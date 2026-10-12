@@ -1,26 +1,159 @@
 @import "tailwindcss";
 
+/* 디자인 토큰 — docs/specs/*.md 의 색·치수를 그대로 옮김 */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #1b2230;
+  --ink-2: #3a4452;
+  --ink-3: #4a5563;
+  --muted: #5b6675;
+  --faint: #7a8594;
+  --ghost: #a7b0ba;
+
+  --bg: #eef4f2;
+  --bg-main: #f3f7f6;
+  --surface: #ffffff;
+  --surface-2: #f7faf9;
+  --surface-3: #fafcfb;
+
+  --line: #e4ecea;
+  --line-2: #eef2f1;
+  --line-3: #d9e2df;
+  --line-dash: #c9d6d2;
+
+  --navy: #22264b;
+  --mint: #0d7a64;
+  --mint-dark: #095c4b;
+  --mint-deep: #0b6553;
+  --mint-bright: #5fd3b8;
+  --mint-bar: #12a386;
+  --mint-soft: #ddf4ee;
+  --blue: #3b6fe0;
+  --blue-text: #2f5bc2;
+  --blue-soft: #e3ecfd;
+  --blue-avatar: #dce6fb;
+  --warn: #b4462b;
+  --warn-soft: #fde8e1;
+  --danger: #d64545;
+  --amber-text: #7a4f00;
+  --amber-soft: #fbefd3;
+  --lav-text: #6b45b8;
+  --lav-soft: #eee7fb;
+  --slate-soft: #e9eef0;
+
+  --done: #1e9e6a;
+  --late: #c98a00;
+  --missed: #d64545;
+  --open-stroke: #6b7684;
+  --planned-stroke: #8c97a4;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-plex), system-ui, sans-serif;
+
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-ghost: var(--ghost);
+  --color-bg: var(--bg);
+  --color-bg-main: var(--bg-main);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-line-3: var(--line-3);
+  --color-line-dash: var(--line-dash);
+  --color-navy: var(--navy);
+  --color-mint: var(--mint);
+  --color-mint-dark: var(--mint-dark);
+  --color-mint-deep: var(--mint-deep);
+  --color-mint-bright: var(--mint-bright);
+  --color-mint-bar: var(--mint-bar);
+  --color-mint-soft: var(--mint-soft);
+  --color-blue: var(--blue);
+  --color-blue-text: var(--blue-text);
+  --color-blue-soft: var(--blue-soft);
+  --color-blue-avatar: var(--blue-avatar);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-amber-text: var(--amber-text);
+  --color-amber-soft: var(--amber-soft);
+  --color-lav-text: var(--lav-text);
+  --color-lav-soft: var(--lav-soft);
+  --color-slate-soft: var(--slate-soft);
+  --color-done: var(--done);
+  --color-late: var(--late);
+  --color-missed: var(--missed);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  margin: 0;
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+a {
+  color: var(--mint);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--mint-dark);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+input,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 2px;
+}
+
+/* 2줄 말줄임 */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 얇은 스크롤바 (패널 내부 스크롤 공통) */
+.thin-scroll {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-dash) transparent;
+}
+.thin-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: var(--line-dash);
+  border-radius: 8px;
+  border: 2px solid #fff;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  margin: 14px 0;
 }
