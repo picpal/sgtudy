@@ -22,15 +22,15 @@ export const AVATAR_PAL: Record<Tone, { bg: string; fg: string }> = {
 
 /** 이름별 고정 아바타 색. 없는 이름은 slate. */
 export const NAME_TONE: Record<string, Tone> = {
-  철수: "blue",
-  민수: "mint",
-  서연: "blue",
-  지훈: "lav",
-  현우: "slate",
-  수민: "peach",
-  예린: "amber",
-  태호: "blue",
-  가은: "amber",
+  // 리더
+  철수: "blue", 민수: "mint", 서연: "blue", 지훈: "lav", 현우: "slate", 수민: "peach", 예린: "amber", 태호: "blue", 가은: "amber",
+  // 참가자 (원본 COLOR 맵)
+  민재: "mint", 보람: "mint", 도현: "mint", 하은: "mint", 시우: "mint",
+  지은: "peach", 소율: "peach", 지성: "peach", 은지: "peach",
+  하나: "lav", 다은: "lav", 태윤: "lav", 나연: "lav", 다인: "lav",
+  도윤: "slate",
+  아린: "amber", 유진: "amber", 준서: "amber", 현준: "amber",
+  승호: "blue",
 };
 
 export const toneOf = (name: string): Tone => NAME_TONE[name] ?? "slate";

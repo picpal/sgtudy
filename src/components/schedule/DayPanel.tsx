@@ -1,0 +1,85 @@
+import Link from "next/link";
+import { dday, md, weekdayKo } from "@/lib/date";
+import { routes, TODAY } from "@/lib/routes";
+import { STATUS_LABEL } from "@/lib/types";
+import { shortName, STUDY, type Marker, type StudyId, type Task } from "@/data/schedule";
+
+type Props = { sel: string; tasks: Task[]; markers: Marker[] };
+
+type Item = { key: string; study: StudyId; title: string; sub: string; badge: string; urgent?: boolean };
+
+export function DayPanel({ sel, tasks, markers }: Props) {
+  const starts: Item[] = markers
+    .filter((mk) => mk.date === sel)
+    .map((mk) => ({
+      key: `s-${mk.study}`,
+      study: mk.study,
+      title: `${mk.round} 회차 시작`,
+      sub: STUDY[mk.study].pending ? "승인되면 참여할 수 있어요" : "새 과제가 열렸어요",
+      badge: "시작",
+    }));
+  const due: Item[] = tasks
+    .filter((t) => t.e === sel)
+    .map((t) => ({
+      key: `d-${t.id}`,
+      study: t.study,
+      title: t.title,
+      sub: `${t.round} · ${md(t.s)}–${md(t.e)} · ${STATUS_LABEL[t.st]}`,
+      badge: t.st === "done" || t.st === "late" ? STATUS_LABEL[t.st] : `마감 ${dday(TODAY, t.e)}`,
+      urgent: t.st === "open",
+    }));
+  const ongoing: Item[] = tasks
+    .filter((t) => t.s <= sel && t.e > sel)
+    .map((t) => ({ key: `o-${t.id}`, study: t.study, title: t.title, sub: `${t.round} · ${md(t.e)} 마감`, badge: STATUS_LABEL[t.st] }));
+
+  const groups = (
+    [
+      ["회차 시작", starts],
+      ["이 날 마감", due],
+      ["진행 중인 과제", ongoing],
+    ] as [string, Item[]][]
+  ).filter(([, items]) => items.length);
+
+  return (
+    <section className="thin-scroll box-border flex min-h-0 flex-[1_1_0] flex-col gap-[14px] overflow-auto rounded-[20px] bg-surface p-5 max-[900px]:flex-none max-[900px]:overflow-visible">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="m-0 text-[18px] font-bold">
+          {Number(sel.slice(5, 7))}월 {Number(sel.slice(8, 10))}일 ({weekdayKo(sel)})
+        </h2>
+        {sel === TODAY && <span className="rounded-[7px] bg-ink px-2 py-[2px] text-[12px] font-bold text-white">오늘</span>}
+      </div>
+      {groups.map(([label, items]) => (
+        <div key={label} className="flex flex-col gap-2">
+          <div className="text-[12px] font-semibold text-muted">{label}</div>
+          {items.map((it) => {
+            const S = STUDY[it.study];
+            return (
+              <Link
+                key={it.key}
+                href={S.pending ? routes.room(it.study) : routes.myStudy(it.study)}
+                className="box-border flex min-h-11 items-center gap-[10px] rounded-[12px] border border-line-2 px-3 py-[10px] text-ink hover:text-ink"
+              >
+                <span className="shrink-0 whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[11px] font-bold" style={{ background: S.bg, color: S.fg }}>
+                  {shortName(S)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-semibold text-ink">{it.title}</span>
+                  <span className="mt-[2px] block text-[12px] text-muted">{it.sub}</span>
+                </span>
+                <span
+                  className="shrink-0 whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[11px] font-bold"
+                  style={{ color: it.urgent ? "#FFFFFF" : "#3A4452", background: it.urgent ? "#B4462B" : "#EEF2F1" }}
+                >
+                  {it.badge}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      ))}
+      {groups.length === 0 && (
+        <div className="rounded-[14px] border border-dashed border-line-dash px-[14px] py-5 text-center text-[13px] text-muted">이 날은 예정된 일정이 없어요</div>
+      )}
+    </section>
+  );
+}
