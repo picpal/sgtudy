@@ -75,8 +75,8 @@ export function AppHeader({ active, variant = "card", children, unread = 3 }: Pr
           );
         })}
       </nav>
-      <div className="flex-[1_1_24px]" />
-      {children}
+      <div className="flex-[1_1_24px] max-sm:flex-1" />
+      {children && <div className="flex min-w-0 max-sm:order-9 max-sm:w-full [&>*]:max-sm:w-full">{children}</div>}
       <button
         type="button"
         aria-label={`알림 ${unread}개`}

@@ -8,7 +8,6 @@ import type { ScreenState, Update, Zoom } from "../state";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
 
-const LEFT = 300;
 /** 리프 막대 색 [bg, 글자, border] */
 const GBAR: Record<LeafState, [string, string, string]> = {
   complete: ["#1E9E6A", "#FFFFFF", "1px solid #1E9E6A"],
@@ -52,10 +51,10 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
         </span>
       </div>
 
-      <div className="thin-scroll overflow-x-auto rounded-[16px] border border-line">
-        <div className="relative min-w-full" style={{ width: LEFT + W }}>
+      <div className="thin-scroll overflow-x-auto rounded-[16px] border border-line [--gantt-left:300px] max-sm:[--gantt-left:180px]">
+        <div className="relative min-w-full" style={{ width: `calc(var(--gantt-left) + ${W}px)` }}>
           <div className="flex h-16 border-b border-line">
-            <div className="sticky left-0 z-[3] flex w-[300px] shrink-0 items-end border-r border-line bg-surface-3 px-[14px] pb-3 text-[12px] font-semibold text-ink-3">목표 · 과제</div>
+            <div className="sticky left-0 z-[3] flex w-[var(--gantt-left)] shrink-0 items-end border-r border-line bg-surface-3 px-[14px] pb-3 text-[12px] font-semibold text-ink-3">목표 · 과제</div>
             <div className="relative h-16 shrink-0 bg-surface-3" style={{ width: W }}>
               {months.map((m) => (
                 <span key={m.i} className="absolute top-0 h-[26px] overflow-hidden whitespace-nowrap border-l border-line px-2 pt-[6px] text-[12px] font-bold text-ink" style={{ left: m.i * dw, width: (m.end - m.i) * dw }}>
@@ -94,7 +93,7 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
             const tip = `${n.title} · ${md(n.s)}–${md(n.e)} · ${n.leaf ? (n.asg ? `${n.sub}/${n.asg} 제출` : "담당자 미정") : `${n.pct}%`}`;
             return (
               <div key={n.id} className="flex h-11 border-b border-line-2">
-                <div className="sticky left-0 z-[2] flex w-[300px] shrink-0 items-center gap-[6px] border-r border-line pl-2 pr-3" style={{ background: n.d === 0 ? "#FAFCFB" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}>
+                <div className="sticky left-0 z-[2] flex w-[var(--gantt-left)] shrink-0 items-center gap-[6px] border-r border-line pl-2 pr-3" style={{ background: n.d === 0 ? "#FAFCFB" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}>
                   <span className="shrink-0" style={{ width: n.d * 16 }} />
                   {n.leaf ? (
                     <span className="w-[26px] shrink-0" />

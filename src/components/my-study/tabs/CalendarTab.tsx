@@ -102,8 +102,8 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                         </span>
                         <span className="flex gap-[3px]">
                           {markers.map((r) => (
-                            <span key={r.id} title={`${r.label} ${r.title} 시작`} className="whitespace-nowrap rounded-[5px] bg-navy px-[6px] py-px text-[10px] font-bold text-white">
-                              {r.label}
+                            <span key={r.id} title={`${r.label} ${r.title} 시작`} className="whitespace-nowrap rounded-[5px] bg-navy px-[6px] py-px text-[10px] font-bold text-white max-sm:h-[7px] max-sm:w-[7px] max-sm:self-center max-sm:rounded-full max-sm:p-0">
+                              <span className="max-sm:hidden">{r.label}</span>
                             </span>
                           ))}
                         </span>

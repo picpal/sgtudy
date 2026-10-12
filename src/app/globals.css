@@ -89,46 +89,49 @@
   --color-missed: var(--missed);
 }
 
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-}
+/* 기본 스타일은 base 레이어에 — 레이어 밖에 두면 Tailwind 유틸리티(text-white 등)를 덮어쓴다 */
+@layer base {
+  html,
+  body {
+    margin: 0;
+    min-height: 100%;
+  }
 
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  word-break: keep-all;
-  overflow-wrap: anywhere;
-}
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
 
-a {
-  color: var(--mint);
-  text-decoration: none;
-}
-a:hover {
-  color: var(--mint-dark);
-}
+  a {
+    color: var(--mint);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--mint-dark);
+  }
 
-button {
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-button:disabled {
-  cursor: not-allowed;
-}
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
 
-input,
-textarea {
-  font: inherit;
-}
+  input,
+  textarea {
+    font: inherit;
+  }
 
-:focus-visible {
-  outline: 2px solid var(--mint);
-  outline-offset: 2px;
+  :focus-visible {
+    outline: 2px solid var(--mint);
+    outline-offset: 2px;
+  }
 }
 
 /* 2줄 말줄임 */
