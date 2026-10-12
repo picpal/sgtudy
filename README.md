@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 슥터디 (sgtudy)
 
-## Getting Started
+스터디 그룹 목표·일정 관리 웹. 현재는 목업 데이터 기반 프론트엔드.
 
-First, run the development server:
+- 프로덕션: https://sgtudy.vercel.app
+- 디자인 스펙: `docs/claude-design-prompt.md`, 화면별 구현 스펙 `docs/specs/*.md`
+
+## 개발
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
+npm run build      # 프로덕션 빌드 (배포 전 통과 확인)
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 화면 ↔ 라우트
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| 화면 | 라우트 | 담당 폴더 |
+|---|---|---|
+| 방 목록 | `/` | `src/components/main`, `src/data/rooms.ts` |
+| 방 상세 (둘러보기) | `/rooms/[id]` | `src/components/room-view`, `src/data/room-view.ts` |
+| 내 스터디 | `/my-study/[id]` | `src/components/my-study`, `src/data/my-study.ts` |
+| 내 일정 | `/schedule` | `src/components/schedule`, `src/data/schedule.ts` |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+공용: `src/components/ui`(헤더·아바타·상태아이콘), `src/lib`(routes·palette·date·types).
 
-## Learn More
+## 배포 (Vercel)
 
-To learn more about Next.js, take a look at the following resources:
+- GitHub `picpal/sgtudy` 가 Vercel 프로젝트 `sgtudy` 에 연결돼 있음.
+- `main` push → 프로덕션 자동 배포. 다른 브랜치/PR → 프리뷰 URL 자동 생성.
+- 수동 배포: `vercel --prod` (로그인 필요).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 백엔드 연결 준비
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `.env.example` 의 `NEXT_PUBLIC_API_URL` 을 `.env.local` 로 복사해 사용. Vercel 에는 Settings → Environment Variables 에 등록.
+- 목업 데이터는 `src/data/*.ts` 에 화면별로 분리돼 있어, API 클라이언트로 교체할 때 이 파일들의 export 시그니처만 유지하면 화면 코드는 그대로 둘 수 있다.
+- "오늘" 기준일은 `src/lib/routes.ts` 의 `TODAY` 상수 (목업 기준 2026-10-12). 실데이터 전환 시 현재 날짜로 교체.
