@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { dday, diffDays, md, weekdayKo } from "@/lib/date";
 import { shortName, type Study, type Task } from "@/data/schedule";
+import { taskHref } from "./calc";
 
 export function UpcomingPanel({ today, studies, upcoming }: { today: string; studies: Record<string, Study>; upcoming: Task[] }) {
   return (
@@ -15,16 +17,18 @@ export function UpcomingPanel({ today, studies, upcoming }: { today: string; stu
           {upcoming.map((t) => {
             const n = diffDays(today, t.e);
             return (
-              <li key={t.id} className="flex items-center gap-[10px] rounded-[12px] bg-surface-2 px-3 py-[10px]">
-                <span className="w-12 shrink-0 rounded-[8px] py-[5px] text-center text-[12px] font-bold text-white" style={{ background: n <= 2 ? "#B4462B" : "#4A5563" }}>
-                  {dday(today, t.e)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold">{t.title}</span>
-                  <span className="mt-[2px] block text-[12px] text-muted">
-                    {shortName(studies[t.study])} · {md(t.e)}({weekdayKo(t.e)}) 23:59
+              <li key={t.id}>
+                <Link href={taskHref(t, studies[t.study])} className="flex items-center gap-[10px] rounded-[12px] bg-surface-2 px-3 py-[10px] text-ink hover:bg-[#EEF4F2] hover:text-ink focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2">
+                  <span className="w-12 shrink-0 rounded-[8px] py-[5px] text-center text-[12px] font-bold text-white" style={{ background: n <= 2 ? "#B4462B" : "#4A5563" }}>
+                    {dday(today, t.e)}
                   </span>
-                </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-semibold">{t.title}</span>
+                    <span className="mt-[2px] block text-[12px] text-muted">
+                      {shortName(studies[t.study])} · {md(t.e)}({weekdayKo(t.e)}) 23:59
+                    </span>
+                  </span>
+                </Link>
               </li>
             );
           })}
