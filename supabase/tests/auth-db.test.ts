@@ -33,7 +33,7 @@ dbTest("anon rpc me_get is denied at the GRANT layer (42501); AUTH_REQUIRED is t
   assertEquals(error?.code, "42501");
 });
 
-dbTest("rpc error contract: me_update without a nickname change but invalid flag type is a PostgREST error, fail() codes travel in message/details/hint", async () => {
+dbTest("rpc error contract: me_update with an invalid nickname is a PostgREST error; fail() codes travel in message/hint", async () => {
   const { c } = await userClient(1);
   const { error } = await c.rpc("me_update", { p_nickname: "a" });
   assertEquals(error?.message, "NICKNAME_INVALID");
