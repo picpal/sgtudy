@@ -25,6 +25,9 @@
 > - 백로그: deactivate 로 전원 제출이 되는 경우의 TASK_ALL_SUBMITTED, 당일 수동 시작 방의 1회차 ROUND_STARTED, 방 기간 변경 알림, ASCII 태그 부분일치 오탐(java ⊂ JavaScript).
 > - plan 04 의 Task 9(LLM `suggest-tags` Edge Function)는 실행하지 않았다(선택·기본 OFF).
 
+> **실행 결과(2026-10-14, main 머지)** — T1~T14 구현, T15 E2E 는 QA 페르소나 3명(기존 멤버·신규 가입자·비로그인 모바일→그룹장, ego-lite) + 수정 2라운드 + 검증 QA 로 대체, T16(Vercel·호스팅 Supabase) 은 사용자 승인 대기. 본문과 다른 점: T8 을 T7 보다 먼저, react-hooks 7 의 set-state-in-effect 대응으로 NotificationBell·NicknameField·MainScreen 구조 변경, `≤900` 브레이크포인트는 Tailwind `max-[901px]`, 루트 레이아웃은 `unstable_rethrow`, 로컬 메일은 Mailpit(`/api/v1/search`).
+> **plan 06 백로그(QA 에서 넘어옴):** 새 방 DRAFT→RECRUIT 버튼·초대 링크 복사·승인 패널(새 방에 아무도 못 들어옴 — QA P0, 범위상 plan 06), 더보기 메뉴, 홈 필터 URL 상태, 같은 이니셜 아바타 구분, 탭 URL 동기화, 문구 통일(승인제/참가중 등). 백엔드: 제목 저장마다 자동 태그 재선택(`node_update`→`tag_autoselect`), 한글 제목 slug 누락·기간 상한 없음, 알림 본문이 방 제목과 중복.
+
 ## 선행 조건 (Phase 0–6 완료 가정)
 
 이 계획은 아래가 **이미 존재**한다고 가정한다. 없으면 01~04 계획을 먼저 실행한다.
