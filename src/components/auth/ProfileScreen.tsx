@@ -20,6 +20,8 @@ export function ProfileScreen({ me }: { me: Me }) {
   const [mail, setMail] = useState(me.optionalMailEnabled);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
+  const [mailBusy, setMailBusy] = useState(false);
+  const [mailError, setMailError] = useState("");
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -38,13 +40,23 @@ export function ProfileScreen({ me }: { me: Me }) {
   };
 
   const toggleMail = async (next: boolean) => {
+    if (mailBusy) return;
+    setMailBusy(true);
+    setMailError("");
     setMail(next);
     try {
       await updateMe({ optionalMailEnabled: next });
     } catch (err) {
       setMail(!next);
-      setMsg({ tone: "bad", text: toApiError(err).message });
+      setMailError(toApiError(err).message);
+    } finally {
+      setMailBusy(false);
     }
+  };
+
+  const onNick = (v: string) => {
+    setNick(v);
+    if (msg?.tone === "ok") setMsg(null); // "바꿨어요" 는 다시 고치기 시작하면 지운다
   };
 
   return (
@@ -62,7 +74,7 @@ export function ProfileScreen({ me }: { me: Me }) {
         </div>
 
         <form onSubmit={save} className="flex flex-col gap-4">
-          <NicknameField value={nick} onChange={setNick} original={original} onHint={setHint} />
+          <NicknameField value={nick} onChange={onNick} original={original} onHint={setHint} />
           <label className="flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
             이메일
             <input type="email" value={me.email} readOnly aria-readonly className="h-12 w-full rounded-[12px] border border-line bg-surface-3 px-4 text-[15px] text-muted" />
@@ -80,8 +92,9 @@ export function ProfileScreen({ me }: { me: Me }) {
               <span className="block text-[14px] font-semibold">옵션 알림 메일 받기</span>
               <span className="block text-[12px] text-muted">마감 리마인더·일정 변경 같은 선택 알림을 메일로도 받아요</span>
             </span>
-            <Switch on={mail} onChange={toggleMail} label="옵션 알림 메일 받기" />
+            <Switch on={mail} onChange={toggleMail} label="옵션 알림 메일 받기" disabled={mailBusy} />
           </div>
+          {mailError && <p role="alert" className="m-0 text-[13px]" style={{ color: "#B4462B" }}>{mailError}</p>}
           <p className="m-0 text-[12px] text-muted">기본 알림(참가 승인·회차 시작·전원 제출)은 항상 발송돼요.</p>
         </section>
       </main>

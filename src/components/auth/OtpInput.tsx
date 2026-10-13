@@ -9,9 +9,11 @@ export function OtpInput({ value, onChange, disabled }: Props) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const focusAt = (i: number) => refs.current[i]?.focus();
 
+  // 마운트 시, 그리고 검증 실패로 다시 활성화되며 칸이 비워지면 0번 칸에 포커스 (검증 중 disabled 라 포커스가 사라진다)
+  const empty = value.every((c) => !c);
   useEffect(() => {
-    focusAt(0);
-  }, []);
+    if (!disabled && empty) focusAt(0);
+  }, [disabled, empty]);
 
   const commit = (r: { digits: Digits; focus: number }) => {
     onChange(r.digits);
@@ -33,6 +35,7 @@ export function OtpInput({ value, onChange, disabled }: Props) {
           maxLength={6}
           value={c}
           disabled={disabled}
+          onFocus={(e) => e.target.select()}
           onChange={(e) => commit(applyDigit(value, i, e.target.value))}
           onPaste={(e) => {
             e.preventDefault();

@@ -6,6 +6,8 @@ const onlyDigits = (s: string) => s.replace(/\D/g, "");
 export function applyDigit(digits: Digits, index: number, raw: string): { digits: Digits; focus: number } {
   const d = onlyDigits(raw);
   if (!d) return { digits, focus: index };
+  // one-time-code 자동완성은 6자리 전체를 onChange 로 한 칸에 넣는다 → 붙여넣기처럼 0번 칸부터 채운다
+  if (d.length >= 6) return applyPaste(digits, d, 0);
   const next = [...digits] as Digits;
   next[index] = d[d.length - 1];
   return { digits: next, focus: Math.min(5, index + 1) };
@@ -35,7 +37,8 @@ export const isComplete = (d: Digits) => d.every((c) => c.length === 1);
 const AUTH_CODE_TEXT: Record<string, string> = {
   over_email_send_rate_limit: "잠시 후 다시 시도해 주세요 · 인증 코드는 1분에 한 번만 보낼 수 있어요",
   over_request_rate_limit: "요청이 너무 많아요 · 잠시 후 다시 시도해 주세요",
-  otp_expired: "인증 코드가 만료됐어요 · 다시 받아 주세요",
+  // GoTrue 는 틀린 코드에도 otp_expired 를 준다
+  otp_expired: "코드가 맞지 않거나 만료됐어요",
   otp_disabled: "이메일 로그인이 꺼져 있어요 · 관리자에게 문의해 주세요",
   validation_failed: "이메일 주소를 확인해 주세요",
   email_address_invalid: "이메일 주소를 확인해 주세요",
