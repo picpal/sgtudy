@@ -133,15 +133,21 @@ on conflict (id) do update
   set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
 -- 버킷 attachments 안의 키 {room_id}/{node_id}/{user_id}/{uuid}.{ext} (개요 Storage 키 규칙 — 원본 파일명은 키에 넣지 않고 files.original_name)
--- foldername = [room_id, node_id, user_id]. 보관 리프의 DESIGNATED 행은 resync 가 해제하므로(plan 02, D13) is_task_assignee 가 거짓 → 업로드 차단
+-- foldername = [room_id, node_id, user_id]. INSERT: 키 형식을 정규식으로 고정(이후 캐스트 보호) + user 세그먼트=본인 + 담당자 + room 세그먼트가 그 노드의 방과 일치.
+-- 보관 리프의 DESIGNATED 행은 resync 가 해제하므로(plan 02, D13) is_task_assignee 가 거짓 → 업로드 차단
 create policy attachments_insert_assignee on storage.objects for insert to authenticated
   with check (
     bucket_id = 'attachments'
+    and name ~ '^[0-9]+/[0-9]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^/]+$'
     and (storage.foldername(name))[3] = (select auth.uid())::text
-    and public.is_task_assignee(((storage.foldername(name))[2])::bigint, (select auth.uid())));
+    and public.is_task_assignee(((storage.foldername(name))[2])::bigint, (select auth.uid()))
+    and (storage.foldername(name))[1] = (select n.room_id::text from public.goal_nodes n where n.id = ((storage.foldername(name))[2])::bigint));
 
+-- SELECT: 제출물 읽기 규칙과 동일 — 보관 노드 첨부는 그룹장·작성자(user 세그먼트)만 (D10)
 create policy attachments_select_member on storage.objects for select to authenticated
-  using (bucket_id = 'attachments' and public.can_read_submissions(((storage.foldername(name))[1])::bigint));
+  using (
+    bucket_id = 'attachments'
+    and public.can_read_submission(((storage.foldername(name))[2])::bigint, ((storage.foldername(name))[3])::uuid));
 
 create policy attachments_delete_own on storage.objects for delete to authenticated
   using (bucket_id = 'attachments' and (storage.foldername(name))[3] = (select auth.uid())::text);
