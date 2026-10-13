@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseInline, parseMarkdown } from "./markdown";
+import { headingTag, parseInline, parseMarkdown } from "./markdown";
 
 describe("parseMarkdown (Q2-10) — 블록", () => {
   it("headings, paragraphs with line breaks, lists", () => {
@@ -24,4 +24,10 @@ describe("parseInline", () => {
     ]);
   });
   it("raw html stays text", () => expect(parseInline("<img src=x onerror=1>")).toEqual([{ t: "text", v: "<img src=x onerror=1>" }]));
+});
+
+describe("headingTag (V2-06)", () => {
+  it("nests markdown headings under the section h3", () => {
+    expect([1, 2, 3].map((l) => headingTag(l as 1 | 2 | 3))).toEqual(["h4", "h5", "h6"]);
+  });
 });

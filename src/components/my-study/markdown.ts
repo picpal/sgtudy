@@ -9,6 +9,9 @@ const H = /^(#{1,3})\s+(.+)$/;
 const UL = /^[-*]\s+(.*)$/;
 const OL = /^\d+[.)]\s+(.*)$/;
 
+/** 소개 본문은 "스터디 소개" h3 아래에 놓이므로 # → h4, ## → h5, ### → h6 (V2-06) */
+export const headingTag = (level: 1 | 2 | 3) => (["h4", "h5", "h6"] as const)[level - 1];
+
 export function parseMarkdown(src: string): MdBlock[] {
   const out: MdBlock[] = [];
   let cur: MdBlock | null = null;

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
-import { parseInline, parseMarkdown } from "./markdown";
+import { headingTag, parseInline, parseMarkdown } from "./markdown";
 
 function Inline({ text }: { text: string }) {
   return (
@@ -25,7 +25,8 @@ export function MarkdownView({ src }: { src: string }) {
       {blocks.map((b, i) => {
         if (b.type === "h") {
           const size = b.level === 1 ? "text-[17px]" : b.level === 2 ? "text-[16px]" : "text-[15px]";
-          return <p key={i} className={`m-0 font-bold text-ink ${size}`}><Inline text={b.text} /></p>;
+          const H = headingTag(b.level);
+          return <H key={i} className={`m-0 font-bold text-ink ${size}`}><Inline text={b.text} /></H>;
         }
         if (b.type === "p")
           return (
