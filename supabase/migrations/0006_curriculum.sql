@@ -643,3 +643,47 @@ begin
 end $$;
 
 grant execute on function public.node_move(text, bigint, bigint, int) to authenticated;
+
+-- ───────── me_studies (03-api §6, mystudy §1.1·§3.8) ─────────
+create or replace function public.me_studies() returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid   uuid := public.require_user();
+  v_today date := public.kst_today();
+  v_out   jsonb;
+begin
+  with mine as (
+    select r.id, r.slug, r.title, r.intro, r.start_date, r.end_date,
+           case when r.leader_id = v_uid then 'leader' when m.status = 'PENDING' then 'pending' else 'joined' end as membership,
+           case when r.status = 'ACTIVE' then 'active' when r.status in ('RECRUIT', 'DRAFT') then 'recruit' else 'ended' end as kind
+    from public.rooms r
+    join public.room_members m on m.room_id = r.id and m.user_id = v_uid
+    where r.archived_at is null
+      and (r.leader_id = v_uid or m.status = 'ACTIVE' or (m.status = 'PENDING' and r.status in ('RECRUIT', 'DRAFT')))),
+  due as (
+    -- 내 OPEN 과제(미제출, 기간 안, 보관 아님) 중 가장 빠른 마감
+    select n.room_id, min(n.end_date) as d
+    from public.goal_nodes n
+    join public.task_assignments a on a.node_id = n.id and a.user_id = v_uid and a.released_at is null
+    left join public.submissions s on s.node_id = n.id and s.user_id = v_uid
+    where n.task_type is not null and n.archived_at is null and s.id is null
+      and n.start_date <= v_today and v_today <= n.end_date
+    group by n.room_id),
+  items as (
+    select m.*, d.d,
+           jsonb_build_object('slug', m.slug, 'title', m.title, 'intro', m.intro, 'membership', m.membership,
+             'when', case m.kind
+               when 'active'  then jsonb_build_object('kind', case when d.d is null then 'end' else 'deadline' end,
+                                                      'date', to_char(coalesce(d.d, m.end_date), 'YYYY-MM-DD'))
+               when 'recruit' then jsonb_build_object('kind', 'start', 'date', to_char(m.start_date, 'YYYY-MM-DD'))
+               else                jsonb_build_object('kind', 'end',   'date', to_char(m.end_date, 'YYYY-MM-DD')) end) as j
+    from mine m left join due d on d.room_id = m.id)
+  select jsonb_build_array(
+    jsonb_build_object('kind', 'active',  'items', coalesce((select jsonb_agg(j order by coalesce(d, end_date), id) from items where kind = 'active'),  '[]'::jsonb)),
+    jsonb_build_object('kind', 'recruit', 'items', coalesce((select jsonb_agg(j order by start_date, id)          from items where kind = 'recruit'), '[]'::jsonb)),
+    jsonb_build_object('kind', 'ended',   'items', coalesce((select jsonb_agg(j order by end_date desc, id)       from items where kind = 'ended'),   '[]'::jsonb)))
+  into v_out;
+  return jsonb_build_object('today', to_char(v_today, 'YYYY-MM-DD'), 'groups', v_out);
+end $$;
+
+grant execute on function public.me_studies() to authenticated;
