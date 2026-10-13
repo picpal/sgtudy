@@ -108,3 +108,18 @@ sqlTest("me_get: unreadCount counts unread notifications only", withCase(db, asy
   await asUser(q, uid);
   assertEquals((await j(q, "select public.me_get() as j")).unreadCount, 1);
 }));
+
+sqlTest("privileges: public RPCs actually run under the real roles (D7 — DEFINER over ungranted helpers)", withCase(db, async (q) => {
+  await setToday(q, "2026-10-12");
+  const uid = await newUser(q, "role@example.com");
+  await asUser(q, uid);
+  await q("set local role anon");
+  assertEquals((await j(q, "select public.meta_get() as j")).today, "2026-10-12");
+  await expectFail(q("select public.me_get()"), "permission denied");          // anon 은 me_get 자체가 비공개
+  await q("set local role authenticated");
+  assertEquals((await j(q, "select public.meta_get() as j")).today, "2026-10-12");
+  assertEquals((await j(q, "select public.me_get() as j")).id, uid);
+  assertEquals((await j(q, "select public.me_update(p_nickname => '역할테스트') as j")).nickname, "역할테스트");
+  assertEquals(await j(q, "select public.nickname_check('역할테스트') as j"), { available: true });
+  await q("reset role");
+}));

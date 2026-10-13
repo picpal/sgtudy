@@ -166,10 +166,12 @@ begin
 end $$;
 
 -- ───────── 메타 ─────────
+-- 공개 RPC 는 전부 SECURITY DEFINER (내부 헬퍼는 GRANT 되지 않으므로 INVOKER 면 권한 오류).
 create or replace function public.meta_get()
-returns jsonb language sql stable set search_path = '' as $$
-  select jsonb_build_object('today', to_char(public.kst_today(), 'YYYY-MM-DD'), 'serverTime', public.iso(now()))
-$$;
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+begin
+  return jsonb_build_object('today', to_char(public.kst_today(), 'YYYY-MM-DD'), 'serverTime', public.iso(now()));
+end $$;
 
 -- ───────── 나 ─────────
 -- 온보딩 전에도 호출 가능(require_user 아님). initial = 닉네임 첫 글자, 없으면 이메일 첫 글자.
