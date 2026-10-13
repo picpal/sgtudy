@@ -331,3 +331,59 @@
 8. 플랜 간: 알림 dedupe·수신자 계약이 plan 03 과 다름(S5), 태그 자동 선택 훅은 node_update 에만(S6), vitest·safeReturnTo 중복(S9), 테스트 명령에 `--config` 누락(S8).
 9. 프론트: `?task=` 링크 미처리(S11), algo "13주 완주"가 실데이터에선 "3주"(S10), 빈 people NaN(S15), 공통 상태·에러 경계 부재(S13), E2E 기대값 3건 오류(S14).
 10. §4.10 제출 UI 이월은 plan 06 을 개요에 등록하고 게이트 문구를 낮추는 조건으로만 수용 가능 — 현재는 갭(S12). 나머지 산수(toeic 8주·D-21, aws 50%·D-2·24%, algo 87%, 회차 창, glance)는 맞다.
+
+---
+
+## 반영 내역 (2026-10-13)
+
+> 수정 대상: `04` = `2026-10-13-backend-04-submission-notification-tags.md`, `05` = `2026-10-13-backend-05-frontend-integration.md`. plan 00~03·스펙·src 는 건드리지 않음.
+
+### Blocker
+
+| id | 변경 | 위치 |
+|---|---|---|
+| B1 | `_boot.ts`·storage/`auth.role()` 중복 스텁 삭제. plan 01 `_harness.ts`(`openDb`·`applySeed`·`withCase`·`sqlTest`·`asUser`·`asAnon`·`setToday`·`expectFail`)를 import 하고, 새로 만드는 건 시드 조회·시계 헬퍼 `_fixtures.ts`(`uidOf`·`roomId`·`nodeId`·`setNow`·`one`·`uuids`·`cases()` — `sqlTest`+`withCase` 위의 얇은 어댑터, plan 03 `uid`/`roomId` 재사용)뿐. 모든 테스트 파일 import·부팅(`openDb()`+`applySeed()`)·`asUser(q,null)`→`asAnon(q)`·`jsr:@std/assert`→`@std/assert` 교체, 모든 실행 명령 `npm run test:db -- --filter "<group>:"` | 04: 파일 구성, 서두 인터페이스, Task 1(전면 재작성), Task 2~10 테스트·Run |
+| B2 | `certification` → `certificate` 전부 | 04: Task 8 계약·테스트 |
+| B3 | `job_round_started` 10/12 단언을 spring 2주차(ACTIVE 5명) 기준 `5`, 재실행 `0` 으로 수정 + spring ACTIVE 수 가드 | 04: Task 7 테스트 |
+| B4 | revoke 문 전부 삭제 → GRANT 전용. 0007 `task_get`(anon)·`submission_upsert`·`file_register`, 0008 `notifications_*`·`settings_*`·`member_deactivate*`, 0009 `tags_search`·`room_tags_get`(anon)·`room_tags_put`·`room_tags_suggest`, `tag_apply_auto` 만 service_role. `has_function_privilege` anon/authenticated=false 단언: `submission_json`·`task_node_json`·`file_json`·`storage_exists`(Task 4), `notify_*`·`notification_*`·`leader_room`·`settings_json`(Task 5), `deactivate_*`(Task 6), `job_*`(Task 7), `room_tag_json`·`tag_*`(Task 8). 종료 게이트에 anon 실행 가능 함수 목록 점검 추가 | 04: Global Constraints, Task 4·5·6·7·8 SQL·테스트, 종료 게이트 4 |
+| B5 | 헤더에 "범위 밖 → plan 06" 박스(§4.10 제출, §4.4 승인/거절·초대 복사, 모집 시작/지금 시작, 태그 편집, `node_move`, 라우트별 loading/not-found). Task 10·11·12 에 같은 노트 + `{/* plan 06 */}` 자리표. 게이트 문구 "Phase 7a 종료"로 낮춤 | 05: 헤더, Task 10·11·12 Interfaces, 종료 게이트, Self-Review |
+| B6 | E2E 를 seed 의 `app.today=2026-10-12` 고정 기준 정확값으로 재작성. Step 1 에 `psql … select kst_today()` + PostgREST `meta_get` 둘 다 2026-10-12 확인(아니면 재기동·중단) 추가 | 05: Task 15 서두·Step 1·3·5·6·7·8 |
+
+### Should-fix
+
+| id | 변경 | 위치 |
+|---|---|---|
+| S1 | Storage 키 `{uuid}.{ext}`(원본명은 `files.original_name`), 경로 정규식 교체, 옛 `{uuid}-{name}` 거부 사례 추가 | 04: Global Constraints, Task 3 SQL·테스트·files-db |
+| S2 | `job_cleanup` 은 `files.status='DELETED'` 표시만 — `storage.objects`·`files` 행 삭제 제거, 반환 `{filesExpired, orphansExpired, mailPurged}`, 객체 잔존 단언 | 04: Task 7 SQL·테스트 |
+| S3 | 24h 지난 미연결 READY 고아 → DELETED(`job_cleanup`), `file_register` 5개 한도는 미연결·24h 이내 파일만 셈(연결 파일은 `submission_upsert` ≤5) + 고아 제외 사례 | 04: Task 3·7 |
+| S4 | `submission_upsert` 가 파일마다 `storage_exists(bucket, path)` 재검증 → 없으면 `FILE_NOT_READY` + 사례 | 04: Task 2 SQL, Task 3 테스트 |
+| S5 | 서두 알림 계약표를 D8 + plan 02/03 실제 호출로 재작성(SCHEDULE_CHANGED 수신자 = 리프 담당자, prefix 실제 모양). 행위성 3종은 `notify_publish` 가 `:txid` 를 붙임(plan 03 호출부 무수정으로 D8 충족) + 사례. 04 내부 호출 prefix(`ROUND_STARTED`·`DEADLINE_REMINDER`·`TASK_*`·`MEMBER_DEACTIVATED`…)를 `KIND:room:node…` 로 통일 | 04: 서두 계약표, Task 2·5·6·7 |
+| S6 | "훅은 plan 03 `node_update` 에만" 사실대로 기술, 0004·0006 함수 재정의 금지 명시, 새 방은 첫 커리큘럼 저장 또는 `room_tags_suggest` 후 AUTO 태그 — "new room" 사례 추가 | 04: 서두, Task 8 Interfaces·테스트·SQL 주석 |
+| S7 | RF3: RECRUIT·APPROVAL 방(sqld)에 INACTIVE 행을 만들고 `room_apply` → `MEMBER_NOT_ACTIVE` 단언(기존 `assertRejects` 제거) | 04: Task 6 테스트 |
+| S8 | plan 04 의 모든 deno 실행을 `npm run test:db`(= `--config supabase/tests/deno.json`)로. plan 05 에는 deno 명령 없음 | 04 전 태스크 Run, 종료 게이트 1 |
+| S9 | `routes.ts` 가 plan 01 `return-to.ts` 의 `safeReturnTo`·`loginUrl` 을 re-export(약한 중복 구현 삭제, 동일 함수 참조 단언, `/\evil.com`·`/rooms/../me` 사례). Vitest 설치·설정 단계 삭제 → plan 01 것 확인만 | 05: Task 1 Step 1, Task 2 |
+| S10 | `periodWeeks()` 추가 — "N주 완주" = 기간 주 수(13), "N회차" = roundCount. 픽스처 algo `roundCount/totalRounds: 3`, glance "3회차 · 완료" | 05: Task 8, Task 9 |
+| S11 | `/my-study/[id]` 가 `?task=` 를 읽어 `initialLeaf` → `goLeafPatch`(커리큘럼 탭 + 리프 열림), 검증·E2E 항목 추가 | 05: Task 12 Interfaces·MyStudyScreen·page·Step 13, Task 15 Step 8 |
+| S12 | B5 와 함께 처리(plan 06 등록 참조) | 05: 헤더·Self-Review |
+| S13 | 루트 레이아웃 `meta_get` 실패 → `kstToday()`(Intl Asia/Seoul) 폴백, `me_get` 실패 → 익명, 루트 `error.tsx`(Next 16 `retry`). 라우트별 loading/not-found 는 plan 06 | 05: Task 2 |
+| S14 | E2E: 배지 3 → 승인 후 4 → 클릭 후 3 → 모두 읽음 활성, 일정 칩 5개, "6주차" | 05: Task 13 Step 8, Task 15 Step 6·7·8 |
+| S15 | `CurrentRoundCard`·`OverviewTab` 담당자 0명 → "담당자 미정"(NaN 가드) + 어댑터 사례 | 05: Task 11 Step 9, Task 12 Step 6·11 |
+| S16 | `node_move`·태그 편집 UI → plan 06 참조(헤더·Task 12·RPC 표) | 05 |
+| S17 | 일정 픽스처 `upcoming` 에 `st:null` 항목 추가 + 제외 사례 | 05: Task 13 테스트 |
+| D5 | aws 내 진척률 픽스처 2/4·50% → **2/6·33%**, D-2 유지(EC2 OPEN) | 05: Architecture, Task 9 테스트·Room 노트, Task 15 Step 3 |
+
+### Nit
+
+| 항목 | 변경 | 위치 |
+|---|---|---|
+| dedupe `left(…,160)` | 160자 초과 시 `'h:'||md5(base)||':'||recipient` — 수신자 uuid 보존 + 사례 | 04 Task 5 |
+| `member_deactivate` null action | `LEAVE_DECISION_MISSING` + 사례 | 04 Task 6 |
+| 시드 알림 순서 | 시간순 INSERT(D-3 리마인더 10/11 → 2주차 시작 → 일정 변경), 모두 기준일 이전, createdAt 역순 단언, seed 마지막 `app.today` 줄 앞에 삽입 | 04 Task 10 |
+| 2자 별칭 오탐 | 영숫자 2자 용어는 단어 경계 필요(`cs`⊄docs), 한글은 조사 때문에 부분 일치 유지(한계 주석) + 사례 | 04 Task 8 |
+| 기타 04 | 자리표 위치 "0002/0005"→0004, `updatedAt` 조건부 지시 → `>=` 확정, `total` 이중 지시 → 시드 수 직접 계산, "다르면 테스트를 고친다" 분기 삭제, 시드 tags 사전 우선순위(0009 승) 사실대로 | 04 서두·Task 2·5·8 |
+| `loc=text:` | `text=` | 05 Task 15 Step 2 |
+| `kill %1` | pid 파일 + 포트 기준 정리, `SPACE_ID` 환경변수로 전달 | 05 Task 15 Step 1·2·10 |
+| Task 4 Step 7 | 시드 3건 기준 배지·드롭다운 문구로 수정 | 05 Task 4 |
+| `periodOf` | 정의 없는 지시 삭제 → `format.ts` `periodLong` 하나로 | 05 Task 7 |
+| 말줄임 타입 블록 | `src/data/rooms.ts` Room, `room-view.ts` RoomMember/RoomTask/Room, `my-study.ts` Room 전체 블록으로 | 05 Task 9·11·12 |
+| `leaderTone` | room-view 확장 목록·타입·`toRoom` 에 추가 | 05 Task 11 |

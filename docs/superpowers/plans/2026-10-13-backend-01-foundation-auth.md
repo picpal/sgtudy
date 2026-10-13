@@ -15,11 +15,14 @@
 (00 개요의 Global Constraints 전부 + 이 Phase 고유 항목)
 
 - 디렉터리: `supabase/{config.toml, migrations/, seed.sql, tests/}`, `src/lib/supabase/{server,client,admin,middleware,return-to}.ts`, `src/proxy.ts`.
-- 마이그레이션 파일명 `0001_schema.sql`, `0002_functions_core.sql`, `0003_rls.sql`. 이 계획 안에서는 아직 배포 전이므로 같은 파일에 태스크가 이어 쓸 수 있다(Task 6 → Task 8 이 `0002` 에 추가). 배포 뒤에는 수정 금지.
+- 마이그레이션 파일명 `0001_schema.sql`, `0002_functions_core.sql`, `0003_rls.sql`. 이 계획 안에서는 아직 배포 전이므로 같은 파일에 태스크가 이어 쓸 수 있다(Task 5 → Task 7 이 `0002` 에 추가). 배포 뒤에는 수정 금지.
 - 모든 SECURITY DEFINER 함수: `LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''`, 테이블·함수는 `public.`/`auth.` 한정. 예외: `0001` 의 `handle_new_auth_user()` 는 스펙 §2 원문(`search_path = public`) 그대로 둔다.
 - 에러: `public.fail('<CODE>', '<한국어>', '<json>'::jsonb)` 만 사용. `<CODE>` 는 `03-api.md` §0 목록. I9 위반은 `FIELD_LOCKED`.
 - "오늘"은 `public.kst_today()`. 테스트는 `setToday(q, '2026-10-12')`.
-- `current_user_id()` 는 `auth.uid()` 를 먼저 보고, 없을 때만 `app.uid` 설정을 읽는다(호스팅에서 실세션이 항상 이긴다. PGlite 스텁의 `auth.uid()` 자체가 `app.uid` 를 읽으므로 테스트에서는 둘이 같다).
+- `current_user_id()` 는 `auth.uid()` **만** 반환한다(GUC 폴백 없음, D13). 테스트에서는 PGlite 스텁의 `auth.uid()` 가 `app.uid` 를 읽으므로 따로 뒷문이 필요 없다.
+- **함수 권한(D7)**: `0002` 첫 문장이 `alter default privileges in schema public revoke execute on functions from public, anon, authenticated;`(개요의 `FROM PUBLIC` 에 Supabase 가 기본으로 주는 anon·authenticated GRANT 회수를 더한 것). 이후 만드는 함수는 전부 기본 비공개. `03-api.md` RPC 열의 공개 함수만 명시 `grant execute … to anon, authenticated`(권한 "공개") 또는 `to authenticated`("로그인"·"그룹장"·"본인" 등). 내부 헬퍼(`fail`·`kst_*`·`pct`·`person_json`·`slugify`·`nickname_*`·RLS 헬퍼 등)는 GRANT 하지 않는다 — RLS 정책이 호출하는 헬퍼는 정책 평가가 **정책 소유자가 아니라 호출 역할 권한**으로 돌므로 예외적으로 `grant execute … to anon, authenticated`(Task 6 에 명시). `revoke … from anon, authenticated` 같은 개별 회수는 쓰지 않는다.
+- **SECURITY DEFINER 가 아닌 함수에도** `set search_path = ''`(Supabase linter `function_search_path_mutable`). 트리거 함수 포함. 예외는 `handle_new_auth_user()` 하나.
+- pg_cron 확장 문장은 `create extension if not exists pg_cron;` **한 형태만** 쓴다(`with schema …` 금지). 하네스가 정확히 이 줄을 걷어낸다. `cron.schedule(name, sched, cmd)`·`cron.unschedule(name)` 은 스텁이 받는다.
 - 테스트: PGlite `*-sql.test.ts`(Docker 불필요, 사례마다 `begin … rollback`), 로컬 supabase `*-db.test.ts`(`SUPABASE_URL` 없으면 `ignore`). 조건 없는 delete·truncate 금지. 로컬 DB 테스트 사용자는 `sgtudy-test-<n>@example.com`.
 - 메모리: `supabase start` 와 `npm run build` 전 `vm_stat | grep -E 'free|compressor'` 확인, 둘을 동시에 돌리지 않는다. PGlite 테스트(`npm run test:db`)는 Docker 없이 돈다.
 - 환경변수: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` 만 Vercel. `SUPABASE_SERVICE_ROLE_KEY` 는 `.env.local` 전용. `NEXT_PUBLIC_API_URL` 폐기.
@@ -34,11 +37,11 @@
 
 스펙이 암시하지만 자연히 테스트되지 않을 입력. 각 항목은 아래 소유 태스크에 테스트로 박혀 있다.
 
-1. **닉네임 유니코드 정규화** — macOS 가 만드는 NFD 분해형 "철수" 와 NFC "철수" 는 같은 닉네임이어야 하고(`NICKNAME_TAKEN`), 대소문자(`Chulsoo`/`chulsoo`)도 같다. 전각 공백·탭·연속 공백은 `NICKNAME_INVALID`. → Task 8.
+1. **닉네임 유니코드 정규화** — macOS 가 만드는 NFD 분해형 "철수" 와 NFC "철수" 는 같은 닉네임이어야 하고(`NICKNAME_TAKEN`), 대소문자(`Chulsoo`/`chulsoo`)도 같다. 전각 공백·탭·연속 공백은 `NICKNAME_INVALID`. → Task 7.
 2. **returnTo 오픈 리다이렉트** — `//evil.com`, `/\evil.com`, `https://…`, `/rooms/../x`, `javascript:` 는 전부 `/` 로 떨어져야 한다. → Task 3.
-3. **온보딩 전 사용자** — `profiles.nickname IS NULL` 인 사용자는 `require_user()` 를 쓰는 쓰기 RPC 에서 `ONBOARDING_REQUIRED` 지만, `me_get`/`me_update`/`nickname_check` 는 동작해야 온보딩을 끝낼 수 있다. → Task 6(require_user), Task 8(me_update).
-4. **자정 경계 지각** — 마감 10/03 과제를 KST 10/04 00:00:30(UTC 10/03 15:00:30)에 내면 지각, 23:59:59 KST 는 정시. `kst_deadline` 과 `task_code` 가 이걸 떠받친다. → Task 6.
-5. **이메일 변경 동기화** — `auth.users.email` 이 바뀌어도(Supabase Auth 이메일 변경) `profiles.email` 이 따라와야 한다. 스펙 §2 트리거는 INSERT 만 걸려 있다. → Task 6 (`0002` 에 UPDATE 트리거 추가).
+3. **온보딩 전 사용자** — `profiles.nickname IS NULL` 인 사용자는 `require_user()` 를 쓰는 쓰기 RPC 에서 `ONBOARDING_REQUIRED` 지만, `me_get`/`me_update`/`nickname_check` 는 동작해야 온보딩을 끝낼 수 있다. → Task 5(require_user), Task 7(me_update).
+4. **자정 경계 지각** — 마감 10/03 과제를 KST 10/04 00:00:30(UTC 10/03 15:00:30)에 내면 지각, 23:59:59 KST 는 정시. `kst_deadline` 과 `task_code` 가 이걸 떠받친다. → Task 5.
+5. **이메일 변경 동기화** — `auth.users.email` 이 바뀌어도(Supabase Auth 이메일 변경) `profiles.email` 이 따라와야 한다. 스펙 §2 트리거는 INSERT 만 걸려 있다. → Task 5 (`0002` 에 UPDATE 트리거 추가).
 
 ---
 
@@ -53,7 +56,7 @@
 | `supabase/seed.sql` | 시드 §1 사용자(29명, 고정 UUID). §2 이후는 Phase 2~6 이 이어 쓴다 |
 | `supabase/tests/deno.json` | Deno 설정(import map, lock 없음) |
 | `supabase/tests/_pglite-stubs.ts` | `auth`·`cron`·`storage` 스키마 스텁, 역할 |
-| `supabase/tests/_harness.ts` | `openDb()`, `applySeed()`, `withCase()`, `asUser()`, `asAnon()`, `setToday()`, `newUser()`, `expectFail()` |
+| `supabase/tests/_harness.ts` | `openDb()`, `migrationFiles()`, `applySeed()`, `makeQ()`, `withCase()`, `sqlTest()`, `asUser()`, `asAnon()`, `setToday()`, `newUser()`, `expectFail()` — **전 계획의 유일한 하네스**(plan 02~05 는 import 만) |
 | `supabase/tests/_testenv.ts` | 로컬 supabase 클라이언트·테스트 사용자, `dbTest()` |
 | `supabase/tests/schema-sql.test.ts` | 0001 적용·profiles 트리거 |
 | `supabase/tests/core-sql.test.ts` | 0002 헬퍼 전부 |
@@ -181,7 +184,12 @@ enabled = false
 
 ```sql
 -- 로컬·테스트 전용 시드 (02-domain-and-schema.md §8). `supabase db reset` 이 마이그레이션 뒤에 실행한다.
--- 기준일 2026-10-12. 섹션 순서: §1 사용자(이 파일 아래, plan 01) → §2 방·멤버(plan 02) → §3 커리큘럼(plan 03) → §4 제출·알림·태그(plan 04).
+-- 기준일 2026-10-12. 섹션 순서: §1 사용자(plan 01) → §2 방·멤버·전역 태그·room_tags(plan 02) → §3 커리큘럼·배정·제출(plan 03) → §4 알림·설정 등 나머지(plan 04).
+-- §4 는 §2 의 태그와 §3 의 제출을 다시 넣지 않는다(이미 있는 행은 읽기만). 각 섹션은 아래 app.today 줄 **위에** 끼워 넣는다.
+
+-- ═══════════ 고정 기준일 (항상 이 파일의 마지막 문장) ═══════════
+-- kst_today() 가 로컬·E2E 에서 항상 2026-10-12 를 돌려주게 한다(02 §8). 호스팅에는 seed 가 가지 않는다.
+alter database postgres set app.today = '2026-10-12';
 ```
 
 Run: `touch supabase/migrations/.gitkeep`
@@ -265,9 +273,12 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - Produces (모든 `*-sql.test.ts` 가 쓴다):
   ```ts
   export type Q = (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
+  export async function migrationFiles(): Promise<string[]>;             // supabase/migrations/*.sql 이름(정렬)
   export async function openDb(): Promise<PGlite>;                       // 스텁 + supabase/migrations/*.sql 전부 적용
   export async function applySeed(db: PGlite): Promise<void>;            // supabase/seed.sql 적용
-  export function withCase(db: PGlite, fn: (q: Q) => Promise<void>): () => Promise<void>;  // begin … rollback
+  export function makeQ(db: PGlite): Q;                                  // db.query 래퍼(rows 만)
+  export function withCase(db: PGlite, fn: (q: Q) => Promise<void>): () => Promise<void>;  // begin … rollback, 문장마다 savepoint(실패해도 사례 계속)
+  export function sqlTest(name: string, fn: () => Promise<void>): void;  // Deno.test + sanitize off
   export async function asUser(q: Q, uid: string): Promise<void>;        // set_config('app.uid', uid, true)
   export async function asAnon(q: Q): Promise<void>;                     // set_config('app.uid', '', true)
   export async function setToday(q: Q, ymd: string): Promise<void>;      // set_config('app.today', ymd, true)
@@ -345,6 +356,8 @@ create table cron.job (jobid bigserial primary key, jobname text unique, schedul
 create function cron.schedule(p_name text, p_schedule text, p_command text) returns bigint language sql as
   $$ insert into cron.job (jobname, schedule, command) values (p_name, p_schedule, p_command)
      on conflict (jobname) do update set schedule = excluded.schedule, command = excluded.command returning jobid $$;
+create function cron.unschedule(p_name text) returns boolean language sql as
+  $$ with d as (delete from cron.job where jobname = p_name returning 1) select exists (select 1 from d) $$;
 
 create schema storage;
 create table storage.buckets (
@@ -376,9 +389,12 @@ export type Q = (sql: string, params?: unknown[]) => Promise<Record<string, unkn
 const MIGRATIONS_DIR = new URL("../migrations/", import.meta.url);
 const SEED_FILE = new URL("../seed.sql", import.meta.url);
 
-// pg_cron 은 PGlite 에 없다. 0010 의 CREATE EXTENSION 줄만 걷어내고 cron.schedule 스텁이 받는다.
+// pg_cron 은 PGlite 에 없다. 0010 의 확장 문장은 개요가 고정한 한 형태
+// `create extension if not exists pg_cron;`(한 줄, with schema 없음)만 허용하고 그 줄만 걷어낸다.
+// cron.schedule / cron.unschedule 은 스텁이 받는다. 다른 형태가 들어오면 PGlite 가 "extension not available" 로 실패 → 형태를 고칠 것.
+export const PG_CRON_LINE = /^\s*create extension if not exists pg_cron\s*;\s*$/gim;
 function stripUnsupported(sql: string): string {
-  return sql.replace(/^\s*create extension if not exists pg_cron\s*;\s*$/gim, "");
+  return sql.replace(PG_CRON_LINE, "");
 }
 
 export async function migrationFiles(): Promise<string[]> {
@@ -407,11 +423,30 @@ export function makeQ(db: PGlite): Q {
   return async (sql, params = []) => (await db.query(sql, params)).rows as Record<string, unknown>[];
 }
 
+/**
+ * 사례 안의 Q: 문장마다 savepoint 로 감싼다. 실패한 문장(expectFail 로 기대한 에러)만 되감고
+ * 트랜잭션은 살아 있게 한다 — 없으면 첫 에러 뒤 모든 문장이 25P02(current transaction is aborted) 로 실패한다.
+ */
+function caseQ(db: PGlite): Q {
+  const plain = makeQ(db);
+  return async (sql, params = []) => {
+    await db.exec("savepoint case_stmt");
+    try {
+      const rows = await plain(sql, params);
+      await db.exec("release savepoint case_stmt");
+      return rows;
+    } catch (e) {
+      await db.exec("rollback to savepoint case_stmt");
+      throw e;
+    }
+  };
+}
+
 /** 사례마다 begin … rollback. set_config(…, true) 도 함께 되돌아간다 */
 export function withCase(db: PGlite, fn: (q: Q) => Promise<void>): () => Promise<void> {
   return async () => {
     await db.exec("begin");
-    try { await fn(makeQ(db)); } finally { await db.exec("rollback"); }
+    try { await fn(caseQ(db)); } finally { await db.exec("rollback"); }
   };
 }
 
@@ -504,7 +539,7 @@ export function dbTest(name: string, fn: () => Promise<void>) {
 
 ```ts
 import { assertEquals } from "@std/assert";
-import { asAnon, asUser, openDb, sqlTest, withCase } from "./_harness.ts";
+import { asAnon, asUser, expectFail, openDb, PG_CRON_LINE, sqlTest, withCase } from "./_harness.ts";
 
 const db = await openDb();
 
@@ -522,6 +557,14 @@ sqlTest("harness: rollback isolates cases", withCase(db, async (q) => {
   await q("insert into _tmp_probe values (1)");
 }));
 
+sqlTest("harness: an expected failure does not abort the case (statement savepoints)", withCase(db, async (q) => {
+  await q("create table _tmp_sp (x int)");
+  await q("insert into _tmp_sp values (1)");
+  await expectFail(q("select 1/0"), "division by zero");
+  await asUser(q, crypto.randomUUID());                                   // 실패 뒤에도 같은 트랜잭션에서 계속
+  assertEquals((await q("select count(*)::int as n from _tmp_sp"))[0].n, 1);
+}));
+
 sqlTest("harness: previous case left nothing behind", withCase(db, async (q) => {
   const r = await q("select to_regclass('public._tmp_probe') as t");
   assertEquals(r[0].t, null);
@@ -531,12 +574,21 @@ sqlTest("harness: storage.foldername drops the file name", withCase(db, async (q
   const r = await q("select storage.foldername('12/34/abc/x.png') as f");
   assertEquals(r[0].f, ["12", "34", "abc"]);
 }));
+
+sqlTest("harness: pg_cron line form is pinned; cron.schedule/unschedule stubs work", withCase(db, async (q) => {
+  // 정확히 이 형태만 걷어낸다
+  assertEquals("create extension if not exists pg_cron;".replace(PG_CRON_LINE, ""), "");
+  assertEquals("create extension if not exists pg_cron with schema pg_catalog;".replace(PG_CRON_LINE, "").length > 0, true);
+  await q("select cron.schedule('probe', '0 15 * * *', 'select 1')");
+  assertEquals((await q("select cron.unschedule('probe') as ok"))[0].ok, true);
+  assertEquals((await q("select count(*)::int as n from cron.job where jobname = 'probe'"))[0].n, 0);
+}));
 ```
 
 - [ ] **Step 6: 실행**
 
 Run: `npm run test:db`
-Expected: 4 passed (마이그레이션 디렉터리는 아직 `.gitkeep` 뿐이라 적용 0건).
+Expected: 6 passed (마이그레이션 디렉터리는 아직 `.gitkeep` 뿐이라 적용 0건).
 
 - [ ] **Step 7: Commit**
 
@@ -917,7 +969,7 @@ Expected: `VERBATIM`.
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npm run test:db`
-Expected: harness 4 + schema 4 = 8 passed. (PGlite 에서 `CREATE EXTENSION citext/pg_trgm` 은 하네스가 contrib 를 로드했으므로 통과.)
+Expected: harness 6 + schema 4 = 10 passed. (PGlite 에서 `CREATE EXTENSION citext/pg_trgm` 은 하네스가 contrib 를 로드했으므로 통과.)
 
 - [ ] **Step 5: Commit**
 
@@ -955,7 +1007,9 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   public.set_updated_at() returns trigger                     -- rooms·room_members·goal_nodes·submissions
   public.submissions_guard_immutable() returns trigger        -- I9 → FIELD_LOCKED
   trigger on_auth_user_email_updated on auth.users            -- Review Focus 5
+  alter default privileges in schema public revoke execute on functions from public, anon, authenticated  -- 파일 첫 문장(D7)
   ```
+  권한: 이 Task 의 함수는 전부 **GRANT 없음**(내부 헬퍼). `current_user_id()` 만 Task 6 이 RLS 정책용으로 `anon, authenticated` 에 GRANT 한다.
 
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/core-sql.test.ts`**
 
@@ -1052,6 +1106,21 @@ sqlTest("current_user_id / require_user: anon, onboarding, onboarded (Review Foc
   assertEquals((await q("select public.require_user()::text as u"))[0].u, uid);
 }));
 
+sqlTest("privileges: 0002 helpers are not executable by anon/authenticated (D7 default-privileges REVOKE)", withCase(db, async (q) => {
+  for (const fn of ["public.require_user()", "public.fail(text,text,jsonb)", "public.person_json(uuid)", "public.kst_today()",
+                    "public.task_code(date,date,timestamptz,boolean,date)", "public.slugify(text,bigint)"]) {
+    for (const role of ["anon", "authenticated"]) {
+      const r = await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]);
+      assertEquals(r[0].ok, false, `${role} → ${fn}`);
+    }
+  }
+}));
+
+sqlTest("current_user_id: auth.uid() only — no GUC fallback in the function body (D13)", withCase(db, async (q) => {
+  const src = (await q("select prosrc from pg_proc where oid = 'public.current_user_id()'::regprocedure"))[0].prosrc as string;
+  assertEquals(src.includes("current_setting"), false);
+}));
+
 sqlTest("person_json: userId/nickname/tone, empty nickname before onboarding", withCase(db, async (q) => {
   const uid = await newUser(q);
   await q("update public.profiles set avatar_tone = 'blue' where id = $1::uuid", [uid]);
@@ -1097,21 +1166,27 @@ Expected: FAIL — `function public.kst_today() does not exist`.
 - [ ] **Step 3: `supabase/migrations/0002_functions_core.sql`**
 
 ```sql
--- 공통 헬퍼 (00-overview "공통 계약", 01-decisions D5·D13). 순수 함수는 IMMUTABLE, 설정·테이블을 읽는 함수는 STABLE.
--- 규칙: SECURITY DEFINER 는 search_path = '' + 스키마 한정. 에러는 fail() 만.
+-- 공통 헬퍼 (00-overview "공통 계약", 01-decisions D5·D7·D13). 순수 함수는 IMMUTABLE, 설정·테이블을 읽는 함수는 STABLE.
+-- 규칙: 모든 함수 search_path = '' + 스키마 한정(DEFINER 여부 무관, linter function_search_path_mutable). 에러는 fail() 만.
+
+-- ───────── 함수 권한 (D7) ─────────
+-- Postgres 는 새 함수에 EXECUTE TO PUBLIC 을, Supabase 는 public 스키마 함수에 anon·authenticated GRANT 를 기본으로 준다.
+-- PostgREST 는 public 의 실행 가능한 함수를 전부 RPC 로 연다 → 이후 만드는 함수는 기본 비공개로 하고,
+-- 03-api RPC 열의 공개 함수만 각 마이그레이션이 명시적으로 GRANT 한다. 개별 `revoke … from anon, authenticated` 는 쓰지 않는다.
+alter default privileges in schema public revoke execute on functions from public, anon, authenticated;
 
 -- ───────── 에러 ─────────
 create or replace function public.fail(p_code text, p_detail text, p_hint jsonb default null)
-returns void language plpgsql as $$
+returns void language plpgsql set search_path = '' as $$
 begin
   raise exception using errcode = 'P0001', message = p_code, detail = p_detail, hint = coalesce(p_hint, '{}'::jsonb)::text;
 end $$;
 
 -- ───────── 사용자 ─────────
--- 호스팅: auth.uid(). PGlite: auth.uid() 스텁이 app.uid 를 읽는다. 실세션이 없을 때만 app.uid 를 본다(테스트 전용 뒷문이 세션을 이길 수 없게).
+-- auth.uid() 의 유일한 래퍼(D13). GUC 폴백 없음 — PGlite 에서는 auth.uid() 스텁이 app.uid 를 읽는다.
 create or replace function public.current_user_id()
 returns uuid language sql stable set search_path = '' as $$
-  select coalesce(auth.uid(), nullif(current_setting('app.uid', true), '')::uuid)
+  select auth.uid()
 $$;
 
 create or replace function public.require_user()
@@ -1134,24 +1209,24 @@ $$;
 
 -- ───────── 날짜 ─────────
 create or replace function public.kst_today()
-returns date language sql stable as $$
+returns date language sql stable set search_path = '' as $$
   select coalesce(nullif(current_setting('app.today', true), '')::date, (now() at time zone 'Asia/Seoul')::date)
 $$;
 
 -- 마감 = end_date 다음날 00:00 KST (exclusive). 제출 시각 >= 마감 이면 지각.
 create or replace function public.kst_deadline(p_end date)
-returns timestamptz language sql stable as $$
+returns timestamptz language sql stable set search_path = '' as $$
   select ((p_end + 1)::timestamp at time zone 'Asia/Seoul')
 $$;
 
 create or replace function public.iso(p_ts timestamptz)
-returns text language sql immutable as $$
+returns text language sql immutable set search_path = '' as $$
   select to_char(p_ts at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
 $$;
 
 -- ───────── 상태 (D5) ─────────
 create or replace function public.task_code(p_s date, p_e date, p_first timestamptz, p_late boolean, p_today date)
-returns text language sql immutable as $$
+returns text language sql immutable set search_path = '' as $$
   select case
     when p_first is not null then case when p_late then 'late' else 'done' end
     when p_today < p_s then 'planned'
@@ -1160,7 +1235,7 @@ returns text language sql immutable as $$
 $$;
 
 create or replace function public.leaf_state(p_asg int, p_sub int, p_s date, p_e date, p_today date)
-returns text language sql immutable as $$
+returns text language sql immutable set search_path = '' as $$
   select case
     when p_asg = 0 then 'unassigned'
     when p_sub = p_asg then 'complete'
@@ -1171,14 +1246,14 @@ $$;
 
 -- round(numeric) 은 .5 를 0 에서 먼 쪽으로 → 양수에서 half-up. 5/8 → 62.5 → 63
 create or replace function public.pct(p_asg int, p_sub int)
-returns int language sql immutable as $$
+returns int language sql immutable set search_path = '' as $$
   select case when p_asg = 0 then null else round(p_sub * 100.0 / p_asg)::int end
 $$;
 
 -- ───────── slug (D1) ─────────
 -- 영문·숫자만 남겨 '-' 로 잇는다. 아무것도 안 남으면 r-<base36(id)>. 최대 50자(충돌 접미 '-2' 자리를 남긴다).
 create or replace function public.slugify(p_title text, p_id bigint)
-returns text language plpgsql immutable as $$
+returns text language plpgsql immutable set search_path = '' as $$
 declare
   v text;
   v_n bigint := p_id;
@@ -1201,7 +1276,7 @@ end $$;
 
 -- ───────── 트리거 ─────────
 create or replace function public.set_updated_at()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = '' as $$
 begin
   new.updated_at := now();
   return new;
@@ -1214,7 +1289,7 @@ create trigger trg_submissions_updated_at  before update on public.submissions  
 
 -- I9: first_submitted_at / is_late 는 최초 제출 시 고정
 create or replace function public.submissions_guard_immutable()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = '' as $$
 begin
   if new.first_submitted_at is distinct from old.first_submitted_at or new.is_late is distinct from old.is_late then
     perform public.fail('FIELD_LOCKED', '최초 제출 시각과 지각 여부는 바꿀 수 없어요',
@@ -1234,7 +1309,7 @@ create trigger on_auth_user_email_updated after update of email on auth.users
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npm run test:db`
-Expected: 8 + 13 = 21 passed. `fail` 사례에서 PGlite 가 던지는 오류 객체의 `detail`/`hint`/`code` 필드가 없으면(라이브러리 버전 차) 그 세 줄의 assert 를 `err.message.includes("ROOM_FULL")` 하나로 줄이고 주석으로 이유를 남긴다.
+Expected: 10 + 15 = 25 passed. (PGlite 0.3 의 `DatabaseError` 는 `detail`·`hint`·`code` 필드를 그대로 싣는다 — `fail` 사례의 세 assert 는 그대로 둔다.)
 
 - [ ] **Step 5: Commit**
 
@@ -1266,6 +1341,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   view public.public_profiles (id, nickname, avatar_tone)
   storage bucket 'attachments'
   ```
+  권한: 정책 식은 **조회하는 역할의 권한**으로 평가되므로 정책이 직접 부르는 함수만 GRANT 한다 — `current_user_id`·`is_room_member`·`is_room_leader`·`can_read_room`·`can_read_submissions`·`can_read_submission` → `anon, authenticated`, `is_task_assignee`(Storage INSERT 정책, `to authenticated`) → `authenticated` 만.
 
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/rls-sql.test.ts`**
 
@@ -1294,9 +1370,21 @@ sqlTest("rls: every public table has RLS enabled", withCase(db, async (q) => {
   assertEquals(off.map((r) => r.relname), []);
 }));
 
-sqlTest("rls: no insert/update/delete policies anywhere (writes go through RPC only)", withCase(db, async (q) => {
-  const w = await q("select polname from pg_policy where polcmd <> 'r'");
+sqlTest("rls: no insert/update/delete policies on public tables (writes go through RPC only)", withCase(db, async (q) => {
+  // storage.objects 의 INSERT·DELETE 정책은 의도된 것 → public 스키마만 본다
+  const w = await q("select polname from pg_policy where polcmd <> 'r' and polrelid::regclass::text like 'public.%'");
   assertEquals(w.map((r) => r.polname), []);
+}));
+
+sqlTest("rls: policy helpers executable by the querying roles; is_task_assignee by authenticated only", withCase(db, async (q) => {
+  const can = async (role: string, fn: string) =>
+    (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
+  for (const fn of ["public.current_user_id()", "public.can_read_room(bigint)", "public.can_read_submission(bigint,uuid)"]) {
+    assertEquals(await can("anon", fn), true, fn);
+    assertEquals(await can("authenticated", fn), true, fn);
+  }
+  assertEquals(await can("anon", "public.is_task_assignee(bigint,uuid)"), false);
+  assertEquals(await can("authenticated", "public.is_task_assignee(bigint,uuid)"), true);
 }));
 
 sqlTest("rls: can_read_room — anon sees public non-draft only", withCase(db, async (q) => {
@@ -1437,6 +1525,15 @@ returns boolean language sql stable security definer set search_path = '' as $$
       and (n.archived_at is null or public.is_room_leader(n.room_id) or p_author = public.current_user_id()))
 $$;
 
+-- 정책 식은 조회 역할의 권한으로 평가된다 → 정책이 직접 부르는 헬퍼만 GRANT (0002 의 default privileges 로 기본 비공개)
+grant execute on function public.current_user_id()                    to anon, authenticated;
+grant execute on function public.is_room_member(bigint)               to anon, authenticated;
+grant execute on function public.is_room_leader(bigint)               to anon, authenticated;
+grant execute on function public.can_read_room(bigint)                to anon, authenticated;
+grant execute on function public.can_read_submissions(bigint)         to anon, authenticated;
+grant execute on function public.can_read_submission(bigint, uuid)    to anon, authenticated;
+grant execute on function public.is_task_assignee(bigint, uuid)       to authenticated;
+
 -- ───────── RLS 켜기 ─────────
 alter table public.profiles                   enable row level security;
 alter table public.rooms                      enable row level security;
@@ -1514,7 +1611,8 @@ values ('attachments', 'attachments', false, 10485760,
 on conflict (id) do update
   set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
--- 경로 {room_id}/{node_id}/{user_id}/{uuid}-{name} — foldername = [room_id, node_id, user_id]
+-- 버킷 attachments 안의 키 {room_id}/{node_id}/{user_id}/{uuid}.{ext} (개요 Storage 키 규칙 — 원본 파일명은 키에 넣지 않고 files.original_name)
+-- foldername = [room_id, node_id, user_id]. 보관 리프의 DESIGNATED 행은 resync 가 해제하므로(plan 02, D13) is_task_assignee 가 거짓 → 업로드 차단
 create policy attachments_insert_assignee on storage.objects for insert to authenticated
   with check (
     bucket_id = 'attachments'
@@ -1531,7 +1629,7 @@ create policy attachments_delete_own on storage.objects for delete to authentica
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npm run test:db`
-Expected: 21 + 7 = 28 passed.
+Expected: 25 + 8 = 33 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -1563,6 +1661,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   public.nickname_check(p_value text) returns jsonb                 -- {available, reason?}
   ```
   `Me = { id, email, nickname, initial, tone, onboarded, optionalMailEnabled, unreadCount, today }`.
+  권한(D7): `meta_get` → `anon, authenticated`(공개), `me_get`·`me_update`·`nickname_check` → `authenticated`. `nickname_normalize`·`nickname_problem` 은 GRANT 없음.
 
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/me-sql.test.ts`**
 
@@ -1657,6 +1756,19 @@ sqlTest("nickname_check: available / taken / invalid / reserved; own nickname co
   assertEquals(await j(q, "select public.nickname_check('admin') as j"), { available: false, reason: "reserved" });
 }));
 
+sqlTest("privileges: meta_get public, me_* authenticated only, nickname helpers private (D7)", withCase(db, async (q) => {
+  const can = async (role: string, fn: string) =>
+    (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
+  assertEquals(await can("anon", "public.meta_get()"), true);
+  for (const fn of ["public.me_get()", "public.me_update(text,boolean)", "public.nickname_check(text)"]) {
+    assertEquals(await can("anon", fn), false, fn);
+    assertEquals(await can("authenticated", fn), true, fn);
+  }
+  for (const fn of ["public.nickname_normalize(text)", "public.nickname_problem(text)"]) {
+    assertEquals(await can("authenticated", fn), false, fn);
+  }
+}));
+
 sqlTest("me_get: unreadCount counts unread notifications only", withCase(db, async (q) => {
   const uid = await newUser(q);
   await q(`insert into public.notifications (user_id, kind, title, link, read_at)
@@ -1677,12 +1789,12 @@ Expected: FAIL — `function public.me_get() does not exist`.
 -- ───────── 닉네임 (03-api §1) ─────────
 -- 2~16자, 한글 음절·영문·숫자·'_'·'.'·단일 공백(앞뒤 불가). 정규화 = trim → NFC → lower, UNIQUE 는 정규화값.
 create or replace function public.nickname_normalize(p_value text)
-returns text language sql immutable as $$
+returns text language sql immutable set search_path = '' as $$
   select lower(normalize(btrim(p_value), NFC))
 $$;
 
 create or replace function public.nickname_problem(p_value text)
-returns text language plpgsql immutable as $$
+returns text language plpgsql immutable set search_path = '' as $$
 declare
   v text := normalize(coalesce(p_value, ''), NFC);
   v_norm text;
@@ -1701,7 +1813,7 @@ end $$;
 
 -- ───────── 메타 ─────────
 create or replace function public.meta_get()
-returns jsonb language sql stable as $$
+returns jsonb language sql stable set search_path = '' as $$
   select jsonb_build_object('today', to_char(public.kst_today(), 'YYYY-MM-DD'), 'serverTime', public.iso(now()))
 $$;
 
@@ -1775,6 +1887,12 @@ begin
   end if;
   return jsonb_build_object('available', true);
 end $$;
+
+-- ───────── 공개 RPC GRANT (D7, 03-api §1) ─────────
+grant execute on function public.meta_get()                        to anon, authenticated;
+grant execute on function public.me_get()                          to authenticated;
+grant execute on function public.me_update(text, boolean)          to authenticated;
+grant execute on function public.nickname_check(text)              to authenticated;
 ```
 
 주의: `me_get` 의 `NOT_FOUND` 는 §0 목록에 있는 코드다(404). `profiles` 행은 `auth.users` 트리거가 항상 만들므로 실제로는 닿지 않는다.
@@ -1782,7 +1900,7 @@ end $$;
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npm run test:db`
-Expected: 28 + 8 = 36 passed. `normalize()` 가 PGlite 에서 "database encoding is not UTF8" 류 오류를 내면 `openDb()` 의 PGlite 생성 옵션을 확인한다(기본 UTF8 이라 정상이면 안 난다).
+Expected: 33 + 9 = 42 passed. `normalize()` 가 PGlite 에서 "database encoding is not UTF8" 류 오류를 내면 `openDb()` 의 PGlite 생성 옵션을 확인한다(기본 UTF8 이라 정상이면 안 난다).
 
 - [ ] **Step 5: Commit**
 
@@ -1803,7 +1921,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - Create: `supabase/tests/seed-sql.test.ts`
 
 **Interfaces:**
-- Produces: `auth.users`/`auth.identities`/`profiles` 29행. UUID 규칙 `00000000-0000-4000-8000-0000000000NN`(NN = 2자리 번호). 이메일 `<romanized>@sgtudy.local`. Phase 2~ 시드는 `(select id from public.profiles where nickname = '민수')` 로 사람을 찾는다. 임시 테이블 `seed_users(n, email_local, nickname, tone)` 은 같은 세션(= 같은 `db reset`) 안에서 뒤 섹션이 재사용할 수 있다.
+- Produces: `auth.users`/`auth.identities`/`profiles` 29행. §1 은 헤더 주석과 마지막 `alter database postgres set app.today …` 줄 **사이**에 넣는다. UUID 규칙 `00000000-0000-4000-8000-0000000000NN`(NN = 2자리 번호). 이메일 `<romanized>@sgtudy.local`. Phase 2~ 시드는 `(select id from public.profiles where nickname = '민수')` 로 사람을 찾는다. 임시 테이블 `seed_users(n, email_local, nickname, tone)` 은 같은 세션(= 같은 `db reset`) 안에서 뒤 섹션이 재사용할 수 있다.
 
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/seed-sql.test.ts`**
 
@@ -1850,6 +1968,12 @@ sqlTest("seed: is idempotent", withCase(db, async (q) => {
   const n = await q("select count(*)::int as n from public.profiles where email like '%@sgtudy.local'");
   assertEquals(n[0].n, 29);
 }));
+
+sqlTest("seed: last statement pins app.today = 2026-10-12 (02 §8)", withCase(db, async () => {
+  const text = await Deno.readTextFile(new URL("../seed.sql", import.meta.url));
+  const stmts = text.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("--"));
+  assertEquals(stmts.at(-1), "alter database postgres set app.today = '2026-10-12';");
+}));
 ```
 
 - [ ] **Step 2: 실패 확인**
@@ -1859,7 +1983,7 @@ Expected: FAIL — `rows.length` 0.
 
 - [ ] **Step 3: `supabase/seed.sql` 에 §1 추가**
 
-헤더 주석 아래에 붙인다.
+헤더 주석 아래, 마지막 `app.today` 줄 위에 끼워 넣는다.
 
 ```sql
 -- ═══════════ §1 사용자 (plan 01) ═══════════
@@ -1930,7 +2054,7 @@ update public.profiles p
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `npm run test:db`
-Expected: 36 + 3 = 39 passed.
+Expected: 42 + 4 = 46 passed.
 
 - [ ] **Step 5: 로컬 Supabase 에서 `db reset` 실측**
 
@@ -2024,17 +2148,26 @@ dbTest("me_update sets a nickname; nickname_check reports taken for another user
   assertEquals(JSON.parse(taken!.hint!), { field: "nickname" });
 });
 
-dbTest("meta_get is callable by anon and returns KST today", async () => {
+dbTest("meta_get is callable by anon and returns KST today (seed pins 2026-10-12)", async () => {
   const { data, error } = await anon().rpc("meta_get");
   assertEquals(error, null);
-  assertEquals(/^\d{4}-\d{2}-\d{2}$/.test(data.today), true);
+  assertEquals(data.today, "2026-10-12");
+});
+
+dbTest("internal helpers are not exposed as RPC even with Supabase default grants (D7)", async () => {
+  // Supabase 는 public 함수에 anon·authenticated GRANT 를 기본으로 준다 — 0002 의 alter default privileges 가 그것까지 걷어냈는지
+  for (const [fn, args] of [["require_user", {}], ["person_json", { p_user: "00000000-0000-4000-8000-000000000001" }]] as const) {
+    const { error } = await anon().rpc(fn, args);
+    assert(error !== null, fn);
+    assert(error!.code === "42501" || error!.code === "PGRST202", `${fn}: ${error!.code} ${error!.message}`);
+  }
 });
 ```
 
 - [ ] **Step 2: 환경변수 없이 실행 — skip 확인**
 
 Run: `npm run test:db`
-Expected: 39 passed, 6 ignored(`db:` 접두 테스트).
+Expected: 46 passed, 7 ignored(`db:` 접두 테스트).
 
 - [ ] **Step 3: 로컬 supabase 로 실행**
 
@@ -2045,11 +2178,12 @@ supabase status >/dev/null || supabase start
 eval "$(supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY
 npm run test:db
 ```
-Expected: 45 passed, 0 ignored. `status -o env` 가 `ANON_KEY`/`SERVICE_ROLE_KEY` 대신 `PUBLISHABLE_KEY`/`SECRET_KEY` 를 내면 그 값을 같은 변수에 넣는다(supabase-js 는 둘 다 받는다).
+Expected: 53 passed, 0 ignored. `status -o env` 가 `ANON_KEY`/`SERVICE_ROLE_KEY` 대신 `PUBLISHABLE_KEY`/`SECRET_KEY` 를 내면 그 값을 같은 변수에 넣는다(supabase-js 는 둘 다 받는다).
 
 문제가 나면:
 - `42501` 대신 다른 코드 → 0003 의 `enable row level security` 누락 테이블 확인.
-- `anon` 의 `profiles` select 가 권한 오류(`42501`) → Supabase 기본 권한(테이블 GRANT)이 빠진 환경. `grant select on all tables in schema public to anon, authenticated;` 를 0003 끝에 추가하고 다시 reset.
+- `anon` 의 `profiles` select 가 권한 오류(`42501`) → Supabase 기본 테이블 GRANT 가 빠진 환경(정상 로컬 스택에서는 나지 않는다). 마이그레이션을 고치지 말고 `supabase stop --no-backup && supabase start` 로 스택을 새로 만든다.
+- 내부 헬퍼 사례가 `error === null` → 0002 첫 문장 `alter default privileges … revoke execute on functions from public, anon, authenticated` 가 함수 생성보다 뒤에 있거나 빠졌다.
 
 - [ ] **Step 4: 타입 생성**
 
@@ -2075,13 +2209,13 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 ## Phase 종료 게이트
 
-- [ ] `npm run test:db`(PGlite 39 + db 6) · `npm test` · `npm run lint` · `npx tsc --noEmit` 전부 통과.
+- [ ] `npm run test:db`(PGlite 46 + db 7) · `npm test` · `npm run lint` · `npx tsc --noEmit` 전부 통과.
 - [ ] `supabase db reset` 이 0001→0002→0003→seed 순으로 깨끗이 적용.
 - [ ] 호스팅 프로젝트가 있으면 `supabase link` 후 `supabase db push` — `0001` 의 `auth.users` 트리거와 `0003` 의 `storage.objects` 정책이 `postgres` 역할로 생성되는지 확인(둘 다 Supabase 가 허용하는 표준 패턴). 대시보드 Auth 설정(OTP 6자리·600초·60초, Redirect URL `https://sgtudy.vercel.app/**`) 은 수동.
-- [ ] 다음 계획(`…-02-rooms-membership.md`)에 넘기는 것: `rooms` 쓰기 RPC 는 `require_user()` 로 시작하고 `slugify()` 충돌 시 `-2` 접미를 붙인다. 내부 전용 함수(`assignment_resync`, `notify_publish`, `room_transition_*`)는 만들 때 `revoke execute on function … from anon, authenticated;` 를 같이 건다(PostgREST 는 public 함수 전부를 RPC 로 노출한다. 이 계획의 0002·0003 함수는 순수·읽기 전용이라 노출돼도 무해).
+- [ ] 다음 계획(`…-02-rooms-membership.md`)에 넘기는 것: `rooms` 쓰기 RPC 는 `require_user()` 로 시작하고 `slugify()` 충돌 시 `-2` 접미를 붙인다. 함수 권한은 **GRANT-only 모델**(D7): 0002 의 default privileges 로 새 함수는 전부 비공개이므로, `03-api.md` RPC 열의 공개 함수만 `grant execute … to anon, authenticated`(권한 "공개") 또는 `to authenticated` 를 같은 마이그레이션 끝에 건다. 내부 헬퍼(`*_json`, `assignment_resync`, `notify_publish`, `room_transition_*`, `room_lock/take_seat/release_seat`, `room_tick` 등)는 아무것도 하지 않는다 — `revoke … from anon, authenticated` 를 쓰지 않는다. 각 Phase 테스트에 `has_function_privilege('anon', …, 'execute') = false` 단언. 하네스는 이 계획의 `_harness.ts` 하나뿐이고 재정의하지 않는다.
 
 ## Self-Review 메모
 
-- 스펙 커버리지: 02 §2(Task 4 원문), §5 전 행(Task 6: profiles/rooms/room_members/room_invites/goal_nodes/task_assignments/submissions/submission_links/files/tags/room_tags/suppressions/settings/notifications/mail_outbox + Storage 3정책 + 버킷), §6 공통 행과 상태 함수(Task 5), 트리거 4종(0001 profiles, I9, updated_at, 0002 이메일 동기화 추가), §8 사용자 행(Task 8), 03 §0 에러 형식(`fail`, Task 9 가 PostgREST 전달 확인), §1 전 RPC(Task 7), D6 세션·보호 라우트·returnTo(Task 3). 미포함(의도): `last_login_at` 갱신 — 스펙에 쓰기 경로가 없어 Phase 7 로그인 콜백에서 결정.
+- 스펙 커버리지: 02 §2(Task 4 원문), §5 전 행(Task 6: profiles/rooms/room_members/room_invites/goal_nodes/task_assignments/submissions/submission_links/files/tags/room_tags/suppressions/settings/notifications/mail_outbox + Storage 3정책 + 버킷), §6 공통 행과 상태 함수(Task 5), 트리거 4종(0001 profiles, I9, updated_at, 0002 이메일 동기화 추가), §8 사용자 행·고정 `app.today`(Task 8), D7 함수 권한(0002 default privileges + Task 5·6·7 GRANT·단언, Task 9 실스택 확인), 03 §0 에러 형식(`fail`, Task 9 가 PostgREST 전달 확인), §1 전 RPC(Task 7), D6 세션·보호 라우트·returnTo(Task 3). 미포함(의도): `last_login_at` 갱신 — 스펙에 쓰기 경로가 없어 Phase 7 로그인 콜백에서 결정.
 - 이름 일치: `current_user_id`, `require_user`, `kst_today`, `kst_deadline`, `fail`, `iso`, `task_code`, `leaf_state`, `pct`, `person_json`, `slugify`, `is_room_member`, `is_room_leader`, `can_read_room`, `can_read_submissions`, `is_task_assignee` — 개요 공통 계약과 동일. 추가 헬퍼 `can_read_submission`, `nickname_normalize`, `nickname_problem`, `set_updated_at`, `submissions_guard_immutable` 은 이 문서가 정의.
 - Review Focus 5건 전부 소유 태스크 테스트에 박음(1→Task 7, 2→Task 3, 3→Task 5·7, 4→Task 5, 5→Task 5).

@@ -4,7 +4,7 @@
 
 **Goal:** 과제 제출(본문·링크·첨부 Storage), 인앱 알림(생성·목록·설정·dedupe), 그룹장의 이탈 처리, pg_cron 잡 6종, 태그 사전·자동 선택을 Postgres 함수로 구현하고 PGlite 테스트로 고정한다.
 
-**Architecture:** 모든 쓰기는 `SECURITY DEFINER SET search_path = ''` 함수. 알림은 `notify_publish()` 한 함수가 설정 필터·본인 제외·`dedupe_key` 멱등·한국어 템플릿 렌더링을 전담하고, 0002/0005 의 placeholder 를 `CREATE OR REPLACE` 로 교체하므로 plan 02/03 이 이미 넣은 호출이 그대로 실알림이 된다. 제출은 `submission_upsert()` 한 번에 본문·링크 교체·파일 연결·전원 제출 감지를 끝낸다. 태그는 SQL 키워드 매칭이 기본, LLM Edge Function 은 선택.
+**Architecture:** 모든 쓰기는 `SECURITY DEFINER SET search_path = ''` 함수. 알림은 `notify_publish()` 한 함수가 설정 필터·본인(actor) 제외·행위성 kind 의 txid 접미·`dedupe_key` 멱등·한국어 템플릿 렌더링을 전담하고, 0004(plan 02)의 placeholder 를 같은 시그니처로 `CREATE OR REPLACE` 하므로 plan 02/03 이 이미 넣은 호출이 그대로 실알림이 된다. 제출은 `submission_upsert()` 한 번에 본문·링크 교체·파일 연결·전원 제출 감지를 끝낸다. 태그는 SQL 키워드 매칭이 기본, LLM Edge Function 은 선택.
 
 **Tech Stack:** Supabase(Postgres 15, Storage, pg_cron), PL/pgSQL, Deno + `@electric-sql/pglite` 0.3 테스트, (선택) Supabase Edge Function + `@anthropic-ai/sdk`.
 
@@ -15,20 +15,22 @@
 - 00 개요 "Global Constraints" 전부 적용. 특히: 마이그레이션 파일은 `0007_submissions.sql`, `0008_notifications.sql`, `0009_tags.sql`, `0010_cron.sql` 만 새로 만들고 0001~0006 은 수정하지 않는다.
 - 에러 코드는 `03-api.md` §0 목록만: `VALIDATION_FAILED`, `INVALID_LINK`, `LEAVE_DECISION_MISSING`, `REASSIGN_REQUIRED`, `AUTH_REQUIRED`, `ONBOARDING_REQUIRED`, `NOT_LEADER`, `TASK_NOT_ASSIGNED`, `ROOM_NOT_FOUND`, `NODE_NOT_FOUND`, `NOT_FOUND`, `ROOM_NOT_ACTIVE`, `ROOM_NOT_EDITABLE`, `NODE_NOT_LEAF`, `ASSIGNEE_NOT_MEMBER`, `MEMBER_NOT_ACTIVE`, `CANNOT_DEACTIVATE_LEADER`, `TASK_NOT_STARTED`, `TASK_ARCHIVED`, `FILE_LIMIT_EXCEEDED`, `FILE_NOT_READY`, `TAG_LIMIT_EXCEEDED`, `FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`. (`TAG_LABEL_INVALID`·`FILE_COUNT_EXCEEDED` 는 분석 문서에만 있고 §0 에 없으므로 쓰지 않는다 → `VALIDATION_FAILED`·`FILE_LIMIT_EXCEEDED`.)
 - 제한값(D10): 본문 ≤ 50,000자 · 링크 ≤ 20개(`http(s)://`) · 파일 ≤ 5개 × 10,485,760 bytes · MIME `image/png, image/jpeg, image/gif, image/webp, application/pdf, application/zip, application/x-zip-compressed, text/plain, text/markdown`.
-- Storage 객체 경로(버킷 `attachments` 안): `{room_id}/{node_id}/{user_id}/{file_uuid}-{name}`. `files.id` = 경로 4번째 세그먼트 앞 36자 UUID(클라이언트가 `crypto.randomUUID()` 로 생성).
+- Storage 객체 경로(버킷 `attachments` 안): `{room_id}/{node_id}/{user_id}/{file_uuid}.{ext}` (00 개요 — 원본 파일명은 키에 넣지 않는다. Supabase Storage 는 비ASCII·공백 키를 `Invalid key` 로 거부). `ext` 는 원본명의 마지막 확장자를 소문자로(`[a-z0-9]{1,10}`, 없으면 생략 → `{file_uuid}`). 원본명은 `files.original_name` 에만. `files.id` = 4번째 세그먼트 앞 36자 UUID(클라이언트가 `crypto.randomUUID()` 로 생성).
+- Storage **객체** 는 SQL 로 지우지 않는다(`storage.objects` 직접 DELETE 금지 — 00 개요). `job_cleanup` 은 `files.status='DELETED'` 표시까지만, 실제 객체 삭제는 2단계 Edge Function(Storage API) 몫.
+- **함수 권한(D7, GRANT 전용 모델)**: 0002 의 `ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` 때문에 이 플랜이 만드는 함수는 전부 기본 비공개다. `revoke` 문은 쓰지 않고, `03-api.md` RPC 열의 공개 함수만 각 마이그레이션 끝에서 명시적으로 `grant execute … to authenticated`(로그인) 또는 `to anon, authenticated`(비로그인 허용) 한다. 내부 헬퍼(`*_json`, `notify_*`, `leader_room`, `deactivate_*`, `job_*`, `tag_*`, `storage_exists` …)는 GRANT 하지 않으며, 각 태스크 테스트가 `has_function_privilege('anon', …) = false` 를 단언한다.
 - 알림 15종 `kind` 는 `03-api.md` §7 `NotificationKind` 문자열 그대로. 제목은 생성 시점에 한국어로 렌더링해 저장.
 - 알림 시각(D8): 상태 전환·회차 시작 00:00 KST, 리마인더·일일 요약 09:00 KST. cron 은 UTC(`02 §7` 표 그대로).
 - 태그: 방당 ≤ 8, 자동 선택 ≤ 5, 자유 입력 라벨 1~20자, 자동 결과는 MANUAL 보존 + 억제 목록 존중.
 - "지금" 은 `public.app_now()`(이 플랜에서 추가, `app.now` 설정 우선) — 지각 경계 테스트용. `now()` 를 지각 판정에 직접 쓰지 않는다.
-- 테스트: PGlite, 사례마다 `begin … rollback`, 시드 기준일 `set_config('app.today','2026-10-12',true)`. 숫자 id 는 쿼리에서 `::text` 로 받아 문자열로 다룬다(PGlite 의 int8 → BigInt 혼동 방지).
+- 테스트: **plan 01 의 `supabase/tests/_harness.ts` 하나만 쓴다**(`openDb`·`applySeed`·`withCase`·`sqlTest`·`asUser`·`asAnon`·`setToday`·`expectFail` — 재정의 금지). 이 플랜이 더하는 건 시드 조회·시계 헬퍼 `_fixtures.ts`(Task 1)와 제출 헬퍼 `_submit.ts`(Task 2)뿐. 실행은 항상 `npm run test:db -- --filter "<group>:"`(`--config supabase/tests/deno.json` 포함). 사례마다 `begin … rollback`, 시드 기준일 `setToday(q, '2026-10-12')`. 숫자 id 는 쿼리에서 `::text` 로 받아 문자열로 다룬다(PGlite 의 int8 → BigInt 혼동 방지).
 
 ## Review Focus
 
 1. **자정 경계 지각** — 마감 10/03 과제를 KST 10/04 00:00:30(UTC 10/03 15:00:30) 에 제출하면 `is_late=true`, 23:59:59 KST 는 `false`. → Task 2 테스트 `is_late boundary`.
-2. **이탈자 분모** — 공통 과제를 제출한 멤버를 이탈 처리하면 회차 집계는 그 사람을 빼고(5/8) 제출물은 그룹장이 계속 읽는다. INACTIVE 를 다시 이탈 처리하면 `MEMBER_NOT_ACTIVE`. → Task 5 테스트.
-3. **cron 재실행** — 모든 `job_*` 는 같은 날 두 번 돌려도 두 번째는 0건(`dedupe_key`), 다른 날이면 새 키. → Task 6 각 잡 테스트의 "idempotent" 사례.
-4. **옵션 알림 꺼짐** — `room_notification_settings` 가 꺼진 kind 는 행이 생기지 않고 반환값 0, 설정 행이 없으면 기본 ON. → Task 3 테스트 `optional kind filtered`.
-5. **그룹장이 지운 AUTO 태그 복귀 금지** — `room_tags_put` 으로 AUTO 태그를 빼면 `room_tag_suppressions` 에 남아 다음 `tag_autoselect` 가 다시 붙이지 않고, 수동으로 다시 넣으면 억제가 풀린다. → Task 7 테스트.
+2. **이탈자 분모** — 공통 과제를 제출한 멤버를 이탈 처리하면 회차 집계는 그 사람을 빼고(5/8) 제출물은 그룹장이 계속 읽는다. INACTIVE 를 다시 이탈 처리하면 `MEMBER_NOT_ACTIVE`, **RECRUIT 방의 INACTIVE 행이 `room_apply` 하면 `MEMBER_NOT_ACTIVE`**(00 개요 RF3). → Task 6 테스트.
+3. **cron 재실행** — 모든 `job_*` 는 같은 날 두 번 돌려도 두 번째는 0건(`dedupe_key`), 다른 날이면 새 키. → Task 7 각 잡 테스트의 "idempotent" 사례.
+4. **옵션 알림 꺼짐** — `room_notification_settings` 가 꺼진 kind 는 행이 생기지 않고 반환값 0, 설정 행이 없으면 기본 ON. → Task 5 테스트 `optional kind filtered`.
+5. **그룹장이 지운 AUTO 태그 복귀 금지** — `room_tags_put` 으로 AUTO 태그를 빼면 `room_tag_suppressions` 에 남아 다음 `tag_autoselect` 가 다시 붙이지 않고, 수동으로 다시 넣으면 억제가 풀린다. → Task 8 테스트.
 
 ---
 
@@ -36,169 +38,160 @@
 
 | 파일 | 책임 |
 |---|---|
-| `supabase/migrations/0007_submissions.sql` | `app_now`, `allowed_mime_types`, `storage_exists`, `file_json`, `submission_json`, `submission_upsert`, `file_register`, `task_node_json`, `task_get` (I9 트리거는 0002, Storage 버킷·정책은 0003 소유 — 참조만) |
-| `supabase/migrations/0008_notifications.sql` | `notify_render`, `notify_enabled`, **`notify_publish`(placeholder 교체)**, `notifications_*`, `settings_*`, `leader_room`, `member_deactivate_preview`, `member_deactivate`, `job_*` 5종, `member_count_audit` |
-| `supabase/migrations/0009_tags.sql` | 태그 사전 시드 19종, `usage_count` 트리거, `tag_term_hit`, `tag_slug_for`, `room_tag_json`, `tags_search`, `room_tags_get`, `room_tags_put`, `tag_apply_auto`, `tag_autoselect`, `room_tags_suggest` |
+| `supabase/migrations/0007_submissions.sql` | `app_now`, `allowed_mime_types`, `storage_exists`, `file_json`, `submission_json`, `submission_upsert`, `file_register`, `task_node_json`, `task_get`, 공개 RPC GRANT (I9 트리거는 0002, Storage 버킷·정책은 0003 소유 — 참조만) |
+| `supabase/migrations/0008_notifications.sql` | `notify_render`, `notify_enabled`, **`notify_publish`(placeholder 교체)**, `notifications_*`, `settings_*`, `leader_room`, `member_deactivate_preview`, `member_deactivate`, `job_*` 5종, `member_count_audit`, 공개 RPC GRANT |
+| `supabase/migrations/0009_tags.sql` | 태그 사전 시드 19종, `usage_count` 트리거, `tag_term_hit`, `tag_slug_for`, `room_tag_json`, `tags_search`, `room_tags_get`, `room_tags_put`, `tag_apply_auto`, `tag_autoselect`, `room_tags_suggest`, 공개 RPC GRANT |
 | `supabase/migrations/0010_cron.sql` | `cron.schedule` 7줄 |
 | `supabase/seed.sql` (append) | 알림 설정 행, 철수 알림 3건, 제출 링크 샘플 |
-| `supabase/tests/_pglite-stubs.ts` (append) | `storage` 스키마 스텁, `auth.role()` |
-| `supabase/tests/_boot.ts` | PGlite 부팅(스텁 → 마이그레이션 전부 → 시드) + 공용 헬퍼 |
+| `supabase/tests/_fixtures.ts` | 시드 조회(`uidOf`·`roomId`·`nodeId`)·시계(`setNow`)·`one`·`uuids`·`cases()` — **plan 01 `_harness.ts` 위에 얹는 얇은 헬퍼**(하네스 재구현 아님) |
 | `supabase/tests/_submit.ts` | `submission_upsert` 호출 헬퍼(`submit`, `sqlArr`) — 테스트 파일끼리 import 하지 않기 위한 공용 모듈 |
 | `supabase/tests/submissions-sql.test.ts`, `files-sql.test.ts`, `task-get-sql.test.ts`, `notifications-sql.test.ts`, `deactivate-sql.test.ts`, `jobs-sql.test.ts`, `tags-sql.test.ts`, `cron-sql.test.ts` | PGlite 사례. `files-db.test.ts` 는 로컬 Supabase 전용(Storage 정책) |
 | `supabase/functions/_shared/auth.ts`, `supabase/functions/suggest-tags/{index.ts,deno.json}` | (선택) LLM 태그 제안 Edge Function — 키워드 `room_tags_suggest` 로 fallback |
 
+`supabase/tests/_pglite-stubs.ts` 는 **수정하지 않는다** — plan 01 Task 2 가 `storage.buckets`·`storage.objects`(`metadata jsonb` 포함)·`storage.foldername`·`auth.role()` 를 이미 만든다. `_boot.ts` 같은 두 번째 부팅 헬퍼도 만들지 않는다.
+
 ## 선행 Phase 와의 인터페이스 (orchestrator 가 plan 01/02/03 과 대조할 것)
 
 **이 플랜이 소비하는 것(0002~0006 에 있어야 함):**
-- `public.current_user_id()` — PGlite 에서는 `nullif(current_setting('app.uid', true), '')::uuid`. `public.require_user()`, `public.kst_today()`, `public.kst_deadline(date)`, `public.fail(text, text, jsonb default null)`, `public.iso(timestamptz)`(null 입력 → null), `public.task_code(date, date, timestamptz, boolean, date)`, `public.leaf_state(int, int, date, date, date)`, `public.pct(int, int)`, `public.person_json(uuid)`.
-- `public.is_task_assignee(p_node bigint, p_user uuid)`, `public.can_read_room(bigint)`, `public.can_read_submissions(bigint)`.
-- `public.assignment_resync(p_room bigint)`, `public.membership_result(p_room bigint, p_user uuid)`, `public.room_transition_active(p_room bigint, p_actor uuid)`, `public.room_transition_ended(p_room bigint)`.
-- placeholder `public.notify_publish(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p_recipients uuid[], p_dedupe_prefix text, p_model jsonb) returns int` — **인자 이름·타입이 정확히 같아야** `CREATE OR REPLACE` 가 통한다(다르면 0008 첫 줄의 `drop function if exists` 가 처리하지만, 의존 함수가 있으면 실패하므로 이름을 맞출 것).
-- 테스트에서 호출하는 plan 02/03 함수(가정 시그니처, 다르면 테스트 쪽을 고친다): `room_apply(p_slug text, p_invite_token text default null)`, `room_approve(p_slug text, p_user uuid)`, `room_reject(p_slug text, p_user uuid)`, `node_update(p_slug text, p_node_id bigint, p_patch jsonb)`.
-- `supabase/tests/_pglite-stubs.ts` 의 `PGLITE_STUBS` 문자열(auth.users, `auth.uid()`, cron 스텁, `anon/authenticated/service_role` 롤).
-- 시드: 방 slug 9개, 닉네임(민수·지은·철수·하나·도윤·가은·서연·지훈·현우 …), aws 트리(1주차 IAM 정책 이해 DLDM / VPC 실습 DMDM, 2주차 EC2 인스턴스 유형 정리(지정: 지은 D·철수 O) / S3 스토리지 클래스 발표자료(지정: 하나 O), 3주차 10/15 시작), spring 1주차 "섹션 1~5 정리 노트" DDDDD(D = end_date 18:00 KST). 도윤은 aws INACTIVE.
+- `public.current_user_id()`(운영 = `auth.uid()`, PGlite 는 스텁 `auth.uid()` 가 `app.uid` 를 읽음), `public.require_user()`, `public.kst_today()`, `public.kst_deadline(date)`, `public.fail(text, text, jsonb default null)`, `public.iso(timestamptz)`(null 입력 → null), `public.task_code(date, date, timestamptz, boolean, date)`, `public.leaf_state(int, int, date, date, date)`, `public.pct(int, int)`, `public.person_json(uuid)`.
+- `public.is_task_assignee(p_node bigint, p_user uuid)`, `public.can_read_room(bigint)`, `public.can_read_submissions(bigint)`, `public.can_read_submission(p_node bigint, p_author uuid)`.
+- `public.assignment_resync(p_room bigint)`, `public.membership_result(p_room bigint, p_user uuid)`, `public.room_transition_active(p_room bigint, p_actor uuid)`, `public.room_transition_ended(p_room bigint)`, `public.room_lock(p_slug)`, `public.room_readable(p_room, p_uid, p_token default null)`, `public.room_leaf_stats(p_room)`, `public.room_release_seat(p_room)`.
+- placeholder `public.notify_publish(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p_recipients uuid[], p_dedupe_prefix text, p_model jsonb) returns int`(0004, `language sql`) — 인자 이름·타입이 같으므로 0008 이 `CREATE OR REPLACE`(`plpgsql` 로 교체 — PGlite 실측 OK).
+- 테스트에서 호출하는 plan 02/03 함수(확정 시그니처): `room_create(p_title, p_intro, p_start_date, p_end_date, p_max_members, p_is_public, p_join_mode, …)`, `room_apply(p_slug text, p_invite_token text default null)`, `room_approve(p_slug text, p_user uuid)`, `room_reject(p_slug text, p_user uuid)`, `room_tick()`, `node_update(p_slug text, p_node_id bigint, p_patch jsonb)`.
+- 테스트 하네스: plan 01 `supabase/tests/_harness.ts` 의 `openDb`·`applySeed`·`makeQ`·`withCase`·`sqlTest`·`asUser`·`asAnon`·`setToday`·`newUser`·`expectFail`, plan 03 `_curriculum-helpers.ts` 의 `uid`·`roomId`·`TODAY`(시드 조회 — `_fixtures.ts` 가 재사용).
+- 시드: 방 slug 9개, 닉네임(민수·지은·철수·하나·도윤·가은·서연·지훈·현우 …), aws 트리(1주차 IAM 정책 이해 DLDM / VPC 실습 DMDM, 2주차 EC2 인스턴스 유형 정리(지정: 지은 D·철수 O) / S3 스토리지 클래스 발표자료(지정: 하나 O), 3주차 10/15 시작), spring 1주차 "섹션 1~5 정리 노트" DDDDD(D = end_date 18:00 KST), **spring 2주차 10/12 시작(ACTIVE 5명)**. 도윤은 aws INACTIVE.
 
-**plan 02/03 쪽 호출 계약(이 플랜의 `notify_publish` 가 기대하는 인자) — 이미 들어간 호출을 이 표로 점검:**
+**알림 호출 계약 — D8 + plan 02/03 의 실제 호출(이 표가 정본):**
 
-| kind | p_room | p_node | p_actor | p_recipients | p_dedupe_prefix 예 | p_model 필수 키 |
-|---|---|---|---|---|---|---|
-| JOIN_REQUESTED | 방 | null | 신청자 | `[leader_id]` | `JOIN_REQUESTED:room=1:user=<uuid>` | 없음(닉네임은 actor 로 조회) |
-| JOIN_APPROVED / JOIN_REJECTED | 방 | null | 그룹장 | `[신청자]` | `JOIN_APPROVED:room=1:user=<uuid>` | 없음 |
-| JOIN_EXPIRED | 방 | null | null | PENDING 전원 | `JOIN_EXPIRED:room=1` | 없음 |
-| ROOM_STARTED / ROOM_ENDED | 방 | null | 조기 시작 actor 또는 null | ACTIVE 전원 | `ROOM_STARTED:room=1` | 없음 |
-| SCHEDULE_CHANGED | 방 | null | 그룹장 | ACTIVE 전원 | `SCHEDULE_CHANGED:room=1:tx=<txid_current()>` (저장 1회 = 1건) | 없음 |
-| TASK_ASSIGNED / TASK_UNASSIGNED | 방 | 리프 | 그룹장 | 추가/제외된 사람 | `TASK_ASSIGNED:node=42:tx=<txid_current()>` | 없음 |
-| ROOM_START_BLOCKED | 방 | null | null | `[leader_id]` | `ROOM_START_BLOCKED:room=1:d=2026-10-12` | 없음 |
+`dedupe_key` = `p_dedupe_prefix`(+ 행위성 kind 면 `':' || txid_current()`) `|| ':' || recipient`. 수신자에서 `p_actor` 를 빼는 건 **`notify_publish` 의 책임**(호출자는 신경 쓰지 않는다 — D8). 행위성 3종(`SCHEDULE_CHANGED`·`TASK_ASSIGNED`·`TASK_UNASSIGNED`)은 plan 03 호출부가 txid 를 넣지 않으므로 **0008 `notify_publish` 가 prefix 뒤에 `:<txid_current()>` 를 붙인다** — 같은 사람을 다시 지정하거나 일정을 A→B→A 로 되돌려도 새 알림이 가고, 한 저장(같은 트랜잭션) 안의 같은 수신자·kind 는 1건.
 
-제목·링크는 `notify_publish` 가 방·노드·actor 를 id 로 조회해 채운다. `p_model` 은 `DEADLINE_REMINDER` 의 `days`, `TASK_COMPLETION_DIGEST` 의 `count` 처럼 추가 값만 넣는다. `p_dedupe_prefix` 가 null 이면 dedupe 없음(쓰지 말 것).
+| kind | 성격 | 호출 위치 | p_node | p_actor | p_recipients | p_dedupe_prefix (호출자가 넘기는 값) | 최종 키 접미 |
+|---|---|---|---|---|---|---|---|
+| JOIN_REQUESTED | 행위 | 02 `room_apply` | null | 신청자 | `[leader_id]` | `JOIN_REQUESTED:<room>:<user>:<epoch>` | `:<recipient>` (epoch 로 이미 행위 단위) |
+| JOIN_APPROVED / JOIN_REJECTED | 행위 | 02 `room_approve`/`room_reject` | null | 그룹장 | `[신청자]` | `JOIN_APPROVED:<room>:<user>:<epoch>` | `:<recipient>` |
+| JOIN_EXPIRED | 상태 | 02 `room_transition_active` | null | actor 또는 null | 만료된 PENDING | `JOIN_EXPIRED:<room>` | `:<recipient>` |
+| ROOM_STARTED / ROOM_ENDED | 상태 | 02 `room_transition_*` | null | 조기 시작 actor 또는 null | ACTIVE 전원 | `ROOM_STARTED:<room>` | `:<recipient>` |
+| SCHEDULE_CHANGED | 행위 | 03 `node_update`(ACTIVE 방, 기간 변경) | 리프 | 그룹장 | **해당 리프의 유효 담당자**(본인 제외) | `SCHEDULE_CHANGED:<room>:<node>:<YYYYMMDD><YYYYMMDD>` | `:<txid>:<recipient>` |
+| TASK_ASSIGNED / TASK_UNASSIGNED | 행위 | 03 `node_update`, 04 `member_deactivate` | 리프 | 그룹장 | 추가/제외된 사람 | `TASK_ASSIGNED:<room>:<node>` | `:<txid>:<recipient>` |
+| ROOM_START_BLOCKED | 상태 | 04 `job_draft_blocked` | null | null | `[leader_id]` | `ROOM_START_BLOCKED:<room>:<YYYY-MM-DD>` | `:<recipient>` |
+| ROUND_STARTED | 상태 | 04 `job_round_started` | 회차 | null | ACTIVE 전원 | `ROUND_STARTED:<room>:<node>` | `:<recipient>` |
+| DEADLINE_REMINDER | 상태 | 04 `job_deadline_reminder` | 리프 | null | 미제출 담당자 | `DEADLINE_REMINDER:<room>:<node>:d<1\|3>` | `:<recipient>` |
+| TASK_ALL_SUBMITTED | 상태 | 04 `submission_upsert`(IMMEDIATE) | 리프 | 마지막 제출자 | `[leader_id]` | `TASK_ALL_SUBMITTED:<room>:<node>` | `:<recipient>` |
+| TASK_COMPLETION_DIGEST | 상태 | 04 `job_completion_digest` | null | null | `[leader_id]` | `TASK_COMPLETION_DIGEST:<room>:<YYYY-MM-DD>` | `:<recipient>` |
+| MEMBER_DEACTIVATED | 행위(1회성) | 04 `member_deactivate` | null | 그룹장 | `[대상]` | `MEMBER_DEACTIVATED:<room>:<user>` | `:<recipient>` |
 
-**태그 자동 선택 훅(plan 02/03 에 들어가야 할 가드):** `room_create`·`room_update`·`node_create`·`node_update`·`node_delete`·`node_archive` 의 **끝**(커밋 직전)에 아래 블록을 둔다. 0009 가 아직 없을 때(Phase 2·3 테스트)도 깨지지 않는다.
+제목·링크는 `notify_publish` 가 방·노드·actor 를 id 로 조회해 채운다. `p_model` 은 `DEADLINE_REMINDER` 의 `days`, `TASK_COMPLETION_DIGEST` 의 `count` 처럼 추가 값만 넣는다. `p_dedupe_prefix` 가 null 이면 dedupe 없음(쓰지 말 것). 키가 160자를 넘으면 `'h:' || md5(prefix[+txid]) || ':' || recipient` 로 줄인다(수신자 uuid 는 절대 자르지 않는다).
 
-```sql
-  if to_regproc('public.tag_autoselect') is not null then
-    perform public.tag_autoselect(v_room_id);   -- v_room_id: 해당 함수의 방 id 변수
-  end if;
-```
-
-plan 02/03 에 이 가드가 빠졌다면: 아직 배포 전이므로 0004/0006 에 추가한다(배포 후라면 0011 에서 `CREATE OR REPLACE` 로 본문 전체를 다시 쓴다). Task 7 의 "node_update 가 태그를 다시 고른다" 테스트가 이를 검증한다.
+**태그 자동 선택 훅 — 실제 상태(S6):** `to_regproc('public.tag_autoselect')` 가드는 **plan 03 `node_update` 에만**(title/descriptionMd 변경 시) 있다. `room_create`·`room_update`(0004)·`node_create`·`node_delete`·`node_archive`(0006)에는 없고, **이 플랜은 그 함수들을 다시 만들지 않는다**(0004·0006 의 본문을 0009 에서 `CREATE OR REPLACE` 로 복제하면 두 플랜이 같은 함수를 소유하게 된다). 대신:
+- 새 방의 AUTO 태그는 **첫 커리큘럼 저장(노드 제목·설명을 고친 `node_update`) 이후** 붙는다. 그 전에는 `room_create` 의 `p_tag_slugs`(MANUAL)만 있다.
+- 그룹장의 "태그 다시 고르기" = `room_tags_suggest(p_slug)` 가 `tag_autoselect` 를 즉시 호출한다(Task 8 테스트 "new room: 0 auto tags until node_update / suggest"). 프론트 UI 는 plan 06(§2.6 태그 편집).
 
 ---
 
-### Task 1: 테스트 부팅 헬퍼 + Storage 스텁
+### Task 1: 시드 조회·시계 헬퍼 `_fixtures.ts` (plan 01 하네스 재사용)
 
 **Files:**
-- Modify: `supabase/tests/_pglite-stubs.ts` (문자열 끝에 storage 스텁 추가)
-- Create: `supabase/tests/_boot.ts`
-- Test: `supabase/tests/boot-sql.test.ts`
+- Create: `supabase/tests/_fixtures.ts`
+- Test: `supabase/tests/fixtures-sql.test.ts`
 
 **Interfaces:**
-- Consumes: `PGLITE_STUBS`(plan 01), `supabase/migrations/*.sql`, `supabase/seed.sql`.
-- Produces: `bootDb(): Promise<{db, q}>`, `Q`, `one`, `asUser`, `setToday`, `setNow`, `uidOf`, `roomId`, `nodeId`, `expectFail`, `cases` — 이후 모든 테스트가 이것만 import.
+- Consumes: plan 01 `_harness.ts`(`openDb`, `applySeed`, `withCase`, `sqlTest`, `setToday`, `type Q`), plan 03 `_curriculum-helpers.ts`(`uid`, `roomId`, `TODAY`).
+- Produces (이후 모든 Phase 4–6 테스트가 `_harness.ts` + 이것만 import):
+  ```ts
+  export type Row = Record<string, any>;                                   // 테스트 편의(값 any)
+  export type Q = (sql: string, params?: unknown[]) => Promise<Row[]>;    // 하네스 Q 와 호환(반환 원소 any)
+  export type Case = { name: string; run: (q: Q) => Promise<void> };
+  export const TODAY: "2026-10-12";
+  export function one(q: Q, sql: string, p?: unknown[]): Promise<Row>;
+  export function setNow(q: Q, iso: string): Promise<void>;              // set_config('app.now', iso, true) — 0007 app_now() 가 읽음
+  export function uidOf(q: Q, nick: string): Promise<string>;            // = plan 03 uid()
+  export function roomId(q: Q, slug: string): Promise<string>;           // = plan 03 roomId()
+  export function nodeId(q: Q, slug: string, title: string): Promise<string>;
+  export function uuids(xs: string[]): string;                           // uuid[] 리터럴
+  export function cases(group: string, db: PGlite, list: Case[]): void;  // sqlTest(`${group}: …`, withCase(db, …)) + setToday(TODAY)
+  ```
 
-- [ ] **Step 1: `_pglite-stubs.ts` 에 storage 스텁 추가**
-
-`PGLITE_STUBS` 템플릿 문자열의 **맨 끝**(닫는 백틱 앞)에 붙인다. plan 01 이 `auth.uid()` 를 이미 정의했으면 그대로 두고 `auth.role()` 만 없을 때 추가한다.
-
-```sql
--- ── storage 스텁 (0007 의 버킷·정책이 닿는 것만) ──
-create schema if not exists storage;
-create table if not exists storage.buckets (
-  id text primary key, name text not null, public boolean not null default false,
-  file_size_limit bigint, allowed_mime_types text[], created_at timestamptz default now());
-create table if not exists storage.objects (
-  id uuid primary key default gen_random_uuid(),
-  bucket_id text not null references storage.buckets(id),
-  name text not null, owner_id text, metadata jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  unique (bucket_id, name));
-create or replace function storage.foldername(p_name text) returns text[] language sql immutable as
-  $$ select (string_to_array(p_name, '/'))[1 : array_length(string_to_array(p_name, '/'), 1) - 1] $$;
-create or replace function auth.role() returns text language sql stable as
-  $$ select case when nullif(current_setting('app.uid', true), '') is null then 'anon' else 'authenticated' end $$;
-```
-
-- [ ] **Step 2: `_boot.ts` 작성**
+- [ ] **Step 1: 실패하는 테스트 `supabase/tests/fixtures-sql.test.ts`**
 
 ```ts
-// supabase/tests/_boot.ts — PGlite 에 스텁 → 마이그레이션 전부(번호순) → 시드를 올린다. 모든 *-sql.test.ts 가 공유.
-import { PGlite } from "npm:@electric-sql/pglite@0.3";
-import { PGLITE_STUBS } from "./_pglite-stubs.ts";
+import { assertEquals } from "@std/assert";
+import { applySeed, openDb } from "./_harness.ts";
+import { cases, nodeId, one, roomId, setNow, uidOf } from "./_fixtures.ts";
 
-// deno-lint-ignore no-explicit-any
-export type Row = Record<string, any>;
-export type Q = (sql: string, params?: unknown[]) => Promise<Row[]>;
-export type Case = { name: string; run: (q: Q) => Promise<void> };
+const db = await openDb();
+await applySeed(db);
 
-export async function bootDb(): Promise<{ db: PGlite; q: Q }> {
-  const db = new PGlite();
-  await db.exec(PGLITE_STUBS);
-  const dir = new URL("../migrations/", import.meta.url);
-  const files = [...Deno.readDirSync(dir)].map((e) => e.name).filter((n) => n.endsWith(".sql")).sort();
-  for (const f of files) await db.exec(await Deno.readTextFile(new URL(f, dir)));
-  await db.exec(await Deno.readTextFile(new URL("../seed.sql", import.meta.url)));
-  const q: Q = async (sql, params = []) => (await db.query(sql, params)).rows as Row[];
-  return { db, q };
-}
-
-export const one = async (q: Q, sql: string, p: unknown[] = []): Promise<Row> => (await q(sql, p))[0];
-export const asUser = (q: Q, uid: string | null) => q("select set_config('app.uid', $1, true)", [uid ?? ""]);
-export const setToday = (q: Q, d: string) => q("select set_config('app.today', $1, true)", [d]);
-export const setNow = (q: Q, iso: string) => q("select set_config('app.now', $1, true)", [iso]);
-export const uidOf = async (q: Q, nick: string) => (await one(q, "select id::text as id from public.profiles where nickname = $1", [nick])).id as string;
-export const roomId = async (q: Q, slug: string) => (await one(q, "select id::text as id from public.rooms where slug = $1", [slug])).id as string;
-export const nodeId = async (q: Q, slug: string, title: string) =>
-  (await one(q, "select n.id::text as id from public.goal_nodes n join public.rooms r on r.id = n.room_id where r.slug = $1 and n.title = $2", [slug, title])).id as string;
-export const uuids = (xs: string[]) => "{" + xs.join(",") + "}";
-
-export async function expectFail(p: Promise<unknown>, code: string) {
-  try { await p; } catch (e) {
-    const msg = String((e as Error).message);
-    if (msg.includes(code)) return;
-    throw new Error(`expected ${code}, got: ${msg}`);
-  }
-  throw new Error(`expected ${code}, but the call succeeded`);
-}
-
-export function cases(group: string, db: PGlite, q: Q, list: Case[]) {
-  for (const c of list) {
-    Deno.test({ name: `${group}: ${c.name}`, sanitizeResources: false, sanitizeOps: false, fn: async () => {
-      await db.exec("begin");
-      try { await setToday(q, "2026-10-12"); await c.run(q); } finally { await db.exec("rollback"); }
-    } });
-  }
-}
-```
-
-- [ ] **Step 3: 부팅 테스트 작성**
-
-```ts
-// supabase/tests/boot-sql.test.ts
-import { assert, assertEquals } from "jsr:@std/assert";
-import { bootDb, cases, one } from "./_boot.ts";
-
-const { db, q } = await bootDb();
-cases("boot", db, q, [
-  { name: "seed loaded: 9 rooms, aws leader 민수", run: async (q) => {
-    assertEquals(Number((await one(q, "select count(*)::int as n from public.rooms")).n), 9);
-    const r = await one(q, "select p.nickname from public.rooms r join public.profiles p on p.id = r.leader_id where r.slug = 'aws'");
-    assertEquals(r.nickname, "민수");
+cases("fixtures", db, [
+  { name: "seed lookups: 9 rooms, aws leader 민수, EC2 node id, today pinned", run: async (q) => {
+    assertEquals((await one(q, "select count(*)::int as n from public.rooms")).n, 9);
+    const r = await one(q, "select leader_id::text as id from public.rooms where slug = 'aws'");
+    assertEquals(r.id, await uidOf(q, "민수"));
+    assertEquals(typeof await roomId(q, "aws"), "string");
+    const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    assertEquals((await one(q, "select title from public.goal_nodes where id = $1::bigint", [ec2])).title, "EC2 인스턴스 유형 정리");
+    assertEquals((await one(q, "select public.kst_today()::text as d")).d, "2026-10-12");
   } },
-  { name: "storage stub present", run: async (q) => {
-    assert((await q("select 1 from information_schema.tables where table_schema = 'storage' and table_name = 'objects'")).length === 1);
+  { name: "setNow sets app.now for the case only", run: async (q) => {
+    await setNow(q, "2026-10-03T15:00:30Z");
+    assertEquals((await one(q, "select current_setting('app.now', true) as v")).v, "2026-10-03T15:00:30Z");
   } },
 ]);
 ```
 
-- [ ] **Step 4: 실행**
+- [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/boot-sql.test.ts`
-Expected: 2 passed. (0007~0010 이 아직 없어도 통과해야 한다 — 마이그레이션 디렉터리를 그대로 읽으므로.)
+Run: `npm run test:db -- --filter "fixtures:"`
+Expected: FAIL — `Module not found "…/supabase/tests/_fixtures.ts"`.
+
+- [ ] **Step 3: `supabase/tests/_fixtures.ts`**
+
+```ts
+// supabase/tests/_fixtures.ts — plan 04 테스트 공용 헬퍼. 부팅·격리·권한 흉내는 전부 plan 01 _harness.ts 의 것을 쓴다(재정의 금지).
+import type { PGlite } from "pglite";
+import { setToday, sqlTest, withCase } from "./_harness.ts";
+import { roomId as roomIdOf, TODAY as SEED_TODAY, uid } from "./_curriculum-helpers.ts";
+
+// deno-lint-ignore no-explicit-any
+export type Row = Record<string, any>;
+/** _harness.ts 의 Q 와 같은 함수 — 반환 원소만 any 로 넓혀 단언을 짧게 쓴다 */
+export type Q = (sql: string, params?: unknown[]) => Promise<Row[]>;
+export type Case = { name: string; run: (q: Q) => Promise<void> };
+
+export const TODAY = SEED_TODAY;
+export const uidOf = uid;
+export const roomId = roomIdOf;
+
+export const one = async (q: Q, sql: string, p: unknown[] = []): Promise<Row> => (await q(sql, p))[0];
+export const setNow = async (q: Q, iso: string) => { await q("select set_config('app.now', $1, true)", [iso]); };
+export const nodeId = async (q: Q, slug: string, title: string): Promise<string> => {
+  const r = await q(`select n.id::text as id from public.goal_nodes n join public.rooms r on r.id = n.room_id
+                     where r.slug = $1 and n.title = $2 order by n.id`, [slug, title]);
+  if (r.length !== 1) throw new Error(`node "${title}" in ${slug}: ${r.length} rows`);
+  return r[0].id as string;
+};
+export const uuids = (xs: string[]) => "{" + xs.join(",") + "}";
+
+/** 사례 묶음 → sqlTest(`${group}: ${name}`, withCase(...)). 각 사례는 시드 기준일로 시작한다 */
+export function cases(group: string, db: PGlite, list: Case[]) {
+  for (const c of list) {
+    sqlTest(`${group}: ${c.name}`, withCase(db, async (q) => {
+      await setToday(q, TODAY);
+      await c.run(q as Q);
+    }));
+  }
+}
+```
+
+- [ ] **Step 4: 실행해서 통과 확인**
+
+Run: `npm run test:db -- --filter "fixtures:"`
+Expected: 2 passed. 0007 이 아직 없어도 통과한다(`app.now` 는 설정값만 본다).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/tests/_pglite-stubs.ts supabase/tests/_boot.ts supabase/tests/boot-sql.test.ts
-git commit -m "test(db): PGlite boot helper and storage stubs for phase 4-6
+git add supabase/tests/_fixtures.ts supabase/tests/fixtures-sql.test.ts
+git commit -m "test(db): seed lookup and clock fixtures for phase 4-6 on top of the plan 01 harness
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
@@ -234,7 +227,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 ```ts
 // supabase/tests/_submit.ts — submission_upsert 호출 헬퍼 (submissions·files·notifications·deactivate·jobs 테스트 공용)
-import { one, uuids, type Q } from "./_boot.ts";
+import { one, uuids, type Q } from "./_fixtures.ts";
 
 /** text[] 리터럴. 큰따옴표만 이스케이프 */
 export const sqlArr = (xs: string[]) => "{" + xs.map((x) => '"' + x.replace(/"/g, '\\"') + '"').join(",") + "}";
@@ -247,14 +240,16 @@ export const submit = async (q: Q, node: string, body = "제출 본문", links: 
 - [ ] **Step 2: 실패하는 테스트 `supabase/tests/submissions-sql.test.ts`**
 
 ```ts
-import { assertEquals, assertNotEquals } from "jsr:@std/assert";
-import { asUser, bootDb, cases, expectFail, nodeId, one, roomId, setNow, uidOf } from "./_boot.ts";
+import { assert, assertEquals } from "@std/assert";
+import { applySeed, asAnon, asUser, expectFail, openDb } from "./_harness.ts";
+import { cases, nodeId, one, roomId, setNow, uidOf } from "./_fixtures.ts";
 import { submit } from "./_submit.ts";
 
-const { db, q } = await bootDb();
+const db = await openDb();
+await applySeed(db);
 const NOW = "2026-10-12T03:00:00Z";   // KST 10/12 12:00
 
-cases("submissions", db, q, [
+cases("submissions", db, [
   { name: "upsert: first submit fixes firstSubmittedAt/isLate, second keeps them and replaces links", run: async (q) => {
     await setNow(q, NOW);
     await asUser(q, await uidOf(q, "철수"));
@@ -273,7 +268,7 @@ cases("submissions", db, q, [
     assertEquals(b.isLate, false);
     assertEquals(b.bodyMd, "고친 본문");
     assertEquals(b.links, ["https://c.example/3"]);
-    assertNotEquals(b.updatedAt, a.updatedAt);
+    assert(b.updatedAt >= a.updatedAt);                                     // 같은 트랜잭션 안의 now() 는 고정값이라 '같음'도 정상
     const n = await one(q, "select count(*)::int as n from public.submissions where node_id = $1::bigint", [ec2]);
     assertEquals(n.n, 2);                                                   // 지은(시드 D) + 철수
   } },
@@ -315,7 +310,7 @@ cases("submissions", db, q, [
     await asUser(q, await uidOf(q, "가은"));                                 // 비멤버
     await expectFail(submit(q, ec2), "TASK_NOT_ASSIGNED");
     await expectFail(submit(q, "999999"), "NODE_NOT_FOUND");
-    await asUser(q, null);
+    await asAnon(q);
     await expectFail(submit(q, ec2), "AUTH_REQUIRED");
   } },
 
@@ -333,7 +328,7 @@ cases("submissions", db, q, [
     const pending = crypto.randomUUID();
     await q(`insert into public.files (id, owner_user_id, room_id, node_id, purpose, object_path, original_name, content_type, size_bytes, status)
              values ($1::uuid, $2::uuid, $3::bigint, $4::bigint, 'ATTACHMENT', $5, 'a.png', 'image/png', 10, 'PENDING')`,
-            [pending, cheolsu, await roomId(q, "aws"), ec2, `${await roomId(q, "aws")}/${ec2}/${cheolsu}/${pending}-a.png`]);
+            [pending, cheolsu, await roomId(q, "aws"), ec2, `${await roomId(q, "aws")}/${ec2}/${cheolsu}/${pending}.png`]);
     await expectFail(submit(q, ec2, "x", [], [pending]), "FILE_NOT_READY");
     await expectFail(submit(q, ec2, "x", [], [crypto.randomUUID()]), "NOT_FOUND");
     // 담당자 아닌 사람의 파일 id 를 끼워 넣어도 NOT_FOUND
@@ -358,7 +353,7 @@ cases("submissions", db, q, [
 
 - [ ] **Step 3: 실행해서 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/submissions-sql.test.ts`
+Run: `npm run test:db -- --filter "submissions:"`
 Expected: FAIL — `function public.submission_upsert(bigint, text, text[], uuid[]) does not exist`.
 
 - [ ] **Step 4: `supabase/migrations/0007_submissions.sql` 작성**
@@ -408,7 +403,8 @@ $$;
 -- ───────── submission_upsert (D10, mystudy §2.2) ─────────
 -- 선행: 방 ACTIVE·미보관, 리프 미보관, 담당자(released 아님), today ≥ start_date.
 -- 최초 제출만 first_submitted_at/is_late 를 정한다(이후 갱신은 본문·링크·첨부만, I9 트리거가 두 컬럼 변경을 막는다).
--- 링크는 전부 교체, 첨부는 목록대로 연결하고 빠진 첨부는 soft delete(job_cleanup 이 객체까지 지운다).
+-- 링크는 전부 교체, 첨부는 목록대로 연결하고 빠진 첨부는 soft delete(status=DELETED). Storage 객체는 SQL 로 지우지 않는다(00 개요 — 2단계 Edge Function).
+-- 첨부마다 files 행(본인·이 리프·READY) + storage.objects 실재(D10 "존재 재검증")를 확인한다 — 등록 후 소유자가 attachments_delete_own 정책으로 객체를 지웠으면 FILE_NOT_READY.
 create or replace function public.submission_upsert(p_node bigint, p_body text, p_links text[], p_file_ids uuid[])
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -423,6 +419,8 @@ declare
   v_link  text;
   v_fid   uuid;
   v_fst   text;
+  v_fpath text;
+  v_fbkt  text;
   v_sid   bigint;
   v_new   boolean;
   v_asg   int;
@@ -461,10 +459,12 @@ begin
     perform public.fail('FILE_LIMIT_EXCEEDED', '첨부는 5개까지예요', '{"field":"fileIds"}'::jsonb);
   end if;
   foreach v_fid in array v_files loop
-    select status into v_fst from public.files
+    select status, bucket_id, object_path into v_fst, v_fbkt, v_fpath from public.files
     where id = v_fid and owner_user_id = v_uid and node_id = n.id and purpose = 'ATTACHMENT';
     if not found then perform public.fail('NOT_FOUND', '첨부 파일을 찾을 수 없어요', jsonb_build_object('fileId', v_fid::text)); end if;
-    if v_fst <> 'READY' then perform public.fail('FILE_NOT_READY', '업로드가 끝나지 않은 파일이 있어요', jsonb_build_object('fileId', v_fid::text)); end if;
+    if v_fst <> 'READY' or not public.storage_exists(v_fbkt, v_fpath) then
+      perform public.fail('FILE_NOT_READY', '업로드가 끝나지 않은 파일이 있어요', jsonb_build_object('fileId', v_fid::text));
+    end if;
   end loop;
 
   -- xmax = 0 이면 INSERT 된 행(최초 제출). ON CONFLICT 분기는 first_submitted_at/is_late 를 건드리지 않는다
@@ -488,7 +488,7 @@ begin
       select completion_mode into v_mode from public.room_notification_settings where room_id = r.id;
       if coalesce(v_mode, 'DAILY_DIGEST') = 'IMMEDIATE' then
         perform public.notify_publish('TASK_ALL_SUBMITTED', r.id, n.id, v_uid, array[r.leader_id],
-                                      'TASK_ALL_SUBMITTED:node=' || n.id, '{}'::jsonb);
+                                      'TASK_ALL_SUBMITTED:' || r.id || ':' || n.id, '{}'::jsonb);
       end if;
     end if;
   end if;
@@ -499,8 +499,8 @@ end $$;
 
 - [ ] **Step 5: 실행해서 통과 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/submissions-sql.test.ts`
-Expected: 6 passed. `updatedAt` 비교가 같은 값으로 실패하면 `set_updated_at` 트리거(0002)가 `now()` 를 쓰는지 확인 — 두 upsert 가 같은 트랜잭션이라 `now()` 가 같다. 그 경우 테스트의 두 번째 호출 앞에 `await q("select pg_sleep(0.01)")` 대신 `assertNotEquals` 를 `assert(b.updatedAt >= a.updatedAt)` 로 완화하고 주석을 남긴다(같은 트랜잭션 안에서 `now()` 는 고정값이 정상).
+Run: `npm run test:db -- --filter "submissions:"`
+Expected: 6 passed. (`updatedAt` 은 `>=` 로만 단언한다 — 두 upsert 가 한 사례 트랜잭션 안이라 `set_updated_at` 트리거의 `now()` 가 같을 수 있다.)
 
 - [ ] **Step 6: Commit**
 
@@ -522,16 +522,19 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Interfaces:**
 - Consumes: Task 2 의 `allowed_mime_types`, `storage_exists`, `file_json`, `submission_upsert`; 0003(plan 01 Task 6)의 버킷 `attachments`(private, `file_size_limit=10485760`, `allowed_mime_types`=D10) 와 정책 `attachments_insert_assignee`(본인 폴더 ∧ 담당자) / `attachments_select_member`(`can_read_submissions`) / `attachments_delete_own`. **버킷·정책은 0003 이 전부 만들었으므로 여기서는 추가하지 않는다** — Step 3 의 주석으로만 참조한다.
-- Produces: `public.file_register(p_node bigint, p_path text, p_name text, p_mime text, p_size bigint) returns jsonb` — FileMeta(`status: "ready"`). 업로드 흐름(03-api §5): 프론트가 `crypto.randomUUID()` 로 `fileId` 를 만들고 Storage `upload('{room}/{node}/{uid}/{fileId}-{name}')` → `file_register` → `submission_upsert(fileIds)`.
+- Produces: `public.file_register(p_node bigint, p_path text, p_name text, p_mime text, p_size bigint) returns jsonb` — FileMeta(`status: "ready"`). 업로드 흐름(03-api §5): 프론트가 `crypto.randomUUID()` 로 `fileId` 를 만들고 Storage `upload('{room}/{node}/{uid}/{fileId}.{ext}')`(원본명은 키에 넣지 않음 — `p_name` 으로 따로 넘김) → `file_register` → `submission_upsert(fileIds)`.
+- 개수 한도(S3): `file_register` 는 **아직 제출에 연결되지 않은 24시간 이내 파일(업로드 중인 묶음)** 만 5개까지 센다. 제출에 연결된 파일 수는 `submission_upsert` 의 `cardinality(fileIds) ≤ 5` 가 맡고, 24시간 지난 미연결 READY 고아는 한도에서 빠지며 `job_cleanup`(Task 7)이 DELETED 로 표시한다.
 
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/files-sql.test.ts`**
 
 ```ts
-import { assertEquals } from "jsr:@std/assert";
-import { asUser, bootDb, cases, expectFail, nodeId, one, roomId, setNow, uidOf, type Q } from "./_boot.ts";
+import { assertEquals } from "@std/assert";
+import { applySeed, asAnon, asUser, expectFail, openDb } from "./_harness.ts";
+import { cases, nodeId, one, roomId, setNow, uidOf, type Q } from "./_fixtures.ts";
 import { submit } from "./_submit.ts";
 
-const { db, q } = await bootDb();
+const db = await openDb();
+await applySeed(db);
 
 /** Storage 업로드를 흉내 낸다(storage.objects 스텁 행). metadata.size 가 서버가 아는 크기 */
 async function uploaded(q: Q, path: string, owner: string, size = 1234, mime = "image/png") {
@@ -541,7 +544,7 @@ async function uploaded(q: Q, path: string, owner: string, size = 1234, mime = "
 const register = (q: Q, node: string, path: string, name: string, mime: string, size: number) =>
   one(q, "select public.file_register($1::bigint, $2, $3, $4, $5::bigint) as f", [node, path, name, mime, size]).then((r) => r.f);
 
-cases("files", db, q, [
+cases("files", db, [
   { name: "file_register: READY row from an uploaded object; size comes from storage metadata", run: async (q) => {
     await setNow(q, "2026-10-12T03:00:00Z");
     const cheolsu = await uidOf(q, "철수");
@@ -549,7 +552,7 @@ cases("files", db, q, [
     const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
     await asUser(q, cheolsu);
     const fid = crypto.randomUUID();
-    const path = `${room}/${ec2}/${cheolsu}/${fid}-노트.png`;
+    const path = `${room}/${ec2}/${cheolsu}/${fid}.png`;                     // 원본명(한글)은 키에 넣지 않는다
     await uploaded(q, path, cheolsu, 4096);
     const f = await register(q, ec2, path, "노트.png", "image/png", 1234);
     assertEquals(f, { id: fid, name: "노트.png", contentType: "image/png", size: 4096, status: "ready" });
@@ -572,40 +575,60 @@ cases("files", db, q, [
     const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
     await asUser(q, cheolsu);
     const fid = crypto.randomUUID();
-    const path = `${room}/${ec2}/${cheolsu}/${fid}-a.pdf`;
+    const path = `${room}/${ec2}/${cheolsu}/${fid}.pdf`;
     await expectFail(register(q, ec2, path, "a.pdf", "application/pdf", 10), "FILE_NOT_READY");
     await uploaded(q, path, cheolsu, 10, "application/pdf");
     await expectFail(register(q, ec2, path, "a.pdf", "text/html", 10), "FILE_TYPE_NOT_ALLOWED");
     await expectFail(register(q, ec2, path, "", "application/pdf", 10), "VALIDATION_FAILED");
-    await expectFail(register(q, ec2, `${room}/${ec2}/${await uidOf(q, "지은")}/${fid}-a.pdf`, "a.pdf", "application/pdf", 10), "VALIDATION_FAILED");
-    await expectFail(register(q, ec2, `${room}/${ec2}/${cheolsu}/not-a-uuid-a.pdf`, "a.pdf", "application/pdf", 10), "VALIDATION_FAILED");
+    await expectFail(register(q, ec2, `${room}/${ec2}/${await uidOf(q, "지은")}/${fid}.pdf`, "a.pdf", "application/pdf", 10), "VALIDATION_FAILED");
+    await expectFail(register(q, ec2, `${room}/${ec2}/${cheolsu}/not-a-uuid.pdf`, "a.pdf", "application/pdf", 10), "VALIDATION_FAILED");
+    await expectFail(register(q, ec2, `${room}/${ec2}/${cheolsu}/${fid}-원본이름.pdf`, "a.pdf", "application/pdf", 10), "VALIDATION_FAILED");   // 옛 {uuid}-{name} 형식 거부
 
     const big = crypto.randomUUID();
-    const bigPath = `${room}/${ec2}/${cheolsu}/${big}-big.zip`;
+    const bigPath = `${room}/${ec2}/${cheolsu}/${big}.zip`;
     await uploaded(q, bigPath, cheolsu, 10485761, "application/zip");
     await expectFail(register(q, ec2, bigPath, "big.zip", "application/zip", 10), "FILE_TOO_LARGE");
 
     await asUser(q, await uidOf(q, "가은"));
     await expectFail(register(q, ec2, path, "a.pdf", "application/pdf", 10), "TASK_NOT_ASSIGNED");
-    await asUser(q, null);
+    await asAnon(q);
     await expectFail(register(q, ec2, path, "a.pdf", "application/pdf", 10), "AUTH_REQUIRED");
   } },
 
-  { name: "file_register: 6th file per user per node → FILE_LIMIT_EXCEEDED", run: async (q) => {
+  { name: "file_register: 6th in-flight file per user per node → FILE_LIMIT_EXCEEDED; orphans older than 24h don't count (S3)", run: async (q) => {
     const cheolsu = await uidOf(q, "철수");
     const room = await roomId(q, "aws");
     const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
     await asUser(q, cheolsu);
+    const ids: string[] = [];
     for (let i = 0; i < 5; i++) {
       const id = crypto.randomUUID();
-      const p = `${room}/${ec2}/${cheolsu}/${id}-${i}.txt`;
+      const p = `${room}/${ec2}/${cheolsu}/${id}.txt`;
       await uploaded(q, p, cheolsu, 10, "text/plain");
       await register(q, ec2, p, `${i}.txt`, "text/plain", 10);
+      ids.push(id);
     }
     const id = crypto.randomUUID();
-    const p = `${room}/${ec2}/${cheolsu}/${id}-6.txt`;
+    const p = `${room}/${ec2}/${cheolsu}/${id}.txt`;
     await uploaded(q, p, cheolsu, 10, "text/plain");
     await expectFail(register(q, ec2, p, "6.txt", "text/plain", 10), "FILE_LIMIT_EXCEEDED");
+    // 하나를 이틀 전 고아로 만들면(제출 미연결 READY, created_at 48h 전) 한도에서 빠진다
+    await q("update public.files set created_at = now() - interval '48 hours' where id = $1::uuid", [ids[0]]);
+    assertEquals((await register(q, ec2, p, "6.txt", "text/plain", 10)).id, id);
+  } },
+
+  { name: "submission_upsert re-checks storage: object removed after register → FILE_NOT_READY (S4)", run: async (q) => {
+    await setNow(q, "2026-10-12T03:00:00Z");
+    const cheolsu = await uidOf(q, "철수");
+    const room = await roomId(q, "aws");
+    const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    await asUser(q, cheolsu);
+    const fid = crypto.randomUUID();
+    const path = `${room}/${ec2}/${cheolsu}/${fid}.pdf`;
+    await uploaded(q, path, cheolsu, 10, "application/pdf");
+    await register(q, ec2, path, "보고서.pdf", "application/pdf", 10);
+    await q("delete from storage.objects where name = $1", [path]);   // 소유자가 attachments_delete_own 으로 지운 상황(스텁 행 삭제는 테스트 전용)
+    await expectFail(submit(q, ec2, "첨부", [], [fid]), "FILE_NOT_READY");
   } },
 
   { name: "bucket + policies from 0003 are what file_register relies on", run: async (q) => {
@@ -620,14 +643,15 @@ cases("files", db, q, [
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/files-sql.test.ts`
+Run: `npm run test:db -- --filter "files:"`
 Expected: FAIL — `function public.file_register(...) does not exist`.
 
 - [ ] **Step 3: 0007 끝에 `file_register` 추가**
 
 ```sql
 -- ───────── file_register (03-api §5 complete, D10) ─────────
--- 클라이언트가 Storage 에 직접 올린 뒤 호출. 경로 {room_id}/{node_id}/{user_id}/{file_uuid}-{name} 를 검증하고 files 행을 READY 로 만든다.
+-- 클라이언트가 Storage 에 직접 올린 뒤 호출. 경로 {room_id}/{node_id}/{user_id}/{file_uuid}.{ext} 를 검증하고 files 행을 READY 로 만든다.
+-- 키에 원본 파일명을 넣지 않는다(비ASCII·공백 키는 Storage 가 거부). 원본명은 p_name → files.original_name.
 -- 버킷·Storage 정책은 0003(플랜 01 Task 6) 소유: attachments(private, 10MB, MIME 화이트리스트),
 --   insert = 본인 폴더 ∧ is_task_assignee, select = can_read_submissions, delete = 본인. 여기서는 만들지 않는다.
 -- 크기는 Storage 가 기록한 metadata.size 를 우선한다(클라이언트 값은 참고용).
@@ -654,7 +678,7 @@ begin
 
   v_seg := string_to_array(coalesce(p_path, ''), '/');
   if cardinality(v_seg) <> 4 or v_seg[1] <> r.id::text or v_seg[2] <> n.id::text or v_seg[3] <> v_uid::text
-     or v_seg[4] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-.+$' then
+     or v_seg[4] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9]{1,10})?$' then
     perform public.fail('VALIDATION_FAILED', '첨부 경로가 올바르지 않아요', '{"field":"path"}'::jsonb);
   end if;
   v_id := left(v_seg[4], 36)::uuid;
@@ -677,8 +701,10 @@ begin
     perform public.fail('FILE_TOO_LARGE', '파일은 10MB까지예요', jsonb_build_object('field', 'size', 'size', v_size));
   end if;
 
+  -- 업로드 중 묶음(제출 미연결, 24시간 이내)만 센다. 연결된 파일 수는 submission_upsert 가, 오래된 고아는 job_cleanup 이 맡는다(S3)
   select count(*) into v_cnt from public.files
-  where owner_user_id = v_uid and node_id = n.id and purpose = 'ATTACHMENT' and status in ('PENDING', 'READY') and id <> v_id;
+  where owner_user_id = v_uid and node_id = n.id and purpose = 'ATTACHMENT' and status in ('PENDING', 'READY')
+    and submission_id is null and created_at > now() - interval '24 hours' and id <> v_id;
   if v_cnt >= 5 then perform public.fail('FILE_LIMIT_EXCEEDED', '첨부는 과제당 5개까지예요', '{"field":"fileIds"}'::jsonb); end if;
 
   insert into public.files (id, owner_user_id, room_id, node_id, purpose, bucket_id, object_path, original_name, content_type, size_bytes, status, completed_at)
@@ -694,15 +720,15 @@ end $$;
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/files-sql.test.ts supabase/tests/submissions-sql.test.ts`
-Expected: 4 + 6 = 10 passed.
+Run: `npm run test:db -- --filter "/^(files|submissions):/"`
+Expected: 5 + 6 = 11 passed.
 
 - [ ] **Step 5: 로컬 Supabase 에서 Storage 정책 실측 (`SUPABASE_URL` 있을 때만, 선택)**
 
-`supabase/tests/files-db.test.ts` 를 만들어 plan 01 `_testenv.ts` 의 `userClient()` 로 (a) 담당자가 아닌 사용자의 `storage.from('attachments').upload('6/<ec2>/<uid>/<uuid>-x.png', blob)` 가 403, (b) 담당자 본인 폴더 업로드 성공 후 `file_register` 가 `ready` 를 돌려주는지 확인한다. 시드 사용자는 비밀번호가 없으므로 테스트 사용자를 aws 에 `room_join` 시키는 대신 `service()` 로 `room_members`·`task_assignments` 행을 직접 넣고 끝에 지운다(`RUN` 태그). PGlite 는 RLS 를 강제하지 않으므로 이 사례만 로컬 전용.
+`supabase/tests/files-db.test.ts` 를 만들어 plan 01 `_testenv.ts` 의 `userClient()` 로 (a) 담당자가 아닌 사용자의 `storage.from('attachments').upload('6/<ec2>/<uid>/<uuid>.png', blob)` 가 403, (b) 담당자 본인 폴더 업로드 성공 후 `file_register` 가 `ready` 를 돌려주는지 확인한다. 시드 사용자는 비밀번호가 없으므로 테스트 사용자를 aws 에 `room_join` 시키는 대신 `service()` 로 `room_members`·`task_assignments` 행을 직접 넣고 끝에 지운다(`RUN` 태그). PGlite 는 RLS 를 강제하지 않으므로 이 사례만 로컬 전용.
 
 ```ts
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { dbTest, service, userClient } from "./_testenv.ts";
 
 dbTest("storage: non-assignee upload rejected, assignee upload + file_register ready", async () => {
@@ -710,7 +736,7 @@ dbTest("storage: non-assignee upload rejected, assignee upload + file_register r
   const admin = service();
   const ec2 = (await admin.from("goal_nodes").select("id, room_id").eq("title", "EC2 인스턴스 유형 정리").single()).data!;
   const fid = crypto.randomUUID();
-  const path = `${ec2.room_id}/${ec2.id}/${u.id}/${fid}-x.png`;
+  const path = `${ec2.room_id}/${ec2.id}/${u.id}/${fid}.png`;
   const blob = new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" });
   const denied = await c.storage.from("attachments").upload(path, blob, { contentType: "image/png" });
   assertEquals(Boolean(denied.error), true);
@@ -733,7 +759,7 @@ dbTest("storage: non-assignee upload rejected, assignee upload + file_register r
 });
 ```
 
-Run: `eval "$(supabase status -o env)"; SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY deno test --allow-read --allow-env --allow-net supabase/tests/files-db.test.ts`
+Run: `eval "$(supabase status -o env)"; SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY npm run test:db -- --filter "storage:"`
 Expected: 1 passed (환경변수 없으면 ignored 1). `member_count` 는 직접 넣은 행 때문에 어긋나지만 `member_count_audit()`(Task 7) 이 보정하므로 finally 에서 지우면 된다.
 
 - [ ] **Step 6: Commit**
@@ -766,13 +792,15 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/task-get-sql.test.ts`**
 
 ```ts
-import { assertEquals } from "jsr:@std/assert";
-import { asUser, bootDb, cases, expectFail, nodeId, one, setNow, uidOf, type Q } from "./_boot.ts";
+import { assertEquals } from "@std/assert";
+import { applySeed, asAnon, asUser, expectFail, openDb } from "./_harness.ts";
+import { cases, nodeId, one, setNow, uidOf, type Q } from "./_fixtures.ts";
 
-const { db, q } = await bootDb();
+const db = await openDb();
+await applySeed(db);
 const get = async (q: Q, slug: string, node: string) => (await one(q, "select public.task_get($1, $2::bigint) as t", [slug, node])).t;
 
-cases("task_get", db, q, [
+cases("task_get", db, [
   { name: "assignee view: node, path, people, mySubmission null, isAssignee, allSubmitted false, submissions", run: async (q) => {
     await setNow(q, "2026-10-12T03:00:00Z");
     await asUser(q, await uidOf(q, "철수"));
@@ -805,7 +833,7 @@ cases("task_get", db, q, [
   } },
 
   { name: "anon on a public room: meta only — people [], submissions [], isAssignee false", run: async (q) => {
-    await asUser(q, null);
+    await asAnon(q);
     const t = await get(q, "aws", await nodeId(q, "aws", "EC2 인스턴스 유형 정리"));
     assertEquals(t.node.task.people, []);
     assertEquals([t.node.task.assigned, t.node.task.submitted], [2, 1]);   // 집계 숫자는 공개
@@ -838,19 +866,35 @@ cases("task_get", db, q, [
   } },
 
   { name: "errors: private room anon → ROOM_NOT_FOUND, foreign node → NODE_NOT_FOUND, round → NODE_NOT_LEAF", run: async (q) => {
-    await asUser(q, null);
+    await asAnon(q);
     await expectFail(get(q, "spring", await nodeId(q, "spring", "섹션 1~5 정리 노트")), "ROOM_NOT_FOUND");
     await asUser(q, await uidOf(q, "철수"));
     await expectFail(get(q, "aws", await nodeId(q, "spring", "섹션 1~5 정리 노트")), "NODE_NOT_FOUND");
     await expectFail(get(q, "aws", await nodeId(q, "aws", "EC2·S3")), "NODE_NOT_LEAF");
     await expectFail(get(q, "nope", "1"), "ROOM_NOT_FOUND");
   } },
+
+  { name: "0007 grants: public RPCs only (B4 — D7 GRANT 전용)", run: async (q) => {
+    const can = async (role: string, fn: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, fn])).v;
+    // 내부 헬퍼 — anon·authenticated 모두 불가 (submission_json 이 열리면 비로그인이 임의 제출물 본문을 읽는다)
+    for (const fn of ["public.submission_json(bigint)", "public.task_node_json(bigint, uuid)", "public.file_json(public.files)",
+                      "public.storage_exists(text, text)", "public.app_now()", "public.allowed_mime_types()"]) {
+      assertEquals(await can("anon", fn), false, fn);
+      assertEquals(await can("authenticated", fn), false, fn);
+    }
+    // 공개 RPC
+    assertEquals(await can("anon", "public.task_get(text, bigint)"), true);
+    assertEquals(await can("authenticated", "public.submission_upsert(bigint, text, text[], uuid[])"), true);
+    assertEquals(await can("anon", "public.submission_upsert(bigint, text, text[], uuid[])"), false);
+    assertEquals(await can("authenticated", "public.file_register(bigint, text, text, text, bigint)"), true);
+    assertEquals(await can("anon", "public.file_register(bigint, text, text, text, bigint)"), false);
+  } },
 ]);
 ```
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/task-get-sql.test.ts`
+Run: `npm run test:db -- --filter "task_get:"`
 Expected: FAIL — `function public.task_get(text, bigint) does not exist`.
 
 - [ ] **Step 3: 0007 끝에 `task_node_json`·`task_get` 추가**
@@ -939,12 +983,18 @@ begin
     'allSubmitted', v_asg > 0 and v_sub = v_asg,
     'submissions', v_subs);
 end $$;
+
+-- ───────── 공개 RPC (D7 GRANT 전용 모델 — 0002 의 default privileges 로 나머지는 전부 비공개) ─────────
+-- 내부 헬퍼(app_now, allowed_mime_types, storage_exists, file_json, submission_json, task_node_json)는 GRANT 하지 않는다.
+grant execute on function public.task_get(text, bigint) to anon, authenticated;                          -- 공개 방 메타는 비로그인 허용
+grant execute on function public.submission_upsert(bigint, text, text[], uuid[]) to authenticated;
+grant execute on function public.file_register(bigint, text, text, text, bigint) to authenticated;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/task-get-sql.test.ts`
-Expected: 6 passed. "archived node" 사례의 3건은 plan 03 시드가 IAM `DLDM` 을 민수 D·지은 L·철수 D 로 넣었을 때의 값 — 다르면 시드를 고치지 말고 `src/data/my-study.ts` 와 대조한다.
+Run: `npm run test:db -- --filter "task_get:"`
+Expected: 7 passed. "archived node" 사례의 3건은 plan 03 시드가 IAM `DLDM` 을 민수 D·지은 L·철수 D 로 넣었을 때의 값 — 다르면 시드를 고치지 말고 `src/data/my-study.ts` 와 대조한다.
 
 - [ ] **Step 5: Commit**
 
@@ -985,16 +1035,19 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   public.settings_get(p_slug text) returns jsonb
   public.settings_put(p_slug text, p_settings jsonb) returns jsonb             -- 전체 교체
   ```
-  Task 6(`leader_room`, `notify_publish`), Task 7(`notify_publish`), Task 8(`leader_room`), plan 05 어댑터(`notifications_*`, `settings_*`) 가 의존. 내부 함수(`notify_*`, `storage_exists`)는 `anon/authenticated` 실행 권한을 회수한다.
+  Task 6(`leader_room`, `notify_publish`), Task 7(`notify_publish`), Task 8(`leader_room`), plan 05 어댑터(`notifications_*`, `settings_*`) 가 의존. **GRANT 는 공개 RPC(`notifications_*` 4종, `settings_get/put`)에만 `to authenticated`** — `notify_*`, `notification_kinds`, `notification_json`, `leader_room`, `settings_json` 은 GRANT 하지 않는다(revoke 문 없음, D7).
+  `notify_publish` 계약(이 플랜 서두 "알림 호출 계약" 표): ① `p_actor` 를 수신자에서 뺀다 ② 행위성 3종(`SCHEDULE_CHANGED`·`TASK_ASSIGNED`·`TASK_UNASSIGNED`)은 prefix 뒤에 `:<txid_current()>` 를 붙인다 ③ 키 = prefix(+txid) `|| ':' || recipient`, 160자 초과 시 `'h:' || md5(prefix(+txid)) || ':' || recipient`.
 
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/notifications-sql.test.ts`**
 
 ```ts
-import { assert, assertEquals } from "jsr:@std/assert";
-import { asUser, bootDb, cases, expectFail, nodeId, one, roomId, setNow, setToday, uidOf, uuids, type Q } from "./_boot.ts";
+import { assert, assertEquals } from "@std/assert";
+import { applySeed, asAnon, asUser, expectFail, openDb, setToday } from "./_harness.ts";
+import { cases, nodeId, one, roomId, setNow, uidOf, uuids, type Q } from "./_fixtures.ts";
 import { submit } from "./_submit.ts";
 
-const { db, q } = await bootDb();
+const db = await openDb();
+await applySeed(db);
 
 /** notify_publish 직접 호출(테스트는 수퍼유저라 권한 회수에 걸리지 않는다). 반환: 생성 건수 */
 const publish = async (q: Q, kind: string, room: string, node: string | null, actor: string | null, to: string[], prefix: string, model = "{}") =>
@@ -1006,7 +1059,7 @@ const rowsOf = (q: Q, uid: string, kind?: string) =>
      where user_id = $1::uuid and ($2::text is null or kind = $2) and coalesce(dedupe_key, '') not like 'seed:%' order by id`,
     [uid, kind ?? null]);
 
-cases("notifications", db, q, [
+cases("notifications", db, [
   { name: "dedupe: same prefix twice → 1 then 0 (Review Focus 3)", run: async (q) => {
     const aws = await roomId(q, "aws");
     const cheolsu = await uidOf(q, "철수");
@@ -1017,11 +1070,31 @@ cases("notifications", db, q, [
     assertEquals(await publish(q, "ROOM_STARTED", aws, null, null, [cheolsu], `ROOM_STARTED:${aws}:again`), 1);
   } },
 
+  { name: "behavioral kinds get txid appended: same prefix in one tx → 1, key ends with :<txid>:<uid> (D8)", run: async (q) => {
+    const aws = await roomId(q, "aws");
+    const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    const cheolsu = await uidOf(q, "철수");
+    const prefix = `TASK_ASSIGNED:${aws}:${ec2}`;                                // plan 03 node_update 가 넘기는 모양(txid 없음)
+    assertEquals(await publish(q, "TASK_ASSIGNED", aws, ec2, null, [cheolsu], prefix), 1);
+    assertEquals(await publish(q, "TASK_ASSIGNED", aws, ec2, null, [cheolsu], prefix), 0);   // 한 저장(같은 트랜잭션) = 1건
+    const tx = (await one(q, "select txid_current()::text as t")).t;
+    const k = await one(q, "select dedupe_key from public.notifications where user_id = $1::uuid and kind = 'TASK_ASSIGNED'", [cheolsu]);
+    assertEquals(k.dedupe_key, `${prefix}:${tx}:${cheolsu}`);
+    // 상태성 kind 는 그대로
+    await publish(q, "ROUND_STARTED", aws, ec2, null, [cheolsu], `ROUND_STARTED:${aws}:${ec2}`);
+    assertEquals((await one(q, "select dedupe_key from public.notifications where user_id = $1::uuid and kind = 'ROUND_STARTED'", [cheolsu])).dedupe_key,
+                 `ROUND_STARTED:${aws}:${ec2}:${cheolsu}`);
+    // 긴 prefix 는 해시로 줄이고 수신자 uuid 는 보존
+    await publish(q, "ROOM_ENDED", aws, null, null, [cheolsu], "ROOM_ENDED:" + "x".repeat(200));
+    const long = await one(q, "select dedupe_key from public.notifications where user_id = $1::uuid and kind = 'ROOM_ENDED'", [cheolsu]);
+    assert(long.dedupe_key.startsWith("h:") && long.dedupe_key.endsWith(`:${cheolsu}`) && long.dedupe_key.length <= 160);
+  } },
+
   { name: "actor excluded; duplicates and nulls in recipients collapse", run: async (q) => {
     const aws = await roomId(q, "aws");
     const minsu = await uidOf(q, "민수");
     const cheolsu = await uidOf(q, "철수");
-    const n = await publish(q, "SCHEDULE_CHANGED", aws, null, minsu, [minsu, cheolsu, cheolsu], `SCHEDULE_CHANGED:${aws}:tx=1`);
+    const n = await publish(q, "SCHEDULE_CHANGED", aws, null, minsu, [minsu, cheolsu, cheolsu], `SCHEDULE_CHANGED:${aws}:0:2026101220261015`);
     assertEquals(n, 1);
     assertEquals((await rowsOf(q, minsu, "SCHEDULE_CHANGED")).length, 0);
     const r = await rowsOf(q, cheolsu, "SCHEDULE_CHANGED");
@@ -1036,17 +1109,17 @@ cases("notifications", db, q, [
     const cheolsu = await uidOf(q, "철수");
     const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
     await q("update public.room_notification_settings set reminder_d1 = false where room_id = $1::bigint", [aws]);
-    assertEquals(await publish(q, "DEADLINE_REMINDER", aws, ec2, null, [cheolsu], `DEADLINE_REMINDER:node=${ec2}:d=1`, '{"days":1}'), 0);
-    assertEquals(await publish(q, "DEADLINE_REMINDER", aws, ec2, null, [cheolsu], `DEADLINE_REMINDER:node=${ec2}:d=3`, '{"days":3}'), 1);
+    assertEquals(await publish(q, "DEADLINE_REMINDER", aws, ec2, null, [cheolsu], `DEADLINE_REMINDER:${aws}:${ec2}:d1`, '{"days":1}'), 0);
+    assertEquals(await publish(q, "DEADLINE_REMINDER", aws, ec2, null, [cheolsu], `DEADLINE_REMINDER:${aws}:${ec2}:d3`, '{"days":3}'), 1);
     await q("update public.room_notification_settings set task_assigned = false, room_start_end = false where room_id = $1::bigint", [aws]);
-    assertEquals(await publish(q, "TASK_ASSIGNED", aws, ec2, null, [cheolsu], `TASK_ASSIGNED:node=${ec2}:tx=9`), 0);
-    assertEquals(await publish(q, "TASK_UNASSIGNED", aws, ec2, null, [cheolsu], `TASK_UNASSIGNED:node=${ec2}:tx=9`), 0);
+    assertEquals(await publish(q, "TASK_ASSIGNED", aws, ec2, null, [cheolsu], `TASK_ASSIGNED:${aws}:${ec2}`), 0);
+    assertEquals(await publish(q, "TASK_UNASSIGNED", aws, ec2, null, [cheolsu], `TASK_UNASSIGNED:${aws}:${ec2}`), 0);
     assertEquals(await publish(q, "ROOM_ENDED", aws, null, null, [cheolsu], `ROOM_ENDED:${aws}`), 0);
     // 기본·잠금 kind 는 설정과 무관
-    assertEquals(await publish(q, "ROUND_STARTED", aws, await nodeId(q, "aws", "EC2·S3"), null, [cheolsu], `ROUND_STARTED:node=x`), 1);
+    assertEquals(await publish(q, "ROUND_STARTED", aws, await nodeId(q, "aws", "EC2·S3"), null, [cheolsu], `ROUND_STARTED:${aws}:x`), 1);
     // 설정 행이 없으면 기본 ON
     await q("delete from public.room_notification_settings where room_id = $1::bigint", [aws]);
-    assertEquals(await publish(q, "DEADLINE_REMINDER", aws, ec2, null, [cheolsu], `DEADLINE_REMINDER:node=${ec2}:d=1:b`, '{"days":1}'), 1);
+    assertEquals(await publish(q, "DEADLINE_REMINDER", aws, ec2, null, [cheolsu], `DEADLINE_REMINDER:${aws}:${ec2}:d1:b`, '{"days":1}'), 1);
   } },
 
   { name: "titles and links per kind (Korean templates, task link carries ?task=)", run: async (q) => {
@@ -1091,14 +1164,16 @@ cases("notifications", db, q, [
     const aws = await roomId(q, "aws");
     const cheolsu = await uidOf(q, "철수");
     const minsu = await uidOf(q, "민수");
-    for (let i = 0; i < 25; i++) await publish(q, "SCHEDULE_CHANGED", aws, null, null, [cheolsu], `page:${i}`);
+    for (let i = 0; i < 25; i++) await publish(q, "ROOM_STARTED", aws, null, null, [cheolsu], `page:${i}`);
     await asUser(q, cheolsu);
-    const total = 25 + 3;                                                       // 시드 3건(Task 10) + 25
+    // 시드 §4(Task 10) 전에는 0, 후에는 3 — 어느 시점에 돌려도 같은 단언이 되도록 실제 개수를 읽는다
+    const seeded = Number((await one(q, "select count(*)::int as n from public.notifications where user_id = $1::uuid and dedupe_key like 'seed:%'", [cheolsu])).n);
+    const total = 25 + seeded;
     assertEquals((await one(q, "select public.notifications_unread_count() as c")).c, { count: total });
     const p1 = (await one(q, "select public.notifications_list(null, 20) as l")).l;
     assertEquals(p1.items.length, 20);
     assert(p1.nextCursor !== null);
-    assertEquals(p1.items[0].kind, "SCHEDULE_CHANGED");
+    assertEquals(p1.items[0].kind, "ROOM_STARTED");
     assertEquals(p1.items[0].room, { slug: "aws", title: "AWS SAA 자격증 3개월 완주" });
     assertEquals(p1.items[0].readAt, null);
     assertEquals(p1.items[0].actor, null);
@@ -1116,7 +1191,7 @@ cases("notifications", db, q, [
     await publish(q, "ROOM_STARTED", aws, null, null, [minsu], `mine:${minsu}`);
     const other = await one(q, "select id::text as id from public.notifications where user_id = $1::uuid order by id desc limit 1", [minsu]);
     await expectFail(q("select public.notifications_read($1::bigint)", [other.id]), "NOT_FOUND");
-    await asUser(q, null);
+    await asAnon(q);
     await expectFail(q("select public.notifications_list(null, 20)"), "AUTH_REQUIRED");
     await expectFail(q("select public.notifications_unread_count()"), "AUTH_REQUIRED");
   } },
@@ -1134,7 +1209,7 @@ cases("notifications", db, q, [
     await asUser(q, await uidOf(q, "철수"));
     await expectFail(q("select public.settings_get('aws')"), "NOT_LEADER");
     await expectFail(put(d), "NOT_LEADER");
-    await asUser(q, null);
+    await asAnon(q);
     await expectFail(q("select public.settings_get('aws')"), "AUTH_REQUIRED");
   } },
 
@@ -1188,11 +1263,11 @@ cases("notifications", db, q, [
 ]);
 ```
 
-plan 02/03 의 함수 이름·인자가 다르면 **이 테스트 쪽을** 고친다(`room_apply(p_slug, p_invite_token)`, `room_approve(p_slug, p_user)`, `node_update(p_slug, p_node_id, p_patch)` 가 plan 03 의 계약).
+`room_apply(p_slug, p_invite_token)`·`room_approve(p_slug, p_user)`·`node_update(p_slug, p_node_id, p_patch)` 는 plan 02/03 확정 시그니처다. `SCHEDULE_CHANGED` 수신자는 plan 03 대로 **해당 리프의 담당자**(EC2 = 지은·철수, 민수 본인 제외).
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/notifications-sql.test.ts`
+Run: `npm run test:db -- --filter "notifications"`
 Expected: FAIL — "dedupe" 사례에서 `notify_publish` 가 0 을 돌려준다(자리표), `notifications_list` 없음.
 
 - [ ] **Step 3: `supabase/migrations/0008_notifications.sql` 작성**
@@ -1272,16 +1347,24 @@ language sql stable security definer set search_path = '' as $$
 $$;
 
 -- ───────── notify_publish (D8) — 0004 자리표 교체 ─────────
--- 설정 필터 → 템플릿 렌더 → 수신자별 INSERT (본인 제외, dedupe_key = prefix||':'||user, ON CONFLICT DO NOTHING). 반환: 실제 생성 건수
+-- 설정 필터 → 템플릿 렌더 → 수신자별 INSERT (ON CONFLICT DO NOTHING). 반환: 실제 생성 건수
+-- D8: ① p_actor 는 여기서 뺀다(호출자 책임 아님) ② 행위성 kind 는 prefix 에 txid 를 붙인다 — plan 03 호출부는 txid 없이
+--     'TASK_ASSIGNED:<room>:<node>' 를 넘기므로 재지정·되돌린 일정도 새 알림이 되고, 한 저장 안의 중복은 1건이 된다
+-- ③ dedupe_key = base || ':' || recipient, 160자 초과면 'h:' || md5(base) || ':' || recipient
 create or replace function public.notify_publish(
   p_kind text, p_room bigint, p_node bigint, p_actor uuid, p_recipients uuid[], p_dedupe_prefix text, p_model jsonb)
 returns int language plpgsql security definer set search_path = '' as $$
 declare
-  v_tpl jsonb;
-  v_r   uuid;
-  v_n   int := 0;
-  v_c   int;
+  v_tpl  jsonb;
+  v_r    uuid;
+  v_n    int := 0;
+  v_c    int;
+  v_base text := p_dedupe_prefix;
+  v_key  text;
 begin
+  if v_base is not null and p_kind in ('SCHEDULE_CHANGED', 'TASK_ASSIGNED', 'TASK_UNASSIGNED') then
+    v_base := v_base || ':' || txid_current();
+  end if;
   if p_kind is null or not (p_kind = any(public.notification_kinds())) then
     perform public.fail('VALIDATION_FAILED', '알 수 없는 알림 종류예요', jsonb_build_object('kind', p_kind));
   end if;
@@ -1292,10 +1375,14 @@ begin
   v_tpl := public.notify_render(p_kind, p_room, p_node, p_actor, coalesce(p_model, '{}'::jsonb));
 
   for v_r in select distinct u from unnest(p_recipients) u where u is not null and u is distinct from p_actor loop
+    v_key := null;
+    if v_base is not null then
+      v_key := v_base || ':' || v_r;
+      if length(v_key) > 160 then v_key := 'h:' || md5(v_base) || ':' || v_r; end if;   -- 수신자 uuid 는 자르지 않는다
+    end if;
     insert into public.notifications (user_id, kind, title, body, room_id, node_id, actor_user_id, link, dedupe_key)
     values (v_r, p_kind, v_tpl ->> 'title', v_tpl ->> 'body', p_room, p_node, p_actor,
-            public.notify_link(p_kind, p_room, p_node, v_r),
-            case when p_dedupe_prefix is null then null else left(p_dedupe_prefix || ':' || v_r, 160) end)
+            public.notify_link(p_kind, p_room, p_node, v_r), v_key)
     on conflict (dedupe_key) do nothing;
     get diagnostics v_c = row_count;
     v_n := v_n + v_c;
@@ -1427,40 +1514,47 @@ begin
   return public.settings_json(r.id);
 end $$;
 
--- ───────── 내부 함수 권한 회수 (클라이언트가 직접 알림을 만들 수 없게) ─────────
--- PostgreSQL 은 함수 생성 시 PUBLIC 에 EXECUTE 를 주므로 public 까지 회수하고 service_role 에만 다시 준다(Edge Function·cron 용)
-revoke execute on function public.notify_publish(text, bigint, bigint, uuid, uuid[], text, jsonb) from public, anon, authenticated;
-revoke execute on function public.notify_render(text, bigint, bigint, uuid, jsonb)             from public, anon, authenticated;
-revoke execute on function public.notify_enabled(text, bigint, jsonb)                          from public, anon, authenticated;
-revoke execute on function public.notify_link(text, bigint, bigint, uuid)                      from public, anon, authenticated;
-revoke execute on function public.storage_exists(text, text)                                   from public, anon, authenticated;
-grant  execute on function public.notify_publish(text, bigint, bigint, uuid, uuid[], text, jsonb) to service_role;
+-- ───────── 공개 RPC (D7 GRANT 전용 — revoke 문은 쓰지 않는다) ─────────
+-- notify_*, notification_kinds, notification_json, leader_room, settings_json 은 GRANT 하지 않는다(0002 default privileges 로 비공개).
+-- pg_cron 은 postgres(소유자)로 돌므로 job·notify 함수에 별도 GRANT 가 필요 없다.
+grant execute on function public.notifications_list(text, int)  to authenticated;
+grant execute on function public.notifications_unread_count()   to authenticated;
+grant execute on function public.notifications_read(bigint)     to authenticated;
+grant execute on function public.notifications_read_all()       to authenticated;
+grant execute on function public.settings_get(text)             to authenticated;
+grant execute on function public.settings_put(text, jsonb)      to authenticated;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/notifications-sql.test.ts`
-Expected: 8 passed. "list" 사례의 `total` 은 Task 10 의 시드 3건을 전제한다 — Task 10 전에는 `28` 이 `25` 로 나오므로 그때까지는 `const total = 25 + Number((await one(q, "select count(*)::int as n from public.notifications where user_id = $1::uuid", [cheolsu])).n)` 로 바꿔 두고, Task 10 에서 상수 3 으로 되돌린다(어느 쪽이든 통과). "placeholder calls" 사례가 `room_apply`·`node_update` 이름으로 실패하면 plan 02/03 의 실제 시그니처로 테스트를 고친다. `SCHEDULE_CHANGED` 가 0건이면 plan 03 `node_update` 가 기간 변경 시 `notify_publish('SCHEDULE_CHANGED', …)` 를 호출하는지 확인한다(00 개요 "plan 02/03 쪽 호출 계약").
+Run: `npm run test:db -- --filter "notifications"`
+Expected: 9 passed. "list" 사례의 `total` 은 시드 `seed:*` 행 수를 직접 세므로 Task 10 전(0)·후(3) 모두 같은 단언으로 통과한다. `SCHEDULE_CHANGED` 가 0건이면 plan 03 `node_update` 가 기간 변경 시 `notify_publish('SCHEDULE_CHANGED', …)` 를 담당자에게 부르는지 확인한다(서두 "알림 호출 계약" 표).
 
-- [ ] **Step 5: 권한 회수 확인 (PGlite)**
+- [ ] **Step 5: 권한 확인 (PGlite) — GRANT 전용 모델**
 
 `notifications-sql.test.ts` 끝에 사례 하나 추가:
 
 ```ts
-cases("notifications-grants", db, q, [
-  { name: "internal functions are not executable by anon/authenticated, service_role keeps notify_publish", run: async (q) => {
+cases("notifications-grants", db, [
+  { name: "internal helpers not executable by anon/authenticated; public RPCs granted to authenticated only (B4)", run: async (q) => {
     const can = async (role: string, fn: string) => (await one(q, `select has_function_privilege($1, $2, 'execute') as v`, [role, fn])).v;
-    const np = "public.notify_publish(text, bigint, bigint, uuid, uuid[], text, jsonb)";
-    assertEquals(await can("anon", np), false);
-    assertEquals(await can("authenticated", np), false);
-    assertEquals(await can("service_role", np), true);
-    assertEquals(await can("authenticated", "public.storage_exists(text, text)"), false);
-    assertEquals(await can("authenticated", "public.notifications_list(text, int)"), true);
+    for (const fn of ["public.notify_publish(text, bigint, bigint, uuid, uuid[], text, jsonb)", "public.notify_render(text, bigint, bigint, uuid, jsonb)",
+                      "public.notify_enabled(text, bigint, jsonb)", "public.notify_link(text, bigint, bigint, uuid)",
+                      "public.notification_kinds()", "public.notification_json(public.notifications)",
+                      "public.leader_room(text, boolean)", "public.settings_json(bigint)"]) {
+      assertEquals(await can("anon", fn), false, fn);
+      assertEquals(await can("authenticated", fn), false, fn);
+    }
+    for (const fn of ["public.notifications_list(text, int)", "public.notifications_unread_count()", "public.notifications_read(bigint)",
+                      "public.notifications_read_all()", "public.settings_get(text)", "public.settings_put(text, jsonb)"]) {
+      assertEquals(await can("authenticated", fn), true, fn);
+      assertEquals(await can("anon", fn), false, fn);
+    }
   } },
 ]);
 ```
 
-Run: 같은 명령. Expected: 9 passed.
+Run: `npm run test:db -- --filter "notifications"`. Expected: 10 passed(notifications 9 + grants 1).
 
 - [ ] **Step 6: Commit**
 
@@ -1494,10 +1588,12 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/deactivate-sql.test.ts`**
 
 ```ts
-import { assertEquals, assertRejects } from "jsr:@std/assert";
-import { asUser, bootDb, cases, expectFail, nodeId, one, roomId, uidOf, type Q } from "./_boot.ts";
+import { assertEquals } from "@std/assert";
+import { applySeed, asAnon, asUser, expectFail, openDb } from "./_harness.ts";
+import { cases, nodeId, one, roomId, uidOf, type Q } from "./_fixtures.ts";
 
-const { db, q } = await bootDb();
+const db = await openDb();
+await applySeed(db);
 
 const preview = async (q: Q, slug: string, user: string) => (await one(q, "select public.member_deactivate_preview($1, $2::uuid) as p", [slug, user])).p;
 const deactivate = async (q: Q, slug: string, user: string, decisions: unknown[] = []) =>
@@ -1509,7 +1605,7 @@ const roundStat = async (q: Q, slug: string, label: string) =>
 const leafStat = async (q: Q, node: string) =>
   one(q, "select asg, sub from public.room_leaf_stats((select room_id from public.goal_nodes where id = $1::bigint)) where node_id = $1::bigint", [node]);
 
-cases("deactivate", db, q, [
+cases("deactivate", db, [
   { name: "preview: only unsubmitted designated tasks of the target, with the other assignees", run: async (q) => {
     await asUser(q, await uidOf(q, "민수"));
     assertEquals((await preview(q, "aws", await uidOf(q, "지은"))).tasks, []);       // EC2 는 이미 제출(D)
@@ -1522,7 +1618,7 @@ cases("deactivate", db, q, [
     assertEquals(typeof hana.today, "string");
   } },
 
-  { name: "deactivate 지은 (submitted designated + common): counts drop, submissions stay readable by leader, member_count 3, notified, cannot rejoin (Review Focus 2)", run: async (q) => {
+  { name: "deactivate 지은 (submitted designated + common): counts drop, submissions stay readable by leader, member_count 3, notified (Review Focus 2)", run: async (q) => {
     const minsu = await uidOf(q, "민수");
     const jieun = await uidOf(q, "지은");
     const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
@@ -1547,12 +1643,21 @@ cases("deactivate", db, q, [
     const n = await q("select kind, link from public.notifications where user_id = $1::uuid and kind = 'MEMBER_DEACTIVATED'", [jieun]);
     assertEquals(n.length, 1);
     assertEquals(n[0].link, "/rooms/aws");                                        // 이미 참가자가 아니므로 /rooms
-    // 재참가 거부 (ACTIVE 방이므로 모집 아님 / 이탈자) — 코드는 plan 02 의 room_apply 가 정한다
-    await asUser(q, jieun);
-    await assertRejects(() => q("select public.room_apply('aws')"));
     // 다시 이탈 처리 → MEMBER_NOT_ACTIVE
     await asUser(q, minsu);
     await expectFail(deactivate(q, "aws", jieun), "MEMBER_NOT_ACTIVE");
+  } },
+
+  { name: "INACTIVE cannot re-apply to a RECRUIT room → MEMBER_NOT_ACTIVE (00 RF3, S7)", run: async (q) => {
+    // aws 는 ACTIVE 라 room_apply 가 ROOM_NOT_RECRUITING 에서 먼저 막힌다 → 모집중(RECRUIT·APPROVAL)인 sqld 에 INACTIVE 행을 만들어 분기까지 간다
+    const seoyeon = await uidOf(q, "서연");
+    const sqld = await roomId(q, "sqld");
+    assertEquals((await one(q, "select status, join_mode from public.rooms where id = $1::bigint", [sqld])), { status: "RECRUIT", join_mode: "APPROVAL" });
+    await q(`insert into public.room_members (room_id, user_id, role, status, applied_at, joined_at, left_at)
+             values ($1::bigint, $2::uuid, 'MEMBER', 'INACTIVE', now() - interval '3 days', now() - interval '2 days', now() - interval '1 day')`, [sqld, seoyeon]);
+    await asUser(q, seoyeon);
+    await expectFail(q("select public.room_apply('sqld')"), "MEMBER_NOT_ACTIVE");
+    assertEquals((await one(q, "select status from public.room_members where room_id = $1::bigint and user_id = $2::uuid", [sqld, seoyeon])).status, "INACTIVE");
   } },
 
   { name: "도윤 is already INACTIVE: MEMBER_NOT_ACTIVE and 1주차 stays 5/8", run: async (q) => {
@@ -1573,7 +1678,7 @@ cases("deactivate", db, q, [
     await expectFail(deactivate(q, "sqld", await uidOf(q, "철수")), "ROOM_NOT_ACTIVE");
     await asUser(q, await uidOf(q, "현우"));                                      // algo ENDED
     await expectFail(deactivate(q, "algo", await uidOf(q, "철수")), "ROOM_NOT_ACTIVE");
-    await asUser(q, null);
+    await asAnon(q);
     await expectFail(deactivate(q, "aws", minsu), "AUTH_REQUIRED");
   } },
 
@@ -1584,6 +1689,7 @@ cases("deactivate", db, q, [
     const s3 = await nodeId(q, "aws", "S3 스토리지 클래스 발표자료");
     await asUser(q, minsu);
     await expectFail(deactivate(q, "aws", hana, []), "LEAVE_DECISION_MISSING");
+    await expectFail(deactivate(q, "aws", hana, [{ nodeId: s3 }]), "LEAVE_DECISION_MISSING");               // action 누락도 결정 없음
     await expectFail(deactivate(q, "aws", hana, [{ nodeId: s3, action: "exclude" }]), "REASSIGN_REQUIRED");
     await expectFail(deactivate(q, "aws", hana, [{ nodeId: s3, action: "reassign", assigneeIds: [] }]), "REASSIGN_REQUIRED");
     await expectFail(deactivate(q, "aws", hana, [{ nodeId: s3, action: "reassign", assigneeIds: [await uidOf(q, "가은")] }]), "ASSIGNEE_NOT_MEMBER");
@@ -1610,12 +1716,24 @@ cases("deactivate", db, q, [
     assertEquals(await leafStat(q, ec2), { asg: 1, sub: 1 });
     assertEquals((await one(q, "select public.task_get('aws', $1::bigint) as t", [ec2])).t.allSubmitted, true);
   } },
+
+  { name: "grants: preview/deactivate for authenticated only; deactivate_pending/check internal (B4)", run: async (q) => {
+    const can = async (role: string, fn: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, fn])).v;
+    for (const fn of ["public.deactivate_pending(bigint, uuid)", "public.deactivate_check(text, uuid, boolean)"]) {
+      assertEquals(await can("anon", fn), false, fn);
+      assertEquals(await can("authenticated", fn), false, fn);
+    }
+    for (const fn of ["public.member_deactivate_preview(text, uuid)", "public.member_deactivate(text, uuid, jsonb)"]) {
+      assertEquals(await can("anon", fn), false, fn);
+      assertEquals(await can("authenticated", fn), true, fn);
+    }
+  } },
 ]);
 ```
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/deactivate-sql.test.ts`
+Run: `npm run test:db -- --filter "deactivate:"`
 Expected: FAIL — `function public.member_deactivate_preview(text, uuid) does not exist`.
 
 - [ ] **Step 3: 0008 끝에 이탈 처리 추가**
@@ -1699,6 +1817,9 @@ begin
       perform public.fail('LEAVE_DECISION_MISSING', '미제출 지정 과제마다 처리 방법을 정해 주세요', jsonb_build_object('nodeId', p.node_id::text));
     end if;
     v_action := d ->> 'action';
+    if v_action is null then          -- null 이면 `not in` 이 null 이 되어 통과해 버린다 → 결정 없음으로 본다
+      perform public.fail('LEAVE_DECISION_MISSING', '미제출 지정 과제마다 처리 방법을 정해 주세요', jsonb_build_object('nodeId', p.node_id::text));
+    end if;
     if v_action not in ('exclude', 'reassign') then
       perform public.fail('VALIDATION_FAILED', 'action 은 exclude 또는 reassign 이에요', jsonb_build_object('field', 'action', 'nodeId', p.node_id::text));
     end if;
@@ -1738,25 +1859,26 @@ begin
       select (v_item ->> 'nodeId')::bigint, u, 'DESIGNATED' from unnest(v_adds) u
       on conflict (node_id, user_id) do update set released_at = null, source = 'DESIGNATED', assigned_at = now();
       perform public.notify_publish('TASK_ASSIGNED', r.id, (v_item ->> 'nodeId')::bigint, v_uid, v_adds,
-                                    'TASK_ASSIGNED:node=' || (v_item ->> 'nodeId') || ':tx=' || txid_current(), '{}'::jsonb);
+                                    'TASK_ASSIGNED:' || r.id || ':' || (v_item ->> 'nodeId'), '{}'::jsonb);   -- txid 는 notify_publish 가 붙인다(D8)
     end if;
   end loop;
 
   -- 4·5
   perform public.assignment_resync(r.id);
   perform public.notify_publish('MEMBER_DEACTIVATED', r.id, null, v_uid, array[p_user],
-                                'MEMBER_DEACTIVATED:room=' || r.id || ':user=' || p_user, '{}'::jsonb);
+                                'MEMBER_DEACTIVATED:' || r.id || ':' || p_user, '{}'::jsonb);
   return public.membership_result(r.id, v_uid);
 end $$;
 
-revoke execute on function public.deactivate_pending(bigint, uuid) from public, anon, authenticated;
-revoke execute on function public.deactivate_check(text, uuid, boolean) from public, anon, authenticated;
+-- 공개 RPC 만 GRANT(D7). deactivate_pending·deactivate_check 는 내부 헬퍼라 GRANT 하지 않는다
+grant execute on function public.member_deactivate_preview(text, uuid)     to authenticated;
+grant execute on function public.member_deactivate(text, uuid, jsonb)      to authenticated;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/deactivate-sql.test.ts`
-Expected: 6 passed. `r.members` 에서 지은이 `inactive` 로 보이지 않으면 plan 02 `room_members_json` 이 INACTIVE 를 포함하는지 확인(03-api §2 `members` 는 "ACTIVE 전원 + INACTIVE"). `memberCount` 가 4 그대로면 `room_release_seat` 이름을 plan 02 산출물 표와 대조.
+Run: `npm run test:db -- --filter "deactivate:"`
+Expected: 8 passed. `r.members` 에서 지은이 `inactive` 로 보이지 않으면 plan 02 `room_members_json` 이 INACTIVE 를 포함하는지 확인(03-api §2 `members` 는 "ACTIVE 전원 + INACTIVE"). `memberCount` 가 4 그대로면 `room_release_seat` 이름을 plan 02 산출물 표와 대조.
 
 - [ ] **Step 5: Commit**
 
@@ -1778,31 +1900,33 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Interfaces:**
 - Consumes: Task 5 `notify_publish`, `kst_today`, Task 2 `submission_upsert`(digest 사례), plan 02 `room_create`, `room_tick`(이 플랜은 호출하지 않음 — 0010 이 cron 에 등록만).
-- Produces (전부 `SECURITY DEFINER`, `anon/authenticated` 실행 불가, `service_role` 허용):
+- Produces (전부 `SECURITY DEFINER`, **GRANT 없음** → `anon`·`authenticated` 실행 불가. pg_cron 은 소유자 `postgres` 로 돌므로 GRANT 가 필요 없다):
   ```sql
   public.job_draft_blocked() returns int        -- DRAFT & start_date ≤ today → 그룹장 ROOM_START_BLOCKED (room·day dedupe)
   public.job_round_started() returns int        -- depth 2 & start_date = today & 방 ACTIVE → ACTIVE 전원 ROUND_STARTED (node dedupe)
   public.job_deadline_reminder() returns int    -- 리프 end_date = today+1 / +3, 미제출 담당자, 설정 ON → DEADLINE_REMINDER (node·user·d dedupe)
   public.job_completion_digest() returns int    -- DAILY_DIGEST 방: 어제 전원 제출된 리프 수 → 그룹장 TASK_COMPLETION_DIGEST (room·day dedupe)
-  public.job_cleanup() returns jsonb            -- {filesExpired, filesPurged, mailPurged}
+  public.job_cleanup() returns jsonb            -- {filesExpired, orphansExpired, mailPurged} — files 를 DELETED 로 표시만, storage.objects·files 행은 지우지 않는다
   public.member_count_audit() returns int       -- I7 보정, 고친 방 수
   ```
 
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/jobs-sql.test.ts`**
 
 ```ts
-import { assert, assertEquals } from "jsr:@std/assert";
-import { asUser, bootDb, cases, nodeId, one, roomId, setNow, setToday, uidOf, type Q } from "./_boot.ts";
+import { assert, assertEquals } from "@std/assert";
+import { applySeed, asUser, openDb, setToday } from "./_harness.ts";
+import { cases, nodeId, one, roomId, setNow, uidOf, type Q } from "./_fixtures.ts";
 import { submit } from "./_submit.ts";
 
-const { db, q } = await bootDb();
+const db = await openDb();
+await applySeed(db);
 const run = async (q: Q, fn: string) => (await one(q, `select public.${fn}() as n`)).n;
 /** 시드 §4 의 'seed:*' 행은 제외 */
 const kinds = (q: Q, uid: string, kind: string) =>
   q(`select title, node_id::text as node, room_id::text as room from public.notifications
      where user_id = $1::uuid and kind = $2 and coalesce(dedupe_key, '') not like 'seed:%' order by id`, [uid, kind]);
 
-cases("jobs", db, q, [
+cases("jobs", db, [
   { name: "job_draft_blocked: DRAFT past start_date notifies leader once per day (idempotent)", run: async (q) => {
     const seoyeon = await uidOf(q, "서연");
     await asUser(q, seoyeon);
@@ -1819,7 +1943,7 @@ cases("jobs", db, q, [
     assertEquals((await one(q, "select status from public.rooms where id = $1::bigint", [d.id])).status, "DRAFT");   // 전환은 안 한다
   } },
 
-  { name: "job_round_started: aws 3주차 on 10/15 → ACTIVE members (4), not INACTIVE 도윤; idempotent", run: async (q) => {
+  { name: "job_round_started: aws 3주차 on 10/15 → ACTIVE members (4), not INACTIVE 도윤; idempotent; 10/12 = spring 2주차 → 5", run: async (q) => {
     await setToday(q, "2026-10-15");
     const n = Number(await run(q, "job_round_started"));
     assert(n >= 4);
@@ -1830,8 +1954,12 @@ cases("jobs", db, q, [
     }
     assertEquals((await kinds(q, await uidOf(q, "도윤"), "ROUND_STARTED")).length, 0);
     assertEquals(Number(await run(q, "job_round_started")), 0);
+    // 10/12 에는 spring 2주차가 시작한다(src/data/my-study.ts:362) — spring ACTIVE 5명에게 1건씩. 시드 알림은 'seed:*' 키라 충돌하지 않는다
     await setToday(q, "2026-10-12");
-    assertEquals(Number(await run(q, "job_round_started")), 0);                // 10/12 에 시작하는 회차: spring 2주차는 이미… (없으면 0)
+    const springActive = Number((await one(q, "select count(*)::int as n from public.room_members m join public.rooms r on r.id = m.room_id where r.slug = 'spring' and m.status = 'ACTIVE'")).n);
+    assertEquals(springActive, 5);
+    assertEquals(Number(await run(q, "job_round_started")), 5);
+    assertEquals(Number(await run(q, "job_round_started")), 0);                // 같은 날 재실행
   } },
 
   { name: "job_deadline_reminder: D-1 to unsubmitted assignees only; D-3 honors reminder_d3; idempotent", run: async (q) => {
@@ -1879,26 +2007,32 @@ cases("jobs", db, q, [
     assertEquals((await kinds(q, minsu, "TASK_COMPLETION_DIGEST")).length, 0); // IMMEDIATE 방은 제외
   } },
 
-  { name: "job_cleanup: PENDING files older than 1h → DELETED; DELETED older than 7d purged with the storage object", run: async (q) => {
+  { name: "job_cleanup: stale PENDING (>1h) and unlinked READY orphans (>24h) → DELETED; never deletes storage.objects or files rows (S2·S3)", run: async (q) => {
     const cheolsu = await uidOf(q, "철수");
     const aws = await roomId(q, "aws");
     const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
-    const stale = crypto.randomUUID(), fresh = crypto.randomUUID(), old = crypto.randomUUID();
-    const path = (id: string) => `${aws}/${ec2}/${cheolsu}/${id}-x.txt`;
+    const stale = crypto.randomUUID(), fresh = crypto.randomUUID(), orphan = crypto.randomUUID(), young = crypto.randomUUID(), old = crypto.randomUUID();
+    const path = (id: string) => `${aws}/${ec2}/${cheolsu}/${id}.txt`;
     const ins = (id: string, status: string, created: string, deleted: string | null) =>
       q(`insert into public.files (id, owner_user_id, room_id, node_id, purpose, object_path, original_name, content_type, size_bytes, status, created_at, deleted_at)
          values ($1::uuid, $2::uuid, $3::bigint, $4::bigint, 'ATTACHMENT', $5, 'x.txt', 'text/plain', 1, $6, $7::timestamptz, $8::timestamptz)`,
         [id, cheolsu, aws, ec2, path(id), status, created, deleted]);
     await ins(stale, "PENDING", "2026-10-01T00:00:00Z", null);
     await ins(fresh, "PENDING", new Date().toISOString(), null);
+    await ins(orphan, "READY", "2026-10-01T00:00:00Z", null);                  // 등록만 하고 제출 안 함, 24h 경과
+    await ins(young, "READY", new Date().toISOString(), null);                 // 방금 등록(업로드 중 묶음)
     await ins(old, "DELETED", "2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z");
-    await q("insert into storage.objects (bucket_id, name, owner_id) values ('attachments', $1, $2)", [path(old), cheolsu]);
+    await q("insert into storage.objects (bucket_id, name, owner_id) values ('attachments', $1, $2), ('attachments', $3, $2)", [path(old), cheolsu, path(orphan)]);
     const r = (await one(q, "select public.job_cleanup() as r")).r;
-    assertEquals([r.filesExpired, r.filesPurged], [1, 1]);
-    assertEquals((await one(q, "select status from public.files where id = $1::uuid", [stale])).status, "DELETED");
-    assertEquals((await one(q, "select status from public.files where id = $1::uuid", [fresh])).status, "PENDING");
-    assertEquals((await q("select 1 from public.files where id = $1::uuid", [old])).length, 0);
-    assertEquals((await q("select 1 from storage.objects where name = $1", [path(old)])).length, 0);
+    assertEquals([r.filesExpired, r.orphansExpired], [1, 1]);
+    const st = async (id: string) => (await one(q, "select status, (deleted_at is not null) as del from public.files where id = $1::uuid", [id]));
+    assertEquals(await st(stale), { status: "DELETED", del: true });
+    assertEquals(await st(fresh), { status: "PENDING", del: false });
+    assertEquals(await st(orphan), { status: "DELETED", del: true });
+    assertEquals(await st(young), { status: "READY", del: false });
+    assertEquals((await st(old)).status, "DELETED");                            // 행은 남는다 — 2단계 Edge Function 이 Storage API 로 객체를 지운 뒤 정리
+    assertEquals((await q("select 1 from storage.objects where name in ($1, $2)", [path(old), path(orphan)])).length, 2);   // SQL 로 객체를 지우지 않는다
+    assertEquals((await one(q, "select public.job_cleanup() as r")).r.filesExpired, 0);   // 재실행 0
   } },
 
   { name: "member_count_audit: repairs drifted member_count (I7)", run: async (q) => {
@@ -1908,10 +2042,11 @@ cases("jobs", db, q, [
     assertEquals(Number(await run(q, "member_count_audit")), 0);
   } },
 
-  { name: "jobs are not executable by anon/authenticated", run: async (q) => {
+  { name: "jobs are not executable by anon/authenticated (no GRANT, B4)", run: async (q) => {
     for (const fn of ["job_draft_blocked()", "job_round_started()", "job_deadline_reminder()", "job_completion_digest()", "job_cleanup()", "member_count_audit()"]) {
-      assertEquals((await one(q, "select has_function_privilege('authenticated', $1, 'execute') as v", [`public.${fn}`])).v, false, fn);
-      assertEquals((await one(q, "select has_function_privilege('service_role', $1, 'execute') as v", [`public.${fn}`])).v, true, fn);
+      for (const role of ["anon", "authenticated"]) {
+        assertEquals((await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, `public.${fn}`])).v, false, `${role} ${fn}`);
+      }
     }
   } },
 ]);
@@ -1919,7 +2054,7 @@ cases("jobs", db, q, [
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/jobs-sql.test.ts`
+Run: `npm run test:db -- --filter "jobs:"`
 Expected: FAIL — `function public.job_draft_blocked() does not exist`.
 
 - [ ] **Step 3: 0008 끝에 잡 함수 추가**
@@ -1935,7 +2070,7 @@ declare v_today date := public.kst_today(); r record; v_n int := 0;
 begin
   for r in select id, leader_id from public.rooms where status = 'DRAFT' and archived_at is null and start_date <= v_today order by id loop
     v_n := v_n + public.notify_publish('ROOM_START_BLOCKED', r.id, null, null, array[r.leader_id],
-                                       'ROOM_START_BLOCKED:room=' || r.id || ':d=' || to_char(v_today, 'YYYY-MM-DD'), '{}'::jsonb);
+                                       'ROOM_START_BLOCKED:' || r.id || ':' || to_char(v_today, 'YYYY-MM-DD'), '{}'::jsonb);
   end loop;
   return v_n;
 end $$;
@@ -1952,7 +2087,7 @@ begin
     order by n.id
   loop
     select coalesce(array_agg(user_id), '{}'::uuid[]) into v_members from public.room_members where room_id = r.room_id and status = 'ACTIVE';
-    v_n := v_n + public.notify_publish('ROUND_STARTED', r.room_id, r.id, null, v_members, 'ROUND_STARTED:node=' || r.id, '{}'::jsonb);
+    v_n := v_n + public.notify_publish('ROUND_STARTED', r.room_id, r.id, null, v_members, 'ROUND_STARTED:' || r.room_id || ':' || r.id, '{}'::jsonb);
   end loop;
   return v_n;
 end $$;
@@ -1974,7 +2109,7 @@ begin
       group by n.id, n.room_id order by n.id
     loop
       v_n := v_n + public.notify_publish('DEADLINE_REMINDER', r.room_id, r.id, null, r.users,
-                                         'DEADLINE_REMINDER:node=' || r.id || ':d=' || v_d, jsonb_build_object('days', v_d));
+                                         'DEADLINE_REMINDER:' || r.room_id || ':' || r.id || ':d' || v_d, jsonb_build_object('days', v_d));
     end loop;
   end loop;
   return v_n;
@@ -2002,31 +2137,31 @@ begin
     group by rm.id, rm.leader_id order by rm.id
   loop
     v_n := v_n + public.notify_publish('TASK_COMPLETION_DIGEST', r.id, null, null, array[r.leader_id],
-                                       'TASK_COMPLETION_DIGEST:room=' || r.id || ':d=' || to_char(v_today, 'YYYY-MM-DD'),
+                                       'TASK_COMPLETION_DIGEST:' || r.id || ':' || to_char(v_today, 'YYYY-MM-DD'),
                                        jsonb_build_object('count', r.cnt));
   end loop;
   return v_n;
 end $$;
 
--- 1시간 넘게 PENDING 인 첨부 → DELETED. DELETED 7일 경과 → Storage 객체 + 행 삭제. SENT 메일 30일 경과 삭제
+-- 1시간 넘게 PENDING 인 첨부 → DELETED. 제출에 연결되지 않은 READY 고아 24시간 경과 → DELETED. SENT 메일 30일 경과 삭제.
+-- Storage 객체는 SQL 로 지우지 않는다(00 개요): storage.objects 메타 행만 지우면 실제 객체가 고아로 남고, 최신 Supabase 는 직접 DELETE 를 막기도 한다.
+-- DELETED 행은 남겨 두고 2단계 Edge Function(cleanup-files)이 Storage API remove() 후 행을 정리한다.
 create or replace function public.job_cleanup() returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare v_expired int; v_purged int; v_mail int;
+declare v_expired int; v_orphans int; v_mail int;
 begin
   update public.files set status = 'DELETED', deleted_at = now()
   where status = 'PENDING' and created_at < now() - interval '1 hour';
   get diagnostics v_expired = row_count;
 
-  delete from storage.objects o
-  using public.files f
-  where o.bucket_id = f.bucket_id and o.name = f.object_path and f.status = 'DELETED' and f.deleted_at < now() - interval '7 days';
-  delete from public.files where status = 'DELETED' and deleted_at < now() - interval '7 days';
-  get diagnostics v_purged = row_count;
+  update public.files set status = 'DELETED', deleted_at = now()
+  where status = 'READY' and purpose = 'ATTACHMENT' and submission_id is null and created_at < now() - interval '24 hours';
+  get diagnostics v_orphans = row_count;
 
   delete from public.mail_outbox where status = 'SENT' and sent_at < now() - interval '30 days';
   get diagnostics v_mail = row_count;
 
-  return jsonb_build_object('filesExpired', v_expired, 'filesPurged', v_purged, 'mailPurged', v_mail);
+  return jsonb_build_object('filesExpired', v_expired, 'orphansExpired', v_orphans, 'mailPurged', v_mail);
 end $$;
 
 -- I7 보정: member_count = COUNT(ACTIVE). 원자 증감이 어긋났을 때만 UPDATE
@@ -2040,20 +2175,13 @@ begin
   return v_n;
 end $$;
 
-revoke execute on function public.job_draft_blocked()     from public, anon, authenticated;
-revoke execute on function public.job_round_started()     from public, anon, authenticated;
-revoke execute on function public.job_deadline_reminder() from public, anon, authenticated;
-revoke execute on function public.job_completion_digest() from public, anon, authenticated;
-revoke execute on function public.job_cleanup()           from public, anon, authenticated;
-revoke execute on function public.member_count_audit()    from public, anon, authenticated;
-grant  execute on function public.job_draft_blocked(), public.job_round_started(), public.job_deadline_reminder(),
-                          public.job_completion_digest(), public.job_cleanup(), public.member_count_audit() to service_role;
+-- job_* · member_count_audit 은 GRANT 하지 않는다(D7). pg_cron 은 postgres 로 실행하므로 권한이 필요 없다.
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/jobs-sql.test.ts`
-Expected: 7 passed. `job_completion_digest` 가 0 이면 시드의 IAM 제출 시각이 과거(10/03 18:00 KST, 10/04 09:00 KST)인지 확인 — `max(first_submitted_at)` 이 하나의 10/11 제출이어야 한다. `job_round_started` 의 `n >= 4` 는 같은 날 시작하는 다른 시드 회차가 있어도 통과하도록 둔 하한.
+Run: `npm run test:db -- --filter "jobs:"`
+Expected: 7 passed. `job_completion_digest` 가 0 이면 시드의 IAM 제출 시각이 과거(10/03 18:00 KST, 10/04 09:00 KST)인지 확인 — `max(first_submitted_at)` 이 하나의 10/11 제출이어야 한다. `job_round_started` 의 `n >= 4` 는 같은 날(10/15) 시작하는 다른 시드 회차가 있어도 통과하도록 둔 하한, 10/12 의 5 는 spring 2주차(ACTIVE 5명) 정확값.
 
 - [ ] **Step 5: Commit**
 
@@ -2081,7 +2209,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   ```sql
   -- 사전 19종 (slug): aws, cloud, certificate, english, toeic, spring, backend, java, algorithm, coding-test,
   --   info-processing, cs, interview, react, frontend, docker, kubernetes, sql, data
-  public.tag_term_hit(p_text text, p_term text) returns boolean          -- 대소문자 무시 부분 일치, 2자 이상
+  public.tag_term_hit(p_text text, p_term text) returns boolean          -- 대소문자 무시 부분 일치. 영숫자 2자 용어만 단어 경계 필요(`cs` ⊄ "docs")
   public.tag_slug_for(p_label text) returns text                          -- 자유 입력 → 기존 라벨 재사용 또는 CUSTOM 생성(VALIDATION_FAILED 1~20자)
   public.room_tag_json(p_room bigint) returns jsonb                       -- RoomTag[]
   public.tags_search(p_q text default null) returns jsonb                 -- {items} 상위 20, usage_count DESC
@@ -2091,23 +2219,27 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   public.tag_autoselect(p_room bigint) returns int                        -- 키워드 점수 상위 5 → tag_apply_auto, 적용 수
   public.room_tags_suggest(p_slug text) returns jsonb                     -- 그룹장이 수동으로 다시 고르기 {today, items}
   ```
-  **plan 02 시드와의 계약:** `seed.sql` 의 `room_tags` 행은 위 slug 를 참조해야 한다(aws: `aws`·`cloud` AUTO, `certification` MANUAL 등 `src/data/room-view.ts` 의 `auto` 플래그대로). plan 02 시드가 `tags` 사전 자체를 넣었다면 그 블록을 지운다 — 사전의 출처는 0009 하나다. plan 02/03 의 `room_*`/`node_*` 끝에 `if to_regproc('public.tag_autoselect') is not null then perform public.tag_autoselect(v_room_id); end if;` 가드가 있어야 "node_update 가 태그를 다시 고른다" 사례가 통과한다.
+  **plan 02 시드와의 계약:** `seed.sql` 의 `room_tags` 행은 위 slug 를 참조한다(aws: `aws`·`cloud` AUTO, `certificate` MANUAL 등 `src/data/room-view.ts` 의 `auto` 플래그대로). plan 02 시드도 같은 slug 로 사전을 `on conflict (slug) do nothing` 삽입하지만 마이그레이션(0009)이 먼저 돌므로 **label·tone·aliases 는 0009 값이 이긴다**(사전의 정본은 0009).
+  **자동 선택 훅(S6):** 가드는 plan 03 `node_update`(title/descriptionMd 변경 시)에만 있다. 이 태스크는 0004 의 `room_create`/`room_update`, 0006 의 `node_create`/`node_delete`/`node_archive` 를 **다시 만들지 않는다**. 새 방의 AUTO 태그는 첫 커리큘럼 저장 이후 붙고, 그 전에 채우려면 그룹장이 `room_tags_suggest`(= `tag_autoselect` 즉시 실행)를 부른다 — Step 1 의 "new room" 사례가 이 동작을 고정한다.
+  **GRANT(D7):** `tags_search`·`room_tags_get` → `anon, authenticated`(공개 방 태그·방 목록 필터 자동완성), `room_tags_put`·`room_tags_suggest` → `authenticated`. `room_tag_json`·`tag_term_hit`·`tag_slug_for`·`tag_apply_auto`·`tag_autoselect`·`room_tags_usage` 는 GRANT 없음. Edge Function(Task 9)이 쓰는 `tag_apply_auto` 만 `to service_role`.
 
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/tags-sql.test.ts`**
 
 ```ts
-import { assert, assertEquals } from "jsr:@std/assert";
-import { asUser, bootDb, cases, expectFail, nodeId, one, roomId, uidOf, type Q } from "./_boot.ts";
+import { assert, assertEquals } from "@std/assert";
+import { applySeed, asAnon, asUser, expectFail, openDb } from "./_harness.ts";
+import { cases, nodeId, one, roomId, uidOf, type Q } from "./_fixtures.ts";
 import { sqlArr } from "./_submit.ts";
 
-const { db, q } = await bootDb();
+const db = await openDb();
+await applySeed(db);
 const tagsOf = async (q: Q, slug: string) =>
   q("select rt.tag_slug as slug, rt.source from public.room_tags rt join public.rooms r on r.id = rt.room_id where r.slug = $1 order by rt.sort_order, rt.created_at, rt.tag_slug", [slug]);
 const put = async (q: Q, slug: string, slugs: string[], free: string[] = []) =>
   (await one(q, "select public.room_tags_put($1, $2::text[], $3::text[]) as r", [slug, sqlArr(slugs), sqlArr(free)])).r;
 const autoselect = async (q: Q, room: string) => Number((await one(q, "select public.tag_autoselect($1::bigint) as n", [room])).n);
 
-cases("tags", db, q, [
+cases("tags", db, [
   { name: "dictionary: 19 curated tags with palette tones; aws room tags from seed", run: async (q) => {
     const t = await q("select slug, label, tone, kind from public.tags where kind = 'CURATED' order by slug");
     assertEquals(t.length, 19);
@@ -2118,7 +2250,7 @@ cases("tags", db, q, [
     assertEquals(aws.items.map((x: { label: string; auto: boolean }) => [x.label, x.auto]), [["AWS", true], ["클라우드", true], ["자격증", false]]);
     assertEquals(typeof aws.today, "string");
     await expectFail(q("select public.room_tags_get('nope')"), "ROOM_NOT_FOUND");
-    await asUser(q, null);
+    await asAnon(q);
     await expectFail(q("select public.room_tags_get('spring')"), "ROOM_NOT_FOUND");   // 비공개 방
   } },
 
@@ -2130,7 +2262,7 @@ cases("tags", db, q, [
     assert(n >= 3 && n <= 5, String(n));
     const t = await tagsOf(q, "aws");
     const auto = t.filter((x) => x.source === "AUTO").map((x) => x.slug);
-    assertEquals(auto.slice(0, 3), ["aws", "certification", "cloud"]);
+    assertEquals(auto.slice(0, 3), ["aws", "certificate", "cloud"]);
     assert(!auto.includes("toeic"));                                           // 옛 AUTO 는 교체
     assertEquals(t.filter((x) => x.source === "MANUAL").map((x) => x.slug), ["interview"]);
     assertEquals(await autoselect(q, aws), n);                                 // 멱등
@@ -2141,25 +2273,25 @@ cases("tags", db, q, [
     const aws = await roomId(q, "aws");
     await asUser(q, await uidOf(q, "민수"));
     await autoselect(q, aws);
-    let r = await put(q, "aws", ["certification"]);                            // AWS·클라우드 AUTO 제거
-    assertEquals(r.items.map((x: { slug: string }) => x.slug), ["certification"]);
+    let r = await put(q, "aws", ["certificate"]);                            // AWS·클라우드 AUTO 제거
+    assertEquals(r.items.map((x: { slug: string }) => x.slug), ["certificate"]);
     const sup = await q("select tag_slug from public.room_tag_suppressions where room_id = $1::bigint order by 1", [aws]);
     assert(sup.map((x) => x.tag_slug).includes("aws"));
     assert(sup.map((x) => x.tag_slug).includes("cloud"));
     await autoselect(q, aws);
     const after = (await tagsOf(q, "aws")).map((x) => x.slug);
     assert(!after.includes("aws")); assert(!after.includes("cloud"));
-    assert(after.includes("certification"));
-    r = await put(q, "aws", ["certification", "aws"]);                         // 수동으로 다시 넣으면 억제 해제, MANUAL
+    assert(after.includes("certificate"));
+    r = await put(q, "aws", ["certificate", "aws"]);                         // 수동으로 다시 넣으면 억제 해제, MANUAL
     assertEquals((await tagsOf(q, "aws")).find((x) => x.slug === "aws")?.source, "MANUAL");
     assertEquals((await q("select 1 from public.room_tag_suppressions where room_id = $1::bigint and tag_slug = 'aws'", [aws])).length, 0);
-    await put(q, "aws", ["certification"]);                                    // MANUAL 을 빼는 건 억제가 아니다
+    await put(q, "aws", ["certificate"]);                                    // MANUAL 을 빼는 건 억제가 아니다
     assertEquals((await q("select 1 from public.room_tag_suppressions where room_id = $1::bigint and tag_slug = 'aws'", [aws])).length, 0);
   } },
 
   { name: "room_tags_put: limit 8, CUSTOM free labels (reuse by label), VALIDATION_FAILED, NOT_LEADER, usage_count", run: async (q) => {
     await asUser(q, await uidOf(q, "민수"));
-    await expectFail(put(q, "aws", ["aws", "cloud", "certification", "english", "toeic", "spring", "backend", "java", "sql"]), "TAG_LIMIT_EXCEEDED");
+    await expectFail(put(q, "aws", ["aws", "cloud", "certificate", "english", "toeic", "spring", "backend", "java", "sql"]), "TAG_LIMIT_EXCEEDED");
     await expectFail(put(q, "aws", ["aws"], ["a".repeat(21)]), "VALIDATION_FAILED");
     await expectFail(put(q, "aws", ["aws"], ["   "]), "VALIDATION_FAILED");
     await expectFail(put(q, "aws", ["not-a-tag"]), "NOT_FOUND");
@@ -2177,6 +2309,31 @@ cases("tags", db, q, [
     await expectFail(put(q, "algo", ["aws"]), "ROOM_NOT_EDITABLE");           // ENDED
   } },
 
+  { name: "tag_term_hit: 2-char ASCII terms need a word boundary; Korean and ≥3 chars match as substring", run: async (q) => {
+    const hit = async (t: string, term: string) => (await one(q, "select public.tag_term_hit($1, $2) as v", [t, term])).v;
+    assertEquals(await hit("AWS docs 읽기", "cs"), false);                       // 'cs' ⊂ 'docs' 오탐 제거
+    assertEquals(await hit("CS 면접 대비", "cs"), true);
+    assertEquals(await hit("EC2·S3 정리", "s3"), true);                          // '·' 는 경계
+    assertEquals(await hit("SAA-C03 합격까지", "합격"), true);                   // 한글은 조사가 붙으므로 부분 일치 유지(aws 자격증 점수 근거)
+    assertEquals(await hit("SAA-C03 합격까지", "saa"), true);                    // 3자 이상은 부분 일치
+    assertEquals(await hit("고가용성 아키텍처", "고가용성"), true);
+  } },
+
+  { name: "grants: public tag RPCs only (B4)", run: async (q) => {
+    const can = async (role: string, fn: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, fn])).v;
+    for (const fn of ["public.room_tag_json(bigint)", "public.tag_term_hit(text, text)", "public.tag_slug_for(text)",
+                      "public.tag_apply_auto(bigint, text[])", "public.tag_autoselect(bigint)"]) {
+      assertEquals(await can("anon", fn), false, fn);
+      assertEquals(await can("authenticated", fn), false, fn);
+    }
+    assertEquals(await can("anon", "public.tags_search(text)"), true);
+    assertEquals(await can("anon", "public.room_tags_get(text)"), true);
+    assertEquals(await can("anon", "public.room_tags_put(text, text[], text[])"), false);
+    assertEquals(await can("authenticated", "public.room_tags_put(text, text[], text[])"), true);
+    assertEquals(await can("authenticated", "public.room_tags_suggest(text)"), true);
+    assertEquals(await can("service_role", "public.tag_apply_auto(bigint, text[])"), true);
+  } },
+
   { name: "tags_search: label/alias ILIKE, top 20 by usage, empty q lists all (≤20)", run: async (q) => {
     const s = (await one(q, "select public.tags_search('클라') as r")).r;
     assertEquals(s.items.map((x: { slug: string }) => x.slug), ["cloud"]);
@@ -2186,6 +2343,16 @@ cases("tags", db, q, [
     const all = (await one(q, "select public.tags_search('') as r")).r;
     assert(all.items.length >= 19 && all.items.length <= 20);
     assertEquals((await one(q, "select public.tags_search('zzzz') as r")).r.items, []);
+  } },
+
+  { name: "new room: 0 AUTO tags right after room_create; room_tags_suggest fills them; first node_update re-runs autoselect (S6)", run: async (q) => {
+    const minsu = await uidOf(q, "민수");
+    await asUser(q, minsu);
+    const d = (await one(q, "select public.room_create('도커 컨테이너 입문 Docker 101', '도커와 컨테이너 기초를 함께', '2026-11-02'::date, '2026-11-29'::date, 6, true, 'direct') as d")).d;
+    // room_create 에는 훅이 없다(0004 를 다시 만들지 않는다) → AUTO 0개
+    assertEquals((await tagsOf(q, d.slug)).filter((x) => x.source === "AUTO").length, 0);
+    const r = (await one(q, "select public.room_tags_suggest($1) as r", [d.slug])).r;
+    assert(r.items.some((x: { slug: string; auto: boolean }) => x.slug === "docker" && x.auto), JSON.stringify(r.items));
   } },
 
   { name: "node_update in plan 03 re-runs tag_autoselect (hook guard present)", run: async (q) => {
@@ -2203,7 +2370,7 @@ cases("tags", db, q, [
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/tags-sql.test.ts`
+Run: `npm run test:db -- --filter "tags:"`
 Expected: FAIL — "dictionary" 사례에서 19 가 아닌 수(plan 02 시드가 태그를 넣었으면 그 수, 아니면 0), `room_tags_get` 없음.
 
 - [ ] **Step 3: `supabase/migrations/0009_tags.sql` 작성**
@@ -2212,7 +2379,7 @@ Expected: FAIL — "dictionary" 사례에서 19 가 아닌 수(plan 02 시드가
 -- 0009_tags.sql — 태그 사전 · 방 태그 · 자동 선택 (플랜 04 Task 8). 배포 후 수정 금지.
 
 -- ───────── 사전 시드 (D12, cross-cutting §2.6). 운영 데이터이므로 seed.sql 이 아니라 마이그레이션에 둔다 ─────────
--- tone 은 src/data/room-view.ts·my-study.ts 의 태그 칩 색. aliases 는 자동 선택용 소문자 키워드(2자 이상).
+-- tone 은 src/data/room-view.ts·my-study.ts 의 태그 칩 색. aliases 는 자동 선택용 소문자 키워드(영숫자 2자 용어는 단어 경계가 있어야 맞는다 — tag_term_hit).
 insert into public.tags (slug, label, tone, aliases, kind) values
   ('aws',             'AWS',        'mint',  array['amazon', '아마존', 'saa', 'iam', 'ec2', 's3', 'vpc', 'rds', 'dynamodb'], 'CURATED'),
   ('cloud',           '클라우드',    'blue',  array['cloud', '고가용성', '인프라', '오토스케일링', '로드밸런서'], 'CURATED'),
@@ -2253,10 +2420,17 @@ create trigger trg_room_tags_usage after insert or delete on public.room_tags
 update public.tags t set usage_count = (select count(*) from public.room_tags rt where rt.tag_slug = t.slug);
 
 -- ───────── 헬퍼 ─────────
--- 부분 일치(대소문자 무시). 와일드카드 문제를 피하려고 ILIKE 대신 position
+-- 대소문자 무시. 영숫자 2자 용어(cs, s3, ps …)는 단어 경계가 있어야 맞는다 — 부분 일치면 'cs' ⊂ 'docs' 같은 오탐이 난다.
+-- 그 밖(3자 이상, 한글)은 부분 일치(position — ILIKE 와일드카드 문제 회피). 한글은 조사가 붙으므로('합격까지') 경계를 요구하지 않는다.
+-- 남는 한계: 3자 이상 부분 일치('데이터' ⊂ '데이터베이스')는 허용 — 점수 1 짜리라 상위 5 에 거의 영향 없음.
 create or replace function public.tag_term_hit(p_text text, p_term text) returns boolean
 language sql immutable as $$
-  select p_text is not null and length(trim(coalesce(p_term, ''))) >= 2 and position(lower(trim(p_term)) in lower(p_text)) > 0
+  select case
+    when p_text is null or length(trim(coalesce(p_term, ''))) < 2 then false
+    when length(trim(p_term)) = 2 and trim(p_term) ~ '^[A-Za-z0-9]+$'
+      then lower(p_text) ~ ('(^|[^a-z0-9])' || lower(trim(p_term)) || '($|[^a-z0-9])')
+    else position(lower(trim(p_term)) in lower(p_text)) > 0
+  end
 $$;
 
 create or replace function public.room_tag_json(p_room bigint) returns jsonb
@@ -2364,7 +2538,8 @@ begin
   return public.room_tag_json(p_room);
 end $$;
 
--- 키워드 점수: 제목 3, 소개 2, 노드 제목 모음 1 (용어별 합). score > 0 상위 5 → tag_apply_auto. room_*/node_* 끝에서 가드 호출
+-- 키워드 점수: 제목 3, 소개 2, 노드 제목 모음 1 (용어별 합). score > 0 상위 5 → tag_apply_auto.
+-- 호출처: plan 03 node_update 의 가드(title/descriptionMd 변경 시), room_tags_suggest(그룹장 "다시 고르기"). room_create/room_update 에는 훅이 없다(S6)
 create or replace function public.tag_autoselect(p_room bigint) returns int
 language plpgsql security definer set search_path = '' as $$
 declare v_title text; v_intro text; v_nodes text; v_slugs text[];
@@ -2403,16 +2578,19 @@ begin
   return jsonb_build_object('today', to_char(public.kst_today(), 'YYYY-MM-DD'), 'items', public.room_tag_json(r.id));
 end $$;
 
-revoke execute on function public.tag_apply_auto(bigint, text[]) from public, anon, authenticated;
-revoke execute on function public.tag_autoselect(bigint)         from public, anon, authenticated;
-revoke execute on function public.tag_slug_for(text)             from public, anon, authenticated;
-grant  execute on function public.tag_apply_auto(bigint, text[]), public.tag_autoselect(bigint) to service_role;
+-- ───────── 공개 RPC (D7 GRANT 전용) ─────────
+grant execute on function public.tags_search(text)                    to anon, authenticated;
+grant execute on function public.room_tags_get(text)                 to anon, authenticated;
+grant execute on function public.room_tags_put(text, text[], text[])  to authenticated;
+grant execute on function public.room_tags_suggest(text)              to authenticated;
+-- Edge Function suggest-tags(Task 9)가 service_role 로 머지 함수를 부른다. 사용자 역할에는 열지 않는다
+grant execute on function public.tag_apply_auto(bigint, text[])       to service_role;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/tags-sql.test.ts`
-Expected: 6 passed. "aws room tags from seed" 가 비면 plan 02 시드의 `room_tags` 블록을 위 slug 로 맞춘다. "node_update re-runs" 가 실패하면 plan 03 `node_update` 끝에 가드 블록이 없는 것 — 0006 에 추가한다(이 플랜 서두 "태그 자동 선택 훅"). `autoselect` 상위 3 이 다르면 `aws` 의 intro(`SAA-C03 합격`)·노드 제목(`IAM`, `VPC`, `EC2`, `S3`, `고가용성`)이 시드에 그대로 들어갔는지 본다.
+Run: `npm run test:db -- --filter "tags:"`
+Expected: 9 passed. "node_update re-runs" 가 실패하면 plan 03 `node_update` 끝의 `to_regproc('public.tag_autoselect')` 가드(03 Task 의 0006)를 확인한다. `autoselect` 상위 3 이 다르면 `aws` 의 intro(`SAA-C03 합격`)·노드 제목(`IAM`, `VPC`, `EC2`, `S3`, `고가용성`)이 시드에 그대로 들어갔는지 본다.
 
 - [ ] **Step 5: Commit**
 
@@ -2598,7 +2776,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 **Files:**
 - Create: `supabase/migrations/0010_cron.sql`
 - Modify: `supabase/seed.sql` (끝에 §4 추가)
-- Test: `supabase/tests/cron-sql.test.ts`, `supabase/tests/notifications-sql.test.ts`(Task 5 Step 4 의 `total` 상수를 `25 + 3` 으로 확정)
+- Test: `supabase/tests/cron-sql.test.ts` (Task 5 "list" 사례는 시드 수를 직접 세므로 고칠 것 없음)
 
 **Interfaces:**
 - Consumes: `cron.schedule(name, schedule, command)`(호스팅 pg_cron / PGlite 스텁), `room_tick`(plan 02), Task 7 잡 6종. 시드: plan 02 방·멤버, plan 03 노드·제출.
@@ -2607,12 +2785,14 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/cron-sql.test.ts`**
 
 ```ts
-import { assertEquals } from "jsr:@std/assert";
-import { asUser, bootDb, cases, nodeId, one, uidOf } from "./_boot.ts";
+import { assertEquals } from "@std/assert";
+import { applySeed, asUser, openDb } from "./_harness.ts";
+import { cases, nodeId, one, uidOf } from "./_fixtures.ts";
 
-const { db, q } = await bootDb();
+const db = await openDb();
+await applySeed(db);
 
-cases("cron+seed", db, q, [
+cases("cron+seed", db, [
   { name: "0010 registers 7 jobs with 02 §7 schedules (UTC)", run: async (q) => {
     const jobs = await q("select jobname, schedule, command from cron.job order by jobname");
     assertEquals(jobs.map((j) => [j.jobname, j.schedule, j.command]), [
@@ -2632,6 +2812,8 @@ cases("cron+seed", db, q, [
     assertEquals((await one(q, "select public.notifications_unread_count() as c")).c, { count: 3 });
     const l = (await one(q, "select public.notifications_list(null, 20) as l")).l;
     assertEquals(l.items.map((i: { kind: string }) => i.kind), ["SCHEDULE_CHANGED", "ROUND_STARTED", "DEADLINE_REMINDER"]);
+    const ts = l.items.map((i: { createdAt: string }) => i.createdAt);
+    assertEquals(ts, [...ts].sort().reverse());                                  // id DESC = 시간 DESC (시드 삽입 순서 = 시간 순)
     assertEquals(l.items[2].link, `/my-study/aws?task=${await nodeId(q, "aws", "EC2 인스턴스 유형 정리")}`);
     assertEquals(l.items[0].actor.nickname, "민수");
     const s = await one(q, "select count(*)::int as n from public.rooms r left join public.room_notification_settings st on st.room_id = r.id where st.room_id is null");
@@ -2646,7 +2828,7 @@ cases("cron+seed", db, q, [
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/cron-sql.test.ts`
+Run: `npm run test:db -- --filter "cron+seed:"`
 Expected: FAIL — `cron.job` 0행, 철수 알림 0건.
 
 - [ ] **Step 3: `supabase/migrations/0010_cron.sql`**
@@ -2671,7 +2853,9 @@ select cron.schedule('cleanup',            '0 19 * * *',  'select public.job_cle
 select cron.schedule('member_count_audit', '30 19 * * *', 'select public.member_count_audit()');    -- 04:30 KST
 ```
 
-- [ ] **Step 4: `supabase/seed.sql` 끝에 §4 추가**
+- [ ] **Step 4: `supabase/seed.sql` 에 §4 추가**
+
+§3(plan 03) 뒤, **마지막 줄 `alter database postgres set app.today = '2026-10-12';`(00 개요 — 로컬 고정 기준일) 바로 앞**에 넣는다. 그 줄은 항상 seed 의 마지막에 남긴다.
 
 ```sql
 -- ═══════════ §4 알림 · 설정 · 제출 링크 (plan 04) ═══════════
@@ -2680,10 +2864,12 @@ insert into public.room_notification_settings (room_id)
 select id from public.rooms
 on conflict (room_id) do nothing;
 
--- 철수 미읽음 3건 (헤더 배지·드롭다운). dedupe_key 로 멱등. 생성 시각은 기준일 10/12 전후
+-- 철수 미읽음 3건 (헤더 배지·드롭다운). dedupe_key 로 멱등.
+-- created_at 이 오래된 것부터 INSERT 한다 → id 순서 = 시간 순서(목록은 id DESC 라 드롭다운이 최신순으로 보인다).
+-- 모두 기준일 10/12(KST) 이전 시각: D-3 리마인더 10/11 09:00 KST → spring 2주차 시작 10/12 00:00 KST → aws 일정 변경 10/12 10:30 KST
 insert into public.notifications (user_id, kind, title, body, room_id, node_id, actor_user_id, link, dedupe_key, created_at)
-select p.id, 'DEADLINE_REMINDER', '"EC2 인스턴스 유형 정리" 마감 1일 전이에요', r.title, r.id, n.id, null,
-       '/my-study/aws?task=' || n.id, 'seed:DEADLINE_REMINDER:cheolsu', '2026-10-13 00:00:00+00'
+select p.id, 'DEADLINE_REMINDER', '"EC2 인스턴스 유형 정리" 마감 3일 전이에요', r.title, r.id, n.id, null,
+       '/my-study/aws?task=' || n.id, 'seed:DEADLINE_REMINDER:cheolsu', '2026-10-11 00:00:00+00'
 from public.profiles p, public.rooms r
 join public.goal_nodes n on n.room_id = r.id and n.title = 'EC2 인스턴스 유형 정리'
 where p.nickname = '철수' and r.slug = 'aws'
@@ -2718,10 +2904,10 @@ where not exists (select 1 from public.submission_links l where l.submission_id 
 
 Run:
 ```bash
-cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/cron-sql.test.ts
-deno test --allow-read --allow-env supabase/tests/
+npm run test:db -- --filter "cron+seed:"
+npm run test:db
 ```
-Expected: cron+seed 2 passed. 전체: plan 01~03 사례 + 이 플랜 2(boot) + 6 + 4 + 6 + 9 + 6 + 7 + 6 + 2 = 48 passed 추가. `notifications-sql.test.ts` "list" 사례의 `total` 을 `25 + 3` 상수로 되돌려 둔 상태에서 통과해야 한다. 순서 단언 `["SCHEDULE_CHANGED","ROUND_STARTED","DEADLINE_REMINDER"]` 는 id 역순(삽입 역순)이다.
+Expected: cron+seed 2 passed. 전체: plan 01~03 사례 + 이 플랜 2(fixtures) + 6(submissions) + 5(files) + 7(task_get) + 10(notifications + grants) + 8(deactivate) + 7(jobs) + 9(tags) + 2(cron+seed) = 56 passed 추가(로컬 Supabase 가 없으면 `storage:` 1건 ignored). 순서 단언 `["SCHEDULE_CHANGED","ROUND_STARTED","DEADLINE_REMINDER"]` 는 id 역순이며, 시드가 시간순으로 넣으므로 `createdAt` 역순과도 같다.
 
 - [ ] **Step 6: 로컬 Supabase `db reset` 실측**
 
@@ -2729,14 +2915,14 @@ Run:
 ```bash
 vm_stat | grep -E 'free|compressor'
 supabase start && npm run db:reset
-psql "$(supabase status -o json | python3 -c 'import json,sys; print(json.load(sys.stdin)["DB_URL"])')" -c "select jobname, schedule from cron.job order by 1;" -c "select count(*) from public.notifications;" -c "select public.job_deadline_reminder();"
+psql "$(supabase status -o json | python3 -c 'import json,sys; print(json.load(sys.stdin)["DB_URL"])')" -c "select jobname, schedule from cron.job order by 1;" -c "select count(*) from public.notifications;" -c "select public.kst_today();" -c "select public.job_deadline_reminder();"
 ```
-Expected: 0007~0010 적용 로그, `cron.job` 7행(대시보드에서 pg_cron 이 꺼져 있으면 `schema "cron" does not exist` — Database → Extensions 에서 `pg_cron` 을 켜고 다시 reset), 알림 3건, `job_deadline_reminder()` 가 정수 반환(실제 날짜 기준이라 0 일 수 있음).
+Expected: 0007~0010 적용 로그, `cron.job` 7행(대시보드에서 pg_cron 이 꺼져 있으면 `schema "cron" does not exist` — Database → Extensions 에서 `pg_cron` 을 켜고 다시 reset), 알림 3건, `select public.kst_today()` = `2026-10-12`(seed 마지막 줄의 `app.today` 고정 — 새 세션부터 적용), `job_deadline_reminder()` 가 정수 반환.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add supabase/migrations/0010_cron.sql supabase/seed.sql supabase/tests/cron-sql.test.ts supabase/tests/notifications-sql.test.ts
+git add supabase/migrations/0010_cron.sql supabase/seed.sql supabase/tests/cron-sql.test.ts
 git commit -m "feat(db): 0010 cron schedules; seed notifications, settings rows, submission links
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
@@ -2747,16 +2933,19 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 ## Phase 종료 게이트
 
-1. `cd /Users/picpal/Desktop/workspace/sgtudy && deno test --allow-read --allow-env supabase/tests/` 전부 통과(plan 01~04).
+1. `npm run test:db`(= `deno test -A --config supabase/tests/deno.json supabase/tests`) 전부 통과(plan 01~04).
 2. `supabase db reset` 성공(0001~0010 + seed), Studio 에서 `cron.job` 7행·`tags` 19행·철수 알림 3건 확인.
-3. 로컬 Supabase 가 떠 있으면 `files-db.test.ts`(Storage 정책) 통과.
-4. `supabase gen types typescript --local > src/lib/supabase/database.types.ts` 재생성 → `submission_upsert`, `task_get`, `file_register`, `notifications_*`, `settings_*`, `member_deactivate*`, `tags_search`, `room_tags_*` 가 `Functions` 에 보인다. 커밋 `chore(db): regenerate types after phase 4-6`.
-5. plan 05 로 넘어가기 전에 00 개요 "공통 계약" 의 `notify_publish` 시그니처가 0004·0008 양쪽에서 동일한지 `\df public.notify_publish` 로 한 번 더 확인(오버로드가 2개면 0004 의 placeholder 인자 이름이 달랐던 것 — 0008 첫 줄에 `drop function if exists public.notify_publish(text, bigint, bigint, uuid, uuid[], text, jsonb);` 를 추가하고 의존 함수가 있으면 그 함수들을 0008 에서 `CREATE OR REPLACE` 로 다시 정의한다).
+3. 로컬 Supabase 가 떠 있으면 `files-db.test.ts`(Storage 정책) 통과. 키는 `{uuid}.{ext}` — 한글 원본명 파일도 업로드 성공.
+4. 권한(D7): `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and has_function_privilege('anon', p.oid, 'execute') order by 1;` 결과가 `03-api.md` 의 비로그인 허용 RPC(이 플랜분: `task_get`, `tags_search`, `room_tags_get`) + plan 01~03 의 공개 RPC·RLS 헬퍼뿐인지 확인 — `submission_json`·`task_node_json`·`room_tag_json`·`settings_json`·`leader_room`·`job_*`·`notify_publish` 가 보이면 실패.
+5. `supabase gen types typescript --local > src/lib/supabase/database.types.ts` 재생성 → `submission_upsert`, `task_get`, `file_register`, `notifications_*`, `settings_*`, `member_deactivate*`, `tags_search`, `room_tags_*` 가 `Functions` 에 보인다. 커밋 `chore(db): regenerate types after phase 4-6`.
+6. plan 05 로 넘어가기 전에 00 개요 "공통 계약" 의 `notify_publish` 시그니처가 0004·0008 양쪽에서 동일한지 `\df public.notify_publish` 로 한 번 더 확인(오버로드가 2개면 0004 의 placeholder 인자 이름이 달랐던 것 — 0008 첫 줄에 `drop function if exists public.notify_publish(text, bigint, bigint, uuid, uuid[], text, jsonb);` 를 추가하고 의존 함수가 있으면 그 함수들을 0008 에서 `CREATE OR REPLACE` 로 다시 정의한다).
 
 ## Self-Review 메모
 
 - **스펙 커버리지:** 03-api §5(task_get, submission_upsert, file_register — presign/url 은 Storage SDK 직접) Task 2~4. §3 이탈 2종 Task 6. §7 알림 4종·설정 2종 Task 5, 태그 3종(+suggest SQL 경로 `room_tags_suggest`, LLM 경로 Task 9) Task 8. 02 §6 잡 7종 중 `room_tick` 은 plan 02, 나머지 6종 Task 7, §7 cron 7줄 Task 10, §8 시드(알림 3건·태그 19) Task 8·10. D8 15종 kind 템플릿·링크·본인 제외·dedupe Task 5. D10 제한값 전부 Task 2·3. D11 이탈 2단계·REASSIGN_REQUIRED Task 6. D12 머지 규칙·억제·≤8·CUSTOM Task 8. 빠진 것: `mail_outbox` 적재(2단계, D0 메일 — `job_cleanup` 의 SENT 정리만 둠), Realtime 배지(2단계).
-- **Review Focus 매핑:** 1 → Task 2 "is_late boundary" 2사례. 2 → Task 6 "deactivate 지은"·"도윤" + Task 4 "archived node". 3 → Task 5 "dedupe"·"placeholder calls(tick 2회)", Task 7 모든 잡의 재실행 0건. 4 → Task 5 "optional kind filtered". 5 → Task 8 "suppression".
-- **타입 일관성:** `notify_publish(text, bigint, bigint, uuid, uuid[], text, jsonb) returns int` 0004=0008. `leader_room(p_slug, p_lock)` 은 Task 5 정의, Task 6·8 사용. `submission_json(bigint)` Task 2 정의, Task 4 사용. `room_leaf_stats`·`room_readable`·`room_release_seat`·`membership_result`·`assignment_resync` 는 plan 02 산출물 표의 이름 그대로. 테스트 헬퍼는 전부 Task 1 `_boot.ts` + Task 2 `_submit.ts`.
-- **알려진 가정(실행자가 맨 먼저 확인):** plan 02 `room_apply(p_slug)`·`room_approve(p_slug, p_user)`·`room_members_json` 의 INACTIVE 포함, plan 03 `node_update(p_slug, p_node_id, p_patch)` 가 기간 변경 시 `SCHEDULE_CHANGED` 를 부르고 끝에서 `tag_autoselect` 가드를 호출, plan 03 시드의 제출 시각(D = end_date 18:00 KST, L = 다음날 09:00 KST)과 `room_tags` slug. 어긋나면 **이 플랜의 테스트가 아니라 해당 플랜 쪽(배포 전이므로 0004~0006/seed)** 을 00 개요 계약에 맞춘다.
+- **Review Focus 매핑:** 1 → Task 2 "is_late boundary" 2사례. 2 → Task 6 "deactivate 지은"·"도윤"·"INACTIVE cannot re-apply to a RECRUIT room"(MEMBER_NOT_ACTIVE 코드까지) + Task 4 "archived node". 3 → Task 5 "dedupe"·"placeholder calls(tick 2회)", Task 7 모든 잡의 재실행 0건(round_started 는 10/12 spring 5건 포함). 4 → Task 5 "optional kind filtered". 5 → Task 8 "suppression".
+- **권한(B4):** revoke 문 없음. GRANT = 0007 `task_get`(anon) · `submission_upsert`·`file_register`, 0008 `notifications_*`·`settings_*`·`member_deactivate*`, 0009 `tags_search`·`room_tags_get`(anon) · `room_tags_put`·`room_tags_suggest`, `tag_apply_auto` 만 service_role. Task 4·5·6·7·8 테스트가 내부 헬퍼 anon/authenticated = false 를 단언.
+- **Storage(S1·S2·S3·S4):** 키 `{uuid}.{ext}`(Task 3), `job_cleanup` 은 DELETED 표시만(객체·행 삭제 없음, Task 7), 24h 지난 미연결 READY 고아 정리 + 한도 제외(Task 3·7), `submission_upsert` 가 `storage_exists` 재검증(Task 2·3).
+- **타입 일관성:** `notify_publish(text, bigint, bigint, uuid, uuid[], text, jsonb) returns int` 0004=0008. `leader_room(p_slug, p_lock)` 은 Task 5 정의, Task 6·8 사용. `submission_json(bigint)` Task 2 정의, Task 4 사용. `room_leaf_stats`·`room_readable`·`room_release_seat`·`membership_result`·`assignment_resync` 는 plan 02 산출물 표의 이름 그대로. 테스트는 plan 01 `_harness.ts` + Task 1 `_fixtures.ts` + Task 2 `_submit.ts` 만 쓴다.
+- **알려진 가정(실행자가 맨 먼저 확인):** plan 02 `room_members_json` 의 INACTIVE 포함, plan 03 `node_update` 가 기간 변경 시 담당자에게 `SCHEDULE_CHANGED` 를 부르고(prefix 에 txid 없음 → 0008 이 붙임) title/descriptionMd 변경 시에만 `tag_autoselect` 가드를 호출, plan 03 시드의 제출 시각(D = end_date 18:00 KST, L = 다음날 09:00 KST)과 `room_tags` slug. 0004·0006 의 함수는 이 플랜에서 다시 만들지 않는다(S6) — 자동 태그는 첫 커리큘럼 저장 또는 `room_tags_suggest` 이후.
 - **Placeholder 스캔:** "TBD/TODO/similar to" 없음. Task 9 의 SDK 버전 핀은 배포 시점 갱신이 의도된 값.

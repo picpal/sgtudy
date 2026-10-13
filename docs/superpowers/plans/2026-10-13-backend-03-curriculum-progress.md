@@ -14,13 +14,16 @@
 
 (00 개요 "Global Constraints" 전부 + 아래)
 
-- 파일: `supabase/migrations/0006_curriculum.sql`(신규, 이 플랜의 태스크가 같은 파일 끝에 이어 붙인다 — 배포 전까지만), `supabase/seed.sql`(§3 커리큘럼 섹션 **추가** — §1·§2 는 플랜 01·02 소유), `supabase/tests/_curriculum-helpers.ts`, `supabase/tests/curriculum-sql.test.ts`, `supabase/tests/progress-sql.test.ts`, `supabase/tests/me-studies-sql.test.ts`, `supabase/tests/me-schedule-sql.test.ts`. 다른 파일은 만들지도 고치지도 않는다.
+- 파일: `supabase/migrations/0006_curriculum.sql`(신규, 이 플랜의 태스크가 같은 파일 끝에 이어 붙인다 — 배포 전까지만), `supabase/seed.sql`(§3 커리큘럼 섹션 **추가** — §1·§2 는 플랜 01·02 소유), `supabase/tests/_curriculum-helpers.ts`, `supabase/tests/curriculum-sql.test.ts`, `supabase/tests/progress-sql.test.ts`, `supabase/tests/me-studies-sql.test.ts`, `supabase/tests/me-schedule-sql.test.ts`, 그리고 **플랜 02 의 `supabase/tests/_cases-rooms.ts`**(시드 §3 이 깨뜨리는 사례 3개를 이 플랜 Task 2 Step 5 가 소유해 다시 쓴다 — 리뷰 B1). 그 외 파일은 건드리지 않는다.
 - 모든 쓰기 함수 `LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''`, 읽기 전용 헬퍼는 `LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''`. 테이블 `public.` 한정, 인자 `p_` 접두, JSON 키 camelCase, 숫자 id 는 `::text`, 날짜 `to_char(d,'YYYY-MM-DD')`, 시각 `public.iso()`.
 - 에러는 `public.fail(code, detail, hint)` 만. 이 플랜이 쓰는 코드: `AUTH_REQUIRED, ONBOARDING_REQUIRED, VALIDATION_FAILED, INVALID_PERIOD, INVALID_TITLE, NOT_LEADER, ROOM_NOT_FOUND, NODE_NOT_FOUND, ROOM_NOT_EDITABLE, NODE_HAS_SUBMISSIONS, NODE_DEPTH_EXCEEDED, NODE_NOT_LEAF, PARENT_ARCHIVED, ROOT_CANNOT_OUTDENT, ASSIGNEE_NOT_MEMBER, ASSIGNEE_HAS_SUBMISSION, SCHEDULE_RANGE_INVALID`(전부 03-api §0 목록).
 - 경고(warnings) code: `PERIOD_OUTSIDE_PARENT`, `PERIOD_OUTSIDE_ROOM`, `UNASSIGNED_TASK`. 형식 `{code, nodeId}`.
 - `goal_nodes.task_type`·`task_assignments.source` 는 대문자(`COMMON|DESIGNATED`), JSON 으로 나갈 때만 `lower()`. RPC 입력 `taskType` 은 소문자 `common|designated` 를 받아 `upper()`.
 - "오늘"은 `public.kst_today()` 만. 테스트 기준일 `2026-10-12`(`setToday(q, "2026-10-12")`).
-- 내부 전용 함수(`node_subtree`, `node_has_submissions`, `node_assert_editable`, `node_get`, `room_progress`, `curriculum_json`)는 만들 때 `revoke execute on function … from anon, authenticated;` 를 같이 건다(플랜 01 종료 게이트 규칙).
+- **함수 권한(D7, GRANT-only)**: 0002 의 default privileges 로 새 함수는 기본 비공개. `03-api.md` RPC 열의 공개 함수만 GRANT 한다 — `curriculum_get` → `anon, authenticated`(공개), `node_create`·`node_update`·`node_move`·`node_delete`·`node_archive`·`node_unarchive`·`me_studies`·`me_schedule` → `authenticated`. 내부 함수(`node_subtree`, `node_has_submissions`, `node_assert_editable`, `node_get`, `room_progress`, `curriculum_json`, `me_schedule_leaves`, `goal_nodes_guard`)와 03-api 에 없는 래퍼 `node_indent`·`node_outdent` 는 GRANT 하지 않는다. `revoke … from anon, authenticated` 는 쓰지 않는다(PUBLIC 기본 권한을 못 지운다 — 리뷰 D1). Task 8 에 `has_function_privilege('anon', …) = false` 단언(`curriculum_json`, `me_schedule_leaves` 포함).
+- **`goal_nodes` 형태 트리거**(02 §6, Task 1): 루트 = depth 2·round_id 자기 자신·label 필수, 하위 = label 없음·depth = 부모+1·round_id = 부모 round_id. 직접 INSERT(시드·테스트·service_role)도 막힌다.
+- **depth-2 리프 허용(A7)**: 회차가 곧 과제인 depth-2 리프(task_type 있음)를 허용한다 — `node_create(parent=null, taskType=…)` 로 만들 수 있고, `node_move` 로 리프를 회차로 올리면 `task_type` 을 유지하고 label 은 `{n}주차` 로 채운다. 회차 label 은 null 로 지울 수 없다(`node_update` → `VALIDATION_FAILED`).
+- 알림 호출은 `notify_publish` 계약(개요): 행위자 제외는 0008 이 하므로 호출부는 수신자에서 본인을 빼지 않는다. dedupe prefix(D8): 행위 이벤트(`SCHEDULE_CHANGED`·`TASK_ASSIGNED`·`TASK_UNASSIGNED`) = `KIND:room:node:` || `txid_current()`.
 - 편집 가능 상태: 방 `DRAFT·RECRUIT·ACTIVE` ∧ `archived_at IS NULL`. 그 외 `ROOM_NOT_EDITABLE`. 그룹장 아니면 `NOT_LEADER`.
 - 노드 쓰기 함수는 전부 편집용 `Curriculum` JSON(보관 노드 포함)을 돌려준다. `curriculum_get(p_slug, p_include_archived default false)` 만 보관 제외가 기본.
 - 커밋 메시지 끝 두 줄 트레일러:
@@ -49,16 +52,21 @@ public.room_lock(p_slug text) returns public.rooms   -- FOR UPDATE, 없으면 RO
 public.room_readable(p_room bigint, p_uid uuid, p_token text default null) returns boolean
 public.room_leaf_stats(p_room bigint) returns table(node_id, round_id, parent_id, title, task_type, start_date, end_date, sort_order, asg int, sub int)  -- Task 1 이 CREATE OR REPLACE
 public.room_create(p_title, p_intro, p_start_date, p_end_date, p_max_members, p_is_public, p_join_mode, …) returns jsonb
+public.patch_date(p_patch jsonb, p_key text) returns date   -- 형식 오류 VALIDATION_FAILED (D11) — node_update 가 쓴다
+public.room_release_seat(p_room bigint) returns void
 -- 0005_membership.sql (플랜 02)
-public.assignment_resync(p_room bigint) returns void  -- D4, 멱등
+public.assignment_resync(p_room bigint) returns void  -- D4, 멱등. 보관 리프는 COMMON·DESIGNATED 모두 released_at = archived_at (D13)
 ```
 
 ```ts
 // supabase/tests/_harness.ts (플랜 01 Task 2 — 이름 그대로)
 export type Q = (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
+export async function migrationFiles(): Promise<string[]>;
 export async function openDb(): Promise<PGlite>;                 // 스텁 + supabase/migrations/*.sql 전부(번호순)
 export async function applySeed(db: PGlite): Promise<void>;      // supabase/seed.sql
-export function withCase(db: PGlite, fn: (q: Q) => Promise<void>): () => Promise<void>;   // begin … rollback
+export function makeQ(db: PGlite): Q;
+export function withCase(db: PGlite, fn: (q: Q) => Promise<void>): () => Promise<void>;   // begin … rollback, 문장마다 savepoint
+export async function newUser(q: Q, email?: string): Promise<string>;
 export const asUser: (q: Q, uid: string) => Promise<void>;
 export const asAnon: (q: Q) => Promise<void>;
 export const setToday: (q: Q, ymd: string) => Promise<void>;
@@ -66,7 +74,7 @@ export async function expectFail(p: Promise<unknown>, code: string): Promise<voi
 export function sqlTest(name: string, fn: () => Promise<void>): void;
 ```
 
-시드 고정값(플랜 01·02): 사용자 UUID `00000000-0000-4000-8000-0000000000NN`(NN 은 플랜 01 Task 8 의 `seed_users.n`), 방 id = toeic 1, cs 2, sqld 3, docker 4, jcg 5, aws 6, react 7, algo 8, spring 9. 멤버십(플랜 02 §2 시드): aws 민수 LEADER·지은·철수·하나 ACTIVE·도윤 INACTIVE / spring 지훈 LEADER·철수·소율·민재·아린 / sqld 가은 LEADER(`leader_does_tasks=false`)·철수 PENDING / algo 현우 LEADER·철수·보람·지성·다은·유진 / toeic 서연·도현 / cs 예린·승호·나연 / docker 철수 LEADER / jcg 수민·태윤·하은·준서 / react 태호·은지·시우·다인·현준. 테스트는 번호를 믿지 않고 `uid(q, '민수')`·`roomId(q, 'aws')` 로 런타임 조회한다(`_curriculum-helpers.ts`).
+시드 고정값(플랜 01·02): 사용자 UUID `00000000-0000-4000-8000-0000000000NN`(NN 은 플랜 01 Task 8 의 `seed_users.n`), 방 id = toeic 1, cs 2, sqld 3, docker 4, jcg 5, aws 6, react 7, algo 8, spring 9. 멤버십(플랜 02 §2 시드 — 전 방 `leader_does_tasks=true` 로 넣는다): aws 민수 LEADER·지은·철수·하나 ACTIVE·도윤 INACTIVE / spring 지훈 LEADER·철수·소율·민재·아린 / sqld 가은 LEADER(이 플랜 시드 §3 이 `leader_does_tasks=false` 로 바꾼다)·철수 PENDING / algo 현우 LEADER·철수·보람·지성·다은·유진 / toeic 서연·도현 / cs 예린·승호·나연 / docker 철수 LEADER / jcg 수민·태윤·하은·준서 / react 태호·은지·시우·다인·현준. 테스트는 번호를 믿지 않고 `uid(q, '민수')`·`roomId(q, 'aws')` 로 런타임 조회한다(`_curriculum-helpers.ts`).
 
 ## 이 플랜이 내놓는 것 (Produces — 플랜 04·05 가 의존)
 
@@ -76,8 +84,10 @@ public.node_subtree(p_node bigint) returns setof bigint               -- 자기 
 public.node_has_submissions(p_node bigint) returns boolean            -- 서브트리 어느 리프에든 제출물
 public.node_assert_editable(p_slug text) returns public.rooms         -- room_lock + NOT_LEADER + ROOM_NOT_EDITABLE
 public.node_get(p_room bigint, p_node bigint) returns public.goal_nodes   -- 방 소속 검사, 없으면 NODE_NOT_FOUND
+public.goal_nodes_guard() returns trigger + trigger trg_goal_nodes_guard  -- depth·round_id·label 형태 검사(A1)
 public.room_progress(p_room bigint) returns table(node_id bigint, asg int, sub int, pct int)   -- 전 노드 롤업(보관 제외), 플랜 04 task_get·job_* 재사용
-public.room_leaf_stats(p_room bigint)  -- 시그니처 동일, room_progress 위임 (CREATE OR REPLACE)
+public.room_leaf_stats(p_room bigint)  -- 시그니처 동일, 본문만 room_progress 위임으로 교체 (CREATE OR REPLACE).
+                                       -- 계층: room_progress → room_leaf_stats → (플랜 02, 교체 안 함) room_round_stats·room_detail_json·rooms_list
 public.curriculum_json(p_room bigint, p_uid uuid, p_include_archived boolean) returns jsonb
 public.curriculum_get(p_slug text, p_include_archived boolean default false) returns jsonb
 public.node_create(p_slug text, p_parent_id bigint default null, p_title text default null, p_label text default null,
@@ -91,7 +101,7 @@ public.me_studies() returns jsonb
 public.me_schedule(p_from date, p_to date) returns jsonb
 ```
 
-플랜 05 어댑터 가정 시그니처(`…-05-frontend-integration.md` 표)와 일치한다. 시드(§3) 가 만드는 숫자: aws 6/25=24%(회차 5/8·1/3·0/4·0/4·0/6), spring 12/35=34%, algo 68/78=87%, sqld 0/0=null, react 4주차 3/10, 참가자 aws 민수 2/5·지은 2/7·철수 2/6·하나 0/7.
+플랜 05 어댑터 가정 시그니처(`…-05-frontend-integration.md` 표)와 일치한다. 시드(§3) 가 만드는 숫자: aws 6/25=24%(회차 5/8·1/3·0/4·0/4·0/6), spring 12/35=34%, algo 68/78=87%, sqld 0/0=null, react 4주차 3/10, 참가자 aws 민수 2/5·지은 2/7·철수 2/6·하나 0/7. **철수 aws 진척은 방 목록 슬롯·참가자 통계 모두 2/6=33%**(D5 — 목업의 2/4=50%·참가자 2/3·2/4·2/4·0/4 는 1~3주차만 센 값이라 폐기). 철수 aws 다음 마감 EC2 10/14(OPEN 만, D14).
 
 ## Review Focus
 
@@ -109,10 +119,11 @@ public.me_schedule(p_from date, p_to date) returns jsonb
 
 | 파일 | 책임 |
 |---|---|
-| `supabase/migrations/0006_curriculum.sql` | 헬퍼 4개, `room_progress`, `room_leaf_stats` 교체, `curriculum_json`/`curriculum_get`, `node_*` 9개, `me_studies`, `me_schedule` |
+| `supabase/migrations/0006_curriculum.sql` | `goal_nodes` 형태 트리거, 헬퍼 4개, `room_progress`, `room_leaf_stats` 본문 교체, `curriculum_json`/`curriculum_get`, `node_*` 9개, `me_studies`, `me_schedule`, 공개 RPC GRANT |
 | `supabase/seed.sql` | (추가) §3 커리큘럼: aws/spring/sqld/algo = PLANS 원본, toeic/cs/docker/jcg/react = room-view 회차, 제출물, `assignment_resync` |
 | `supabase/tests/_curriculum-helpers.ts` | `uid`, `roomId`, `mkRoom`, `mkRound`, `mkLeaf`, `submit`, `progress`, `nodeByTitle` |
-| `supabase/tests/progress-sql.test.ts` | `room_progress` 단위 + 시드 회귀(24/34/87/null, 회차, 참가자) + resync 규칙 |
+| `supabase/tests/progress-sql.test.ts` | 트리거 + `room_progress` 단위 + 시드 회귀(24/34/87/null, 회차, 참가자) + resync 규칙 + RF3(제출자 이탈·INACTIVE 재신청) |
+| `supabase/tests/_cases-rooms.ts` (플랜 02 파일) | Task 2 Step 5: 시드 §3 이 깨뜨리는 사례 3개를 전체 시드 값으로 교체, `seedAwsTree` 삭제 |
 | `supabase/tests/curriculum-sql.test.ts` | `curriculum_get` DTO + `node_*` 불변식 매트릭스 |
 | `supabase/tests/me-studies-sql.test.ts` | `me_studies` 그룹·when |
 | `supabase/tests/me-schedule-sql.test.ts` | `me_schedule` 창·st·마커·upcoming·범위 오류 |
@@ -129,7 +140,7 @@ public.me_schedule(p_from date, p_to date) returns jsonb
 
 **Interfaces:**
 - Consumes: `room_lock`, `require_user`, `fail`, `pct`, `assignment_resync`, `room_create`(테스트의 `mkRoom`).
-- Produces: `node_subtree`, `node_has_submissions`, `node_assert_editable`, `node_get`, `room_progress`, 교체된 `room_leaf_stats`. 테스트 헬퍼 `_curriculum-helpers.ts`.
+- Produces: `goal_nodes_guard()` + `trg_goal_nodes_guard`(A1), `node_subtree`, `node_has_submissions`, `node_assert_editable`, `node_get`, `room_progress`, 본문 교체된 `room_leaf_stats`. 테스트 헬퍼 `_curriculum-helpers.ts`. 이 Task 의 함수는 전부 내부용 — GRANT 없음.
 
 - [ ] **Step 1: 테스트 헬퍼 `supabase/tests/_curriculum-helpers.ts`**
 
@@ -230,6 +241,33 @@ import { mkLeaf, mkRoom, mkRound, progress, submit, uid, TODAY } from "./_curric
 const db = await openDb();
 await applySeed(db);
 
+sqlTest("goal_nodes_guard: 직접 INSERT/UPDATE 도 depth=부모+1·round_id 일치·label 은 depth 2 만 (A1)", withCase(db, async (q) => {
+  const room = await mkRoom(q, "서연");
+  const ins = (cols: string, vals: unknown[]) =>
+    q(`insert into public.goal_nodes (${cols}) values (${vals.map((_, i) => "$" + (i + 1)).join(",")}) returning id::text as id, round_id::text as round_id`, vals);
+  // 루트: round_id 를 비워 두면 자기 id 로 채운다
+  const [root] = await ins("room_id, parent_id, depth, sort_order, label, title, start_date, end_date", [room.id, null, 2, 0, "1주차", "R", "2026-11-01", "2026-11-07"]);
+  assertEquals(root.round_id, root.id);
+  // 하위: round_id 를 비워 두면 부모의 round_id 를 물려받는다
+  const [child] = await ins("room_id, parent_id, depth, sort_order, title, start_date, end_date, task_type", [room.id, root.id, 3, 0, "C", "2026-11-01", "2026-11-03", "COMMON"]);
+  assertEquals(child.round_id, root.id);
+  const base = "room_id, parent_id, depth, sort_order, title, start_date, end_date";
+  await expectFail(ins(base, [room.id, root.id, 4, 1, "깊이 틀림", "2026-11-01", "2026-11-03"]), "VALIDATION_FAILED");
+  await expectFail(ins(base + ", round_id", [room.id, root.id, 3, 1, "회차 틀림", "2026-11-01", "2026-11-03", child.id]), "VALIDATION_FAILED");
+  await expectFail(ins(base + ", label", [room.id, root.id, 3, 1, "하위 라벨", "2026-11-01", "2026-11-03", "x"]), "VALIDATION_FAILED");
+  await expectFail(ins(base, [room.id, null, 3, 1, "루트 깊이 3", "2026-11-01", "2026-11-03"]), "VALIDATION_FAILED");
+  await expectFail(ins(base, [room.id, null, 2, 1, "루트 라벨 없음", "2026-11-01", "2026-11-03"]), "VALIDATION_FAILED");
+  const other = await mkRoom(q, "지훈", { title: "다른 방 Other" });
+  await expectFail(ins(base, [other.id, root.id, 3, 0, "다른 방 부모", "2026-11-01", "2026-11-03"]), "VALIDATION_FAILED");
+  // UPDATE 도 같은 규칙: 회차 라벨 지우기·하위에 라벨
+  await expectFail(q("update public.goal_nodes set label = null where id = $1", [root.id]), "VALIDATION_FAILED");
+  await expectFail(q("update public.goal_nodes set label = 'x' where id = $1", [child.id]), "VALIDATION_FAILED");
+  // depth-2 리프(회차 자체가 과제)는 허용(A7)
+  const [leafRoot] = await ins("room_id, parent_id, depth, sort_order, label, title, start_date, end_date, task_type",
+    [room.id, null, 2, 1, "2주차", "회차 과제", "2026-11-08", "2026-11-14", "COMMON"]);
+  assertEquals(leafRoot.round_id, leafRoot.id);
+}));
+
 sqlTest("node_subtree / node_has_submissions: 자기 포함 서브트리, 제출물은 어느 깊이든 감지", withCase(db, async (q) => {
   const room = await mkRoom(q, "서연");
   const r1 = await mkRound(q, room.id, "1주차", "회차", "2026-11-01", "2026-11-07");
@@ -315,6 +353,47 @@ Expected: FAIL — `function public.node_subtree(bigint) does not exist` (0006 �
 ```sql
 -- 0006_curriculum.sql — 커리큘럼 트리 · 진척률 · 내 스터디/일정 (플랜 03 Task 1~8)
 -- 배포 후 수정 금지. Task 3~8 이 이 파일 끝에 함수를 이어 붙인다.
+-- 권한(D7): 함수는 0002 의 default privileges 로 기본 비공개. 공개 RPC 만 각 Task 끝에서 GRANT 한다.
+
+-- ───────── goal_nodes 형태 보강 트리거 (02 §6, I3·I4, 리뷰 A1) ─────────
+-- node_* 함수가 지키는 형태를 직접 INSERT/UPDATE 경로(시드·테스트·service_role)에서도 강제한다.
+--   루트(parent null): depth 2, round_id = 자기 id(비우면 채움), label 필수(공백 불가)
+--   하위: label 없음. INSERT 이거나 parent_id 가 바뀐 행은 같은 방·depth = 부모+1·round_id = 부모 round_id(비우면 채움)
+--   parent_id 가 그대로이고 depth·round_id 만 바뀌는 행 = node_move 의 서브트리 일괄 재기록이다. 같은 문장 안에서 부모 행도
+--   바뀌어 행 단위로는 부모의 새 값을 볼 수 없으므로 부모 관계 검사를 건너뛴다(이동한 노드 자신은 parent_id 가 바뀌어 검사된다).
+--   depth-2 리프(task_type 있음)는 허용한다(A7).
+create or replace function public.goal_nodes_guard() returns trigger
+language plpgsql set search_path = '' as $$
+declare p public.goal_nodes;
+begin
+  if new.parent_id is null then
+    new.round_id := coalesce(new.round_id, new.id);
+    if new.depth <> 2 or new.round_id <> new.id then
+      perform public.fail('VALIDATION_FAILED', '회차는 depth 2 이고 round_id 가 자기 자신이어야 해요',
+                          jsonb_build_object('nodeId', new.id::text, 'field', 'depth'));
+    end if;
+    if new.label is null or btrim(new.label) = '' then
+      perform public.fail('VALIDATION_FAILED', '회차에는 라벨이 있어야 해요', jsonb_build_object('nodeId', new.id::text, 'field', 'label'));
+    end if;
+  else
+    if new.label is not null then
+      perform public.fail('VALIDATION_FAILED', '회차 라벨은 회차에만 줄 수 있어요', jsonb_build_object('nodeId', new.id::text, 'field', 'label'));
+    end if;
+    if tg_op = 'INSERT' or new.parent_id is distinct from old.parent_id then
+      select * into p from public.goal_nodes where id = new.parent_id;
+      new.round_id := coalesce(new.round_id, p.round_id);
+      if p.room_id <> new.room_id or new.depth <> p.depth + 1 or new.round_id is distinct from p.round_id then
+        perform public.fail('VALIDATION_FAILED', '상위 항목과 깊이·회차·방이 맞지 않아요',
+                            jsonb_build_object('nodeId', new.id::text, 'parentId', new.parent_id::text));
+      end if;
+    end if;
+  end if;
+  return new;
+end $$;
+
+create trigger trg_goal_nodes_guard
+  before insert or update of parent_id, depth, round_id, label, room_id on public.goal_nodes
+  for each row execute function public.goal_nodes_guard();
 
 -- ───────── 트리 헬퍼 ─────────
 -- 자기 자신을 포함한 서브트리 id 집합
@@ -326,14 +405,12 @@ language sql stable security definer set search_path = '' as $$
     select c.id from public.goal_nodes c join t on c.parent_id = t.id)
   select id from t
 $$;
-revoke execute on function public.node_subtree(bigint) from anon, authenticated;
 
 -- 서브트리 어느 리프에든 제출물이 있으면 true (I1·I6 — 삭제·부모 전환·타입 변경 금지의 근거)
 create or replace function public.node_has_submissions(p_node bigint) returns boolean
 language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.submissions s where s.node_id in (select public.node_subtree(p_node)))
 $$;
-revoke execute on function public.node_has_submissions(bigint) from anon, authenticated;
 
 -- 모든 노드 쓰기 함수의 첫 줄: 방 잠금 + 그룹장 + 편집 가능 상태(DRAFT·RECRUIT·ACTIVE, 보관 아님)
 create or replace function public.node_assert_editable(p_slug text) returns public.rooms
@@ -347,7 +424,6 @@ begin
   end if;
   return r;
 end $$;
-revoke execute on function public.node_assert_editable(text) from anon, authenticated;
 
 -- 방 소속 노드 조회. 다른 방의 노드도 NODE_NOT_FOUND
 create or replace function public.node_get(p_room bigint, p_node bigint) returns public.goal_nodes
@@ -358,7 +434,6 @@ begin
   if not found then perform public.fail('NODE_NOT_FOUND', '항목을 찾을 수 없어요', jsonb_build_object('nodeId', p_node::text)); end if;
   return n;
 end $$;
-revoke execute on function public.node_get(bigint, bigint) from anon, authenticated;
 
 -- ───────── 진척률 롤업 (D5, 02 §4.1) ─────────
 -- 모든 노드 한 행씩. 리프 = (유효 배정, 그중 제출), 부모 = 보관 아닌 후손 리프의 합. 보관 노드와 그 하위는 0/0(pct null).
@@ -384,7 +459,6 @@ language sql stable security definer set search_path = '' as $$
   where n.room_id = p_room
   group by n.id
 $$;
-revoke execute on function public.room_progress(bigint) from anon, authenticated;
 
 -- 플랜 02 의 room_leaf_stats 를 같은 시그니처로 교체: 숫자는 room_progress 에서 가져온다 (room_get·rooms_list 가 자동으로 같은 값을 본다)
 create or replace function public.room_leaf_stats(p_room bigint)
@@ -403,13 +477,13 @@ $$;
 - [ ] **Step 5: 실행해서 통과 확인**
 
 Run: `npm run test:db -- --filter "sql"`
-Expected: progress 사례 3개 PASS, 플랜 01·02 의 기존 사례도 전부 PASS(`room_leaf_stats` 교체로 `room_get` 숫자가 바뀌면 안 된다).
+Expected: progress 사례 4개(트리거 포함) PASS, 플랜 01·02 의 기존 사례도 전부 PASS(`room_leaf_stats` 교체로 `room_get` 숫자가 바뀌면 안 된다. 플랜 01·02 의 직접 INSERT 는 전부 루트=depth 2+label, 하위=depth+1 이라 트리거에 걸리지 않는다 — 걸리면 그 INSERT 가 형태를 어긴 것).
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add supabase/migrations/0006_curriculum.sql supabase/tests/_curriculum-helpers.ts supabase/tests/progress-sql.test.ts
-git commit -m "feat(db): 0006 tree helpers, room_progress rollup, room_leaf_stats delegation
+git commit -m "feat(db): 0006 goal_nodes guard trigger, tree helpers, room_progress rollup, room_leaf_stats delegation
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
@@ -420,12 +494,13 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 ### Task 2: `seed.sql` §3 커리큘럼 — PLANS 트리 · 제출 코드 · 회귀값
 
 **Files:**
-- Modify: `supabase/seed.sql` (§2 방·멤버 섹션 아래에 §3 추가)
-- Modify: `supabase/tests/progress-sql.test.ts` (시드 회귀 사례 추가)
+- Modify: `supabase/seed.sql` (§2 방·멤버 섹션 아래, 마지막 `app.today` 줄 위에 §3 추가)
+- Modify: `supabase/tests/progress-sql.test.ts` (시드 회귀 + RF3 사례 추가)
+- Modify: `supabase/tests/_cases-rooms.ts` (**플랜 02 파일** — 시드 §3 이 깨뜨리는 사례 3개를 전체 시드 값으로 교체, `seedAwsTree` 삭제. 이 갱신의 소유자는 이 Task 다 — 리뷰 B1)
 
 **Interfaces:**
-- Consumes: 플랜 02 시드의 방 9개·멤버십, `assignment_resync`, Task 1 의 `room_progress`.
-- Produces: `goal_nodes`·`task_assignments`·`submissions` 시드 행. 회귀값(플랜 04·05 테스트가 참조): aws 24%(5/8·1/3·0/4·0/4·0/6), spring 34%, algo 87%, sqld null, react 4주차 3/10, aws IAM people = 민수 done·지은 late·철수 done·하나 missed(today 2026-10-12), 철수 aws 다음 마감 EC2 2026-10-14. 도윤의 IAM 제출물(released 배정)은 플랜 05 "이탈자 제출물 조회" 재료.
+- Consumes: 플랜 02 시드의 방 9개·멤버십, `assignment_resync`, `room_release_seat`, `room_apply`/`room_join`, Task 1 의 `room_progress`.
+- Produces: `goal_nodes`·`task_assignments`·`submissions` 시드 행. 회귀값(플랜 04·05 테스트가 참조): aws 24%(5/8·1/3·0/4·0/4·0/6, 노드 14 = 회차 5 + 중간 1 + 리프 8), spring 34%, algo 87%, sqld null, react 4주차 3/10, aws IAM people = 민수 done·지은 late·철수 done·하나 missed(today 2026-10-12), **철수 aws 2/6=33%**(방 목록 슬롯·참가자 통계 동일, D5), 민수 2/5(다음 마감 없음 — ALB 10/15 시작 전), 철수 aws 다음 마감 EC2 2026-10-14(OPEN 만). 도윤의 IAM 제출물(released 배정)은 플랜 05 "이탈자 제출물 조회" 재료.
 
 - [ ] **Step 1: 실패하는 회귀 테스트 — `supabase/tests/progress-sql.test.ts` 끝에 추가**
 
@@ -453,7 +528,7 @@ sqlTest("seed §3: aws 24% — 회차 5/8·1/3·0/4·0/4·0/6, 트리 모양이 
   const nodes = await q(
     `select depth, label, title, task_type, to_char(start_date,'YYYY-MM-DD') as s, to_char(end_date,'YYYY-MM-DD') as e
      from public.goal_nodes where room_id = $1 order by id`, [room]);
-  assertEquals(nodes.length, 15);   // 회차 5 + 중간 1 + 리프 9
+  assertEquals(nodes.length, 14);   // 회차 5 + 중간 1 + 리프 8 (PLANS.aws)
   assertEquals(nodes[0], { depth: 2, label: "1주차", title: "IAM·VPC", task_type: null, s: "2026-10-01", e: "2026-10-07" });
   assertEquals(nodes.find((n) => n.title === "로드밸런서 비교"), { depth: 3, label: null, title: "로드밸런서 비교", task_type: null, s: "2026-10-15", e: "2026-10-21" });
   assertEquals(nodes.find((n) => n.title === "ALB vs NLB 실습")?.depth, 4);
@@ -535,18 +610,49 @@ sqlTest("resync 규칙: 공통 리프 × ACTIVE, INACTIVE 는 released, leader_d
   await q("select public.assignment_resync($1)", [room]);
   assertEquals(await cnt(), 4);
 }));
+
+sqlTest("RF3 이탈자 분모: 제출자(철수) INACTIVE → IAM 3/4 → 2/3, released 행·제출물 유지, 그룹장은 계속 조회", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const room = await roomId(q, "aws");
+  const iam = await nodeByTitle(q, room, "IAM 정책 이해");
+  const chulsoo = await uid(q, "철수");
+  assertEquals((await progress(q, room))[iam], { asg: 4, sub: 3, pct: 75 });
+  // member_deactivate(플랜 04) 의 전구체: 상태 전환 + 자리 반납 + resync
+  await q("update public.room_members set status = 'INACTIVE', left_at = now() where room_id = $1 and user_id = $2::uuid", [room, chulsoo]);
+  await q("select public.room_release_seat($1)", [room]);
+  await q("select public.assignment_resync($1)", [room]);
+  assertEquals((await progress(q, room))[iam], { asg: 3, sub: 2, pct: 67 });            // 분모에서 빠지고 제출도 집계 제외
+  const [row] = await q("select released_at is not null as released from public.task_assignments where node_id = $1 and user_id = $2::uuid", [iam, chulsoo]);
+  assertEquals(row.released, true);                                                     // 행 삭제 없음
+  assertEquals((await q("select count(*)::int as n from public.submissions where node_id = $1 and user_id = $2::uuid", [iam, chulsoo]))[0].n, 1);
+  await asUser(q, await uid(q, "민수"));
+  assertEquals((await q("select public.can_read_submission($1, $2::uuid) as b", [iam, chulsoo]))[0].b, true);   // 그룹장 조회 유지
+}));
+
+sqlTest("RF3: RECRUIT 방의 INACTIVE 행은 room_apply·room_join 모두 MEMBER_NOT_ACTIVE (재참가 거부)", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const chulsoo = await uid(q, "철수");
+  // sqld(RECRUIT·APPROVAL): 철수 행을 INACTIVE 로 만든다(이탈 처리 결과를 흉내)
+  await q("update public.room_members set status = 'INACTIVE', left_at = now() where room_id = $1 and user_id = $2::uuid", [await roomId(q, "sqld"), chulsoo]);
+  // cs(RECRUIT·DIRECT): INACTIVE 행을 직접 만든다
+  await q(`insert into public.room_members (room_id, user_id, role, status, joined_at, left_at)
+           values ($1, $2::uuid, 'MEMBER', 'INACTIVE', now(), now())`, [await roomId(q, "cs"), chulsoo]);
+  await asUser(q, chulsoo);
+  await expectFail(q("select public.room_apply('sqld')"), "MEMBER_NOT_ACTIVE");
+  await expectFail(q("select public.room_join('cs')"), "MEMBER_NOT_ACTIVE");
+}));
 ```
 
 파일 상단 import 를 `import { mkLeaf, mkRoom, mkRound, nodeByTitle, progress, roomId, submit, uid, TODAY } from "./_curriculum-helpers.ts";` 로 바꾼다.
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `npm run test:db -- --filter "seed §3"`
-Expected: FAIL — `rounds` 가 빈 배열(aws 에 goal_nodes 없음).
+Run: `npm run test:db -- --filter "seed §3|RF3"`
+Expected: `seed §3` 3건 FAIL — `rounds` 가 빈 배열(aws 에 goal_nodes 없음). RF3 두 건도 FAIL(IAM 노드 없음 → `nodeByTitle` 오류 / sqld 는 이미 MEMBER_NOT_ACTIVE 로 PASS 할 수 있다).
 
 - [ ] **Step 3: `supabase/seed.sql` 에 §3 추가**
 
-§2(플랜 02) 바로 아래에 붙인다. 임시 함수는 `pg_temp` 스키마라 세션이 끝나면 사라진다(`supabase db reset` 도 PGlite 도 한 세션).
+§2(플랜 02) 바로 아래, 파일 마지막 `alter database postgres set app.today …` 줄 **위**에 붙인다(그 줄은 항상 마지막). 제출물 시드는 이 섹션이 소유한다 — 플랜 04 의 §4 는 제출물을 다시 넣지 않는다. 임시 함수는 `pg_temp` 스키마라 세션이 끝나면 사라진다(`supabase db reset` 도 PGlite 도 한 세션).
 
 ```sql
 -- ═══════════ §3 커리큘럼 (plan 03) ═══════════
@@ -756,23 +862,136 @@ end $seed3$;
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
-Run: `npm run test:db`
-Expected: progress 7 사례 PASS + 플랜 01·02 전 사례 PASS. 플랜 02 의 `room_get`·`rooms_list` 시드 사례가 "aws overall 24 / 철수 다음 마감 EC2 10-14" 를 보고 있었다면 이제 실제로 통과한다. PGlite 가 `pg_temp.` 함수 생성을 거부하면(`schema "pg_temp" does not exist`) 세 함수를 `public._seed3_*` 로 만들고 DO 블록 뒤에 `drop function public._seed3_kst_at(date,int), public._seed3_seed_round(…), …;` 를 붙인다.
+Run: `npm run test:db -- --filter "progress|seed §3|RF3|resync"`
+Expected: progress 10 사례 PASS. **플랜 02 `rooms:` 중 3건은 이 시점에 FAIL 한다**(시드 트리 위에 `seedAwsTree` 가 회차를 또 붙이거나 빈 트리를 가정) — Step 5 에서 고친다.
 
-- [ ] **Step 5: 로컬 Supabase 로 실측(선택, 메모리 확인 후)**
+PGlite 가 `pg_temp.` 함수 생성을 거부하면(`schema "pg_temp" does not exist`) 네 함수를 `public._seed3_kst_at`·`public._seed3_seed_round`·`public._seed3_seed_node`·`public._seed3_seed_leaf` 로 만들고(본문의 `pg_temp.` 호출도 같은 이름으로), DO 블록 뒤에 아래 네 줄을 붙인다:
+```sql
+drop function public._seed3_seed_leaf(bigint, text, text, date, date, text, text[]);
+drop function public._seed3_seed_node(bigint, text, date, date);
+drop function public._seed3_seed_round(text, text, text, date, date);
+drop function public._seed3_kst_at(date, int);
+```
+
+- [ ] **Step 5: 플랜 02 사례 3개를 전체 시드 값으로 교체 (이 Task 소유 — 리뷰 B1)**
+
+시드 §3 이 들어오면 플랜 02 `_cases-rooms.ts` 의 세 사례가 깨진다: `seedAwsTree` 가 aws 에 회차를 중복으로 붙이고, react `team null/0`·algo `final 0/0/0`·toeic `rounds: []`·stats 0 을 가정한다. 헬퍼 호출을 빼고 아래로 **통째로 바꾼다**. 숫자는 이 Task 의 회귀값과 같은 출처다(D5·D14: 철수 2/6=33%, nextDue/nextTask 는 OPEN 만).
+
+① `rooms_list: progress (seedAwsTree 부분 트리) …` 사례 →
+
+```ts
+  {
+    name: "rooms_list: progress (시드 §3) — 철수 aws mine 2/6 next EC2 10/14, 민수 mine 2/5 next null, 서연 team 2/5, react team 4/8, algo final 68/78·3회차",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const [{ ec2, alb }] = await q(`select (select id::text from public.goal_nodes where room_id = 6 and title = 'EC2 인스턴스 유형 정리') as ec2,
+                                             (select id::text from public.goal_nodes where room_id = 6 and title = 'ALB vs NLB 실습') as alb`);
+      await asUser(q, USERS.철수);
+      let by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      // 철수 aws: IAM D·VPC D·EC2 O·ALB·AutoScaling·RDS = 2/6 = 33% (목업 50% 폐기, D5)
+      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 6, nextTask: { nodeId: ec2, title: "EC2 인스턴스 유형 정리", dueDate: "2026-10-14" } });
+      assertEquals(by.aws.membership, { role: "member", status: "active" });
+      assertEquals(by.react.progress, { kind: "team", currentRound: { index: 4, label: "4주차", title: "상태 관리하기" }, totalRounds: 8 });
+      assertEquals(by.algo.progress, { kind: "final", submitted: 68, assigned: 78, totalRounds: 3 });
+      assertEquals(by.algo.membership, { role: "member", status: "active" });
+      // 민수(그룹장·담당): IAM·VPC·ALB·AutoScaling·RDS = 2/5. 10/12 에 OPEN 인 미제출 없음(ALB 10/15 시작) → null
+      await asUser(q, USERS.민수);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 5, nextTask: null });
+      // 그룹장이 과제를 안 하면 team
+      await q(`update public.rooms set leader_does_tasks = false where id = 6`);
+      await q(`select public.assignment_resync(6)`);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress, { kind: "team", currentRound: { index: 2, label: "2주차", title: "EC2·S3" }, totalRounds: 5 });
+      await asUser(q, USERS.서연);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress, { kind: "team", currentRound: { index: 2, label: "2주차", title: "EC2·S3" }, totalRounds: 5 });
+      // 철수가 EC2 를 제출하면 10/12 엔 OPEN 미제출이 없어 null, 10/15 에 ALB(10/21)
+      await asUser(q, USERS.철수);
+      await q(`insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late) values ($1, $2, 'x', now(), false)`, [ec2, USERS.철수]);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals([by.aws.progress.submitted, by.aws.progress.assigned, by.aws.progress.nextTask], [3, 6, null]);
+      await setToday(q, "2026-10-15");
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress.nextTask, { nodeId: alb, title: "ALB vs NLB 실습", dueDate: "2026-10-21" });
+      await setToday(q, TODAY);
+      // 도윤(INACTIVE) 은 mine 이 아니고 team
+      await asUser(q, USERS.도윤);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress.kind, "team");
+      assertEquals(by.aws.membership, { role: "member", status: "inactive" });
+    },
+  },
+```
+
+② `room_get: me.state matrix …` 사례의 toeic 단언 두 줄(`[r.currentRound, r.rounds, …]`, `r.stats`) →
+
+```ts
+      // toeic(RECRUIT, 시드 §3: 8회차 × 공통 2) — 모집중에도 배정 실체화(D4): 서연(그룹장)·도현 × 16 = 32
+      assertEquals([r.currentRound, r.rounds.length, r.myProgress, r.invite, r.pendingCount], [null, 8, null, null, 0]);
+      assertEquals(r.rounds[0], { id: r.rounds[0].id, label: "1주차", title: "LC Part 1·2", startDate: "2026-11-02", endDate: "2026-11-08", leafCount: 2, assigned: 4, submitted: 0, pct: 0 });
+      assertEquals(r.stats, { roundCount: 8, leafCount: 16, commonCount: 16, designatedCount: 0, totalAssignments: 32, totalSubmissions: 0, overallPct: 0, unassignedCount: 0, startWeekdays: [1] });
+```
+
+③ `room_get: aws with tree (seedAwsTree 부분 트리) …` 사례 →
+
+```ts
+  {
+    name: "room_get: aws (시드 §3) — currentRound 2주차 tasks/people, rounds 5/8·1/3·0/4·0/4·0/6, stats 24%, myProgress 2/6 next EC2, 도윤 inactive listed",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const [{ ec2, s3 }] = await q(`select (select id::text from public.goal_nodes where room_id = 6 and title = 'EC2 인스턴스 유형 정리') as ec2,
+                                            (select id::text from public.goal_nodes where room_id = 6 and title = 'S3 스토리지 클래스 발표자료') as s3`);
+      await asUser(q, USERS.철수);
+      const [{ r }] = await q(`select public.room_get($1) as r`, ["aws"]);
+      assertEquals(r.members.map((m: any) => [m.nickname, m.status]),
+        [["민수", "active"], ["지은", "active"], ["철수", "active"], ["하나", "active"], ["도윤", "inactive"]]);
+      assertEquals(r.rounds.map((x: any) => [x.label, x.leafCount, x.assigned, x.submitted, x.pct]),
+        [["1주차", 2, 8, 5, 63], ["2주차", 2, 3, 1, 33], ["3주차", 1, 4, 0, 0], ["4주차", 1, 4, 0, 0], ["5주차", 2, 6, 0, 0]]);
+      assertEquals([r.currentRound.label, r.currentRound.title, r.currentRound.startDate, r.currentRound.endDate], ["2주차", "EC2·S3", "2026-10-08", "2026-10-14"]);
+      assertEquals(r.currentRound.tasks.map((x: any) => [x.id, x.title, x.type, x.startDate, x.endDate, x.people.map((p: any) => `${p.nickname}:${p.status}`).sort()]), [
+        [ec2, "EC2 인스턴스 유형 정리", "designated", "2026-10-08", "2026-10-14", ["지은:done", "철수:open"]],
+        [s3, "S3 스토리지 클래스 발표자료", "designated", "2026-10-10", "2026-10-14", ["하나:open"]],
+      ]);
+      assertEquals(r.stats, { roundCount: 5, leafCount: 8, commonCount: 5, designatedCount: 3, totalAssignments: 25, totalSubmissions: 6, overallPct: 24, unassignedCount: 0, startWeekdays: [4] });
+      // 철수 2/6 = 33% (방 목록 슬롯과 같은 값, D5), 다음 마감은 OPEN 인 EC2
+      assertEquals(r.myProgress, { submitted: 2, assigned: 6, nextDue: { nodeId: ec2, title: "EC2 인스턴스 유형 정리", roundLabel: "2주차", dueDate: "2026-10-14" } });
+      // 1주차 안(10/05)에서 보면 current 가 1주차 — IAM(10/01–10/03) 은 이미 마감: 하나 missed
+      await setToday(q, "2026-10-05");
+      const [{ r2 }] = await q(`select public.room_get($1) as r2`, ["aws"]);
+      assertEquals(r2.currentRound.label, "1주차");
+      assertEquals(r2.currentRound.tasks[0].people.map((p: any) => `${p.nickname}:${p.status}`).sort(), ["민수:done", "지은:late", "철수:done", "하나:missed"].sort());
+      // 시작 전이면 null
+      await setToday(q, "2026-09-30");
+      assertEquals((await q(`select public.room_get($1) as r3`, ["aws"]))[0].r3.currentRound, null);
+      // 비로그인은 집계는 보되 myProgress 없음
+      await setToday(q, TODAY);
+      await asAnon(q);
+      const [{ an }] = await q(`select public.room_get($1) as an`, ["aws"]);
+      assertEquals([an.me, an.myProgress, an.rounds.length, an.currentRound.tasks.length], [null, null, 5, 2]);
+    },
+  },
+```
+
+마지막으로 `_cases-rooms.ts` 에서 `seedAwsTree` 함수와 그 위 JSDoc 을 지운다(더 이상 호출하는 곳이 없고, 남겨 두면 시드 위에 회차를 중복으로 붙인다).
+
+Run: `npm run test:db`
+Expected: 플랜 01 46 + 플랜 02 29(`rooms:` 22 · `membership:` 7) + 이 플랜 progress 10 전부 PASS. 철수 aws `2/6`, 민수 `2/5`, react `{4, 8}`, algo `68/78·3`, toeic rounds 8 이 위 값과 다르면 시드 §3 의 트리·코드가 PLANS 와 다른 것 — 시드를 고친다(기대값을 맞추지 않는다).
+
+- [ ] **Step 6: 로컬 Supabase 로 실측(선택, 메모리 확인 후)**
 
 Run:
 ```bash
 vm_stat | grep -E 'free|compressor'
 npm run db:reset
 ```
-Expected: `Seeding data from supabase/seed.sql` 뒤 오류 없음. Studio 에서 `select count(*) from goal_nodes` = 15(aws)+11(spring)+13(sqld)+16(algo)+24(react)+24(toeic)+36(cs)+14(docker)+8(jcg) = 161.
+Expected: `Seeding data from supabase/seed.sql` 뒤 오류 없음. Studio 에서 `select count(*) from goal_nodes` = 14(aws)+11(spring)+13(sqld)+16(algo)+24(react)+24(toeic)+36(cs)+14(docker)+8(jcg) = 160. `select current_setting('app.today')` = `2026-10-12`(seed 마지막 줄, 새 연결에서).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add supabase/seed.sql supabase/tests/progress-sql.test.ts
-git commit -m "feat(db): seed §3 curriculum trees, submissions, regression values
+git add supabase/seed.sql supabase/tests/progress-sql.test.ts supabase/tests/_cases-rooms.ts
+git commit -m "feat(db): seed §3 curriculum trees, submissions, regression values; rewrite plan 02 tree cases to seed values
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
@@ -788,7 +1007,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Interfaces:**
 - Consumes: Task 1 `room_progress`, 플랜 01 `person_json`·`task_code`·`leaf_state`·`kst_today`·`iso`, 플랜 02 `room_readable`.
-- Produces: `curriculum_json(p_room bigint, p_uid uuid, p_include_archived boolean) returns jsonb`(내부, Task 4~6 의 쓰기 함수가 반환값으로 쓴다), `curriculum_get(p_slug text, p_include_archived boolean default false) returns jsonb`(공개 RPC). JSON 모양:
+- Produces: `curriculum_json(p_room bigint, p_uid uuid, p_include_archived boolean) returns jsonb`(내부·GRANT 없음, Task 4~6 의 쓰기 함수가 반환값으로 쓴다), `curriculum_get(p_slug text, p_include_archived boolean default false) returns jsonb`(공개 RPC, `anon, authenticated`). JSON 모양:
   ```ts
   { today, room: { slug, status, leaderDoesTasks },
     members: (Person & { role, status: "active"|"inactive", doesTasks })[],      // 그룹장 먼저, joined_at 순
@@ -843,7 +1062,7 @@ sqlTest("curriculum_get(aws): 전위 순서·집계·IAM people(민수 done 지�
   assertEquals(c.nodes[0].task, null);
   assertEquals([c.nodes[0].assigned, c.nodes[0].submitted, c.nodes[0].pct], [8, 5, 63]);
   assertEquals(c.nodes[0].descriptionMd, "");
-  assertEquals(c.stats, { overallPct: 24, leafCount: 9, unassignedCount: 0 });
+  assertEquals(c.stats, { overallPct: 24, leafCount: 8, unassignedCount: 0 });
 }));
 
 sqlTest("curriculum_get: 비로그인·비멤버는 people=[] (집계는 보임), 대기자는 people 보임, 비공개 방 비멤버는 ROOM_NOT_FOUND", withCase(db, async (q) => {
@@ -877,7 +1096,7 @@ sqlTest("curriculum_get: includeArchived 기본 false — 보관 서브트리는
   await q("select public.assignment_resync($1)", [room]);
   let c = await get(q, "aws");
   assertEquals(c.nodes.map((n: Node) => n.title).includes("IAM 정책 이해"), false);
-  assertEquals(c.stats, { overallPct: 6, leafCount: 7, unassignedCount: 0 });     // 1/17
+  assertEquals(c.stats, { overallPct: 6, leafCount: 6, unassignedCount: 0 });     // 1/17, 리프 8 - 2
   c = await get(q, "aws", true);
   const iam = c.nodes.find((n: Node) => n.title === "IAM 정책 이해");
   assertEquals([iam.archived, iam.assigned, iam.submitted, iam.pct, iam.task.people, iam.task.state], [true, 0, 0, null, [], "unassigned"]);
@@ -968,7 +1187,7 @@ begin
     'room', jsonb_build_object('slug', r.slug, 'status', lower(r.status), 'leaderDoesTasks', r.leader_does_tasks),
     'members', v_members, 'nodes', v_nodes, 'stats', v_stats);
 end $$;
-revoke execute on function public.curriculum_json(bigint, uuid, boolean) from anon, authenticated;
+-- curriculum_json 은 임의 p_uid 를 받는 내부 빌더 — GRANT 없음(D7)
 
 -- 공개 RPC. 비공개 방 비멤버·보관 방 비멤버는 ROOM_NOT_FOUND (D7)
 create or replace function public.curriculum_get(p_slug text, p_include_archived boolean default false) returns jsonb
@@ -981,6 +1200,8 @@ begin
   end if;
   return public.curriculum_json(v_room, v_uid, coalesce(p_include_archived, false));
 end $$;
+
+grant execute on function public.curriculum_get(text, boolean) to anon, authenticated;
 ```
 
 `parent_id::text` 가 null 이면 `jsonb_build_object` 는 JSON `null` 을 넣는다(`parentId: null`) — 회차의 기대값과 일치. `path` 의 `sort_order` 가 형제끼리 같아도(손상 데이터) `id` 로 안정 정렬된다.
@@ -1010,7 +1231,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Interfaces:**
 - Consumes: Task 1 헬퍼 4개, Task 3 `curriculum_json`, 플랜 02 `assignment_resync`.
-- Produces: `node_create(p_slug, p_parent_id, p_title, p_label, p_task_type, p_start_date, p_end_date, p_index) returns jsonb`, `node_delete(p_slug, p_node_id)`, `node_archive(p_slug, p_node_id)`, `node_unarchive(p_slug, p_node_id)` — 전부 편집용 Curriculum(보관 포함) 반환. 규칙: 회차 기본값 `title='새 회차'`, `label='{n}주차'`, `start=마지막 회차 end+1`(없으면 방 start), `end=start+6`; 하위 기본값 `title='새 과제'`, `taskType=common`, 기간=부모, 맨 뒤. 제출물 없는 리프 아래에 자식을 만들면 그 리프는 부모로 전환(`task_type=null`, 배정 released). 제출물 있으면 `NODE_HAS_SUBMISSIONS`. 부모 depth 5 → `NODE_DEPTH_EXCEEDED`. 보관된 부모 → `PARENT_ARCHIVED`. 삭제는 서브트리에 제출물이 없을 때만, 형제 `sort_order` 0..n-1 재부여. 보관/해제는 서브트리 전파, 부모가 보관 중이면 해제 불가 `PARENT_ARCHIVED`.
+- Produces: `node_create(p_slug, p_parent_id, p_title, p_label, p_task_type, p_start_date, p_end_date, p_index) returns jsonb`, `node_delete(p_slug, p_node_id)`, `node_archive(p_slug, p_node_id)`, `node_unarchive(p_slug, p_node_id)` — 전부 편집용 Curriculum(보관 포함) 반환. 규칙: 회차 기본값 `title='새 회차'`, `label='{n}주차'`, `start=마지막 회차 end+1`(없으면 방 start), `end=start+6`, `taskType` 이 없으면 빈 부모·있으면 회차 자체가 과제인 **depth-2 리프**(A7 — `node_move` 로 리프가 회차가 될 때와 같은 모양); 하위 기본값 `title='새 과제'`, `taskType=common`, 기간=부모, 맨 뒤. 제출물 없는 리프 아래에 자식을 만들면 그 리프는 부모로 전환(`task_type=null`, 배정 released). 제출물 있으면 `NODE_HAS_SUBMISSIONS`. 부모 depth 5 → `NODE_DEPTH_EXCEEDED`. 보관된 부모 → `PARENT_ARCHIVED`. 삭제는 서브트리에 제출물이 없을 때만, 형제 `sort_order` 0..n-1 재부여. 보관/해제는 서브트리 전파, 부모가 보관 중이면 해제 불가 `PARENT_ARCHIVED`. 보관하면 resync 가 COMMON·DESIGNATED 배정을 모두 해제하고(`released_at = archived_at`, D13 — Storage 업로드도 막힘), 해제하면 COMMON 은 resync 가, DESIGNATED 는 `released_at = 그 리프의 archived_at` 인 행만 `node_unarchive` 가 되살린다. 권한: 네 함수 모두 `authenticated`.
 
 - [ ] **Step 1: 실패하는 테스트 — `curriculum-sql.test.ts` 끝에 추가**
 
@@ -1036,7 +1257,11 @@ sqlTest("node_create(회차): 기본값 label/title/기간, index 로 앞에 끼
   assertEquals(c.nodes[3].title, "새 회차");
   await expectFail(q(`select public.node_create($1, null, $2)`, [room.slug, "가".repeat(81)]), "INVALID_TITLE");
   await expectFail(q(`select public.node_create($1, null, 'x', null, null, '2026-11-10'::date, '2026-11-09'::date)`, [room.slug]), "INVALID_PERIOD");
-  await expectFail(q(`select public.node_create($1, null, 'x', null, 'common')`, [room.slug]), "VALIDATION_FAILED");  // 회차에 taskType
+  // 회차에 taskType → 회차 자체가 과제인 depth-2 리프(A7). 잘못된 값은 VALIDATION_FAILED
+  c = await q(`select public.node_create($1, null, '회차 과제', null, 'common') as c`, [room.slug]).then((r) => r[0].c);
+  const rl = byTitle(c, "회차 과제");
+  assertEquals([rl.depth, rl.label, rl.roundId === rl.id, rl.task.type, rl.task.assigned], [2, "5주차", true, "common", 1]);
+  await expectFail(q(`select public.node_create($1, null, 'x', null, 'weird')`, [room.slug]), "VALIDATION_FAILED");
   await asUser(q, await uid(q, "민수"));
   await expectFail(q(`select public.node_create($1)`, [room.slug]), "NOT_LEADER");
 }));
@@ -1093,7 +1318,7 @@ sqlTest("node_delete: 서브트리에 제출물이 있으면 NODE_HAS_SUBMISSION
   assertEquals(c.nodes.filter((n: Node) => n.depth === 2).map((n: Node) => [n.label, n.sortOrder]), [["1주차", 0], ["2주차", 1], ["4주차", 2], ["5주차", 3]]);
   assertEquals((await q("select count(*)::int as n from public.goal_nodes where id in ($1, $2)", [w3, alb]))[0].n, 0);
   assertEquals((await q("select count(*)::int as n from public.task_assignments where node_id = $1", [alb]))[0].n, 0);
-  assertEquals(c.stats, { overallPct: 29, leafCount: 8, unassignedCount: 0 });    // 6/21, 리프 9 → 8
+  assertEquals(c.stats, { overallPct: 29, leafCount: 7, unassignedCount: 0 });    // 6/21, 리프 8 → 7
   await expectFail(call(q, "node_delete", ["aws", w3]), "NODE_NOT_FOUND");
   await asUser(q, await uid(q, "철수"));
   await expectFail(call(q, "node_delete", ["aws", iam]), "NOT_LEADER");
@@ -1108,7 +1333,7 @@ sqlTest("node_archive/unarchive: 서브트리 전파, 집계·배정 제외/복�
   const vpc = await nodeByTitle(q, aws, "VPC 실습");
   let c = await call(q, "node_archive", ["aws", w1]);
   assertEquals([byTitle(c, "IAM·VPC").archived, byTitle(c, "IAM 정책 이해").archived, byTitle(c, "VPC 실습").archived], [true, true, true]);
-  assertEquals(c.stats, { overallPct: 6, leafCount: 7, unassignedCount: 0 });      // 1/17
+  assertEquals(c.stats, { overallPct: 6, leafCount: 6, unassignedCount: 0 });      // 1/17, 리프 8 - 2
   assertEquals((await q("select count(*)::int as n from public.task_assignments where node_id in ($1, $2) and released_at is null", [iam, vpc]))[0].n, 0);
   assertEquals((await q("select count(*)::int as n from public.submissions where node_id = $1", [iam]))[0].n, 4);   // 민수·지은·철수 + 도윤(이탈) 제출물 보존
   await expectFail(call(q, "node_unarchive", ["aws", iam]), "PARENT_ARCHIVED");
@@ -1121,6 +1346,15 @@ sqlTest("node_archive/unarchive: 서브트리 전파, 집계·배정 제외/복�
   // 리프 하나만 보관하면 그 리프만
   c = await call(q, "node_archive", ["aws", vpc]);
   assertEquals([byTitle(c, "VPC 실습").archived, byTitle(c, "IAM 정책 이해").archived, byTitle(c, "IAM·VPC").assigned], [true, false, 4]);
+  // D13: 지정 리프 보관 → DESIGNATED 행도 해제(업로드 차단), 해제하면 같은 담당자로 복구
+  const ec2 = await nodeByTitle(q, aws, "EC2 인스턴스 유형 정리");
+  const [지은, 철수] = [await uid(q, "지은"), await uid(q, "철수")];
+  await call(q, "node_archive", ["aws", ec2]);
+  assertEquals((await q("select public.is_task_assignee($1, $2::uuid) as b", [ec2, 철수]))[0].b, false);
+  assertEquals((await q("select count(*)::int as n from public.task_assignments where node_id = $1 and released_at is null", [ec2]))[0].n, 0);
+  c = await call(q, "node_unarchive", ["aws", ec2]);
+  assertEquals(peopleOf(byTitle(c, "EC2 인스턴스 유형 정리")), { 지은: "done", 철수: "open" });
+  assertEquals((await q("select public.is_task_assignee($1, $2::uuid) as b", [ec2, 지은]))[0].b, true);
 }));
 ```
 
@@ -1156,9 +1390,10 @@ begin
   v_uid := public.current_user_id();
 
   if p_parent_id is null then
-    -- 회차: 빈 부모로 시작 (자식을 달아야 과제가 된다)
-    if p_task_type is not null then
-      perform public.fail('VALIDATION_FAILED', '회차에는 과제 유형을 줄 수 없어요', '{"field":"taskType"}'::jsonb);
+    -- 회차: taskType 이 없으면 빈 부모(자식을 달아야 과제가 된다), 있으면 회차 자체가 과제인 depth-2 리프(A7)
+    v_type := case when p_task_type is null then null else upper(p_task_type) end;
+    if v_type is not null and v_type not in ('COMMON', 'DESIGNATED') then
+      perform public.fail('VALIDATION_FAILED', '과제 유형은 common 또는 designated 예요', '{"field":"taskType"}'::jsonb);
     end if;
     select count(*)::int, max(end_date) + 1 into v_n, v_s from public.goal_nodes where room_id = r.id and parent_id is null;
     v_depth := 2;
@@ -1244,7 +1479,7 @@ begin
   n := public.node_get(r.id, p_node_id);
   update public.goal_nodes set archived_at = now(), updated_at = now()
   where id in (select public.node_subtree(n.id)) and archived_at is null;
-  perform public.assignment_resync(r.id);                  -- 보관 리프의 COMMON 행 released
+  perform public.assignment_resync(r.id);                  -- 보관 리프의 COMMON·DESIGNATED 행 released (released_at = archived_at, D13)
   return public.curriculum_json(r.id, v_uid, true);
 end $$;
 
@@ -1258,11 +1493,21 @@ begin
   if n.parent_id is not null and exists (select 1 from public.goal_nodes p where p.id = n.parent_id and p.archived_at is not null) then
     perform public.fail('PARENT_ARCHIVED', '상위 항목이 보관 중이에요. 상위 항목을 먼저 해제해 주세요', jsonb_build_object('nodeId', n.parent_id::text));
   end if;
+  -- 보관 때문에 풀린 DESIGNATED 행만 되살린다: resync 가 released_at = 리프의 archived_at 으로 찍어 두었다(D13)
+  update public.task_assignments a set released_at = null
+  from public.goal_nodes g
+  where g.id = a.node_id and g.id in (select public.node_subtree(n.id)) and g.archived_at is not null
+    and a.source = 'DESIGNATED' and a.released_at = g.archived_at;
   update public.goal_nodes set archived_at = null, updated_at = now()
   where id in (select public.node_subtree(n.id)) and archived_at is not null;
-  perform public.assignment_resync(r.id);                  -- COMMON 행 복구
+  perform public.assignment_resync(r.id);                  -- COMMON 행 복구, 그사이 ACTIVE 가 아니게 된 담당자의 DESIGNATED 는 다시 해제
   return public.curriculum_json(r.id, v_uid, true);
 end $$;
+
+grant execute on function public.node_create(text, bigint, text, text, text, date, date, int) to authenticated;
+grant execute on function public.node_delete(text, bigint)    to authenticated;
+grant execute on function public.node_archive(text, bigint)   to authenticated;
+grant execute on function public.node_unarchive(text, bigint) to authenticated;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
@@ -1290,7 +1535,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Interfaces:**
 - Consumes: Task 1 헬퍼, Task 3 `curriculum_json`, 플랜 02 `notify_publish`(자리표)·`assignment_resync`, (있으면) 플랜 04 `tag_autoselect(p_room bigint)`.
-- Produces: `node_update(p_slug text, p_node_id bigint, p_patch jsonb) returns jsonb` — Curriculum(보관 포함) + `warnings: {code, nodeId}[]`. `p_patch` 키: `title, descriptionMd, startDate, endDate, label, taskType, assigneeIds`. 규칙: 타입 변경은 리프만(`NODE_NOT_LEAF`), 제출물 있으면 양방향 모두 `NODE_HAS_SUBMISSIONS`; `assigneeIds` 는 결과 타입이 DESIGNATED 일 때만 적용(COMMON 이면 무시), 각 id 는 ACTIVE 멤버(그룹장은 `leader_does_tasks`) 아니면 `ASSIGNEE_NOT_MEMBER`, 제출물 있는 담당자 제거는 `ASSIGNEE_HAS_SUBMISSION`, 0명 허용(경고 `UNASSIGNED_TASK`); 공통→지정 전환에 `assigneeIds` 가 없으면 현재 담당자 승계(E6). 지정 행은 `source='DESIGNATED'`. 방이 ACTIVE 면 기간 변경 → `SCHEDULE_CHANGED`(담당자, 본인 제외), 담당자 추가/제거 → `TASK_ASSIGNED`/`TASK_UNASSIGNED`. `title`/`descriptionMd` 가 바뀌면 `tag_autoselect` 가 존재할 때만 호출.
+- Produces: `node_update(p_slug text, p_node_id bigint, p_patch jsonb) returns jsonb` — Curriculum(보관 포함) + `warnings: {code, nodeId}[]`. `p_patch` 키: `title, descriptionMd, startDate, endDate, label, taskType, assigneeIds`. 규칙: 타입 변경은 리프만(`NODE_NOT_LEAF`), 제출물 있으면 양방향 모두 `NODE_HAS_SUBMISSIONS`; `assigneeIds` 는 결과 타입이 DESIGNATED 일 때만 적용(COMMON 이면 무시), 각 id 는 ACTIVE 멤버(그룹장은 `leader_does_tasks`) 아니면 `ASSIGNEE_NOT_MEMBER`, 제출물 있는 담당자 제거는 `ASSIGNEE_HAS_SUBMISSION`, 0명 허용(경고 `UNASSIGNED_TASK`); 공통→지정 전환에 `assigneeIds` 가 없으면 현재 담당자 승계(E6). 지정 행은 `source='DESIGNATED'`. 방이 ACTIVE 면 기간 변경 → `SCHEDULE_CHANGED`(담당자 전원을 넘긴다 — 행위자 제외는 `notify_publish` 계약), 담당자 추가/제거 → `TASK_ASSIGNED`/`TASK_UNASSIGNED`. 세 알림 모두 행위 이벤트라 prefix 는 `KIND:room:node:` || `txid_current()`(D8 — 해제 후 재배정도 새 알림). `label` 은 회차(depth 2)만, **회차 label 을 null·빈 문자열로 지울 수 없다**(A7 → `VALIDATION_FAILED`). 날짜 형식 오류는 `patch_date` 로 `VALIDATION_FAILED`(D11). `title`/`descriptionMd` 가 바뀌면 `tag_autoselect` 가 존재할 때만 호출. 권한: `authenticated`.
 
 - [ ] **Step 1: 실패하는 테스트 — `curriculum-sql.test.ts` 끝에 추가**
 
@@ -1313,6 +1558,10 @@ sqlTest("node_update: 제목·설명·기간·라벨, 경고 PERIOD_OUTSIDE_PARE
   c = await upd(q, "aws", w1, { startDate: "2026-09-30" });                              // 방은 10-01 부터
   assertEquals(c.warnings, [{ code: "PERIOD_OUTSIDE_ROOM", nodeId: w1 }]);
   await expectFail(upd(q, "aws", ec2, { label: "x" }), "VALIDATION_FAILED");             // 리프에 label
+  await expectFail(upd(q, "aws", w1, { label: null }), "VALIDATION_FAILED");             // 회차 label 지우기 금지(A7)
+  await expectFail(upd(q, "aws", w1, { label: "  " }), "VALIDATION_FAILED");
+  await expectFail(upd(q, "aws", ec2, { startDate: "2026-02-30" }), "VALIDATION_FAILED"); // D11: 22008 원문 대신
+  await expectFail(upd(q, "aws", ec2, { endDate: 20261014 }), "VALIDATION_FAILED");
   await expectFail(upd(q, "aws", ec2, { nope: 1 }), "VALIDATION_FAILED");
   await expectFail(upd(q, "aws", ec2, { title: "  " }), "INVALID_TITLE");
   await expectFail(upd(q, "aws", ec2, { startDate: "2026-10-20" }), "INVALID_PERIOD");  // start > end(10-16)
@@ -1371,14 +1620,17 @@ sqlTest("node_update(assigneeIds): 교체·해제·0명 경고, ASSIGNEE_NOT_MEM
   await expectFail(upd(q, "aws", s3, { assigneeIds: [민수] }), "ASSIGNEE_NOT_MEMBER");
 }));
 
-sqlTest("node_update: ACTIVE 방 기간 변경·담당자 변경은 notify_publish 를 호출해도 실패하지 않는다(0008 전에는 자리표 0건)", withCase(db, async (q) => {
+sqlTest("node_update: ACTIVE 방 기간 변경·담당자 교체가 알림 호출 경로를 지나도 한 번에 적용된다(0008 전에는 자리표)", withCase(db, async (q) => {
   await setToday(q, TODAY);
   const aws = await roomId(q, "aws");
   await asUser(q, await uid(q, "민수"));
   const s3 = await nodeByTitle(q, aws, "S3 스토리지 클래스 발표자료");
-  const c = await upd(q, "aws", s3, { endDate: "2026-10-15", assigneeIds: [await uid(q, "지은")] });
+  const [지은, 하나] = [await uid(q, "지은"), await uid(q, "하나")];
+  const c = await upd(q, "aws", s3, { endDate: "2026-10-15", assigneeIds: [지은] });
   assertEquals([byTitle(c, "S3 스토리지 클래스 발표자료").endDate, c.warnings], ["2026-10-15", [{ code: "PERIOD_OUTSIDE_PARENT", nodeId: s3 }]]);
-  assertEquals((await q("select count(*)::int as n from public.notifications")) [0].n >= 0, true);   // 0008 이 교체하면 플랜 04 가 건수를 단언
+  // SCHEDULE_CHANGED·TASK_ASSIGNED(지은)·TASK_UNASSIGNED(하나) 호출 뒤의 상태 — 알림 건수 단언은 0008 을 만드는 플랜 04 몫
+  const rows = await q("select user_id::text as u, source, released_at is null as live from public.task_assignments where node_id = $1", [s3]);
+  assertEquals(rows.map((x) => [x.u, x.source, x.live]).sort(), [[지은, "DESIGNATED", true], [하나, "DESIGNATED", false]].sort());
 }));
 ```
 
@@ -1427,7 +1679,7 @@ begin
   end loop;
 
   -- 제목·설명·기간·라벨
-  v_title := case when p_patch ? 'title' then trim(p_patch->>'title') else n.title end;
+  v_title := case when p_patch ? 'title' then trim(coalesce(p_patch->>'title', '')) else n.title end;
   if v_title is null or length(v_title) < 1 or length(v_title) > 80 then
     perform public.fail('INVALID_TITLE', '제목은 1~80자예요', '{"field":"title"}'::jsonb);
   end if;
@@ -1435,13 +1687,14 @@ begin
   if length(v_desc) > 20000 then
     perform public.fail('VALIDATION_FAILED', '설명은 20,000자까지예요', '{"field":"descriptionMd"}'::jsonb);
   end if;
-  v_s := coalesce((p_patch->>'startDate')::date, n.start_date);
-  v_e := coalesce((p_patch->>'endDate')::date, n.end_date);
+  v_s := coalesce(public.patch_date(p_patch, 'startDate'), n.start_date);   -- 형식 오류 → VALIDATION_FAILED (D11)
+  v_e := coalesce(public.patch_date(p_patch, 'endDate'), n.end_date);
   if v_s > v_e then perform public.fail('INVALID_PERIOD', '종료일은 시작일 이후여야 해요', '{"field":"endDate"}'::jsonb); end if;
   v_label := n.label;
   if p_patch ? 'label' then
     if n.depth <> 2 then perform public.fail('VALIDATION_FAILED', '회차 라벨은 회차에만 줄 수 있어요', '{"field":"label"}'::jsonb); end if;
     v_label := nullif(trim(coalesce(p_patch->>'label', '')), '');
+    if v_label is null then perform public.fail('VALIDATION_FAILED', '회차 라벨은 비울 수 없어요', '{"field":"label"}'::jsonb); end if;   -- A7
     if length(v_label) > 20 then perform public.fail('VALIDATION_FAILED', '회차 라벨은 20자까지예요', '{"field":"label"}'::jsonb); end if;
   end if;
 
@@ -1449,7 +1702,7 @@ begin
   v_type := n.task_type;
   if p_patch ? 'taskType' then
     if n.task_type is null then perform public.fail('NODE_NOT_LEAF', '하위 항목이 있는 노드에는 과제 유형을 줄 수 없어요', jsonb_build_object('nodeId', n.id::text)); end if;
-    v_type := upper(p_patch->>'taskType');
+    v_type := upper(coalesce(p_patch->>'taskType', ''));
     if v_type not in ('COMMON', 'DESIGNATED') then
       perform public.fail('VALIDATION_FAILED', '과제 유형은 common 또는 designated 예요', '{"field":"taskType"}'::jsonb);
     end if;
@@ -1518,22 +1771,26 @@ begin
   end if;
 
   -- 알림 (진행중 방만. 0008 전에는 자리표가 0 을 돌려준다)
+  -- 행위자(v_uid) 제외는 notify_publish 계약이 맡는다 — 여기서는 담당자 전원을 넘긴다(A5).
+  -- 세 알림 모두 행위 이벤트 → prefix 'KIND:room:node:' || txid_current() (D8: 같은 사람 해제 후 재배정도 새 알림, 한 저장 안에서는 1건)
   if r.status = 'ACTIVE' and v_type is not null then
     if (v_s, v_e) is distinct from (n.start_date, n.end_date) then
       select coalesce(array_agg(user_id), '{}') into v_rcpt
-      from public.task_assignments where node_id = n.id and released_at is null and user_id <> v_uid;
+      from public.task_assignments where node_id = n.id and released_at is null;
       if cardinality(v_rcpt) > 0 then
         perform public.notify_publish('SCHEDULE_CHANGED', r.id, n.id, v_uid, v_rcpt,
-          'SCHEDULE_CHANGED:' || r.id || ':' || n.id || ':' || to_char(v_s, 'YYYYMMDD') || to_char(v_e, 'YYYYMMDD'),
+          'SCHEDULE_CHANGED:' || r.id || ':' || n.id || ':' || txid_current(),
           jsonb_build_object('title', v_title, 'startDate', to_char(v_s, 'YYYY-MM-DD'), 'endDate', to_char(v_e, 'YYYY-MM-DD')));
       end if;
     end if;
     if cardinality(v_added) > 0 then
-      perform public.notify_publish('TASK_ASSIGNED', r.id, n.id, v_uid, v_added, 'TASK_ASSIGNED:' || r.id || ':' || n.id,
+      perform public.notify_publish('TASK_ASSIGNED', r.id, n.id, v_uid, v_added,
+        'TASK_ASSIGNED:' || r.id || ':' || n.id || ':' || txid_current(),
         jsonb_build_object('title', v_title, 'endDate', to_char(v_e, 'YYYY-MM-DD')));
     end if;
     if cardinality(v_removed) > 0 then
-      perform public.notify_publish('TASK_UNASSIGNED', r.id, n.id, v_uid, v_removed, 'TASK_UNASSIGNED:' || r.id || ':' || n.id,
+      perform public.notify_publish('TASK_UNASSIGNED', r.id, n.id, v_uid, v_removed,
+        'TASK_UNASSIGNED:' || r.id || ':' || n.id || ':' || txid_current(),
         jsonb_build_object('title', v_title));
     end if;
   end if;
@@ -1545,6 +1802,8 @@ begin
 
   return public.curriculum_json(r.id, v_uid, true) || jsonb_build_object('warnings', v_warn);
 end $$;
+
+grant execute on function public.node_update(text, bigint, jsonb) to authenticated;
 ```
 
 `to_regproc('public.tag_autoselect')` 는 같은 이름의 함수가 둘 이상이면 null 을 돌려주므로 플랜 04 는 `tag_autoselect(bigint)` 하나만 만든다. `EXECUTE … USING` 을 쓰는 이유는 함수가 없을 때도 이 함수가 컴파일되게 하려는 것.
@@ -1574,7 +1833,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Interfaces:**
 - Consumes: Task 1 헬퍼, Task 3 `curriculum_json`, Task 4 `node_create`(테스트).
-- Produces: `node_move(p_slug text, p_node_id bigint, p_parent_id bigint, p_index int) returns jsonb`(`p_parent_id` null = 회차로), `node_indent(p_slug, p_node_id)`(직전 형제 아래 맨 뒤), `node_outdent(p_slug, p_node_id)`(조부모 아래, 부모 다음). 규칙: 자기 자신·후손 아래 → `VALIDATION_FAILED`; 보관 부모 → `PARENT_ARCHIVED`; 제출물 있는 리프 아래 → `NODE_HAS_SUBMISSIONS`, 없는 리프는 부모로 전환; 이동 후 서브트리 최대 depth > 5 → `NODE_DEPTH_EXCEEDED`; 회차가 되면 `label` 기본 `{n}주차`(이미 있으면 유지), 회차에서 내려가면 `label=null`; 서브트리 `depth`·`round_id` 재기록(I3·I4); 옛 형제·새 형제 `sort_order` 재부여; 회차 `node_outdent` → `ROOT_CANNOT_OUTDENT`; 직전 형제 없는 `node_indent` → `VALIDATION_FAILED`.
+- Produces: `node_move(p_slug text, p_node_id bigint, p_parent_id bigint, p_index int) returns jsonb`(`p_parent_id` null = 회차로), `node_indent(p_slug, p_node_id)`(직전 형제 아래 맨 뒤), `node_outdent(p_slug, p_node_id)`(조부모 아래, 부모 다음). 권한: `node_move` 만 `authenticated`(03-api §4). `node_indent`/`node_outdent` 는 03-api 에 없는 래퍼라 GRANT 하지 않는다(프론트는 `node_move` 를 쓴다 — 필요해지면 03-api 에 올리고 GRANT). 규칙: 자기 자신·후손 아래 → `VALIDATION_FAILED`; 보관 부모 → `PARENT_ARCHIVED`; 제출물 있는 리프 아래 → `NODE_HAS_SUBMISSIONS`, 없는 리프는 부모로 전환; 이동 후 서브트리 최대 depth > 5 → `NODE_DEPTH_EXCEEDED`; 회차가 되면 `label` 기본 `{n}주차`(이미 있으면 유지), 회차에서 내려가면 `label=null`; **리프를 회차로 올리면 `task_type` 을 유지한 depth-2 리프가 된다**(A7 — 허용, `node_create(parent=null, taskType)` 와 같은 모양); 서브트리 `depth`·`round_id` 재기록(I3·I4); 옛 형제·새 형제 `sort_order` 재부여; 회차 `node_outdent` → `ROOT_CANNOT_OUTDENT`; 직전 형제 없는 `node_indent` → `VALIDATION_FAILED`.
 
 - [ ] **Step 1: 실패하는 테스트 — `curriculum-sql.test.ts` 끝에 추가**
 
@@ -1625,6 +1884,11 @@ sqlTest("node_move: 다른 부모로 — depth·round_id 재기록, 회차↔하
   c = await call(q, "node_indent", [t.room.slug, t.r2]);                         // R2 → 직전 형제 B(리프, 제출 없음) 아래 → B 는 부모로 전환
   assertEquals(order(c), ["R1@2#0", "B@3#0", "R2@4#0", "A@5#0"]);
   assertEquals(byTitle(c, "B").task, null);
+  // 리프를 회차로 올리면 task_type 유지 + label {n}주차 (A7)
+  c = await call(q, "node_create", [t.room.slug, t.r1, "L"]);
+  c = await mv(q, t.room.slug, byTitle(c, "L").id, null, null);
+  const L = byTitle(c, "L");
+  assertEquals([L.depth, L.label, L.roundId === L.id, L.task.type, L.task.assigned], [2, "2주차", true, "common", 1]);   // 이 시점 회차는 R1 하나 → 2주차
   await expectFail(mv(q, t.room.slug, t.r1, t.a, null), "VALIDATION_FAILED");  // 자기 후손 아래
   await expectFail(mv(q, t.room.slug, t.r1, t.r1, null), "VALIDATION_FAILED");
   await expectFail(mv(q, t.room.slug, t.a, 999999, null), "NODE_NOT_FOUND");
@@ -1721,6 +1985,7 @@ begin
   update public.goal_nodes set sort_order = sort_order + 1
   where room_id = r.id and parent_id is not distinct from p_parent_id and id <> n.id and sort_order >= v_idx;
 
+  -- 회차가 되면 label 기본 {n}주차(있으면 유지). task_type 은 건드리지 않는다 → 리프는 depth-2 리프가 된다(A7, 트리거가 허용)
   v_label := case when p_parent_id is null then coalesce(n.label, (v_n + 1) || '주차') else null end;
   update public.goal_nodes
   set parent_id = p_parent_id, sort_order = v_idx, depth = v_depth, round_id = v_round, label = v_label, updated_at = now()
@@ -1761,6 +2026,8 @@ begin
   end if;
   return public.node_move(p_slug, n.id, v_prev, null);
 end $$;
+
+grant execute on function public.node_move(text, bigint, bigint, int) to authenticated;
 ```
 
 `node_outdent`/`node_indent` 가 `node_assert_editable` 을 부르고 `node_move` 가 다시 부른다 — 같은 트랜잭션 안 `FOR UPDATE` 재잠금은 즉시 성공한다.
@@ -1790,7 +2057,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Interfaces:**
 - Consumes: `require_user`, `kst_today`, 시드 §2·§3.
-- Produces: `me_studies() returns jsonb` = `{ today, groups: [{kind:"active", items}, {kind:"recruit", items}, {kind:"ended", items}] }`, `items[] = { slug, title, intro, membership: "leader"|"joined"|"pending", when: { kind: "deadline"|"start"|"end", date } }`. 규칙(03-api §6): active = ACTIVE 방 ∧ (그룹장|ACTIVE 멤버), recruit = RECRUIT|DRAFT 방 ∧ (그룹장|ACTIVE|PENDING), ended = ENDED 방 ∧ (그룹장|ACTIVE 멤버). 보관·INACTIVE 제외. `when`: active → 내 OPEN 과제(미제출, `s ≤ today ≤ e`, 보관 아님) 중 최소 `e` 를 `deadline`, 없으면 방 `end_date` 를 `end`; recruit → `start`; ended → `end`. 정렬: active = when 날짜, recruit = start_date, ended = end_date 내림차순, 동률은 방 id. 세 그룹은 비어도 항상 돌려준다.
+- Produces: `me_studies() returns jsonb` = `{ today, groups: [{kind:"active", items}, {kind:"recruit", items}, {kind:"ended", items}] }`, `items[] = { slug, title, intro, membership: "leader"|"joined"|"pending", when: { kind: "deadline"|"start"|"end", date } }`. 규칙(03-api §6): active = ACTIVE 방 ∧ (그룹장|ACTIVE 멤버), recruit = RECRUIT|DRAFT 방 ∧ (그룹장|ACTIVE|PENDING), ended = ENDED 방 ∧ (그룹장|ACTIVE 멤버). 보관·INACTIVE 제외. `when`: active → 내 OPEN 과제(미제출, `s ≤ today ≤ e`, 보관 아님) 중 최소 `e` 를 `deadline`, 없으면 방 `end_date` 를 `end`; recruit → `start`; ended → `end`. 정렬: active = when 날짜, recruit = start_date, ended = end_date 내림차순, 동률은 방 id. 세 그룹은 비어도 항상 돌려준다. `when.deadline` 은 OPEN 만(D14) — 방 목록 `nextTask`·방 상세 `nextDue` 와 같은 규칙. 권한: `authenticated`.
 
 - [ ] **Step 1: 실패하는 테스트 `supabase/tests/me-studies-sql.test.ts`**
 
@@ -1904,6 +2171,8 @@ begin
   into v_out;
   return jsonb_build_object('today', to_char(v_today, 'YYYY-MM-DD'), 'groups', v_out);
 end $$;
+
+grant execute on function public.me_studies() to authenticated;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
@@ -2011,12 +2280,34 @@ sqlTest("me_schedule: leader_does_tasks=false 그룹장(가은)은 st=null 로 �
   await asAnon(q);
   await expectFail(q("select public.me_schedule('2026-10-01'::date, '2026-10-31'::date)"), "AUTH_REQUIRED");
 }));
+
+sqlTest("privileges (D7): 플랜 03 내부 함수는 anon·authenticated 실행 불가, 공개 RPC 만 GRANT", withCase(db, async (q) => {
+  const can = async (role: string, fn: string) =>
+    (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
+  // 임의 uid 를 받는 빌더(리뷰 D1 의 노출 경로) + 트리 헬퍼 + 03-api 에 없는 래퍼
+  for (const fn of [
+    "public.curriculum_json(bigint,uuid,boolean)", "public.me_schedule_leaves(uuid,date)",
+    "public.room_progress(bigint)", "public.node_subtree(bigint)", "public.node_has_submissions(bigint)",
+    "public.node_assert_editable(text)", "public.node_get(bigint,bigint)", "public.goal_nodes_guard()",
+    "public.node_indent(text,bigint)", "public.node_outdent(text,bigint)",
+  ]) {
+    assertEquals(await can("anon", fn), false, `anon → ${fn}`);
+    assertEquals(await can("authenticated", fn), false, `authenticated → ${fn}`);
+  }
+  assertEquals(await can("anon", "public.curriculum_get(text,boolean)"), true);
+  for (const fn of ["public.node_create(text,bigint,text,text,text,date,date,integer)", "public.node_update(text,bigint,jsonb)",
+                    "public.node_move(text,bigint,bigint,integer)", "public.node_delete(text,bigint)", "public.node_archive(text,bigint)",
+                    "public.node_unarchive(text,bigint)", "public.me_studies()", "public.me_schedule(date,date)"]) {
+    assertEquals(await can("anon", fn), false, fn);
+    assertEquals(await can("authenticated", fn), true, fn);
+  }
+}));
 ```
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `npm run test:db -- --filter "me_schedule"`
-Expected: 3 사례 FAIL — `function public.me_schedule(date, date) does not exist`.
+Run: `npm run test:db -- --filter "me_schedule|privileges \(D7\): 플랜 03"`
+Expected: 4 사례 FAIL — `function public.me_schedule(date, date) does not exist`(privileges 사례는 없는 함수 이름에서 실패).
 
 - [ ] **Step 3: 0006 에 추가**
 
@@ -2041,7 +2332,7 @@ language sql stable security definer set search_path = '' as $$
   where r.archived_at is null
     and (a.id is not null or m.status = 'PENDING' or (r.leader_id = p_uid and not r.leader_does_tasks))
 $$;
-revoke execute on function public.me_schedule_leaves(uuid, date) from anon, authenticated;
+-- me_schedule_leaves 는 임의 p_uid 를 받는 내부 함수 — GRANT 없음(D7)
 
 create or replace function public.me_schedule(p_from date, p_to date) returns jsonb
 language plpgsql security definer set search_path = '' as $$
@@ -2099,12 +2390,14 @@ begin
     'today', to_char(v_today, 'YYYY-MM-DD'),
     'studies', v_studies, 'tasks', v_tasks, 'markers', v_markers, 'upcoming', v_upcoming);
 end $$;
+
+grant execute on function public.me_schedule(date, date) to authenticated;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
 Run: `npm run test:db`
-Expected: me_schedule 3 사례 PASS, 이 플랜 전체(progress 7 · curriculum 15 · me_studies 3 · me_schedule 3 = 28) + 플랜 01·02 전 사례 PASS. 11월 창(11-08~12-12) sqld 6건 = 내장 함수(11-04~11-08, `e >= from` 로 포함)·2과목 전반·서브쿼리·2과목 후반·모의고사 1·2. 5건이면 겹침 판정이 `s >= from` 으로 잘못 짜인 것.
+Expected: me_schedule 3 + privileges 1 사례 PASS, 이 플랜 전체(progress 10 · curriculum 15 · me_studies 3 · me_schedule 4 = 32) + 플랜 01(46)·02(29) 전 사례 PASS. 11월 창(11-08~12-12) sqld 6건 = 내장 함수(11-04~11-08, `e >= from` 로 포함)·2과목 전반·서브쿼리·2과목 후반·모의고사 1·2. 5건이면 겹침 판정이 `s >= from` 으로 잘못 짜인 것.
 
 - [ ] **Step 5: Commit**
 
@@ -2120,16 +2413,16 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 ## Phase 종료 게이트
 
-- [ ] `npm run test:db` 전부 통과 — 플랜 01(39) + 플랜 02 + 이 플랜 28(progress 7 · curriculum 15 · me_studies 3 · me_schedule 3). `npm test` · `npm run lint` · `npx tsc --noEmit` 도 통과(프론트는 건드리지 않았으므로 변화 없음).
-- [ ] `vm_stat | grep -E 'free|compressor'` 확인 후 `npm run db:reset` — 0001→…→0006→seed 가 오류 없이 적용되고 `select count(*) from goal_nodes` = 161, `select public.pct(sum(asg)::int, sum(sub)::int) from public.room_progress(6) p join goal_nodes n on n.id = p.node_id where n.parent_id is null` = 24.
-- [ ] `npm run db:types` 로 `src/lib/supabase/database.types.ts` 재생성 — `Functions` 에 `curriculum_get, node_create, node_update, node_move, node_indent, node_outdent, node_delete, node_archive, node_unarchive, me_studies, me_schedule` 가 보이고 내부 함수(`node_subtree`, `room_progress`, `curriculum_json`, `me_schedule_leaves`, `node_get`, `node_assert_editable`, `node_has_submissions`)는 `revoke` 로 anon/authenticated 가 호출할 수 없다(PostgREST 스키마 캐시에는 보일 수 있다 — 호출하면 `permission denied for function`).
-- [ ] 플랜 02 의 `room_get` 시드 사례가 이제 실제 트리로 돈다: aws `stats.overallPct=24`, `rounds[0]` = 5/8, `currentRound` = 2주차(tasks 2개, EC2 people 지은 done·철수 open), 철수 `myProgress = {submitted 2, assigned 6, nextDue EC2 2026-10-14}`. 숫자가 다르면 `room_leaf_stats` 교체(Task 1)가 0004 의 시그니처와 다른 것.
-- [ ] 다음 계획(`…-04-submission-notification-tags.md`)에 넘기는 것: ① `notify_publish` 를 0008 에서 `CREATE OR REPLACE` 하면 `node_update` 의 `SCHEDULE_CHANGED`/`TASK_ASSIGNED`/`TASK_UNASSIGNED` 호출이 그대로 살아난다 — dedupe prefix 는 `'<KIND>:<room>:<node>[:<YYYYMMDD×2>]'`. ② `tag_autoselect(p_room bigint)` 는 **이 시그니처 하나만** 만든다(`to_regproc` 가 오버로드를 null 로 본다). ③ `member_deactivate` 는 `node_subtree`·`room_progress` 를 쓰고 끝에 `assignment_resync` 를 부른다. ④ `task_get` 은 `curriculum_json` 의 NodeDto 한 건 + `path` 를 `round_id`/`parent_id` 로 만든다. ⑤ `submission_upsert` 선행 조건 `TASK_ARCHIVED` 는 `goal_nodes.archived_at`, `TASK_NOT_ASSIGNED` 는 `task_assignments.released_at is null`. ⑥ 시드 §3 의 도윤 released 행 + 제출물은 "이탈자 제출물 조회" 사례 재료.
+- [ ] `npm run test:db` 전부 통과 — 플랜 01(46) + 플랜 02(29, Task 2 Step 5 로 시드 값에 맞춘 사례 3개 포함) + 이 플랜 32(progress 10 · curriculum 15 · me_studies 3 · me_schedule 4). `npm test` · `npm run lint` · `npx tsc --noEmit` 도 통과(프론트는 건드리지 않았으므로 변화 없음).
+- [ ] `vm_stat | grep -E 'free|compressor'` 확인 후 `npm run db:reset` — 0001→…→0006→seed 가 오류 없이 적용되고 `select count(*) from goal_nodes` = 160, `select public.pct(sum(asg)::int, sum(sub)::int) from public.room_progress(6) p join goal_nodes n on n.id = p.node_id where n.parent_id is null` = 24.
+- [ ] `npm run db:types` 로 `src/lib/supabase/database.types.ts` 재생성 — `Functions` 에 `curriculum_get, node_create, node_update, node_move, node_indent, node_outdent, node_delete, node_archive, node_unarchive, me_studies, me_schedule` 가 보이고 내부 함수(`node_subtree`, `room_progress`, `curriculum_json`, `me_schedule_leaves`, `node_get`, `node_assert_editable`, `node_has_submissions`, `node_indent`, `node_outdent`)는 GRANT 가 없어(0002 default privileges) anon/authenticated 가 호출할 수 없다(PostgREST 스키마 캐시에는 보일 수 있다 — 호출하면 `permission denied for function`). `SUPABASE_URL` 이 있으면 anon 으로 `rpc('curriculum_json', {p_room: 9, p_uid: <지훈>, p_include_archived: true})` 가 에러인지 한 번 확인한다.
+- [ ] 플랜 02 의 사례 3개가 Task 2 Step 5 로 실제 시드 트리 값을 단언한다: aws `stats.overallPct=24`, `rounds` 5개(5/8·1/3·0/4·0/4·0/6), `currentRound` = 2주차(tasks 2개, EC2 people 지은 done·철수 open), 철수 `myProgress = {submitted 2, assigned 6, nextDue EC2 2026-10-14}` = 방 목록 슬롯 2/6=33%, 민수 2/5·nextTask null, react team {4, 8}, algo final 68/78·3, toeic rounds 8. 숫자가 다르면 `room_leaf_stats` 교체(Task 1)가 0004 의 시그니처와 다르거나 시드가 PLANS 와 다른 것.
+- [ ] 다음 계획(`…-04-submission-notification-tags.md`)에 넘기는 것: ① `notify_publish` 를 0008 에서 `CREATE OR REPLACE` 하면 `node_update` 의 `SCHEDULE_CHANGED`/`TASK_ASSIGNED`/`TASK_UNASSIGNED` 호출이 그대로 살아난다 — dedupe prefix 는 `'<KIND>:<room>:<node>:' || txid_current()`(D8 행위 이벤트), 수신자에는 행위자가 섞여 들어오므로 0008 이 `p_actor` 를 뺀다(개요 계약). 이 플랜의 node_update 사례는 알림 건수를 단언하지 않는다 — 0008 이 생기면 플랜 04 가 같은 호출로 건수(행위자 제외·재배정 재알림)를 단언한다. ② `tag_autoselect(p_room bigint)` 는 **이 시그니처 하나만** 만든다(`to_regproc` 가 오버로드를 null 로 본다). ③ `member_deactivate` 는 `node_subtree`·`room_progress` 를 쓰고 끝에 `assignment_resync` 를 부른다. ④ `task_get` 은 `curriculum_json` 의 NodeDto 한 건 + `path` 를 `round_id`/`parent_id` 로 만든다. ⑤ `submission_upsert` 선행 조건 `TASK_ARCHIVED` 는 `goal_nodes.archived_at`, `TASK_NOT_ASSIGNED` 는 `task_assignments.released_at is null`(보관 리프는 DESIGNATED 까지 released — D13 이라 Storage INSERT 정책의 `is_task_assignee` 도 거짓). ⑥ 시드 §3 의 도윤 released 행 + 제출물은 "이탈자 제출물 조회" 사례 재료.
 
 ## Self-Review 메모
 
 - 스펙 커버리지: 03-api §4 전 RPC(`curriculum_get` Task 3, `node_create`/`node_delete`/`node_archive`/`node_unarchive` Task 4, `node_update` Task 5, `node_move` Task 6 — E12·E13 래퍼 `node_indent`/`node_outdent` 추가), §6 `me_studies` Task 7·`me_schedule` Task 8, 02 §3 I1(create·move 리프→부모 전환)·I2(`NODE_NOT_LEAF`)·I3(depth)·I4(round_id 재기록)·I5(archive 전파·`PARENT_ARCHIVED`)·I6(`NODE_HAS_SUBMISSIONS`·`ASSIGNEE_HAS_SUBMISSION`)·I8(모든 쓰기 끝 resync), §4.1 롤업(`room_progress`)·§4.2 사람별 코드(`curriculum_json.people`)·§4.4 일정 쿼리(`me_schedule_leaves`), §8 시드 goal_nodes/task_assignments/submissions 행(Task 2), D4 실체화(모집중 docker 그룹장 배정이 일정에 planned 로 나온다), D5 회귀값 4종, D9 전 항목(편집 단위·불변식·기간 경고·빈 부모 유지·`is_late` 재계산 금지·편집 가능 상태). 미포함(의도): `moreRounds`/`currentRound` 같은 문구 파생은 프론트 어댑터(D13); 노드 `description_md` 길이 20k 는 mystudy E5 의 제안값.
-- 이름 일치: 플랜 02 `room_leaf_stats` 반환 열(`node_id, round_id, parent_id, title, task_type, start_date, end_date, sort_order, asg, sub`) 그대로; 플랜 05 가정 시그니처(`node_update(p_slug, p_node_id, p_patch)`, `node_move(p_slug, p_node_id, p_parent_id, p_index)`, `curriculum_get(p_slug, p_include_archived)`, `me_schedule(p_from, p_to)`) 와 일치; 하네스는 플랜 01 Task 2 의 `openDb/applySeed/withCase(db, fn)/sqlTest/asUser/asAnon/setToday/expectFail(promise, code)` 만 쓴다(플랜 02 본문의 `withCase(name, fn)`·`MIGRATIONS` 배열·`_seed-users.ts` 는 쓰지 않는다 — 두 하네스 서술이 다르므로 실행자는 실제 `_harness.ts` 를 열어 둘 중 어느 쪽인지 확인하고, 플랜 02 쪽이면 이 플랜의 `sqlTest(name, withCase(db, fn))` 를 `withCase(name, fn)` 으로 기계적으로 바꾼다. 사용자 id 는 닉네임 조회라 번호 체계와 무관).
-- 시드 주의: `sqld.leader_does_tasks=false` 는 §3 에서 강제한다(플랜 02 §2 가 true 로 넣었어도 D5 "sqld null" 이 이긴다). algo 9–13주차 회차 `end_date` 는 PLANS 계산값 09-29(목업 문구 "09.30" 과 하루 차이) — 트리를 따른다. PGlite 가 `pg_temp` 함수를 거부하면 Task 2 Step 4 의 대안(`public._seed3_*` + drop).
-- Review Focus 5건 전부 소유 태스크 테스트에 박음(1→Task 4·5, 2→Task 6, 3→Task 2·4·8, 4→Task 2·3·8, 5→Task 3·8).
+- 이름 일치: 플랜 02 `room_leaf_stats` 반환 열(`node_id, round_id, parent_id, title, task_type, start_date, end_date, sort_order, asg, sub`) 그대로; 플랜 05 가정 시그니처(`node_update(p_slug, p_node_id, p_patch)`, `node_move(p_slug, p_node_id, p_parent_id, p_index)`, `curriculum_get(p_slug, p_include_archived)`, `me_schedule(p_from, p_to)`) 와 일치; 하네스는 플랜 01 Task 2 의 `_harness.ts` 하나(`openDb/applySeed/withCase(db, fn)/sqlTest/asUser/asAnon/setToday/expectFail(promise, code)`)를 import 만 한다. Task 2 Step 5 가 고치는 플랜 02 사례 파일은 그 플랜의 `expectFailSql(q, sql, params, code)` 를 그대로 쓴다. 사용자 id 는 닉네임 조회라 번호 체계와 무관.
+- 시드 주의: `sqld.leader_does_tasks=false` 는 §3 에서 강제한다(플랜 02 §2 가 true 로 넣었어도 D5 "sqld null" 이 이긴다). algo 9–13주차 회차 `end_date` 는 PLANS 계산값 09-29(목업 문구 "09.30" 과 하루 차이) — 트리를 따른다. PGlite 가 `pg_temp` 함수를 거부하면 Task 2 Step 4 의 대안(`public._seed3_*` 네 함수 + drop 네 줄). seed 섹션: §1 사용자(01) → §2 방·멤버·태그(02) → §3 커리큘럼·배정·제출(03) → §4 알림 등(04, 태그·제출 재삽입 금지) → 마지막 줄 `app.today`.
+- Review Focus 5건 전부 소유 태스크 테스트에 박음(1→Task 4·5, 2→Task 6, 3→Task 2·4·8, 4→Task 2·3·8, 5→Task 3·8). 개요 Review Focus 3(이탈자 분모)의 Phase 3 몫 = Task 2 의 `RF3 …` 두 사례(제출자 철수 이탈 IAM 3/4→2/3·제출물 유지·그룹장 조회 / RECRUIT INACTIVE 재신청 `MEMBER_NOT_ACTIVE`).
 - 자리표 점검: "TBD/TODO/나중에" 없음. 모든 함수 본문·테스트 코드가 실려 있고, 다른 플랜의 함수는 "Consumes" 블록에 시그니처가 있다.

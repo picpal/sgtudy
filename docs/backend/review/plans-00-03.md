@@ -149,3 +149,78 @@ S2 L381 의 "2/4=50%" 와 my-study 참가자 숫자(2/3·2/4·2/4·0/4)는 실�
 8. 플랜 간 서술이 어긋난 곳: `room_transition_*` 파일(0004 vs 0005), `room_progress` 계층 설명, `expectFail` 이름 충돌, seed 섹션 번호, P01 태스크 번호.
 9. TBD 같은 자리표는 없다. 다만 P02 Task 2 의 기대 통과 수가 틀렸고(C1), 생략부호 대안 코드·조건부 지시가 몇 개 있다.
 10. Review Focus 는 1·4 가 완전히 고정, 2·3·5 는 부분 고정이다. 특히 RF3 은 "제출자 이탈" 전환 사례를 Phase 3 에 추가해야 한다.
+
+---
+
+## 반영 내역 (2026-10-13)
+
+> 수정 대상: P01 = `…-01-foundation-auth.md`, P02 = `…-02-rooms-membership.md`, P03 = `…-03-curriculum-progress.md`. 개요(P00)·01-decisions·02-domain 은 먼저 개정된 계약을 따랐고 이번에 고치지 않았다.
+
+### Blocker
+
+| ID | 반영 |
+|---|---|
+| D1 | P01 Global Constraints·Task 5: `0002` 첫 문장 `alter default privileges in schema public revoke execute on functions from public, anon, authenticated`(Supabase 기본 GRANT 까지 회수). GRANT-only 모델 — P01 Task 6(RLS 정책이 직접 부르는 헬퍼만 GRANT), Task 7(`meta_get` anon+auth, `me_*` auth), P02 Task 1·2·4·5·6·7, P03 Task 3·4·5·6·7·8 끝에 03-api 공개 RPC 만 GRANT. 모든 `revoke … from anon, authenticated` 삭제(P02 Task 6 블록, P03 Task 1·3·8). 단언: P01 Task 5·6·7 `has_function_privilege`, P02 Task 7 `privileges (D7)` 사례(`room_detail_json`·`membership_result`·`room_transition_active`·`invite_ensure` 외), P03 Task 8 `privileges (D7)` 사례(`curriculum_json`·`me_schedule_leaves` 외). P01 Task 9 / P02 Task 8 실스택 사례에 anon `room_detail_json(9, 지훈)`·authenticated `room_transition_active` 호출 거부 추가, P02 Step 3 기대값을 "에러여야 통과"로 고침 |
+| D2 | P01 Task 6: 쓰기 정책 테스트를 `polrelid::regclass::text like 'public.%'` 로 한정. 통과 수 재계산(28 → 33, 하네스·권한 사례 추가분 포함) |
+| D3 | P02 Task 4 progress 사례: 민수 `{2, 3, nextTask null}`(OPEN 만 적용 — ALB 는 10/15 시작이라 planned). 철수 EC2 제출 뒤 10/12 → `null`, `setToday(10-15)` → ALB 10/21 |
+| B1 | P03 Task 2 Files 에 P02 `_cases-rooms.ts` 추가, **Step 5** 신설: `rooms_list: progress`(철수 2/6 next EC2 · 민수 2/5 next null · react team {4, 8} · algo final 68/78·3 · aws team totalRounds 5), `room_get: me.state matrix` 의 toeic(rounds 8 · stats 16/32·startWeekdays [1]), `room_get: aws`(rounds 5개 · stats 24% · 철수 2/6 · 10/05 하나 missed)를 통째로 교체하고 `seedAwsTree` 삭제. P03 Global Constraints 의 "다른 파일은 고치지 않는다" 삭제. P02 seedAwsTree 설명·해당 사례 주석·Phase 게이트에 "P03 Task 2 Step 5 가 소유" 명시 |
+
+### Should-fix
+
+| ID | 반영 |
+|---|---|
+| A1 | P03 Task 1: `goal_nodes_guard()` + `trg_goal_nodes_guard`(BEFORE INSERT/UPDATE OF parent_id·depth·round_id·label·room_id). 루트 = depth 2·round_id 자기(비우면 채움)·label 필수, 하위 = label 금지·INSERT/부모 변경 시 같은 방·depth=부모+1·round_id=부모(비우면 채움). `node_move` 서브트리 일괄 재기록과 충돌하지 않게 parent_id 불변 행은 부모 검사 생략(주석). 테스트 `goal_nodes_guard: …` 추가 |
+| A2 | P02 `room_detail_json.nextDue`·`rooms_list.nxt` 에 `start_date <= today` 추가(OPEN 만). P02 Task 2 open_recruit 사례 → 10/12 `nextDue null`, 11/02 에 과제 1. Global Constraints 에 규칙 명시. P03 `me_studies` 는 원래 OPEN 만 — Interfaces 에 같은 규칙임을 적음 |
+| A3 | 01-decisions D7 개정(선행)과 일치. P02·P03 은 이미 SECURITY DEFINER + 함수 안 검사 — 변경 없음 |
+| A4 / E | P02: 2/4 는 "seedAwsTree 부분 트리 값"으로 라벨링(설명·사례명), 전체 시드 회귀값 2/6=33% 는 P03 Task 2 Step 5 가 단언. P03 Produces·Task 2 Interfaces 에 철수 2/6=33%(슬롯·통계 동일), 참가자 민수 2/5·지은 2/7·철수 2/6·하나 0/7 유지, 목업 2/4=50% 폐기 문구 |
+| A5 | P03 Task 5: `SCHEDULE_CHANGED` 수신자에서 `user_id <> v_uid` 제거(행위자 제외는 `notify_publish` 계약), 세 알림 prefix 를 `KIND:room:node:` ‖ `txid_current()` 로. P02 Produces 의 `notify_publish` 주석을 계약대로 갱신, `ROOM_STARTED` 는 그대로 |
+| A6 | 범위 밖(plan 04) — 변경 없음 |
+| B2 | P02: `room_transition_active/ended` 를 **0005** 로 옮김(Task 2 Step 3 = 0005, Step 3b = 0004). Produces·파일 표 갱신 |
+| B3 | P02 Produces·Task 4·Task 7·게이트: "P03 은 `room_leaf_stats` 본문만 `room_progress` 위임으로 교체, `room_round_stats`·`room_detail_json` 은 교체하지 않음" 으로 통일. P03 Produces 에 계층 주석 |
+| B4 | P02 `_cases-rooms.ts` 의 `expectFail(q, sql, params, code)` → `expectFailSql`(전 사례·import·Self-Review). P02 Consumes 에 하네스 `expectFail(promise, code)` 추가 |
+| C1 | P02 Task 2 Step 4: "PASS 5 / FAIL 4"(room_start·room_tick·room_update 잠금 → Task 5, archive → Task 3)로 정정. Task 3·5 의 후속 기대값도 room_tick 포함으로 맞춤 |
+| D4 | P01 Task 5: `current_user_id()` = `select auth.uid()` 만. Global Constraints 문구 교체, 함수 본문에 GUC 가 없음을 단언하는 사례 추가 |
+| D5 | P02 Task 4: `page` CTE 를 `row_number() over (order by <정렬식>)` 로 고정하고 Step 4 의 조건부 안내 삭제(C4 동시 해결) |
+| D6 | P01 Global Constraints 에 pg_cron 문장 한 형태 고정. 하네스 `PG_CRON_LINE` export + `cron.unschedule` 스텁 + 형태 고정 사례 |
+
+### Nit
+
+| ID | 반영 |
+|---|---|
+| A7 | depth-2 리프 **허용**으로 결정. P03 Task 4 `node_create(parent=null, taskType)` → depth-2 리프(테스트 갱신), Task 5 회차 label null/공백 → `VALIDATION_FAILED`(테스트), Task 6 리프→회차 이동 시 task_type 유지·label `{n}주차`(테스트). Global Constraints 에 명시 |
+| A8 | P02 `room_create`·`room_update`: `coverFileId` 는 내 `COVER` 파일만(아니면 `VALIDATION_FAILED`), 테스트 추가 |
+| A9·A10 | 02-domain §8·§2 개정(선행)과 일치 — 변경 없음 |
+| A11 | P02 `room_detail_json` 주석을 "시드 sqld 는 leader_does_tasks=false 라 null" 로 |
+| A12·A13 | 기록만(스펙 판단 사항) — 변경 없음 |
+| B5 | P01 Interfaces·파일 표에 `migrationFiles`·`makeQ`·`sqlTest` 추가. P02·P03 Consumes 도 같은 목록 |
+| B6·C7 | P03 Self-Review 의 "두 하네스 중 어느 쪽인지 확인" 단서 삭제 |
+| B7 | 시드 섹션 소유 고정: §1 사용자(P01) → §2 방·멤버·태그(P02) → §3 커리큘럼·배정·제출(P03) → §4 그 밖(P04, 태그·제출 재삽입 금지) → 마지막 줄 `app.today`. P01 Task 1 헤더, P02 §2 주석, P03 Task 2·Self-Review |
+| B8 | P02 Review Focus 1 을 5/6 · member_count 6 으로 |
+| B9 | P01 태스크 번호 참조(Global Constraints, Review Focus 1·3·4·5) 정정 |
+| B10 | 개요 계약이 0004 자리표를 명시(선행) — P02 주석만 맞춤 |
+| B11 | P03 시드 고정값 문단: "P02 §2 는 전 방 true, P03 §3 이 sqld 만 false" |
+| B12·C8 | plan 04 리뷰 몫 — 변경 없음 |
+| C2 | P03 Task 2: `_seed3_*` 대안의 drop 네 줄을 시그니처까지 적음 |
+| C3 | P02 Task 2 의 "둘 중 하나만 남긴다" 대안 블록 삭제 |
+| C5 | P01 Task 5 의 조건부 assert 축소 지시 삭제(PGlite 오류 필드 확정), Task 9 의 0003 GRANT 추가 지시를 "스택 재생성"으로 교체 |
+| C6 | P03 Task 5 의 `count >= 0` 단언 → 지은 DESIGNATED 유효·하나 released 단언으로 교체 |
+| D7 | P01 0002 의 비-DEFINER 함수(fail·kst_*·iso·task_code·leaf_state·pct·slugify·nickname_*·meta_get·트리거 함수)에 `set search_path = ''`. P02 `patch_*`·`like_escape`, P03 트리거 함수도 동일 |
+| D8 | 기록만(PG15 차이는 `*-db.test.ts` 가 잡음) |
+| D9 | P02 `invite_ensure`: `on conflict do nothing` 후 재조회 |
+| D10 | P02 `like_escape()` 추가, `room_matches` 세 곳에 적용, `%`·`_` 검색 사례 추가 |
+| D11 | P02 `patch_date/patch_bool/patch_int`(형식 오류 → `VALIDATION_FAILED`), `room_update` 전부 적용, `joinMode` null·`isPublic` null 처리, `room_create` 의 `p_join_mode`/`p_is_public` null 검사. P03 `node_update` 날짜도 `patch_date`. 테스트 추가(P02 Task 1·2, P03 Task 5) |
+| D12 | P03 `TASK_ASSIGNED`/`TASK_UNASSIGNED`/`SCHEDULE_CHANGED` prefix 에 `txid_current()`. P02 `JOIN_*` 도 D8 행위 이벤트 규칙(epoch → txid)으로 |
+| D13 | P02 `assignment_resync` 2a: 보관 리프는 COMMON·DESIGNATED 모두 `released_at = archived_at`. P03 `node_unarchive` 가 그 값으로 DESIGNATED 행을 되살림. P01 Storage 정책 주석, P03 archive 사례에 EC2 보관/해제·`is_task_assignee` 단언 |
+| D14 | 기록만(의도된 security-definer 뷰) |
+| RF1 | B8 과 같음 |
+| RF3 | P03 Task 2: `RF3 이탈자 분모`(철수 INACTIVE → IAM 3/4 → 2/3, released 행·제출물 유지, 그룹장 `can_read_submission`) + `RF3: RECRUIT 방 INACTIVE`(sqld `room_apply`·cs `room_join` → `MEMBER_NOT_ACTIVE`) |
+
+### 리뷰 밖에서 추가로 고친 것
+
+| 항목 | 반영 |
+|---|---|
+| 하네스: 기대한 실패 뒤 트랜잭션 중단 | `withCase` 의 `begin … rollback` 안에서 `expectFail` 로 에러를 받으면 이후 문장이 전부 25P02 로 실패한다(사례 대부분이 실패 후 계속 진행). P01 Task 2: 사례 Q 를 문장 단위 savepoint(`caseQ`)로 감싸고 하네스 자체 사례 추가 |
+| 시드 `app.today` | 개요 계약대로 P01 Task 1 seed 헤더 끝에 `alter database postgres set app.today = '2026-10-12';`(항상 마지막 줄), 마지막 문장 단언 사례, P01 Task 9 `meta_get.today = 2026-10-12` |
+| Storage 키 | P01 0003 정책 주석을 `{room_id}/{node_id}/{user_id}/{uuid}.{ext}` 로(원본 파일명 제외) |
+| aws 시드 노드 수 | PLANS.aws 리프는 8개: P03 Task 2 `nodes.length` 15 → 14, `curriculum_get` stats.leafCount 9 → 8(보관 후 7 → 6, 삭제 후 8 → 7), goal_nodes 합계 161 → 160 |
+| 통과 수 | P01 46 + db 7, P02 rooms 22 · membership 7 · db 4, P03 32(progress 10 · curriculum 15 · me_studies 3 · me_schedule 4) |

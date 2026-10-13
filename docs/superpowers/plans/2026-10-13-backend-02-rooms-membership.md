@@ -20,7 +20,10 @@
 - "오늘"은 `public.kst_today()` 만. 테스트 기준일 `2026-10-12`.
 - `rooms.status` 값은 대문자 `DRAFT|RECRUIT|ACTIVE|ENDED`, JSON 으로 나갈 때만 `lower()`. `room_members.status` 도 대문자, JSON 은 `lower()`.
 - 멤버십 쓰기 함수는 끝에서 반드시 `public.assignment_resync(room_id)` 를 호출한다(I8).
-- 이 플랜은 플랜 01 의 산출물(0001·0002·0003, `_harness.ts`, `_pglite-stubs.ts`, 시드 사용자)을 전제한다. 하네스 이름은 아래 "플랜 01 에서 가져오는 것" 에 고정.
+- 이 플랜은 플랜 01 의 산출물(0001·0002·0003, `_harness.ts`, `_pglite-stubs.ts`, 시드 사용자)을 전제한다. 하네스는 플랜 01 의 것 하나뿐이고 재정의하지 않는다(이름은 아래 "플랜 01 에서 가져오는 것" 에 고정).
+- **함수 권한(D7, GRANT-only)**: 0002 의 default privileges 로 새 함수는 전부 비공개다. 각 Task 의 SQL 끝에 `03-api.md` RPC 열의 공개 함수만 GRANT 한다 — 권한 "공개"(`rooms_list`, `room_get`, `invite_preview`) → `to anon, authenticated`, 나머지 공개 RPC → `to authenticated`. 내부 헬퍼는 아무것도 하지 않는다(`revoke … from anon, authenticated` 금지 — PUBLIC 기본 권한을 못 지운다).
+- **`nextDue`/`nextTask` 는 OPEN 만**(D14): `start_date ≤ today ≤ end_date` ∧ 미제출. 시작 전(planned)·마감 지남(missed)은 제외.
+- jsonb patch·인자 형식 오류(날짜·불리언·정수)는 22007/22P02 원문이 아니라 `VALIDATION_FAILED`(Task 2 의 `patch_*` 헬퍼).
 
 ## 플랜 01 에서 가져오는 것 (Consumes — 전 태스크 공통)
 
@@ -40,13 +43,17 @@ public.slugify(p_title text, p_id bigint) returns text         -- 한글만이�
 ```ts
 // supabase/tests/_harness.ts (플랜 01 Task 2 — 실제 export. 이 이름 그대로 쓴다)
 export type Q = (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
+export async function migrationFiles(): Promise<string[]>;
 export async function openDb(): Promise<PGlite>;                       // 스텁 + supabase/migrations/*.sql 전부(번호순 자동 탐색)
 export async function applySeed(db: PGlite): Promise<void>;            // supabase/seed.sql
-export function withCase(db: PGlite, fn: (q: Q) => Promise<void>): () => Promise<void>;  // begin … rollback
+export function makeQ(db: PGlite): Q;
+export function withCase(db: PGlite, fn: (q: Q) => Promise<void>): () => Promise<void>;  // begin … rollback, 문장마다 savepoint(기대한 실패 뒤에도 사례 계속)
 export function sqlTest(name: string, fn: () => Promise<void>): void;  // Deno.test 등록
 export async function asUser(q: Q, uid: string): Promise<void>;        // set_config('app.uid', uid, true)
 export async function asAnon(q: Q): Promise<void>;                     // set_config('app.uid', '', true)  ← 비로그인은 이걸로(asUser(q, null) 금지)
 export async function setToday(q: Q, ymd: string): Promise<void>;
+export async function newUser(q: Q, email?: string): Promise<string>;
+export async function expectFail(p: Promise<unknown>, code: string): Promise<void>;   // promise 형 — 이 플랜의 사례 파일은 대신 expectFailSql(q, sql, params, code) 를 쓴다
 // supabase/tests/_testenv.ts (플랜 01 Task 2 — 로컬 supabase)
 export const hasEnv: boolean;  export const RUN: string;
 export function service(): SupabaseClient;  export function anon(): SupabaseClient;
@@ -63,7 +70,8 @@ export function dbTest(name: string, fn: () => Promise<void>): void;   // hasEnv
 ```sql
 -- 0004_rooms.sql
 public.notify_publish(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p_recipients uuid[], p_dedupe_prefix text, p_model jsonb) returns int
-   -- Phase 2 자리표: 항상 0. 0008 이 CREATE OR REPLACE 로 교체(시그니처 동일). p_dedupe_prefix 는 '<KIND>:<room_id>[:<extra>]' 형식, 0008 이 ':'||recipient 를 붙여 dedupe_key 로 쓴다.
+   -- Phase 2 자리표: 항상 0. 0008 이 CREATE OR REPLACE 로 교체(시그니처 동일). 0008 은 p_actor 를 수신자에서 빼고(호출자는 빼지 않는다),
+   -- prefix || ':' || recipient 를 dedupe_key 로 쓴다. prefix(D8): 상태성 = 자연키 'KIND:room[:node][:date]', 행위성 = 'KIND:room:<extra>:' || txid_current()
 public.room_lock(p_slug text) returns public.rooms            -- FOR UPDATE, 없으면 ROOM_NOT_FOUND
 public.room_readable(p_room bigint, p_uid uuid, p_token text default null) returns boolean
 public.room_leaf_stats(p_room bigint) returns table(node_id bigint, round_id bigint, parent_id bigint, title text, task_type text, start_date date, end_date date, sort_order int, asg int, sub int)
@@ -73,11 +81,13 @@ public.room_members_json(p_room bigint, p_uid uuid) returns jsonb
 public.room_detail_json(p_room bigint, p_uid uuid) returns jsonb   -- RoomDetail(today 포함)
 public.invite_ensure(p_room bigint, p_by uuid) returns text    -- 활성 토큰 반환, 없으면 생성
 public.room_take_seat(p_room bigint) / room_release_seat(p_room bigint) returns void   -- 원자 증감, ROOM_FULL
-public.room_transition_active(p_room bigint, p_actor uuid) returns void
-public.room_transition_ended(p_room bigint) returns void
 public.room_tick() returns jsonb                                -- {activated, ended}
+public.patch_date(p_patch jsonb, p_key text) / patch_bool / patch_int  -- jsonb 값 캐스트, 형식 오류 VALIDATION_FAILED (D11, 플랜 03 node_update 도 사용)
+public.like_escape(p_text text) returns text                   -- ILIKE 용 \ % _ 이스케이프 (검색)
 public.room_round_stats(p_room bigint) returns table(round_id bigint, label text, title text, start_date date, end_date date, sort_order int, leaf_count int, asg int, sub int)
-   -- 회차별 합산. 플랜 03 이 0006 에서 CREATE OR REPLACE 로 본문 교체 가능(시그니처 고정); room_progress(p_room) 는 이 위에
+   -- 회차별 합산(room_leaf_stats 를 round_id 로 합). 시그니처·본문 모두 플랜 03 에서 그대로 쓴다.
+   -- 계층(B3): 플랜 03 의 0006 은 트리 롤업 room_progress(p_room) 를 새로 만들고 **room_leaf_stats 의 본문을 room_progress 를 읽도록 교체**한다(시그니처 고정).
+   --          room_round_stats·room_detail_json 은 room_leaf_stats 를 통해 자동으로 따라오므로 교체하지 않는다.
 public.room_current_round_id(p_room bigint, p_today date) returns bigint
 public.room_in_scope(p_room bigint, p_scope text, p_uid uuid) / room_matches(p_room bigint, p_status text, p_q text, p_tags text[]) returns boolean
 public.rooms_list(p_scope text, p_status text, p_q text, p_tags text[], p_page int, p_size int, p_sort text) returns jsonb
@@ -85,6 +95,8 @@ public.room_get(p_slug text, p_invite_token text default null) returns jsonb
 public.room_create(...), room_update(p_slug, p_patch jsonb), room_open_recruit, room_start, room_archive, room_unarchive, room_delete
 -- 0005_membership.sql
 public.assignment_resync(p_room bigint) returns void
+public.room_transition_active(p_room bigint, p_actor uuid) returns void   -- 개요 공통 계약대로 0005 (Task 2 가 추가)
+public.room_transition_ended(p_room bigint) returns void
 public.membership_result(p_room bigint, p_user uuid) returns jsonb
 public.invite_check(p_room bigint, p_token text) returns boolean   -- 활성 true / 회전됨 INVITE_REVOKED / 그 외 false
 public.room_join(p_slug text, p_invite_token text default null), room_apply(p_slug text, p_invite_token text default null),
@@ -92,7 +104,10 @@ public.room_leave(p_slug), room_cancel_application(p_slug), room_approve(p_slug,
 public.room_applications(p_slug), room_members_get(p_slug)        -- {today, items}
 public.invite_get(p_slug), invite_rotate(p_slug)                   -- {today, token, url}
 public.invite_preview(p_token), invite_join(p_token)              -- InvitePreview / MembershipResult
--- 내부 전용(anon·authenticated 에 EXECUTE revoke): 위 헬퍼 전부 + room_join_precheck, room_decide_precheck, invite_resolve
+-- 권한(D7): GRANT 하는 것은 03-api RPC 열의 공개 함수뿐 — rooms_list·room_get·invite_preview → anon, authenticated /
+--   room_create·room_update·room_open_recruit·room_start·room_archive·room_unarchive·room_delete·room_join·room_apply·room_leave·
+--   room_cancel_application·room_approve·room_reject·room_applications·room_members_get·invite_get·invite_rotate·invite_join → authenticated.
+--   위 헬퍼 전부 + room_join_precheck, room_decide_precheck, invite_resolve, patch_*, like_escape 는 GRANT 없음(기본 비공개).
 ```
 
 시드 고정값(플랜 03·04·05 테스트가 참조): `rooms.id` = toeic 1, cs 2, sqld 3, docker 4, jcg 5, aws 6, react 7, algo 8, spring 9. 초대 토큰 = `'seed-' || slug`. 태그 slug 19개(Task 3 표)는 플랜 04 `0009_tags.sql` 과 동일해야 한다.
@@ -101,7 +116,7 @@ public.invite_preview(p_token), invite_join(p_token)              -- InvitePrevi
 
 스펙이 암시하지만 자연히 테스트되지 않을 입력 5가지. 각각 소유 태스크에 테스트를 박았다.
 
-1. **정원 race** — 1/2 방에 두 세션이 동시에 `room_join` → 정확히 한 명 ACTIVE, 한 명 `ROOM_FULL`, `member_count = 2`. (Task 8, 로컬 supabase `rooms-db.test.ts`)
+1. **정원 race** — 5/6 방에 두 세션이 동시에 `room_join` → 정확히 한 명 ACTIVE, 한 명 `ROOM_FULL`, `member_count = 6`. (Task 8, 로컬 supabase `rooms-db.test.ts`)
 2. **거절·취소 뒤 재신청** — REJECTED/CANCELED 행이 있는 사용자가 다시 `room_apply` 하면 새 행이 아니라 **같은 행**이 PENDING 으로 돌아오고 `applied_at` 이 갱신된다(UNIQUE 위반 없음). (Task 5)
 3. **보관된 방의 노출** — `rooms_list` 어느 scope 에도 안 나오고, `tabCounts` 에도 안 세고, `room_get` 은 그룹장·기존 멤버만 성공, 비멤버는 `ROOM_NOT_FOUND`. (Task 4, Task 7)
 4. **`room_tick` 과 보관·DRAFT** — 보관된 RECRUIT 방(불가능한 조합이지만 데이터 손상 대비)과 start_date 지난 DRAFT 방은 tick 이 건드리지 않는다. (Task 2)
@@ -113,8 +128,8 @@ public.invite_preview(p_token), invite_join(p_token)              -- InvitePrevi
 
 | 파일 | 책임 |
 |---|---|
-| `supabase/migrations/0004_rooms.sql` | notify 자리표, 방 헬퍼(lock/readable/leaf_stats/json 빌더/invite_ensure/seat), 방 쓰기 함수 7개, 상태 전환 2개, `room_tick`, `room_round_stats`/`room_current_round_id`/`room_in_scope`/`room_matches`, `rooms_list`, `room_get`, 내부 함수 revoke |
-| `supabase/migrations/0005_membership.sql` | `assignment_resync`, `membership_result`, 멤버십 쓰기 6개 + 읽기 2개, 초대 4개 |
+| `supabase/migrations/0004_rooms.sql` | notify 자리표, 방 헬퍼(lock/readable/leaf_stats/json 빌더/invite_ensure/seat), `patch_*`·`like_escape`, 방 쓰기 함수 7개, `room_tick`, `room_round_stats`/`room_current_round_id`/`room_in_scope`/`room_matches`, `rooms_list`, `room_get`, 공개 RPC GRANT |
+| `supabase/migrations/0005_membership.sql` | `assignment_resync`, 상태 전환 2개(`room_transition_active/ended`, 개요 공통 계약 위치), `membership_result`, 멤버십 쓰기 6개 + 읽기 2개, 초대 4개, 공개 RPC GRANT |
 | `supabase/seed.sql` | (추가 §2) 태그 사전 19종(0009 와 같은 slug, `on conflict do nothing`)·방 9개·멤버·초대·알림설정·`assignment_resync` |
 | `supabase/tests/_cases-rooms.ts` | 방 사례(생성·수정 잠금·상태 전환·tick·목록·상세) — PGlite/로컬 공용 |
 | `supabase/tests/_cases-membership.ts` | 멤버십·초대 사례 |
@@ -134,11 +149,11 @@ public.invite_preview(p_token), invite_join(p_token)              -- InvitePrevi
 
 **Interfaces:**
 - Consumes: 플랜 01 공통 계약 전부(위 표). 테이블 `rooms, room_members, room_invites, room_notification_settings, room_tags, tags, goal_nodes, task_assignments, submissions, profiles`.
-- Produces: `notify_publish`(자리표), `room_lock`, `room_readable`, `room_leaf_stats`, `room_me_json`, `room_members_json`, `room_detail_json`, `invite_ensure`, `room_take_seat`, `room_release_seat`, `room_create`, `assignment_resync`. 테스트 쪽: `USERS`, `TODAY`, `expectFail`, `createRoom`, `seedLeaves`, `Case`, `ROOM_CASES`.
+- Produces: `notify_publish`(자리표), `room_lock`, `room_readable`, `room_leaf_stats`, `room_me_json`, `room_members_json`, `room_detail_json`, `invite_ensure`, `room_take_seat`, `room_release_seat`, `room_create`, `assignment_resync`. 테스트 쪽: `USERS`, `TODAY`, `expectFailSql`, `createRoom`, `seedLeaves`, `Case`, `ROOM_CASES`.
 
 - [ ] **Step 1: 하네스 확인**
 
-플랜 01 의 `openDb()` 는 `supabase/migrations/*.sql` 을 자동 탐색하므로 등록 작업이 없다. `supabase/tests/_harness.ts` 에 `openDb, applySeed, withCase, sqlTest, asUser, asAnon, setToday` 가 export 돼 있는지만 확인한다.
+플랜 01 의 `openDb()` 는 `supabase/migrations/*.sql` 을 자동 탐색하므로 등록 작업이 없다. `supabase/tests/_harness.ts` 에 `openDb, migrationFiles, applySeed, makeQ, withCase, sqlTest, asUser, asAnon, setToday, newUser, expectFail` 가 export 돼 있는지만 확인한다(재정의 금지).
 
 - [ ] **Step 2: 실패하는 테스트 — room_create 가 DRAFT 방 + 그룹장 행 + 초대 + 알림설정을 만든다**
 
@@ -159,8 +174,9 @@ export const USERS = Object.fromEntries(
   NAMES.map((n, i) => [n, `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`]),
 ) as Record<(typeof NAMES)[number], string>;
 
-/** P0001 에러를 code(message) 로 단언한다. fail() 은 MESSAGE=code, DETAIL=문구, HINT=json */
-export async function expectFail(q: Q, sql: string, params: unknown[], code: string) {
+/** SQL 문자열을 실행해 P0001 에러를 code(message) 로 단언한다. fail() 은 MESSAGE=code, DETAIL=문구, HINT=json.
+ *  하네스의 `expectFail(promise, code)` 와 이름이 겹치지 않게 `expectFailSql` — 사례 파일은 이것만 쓴다. */
+export async function expectFailSql(q: Q, sql: string, params: unknown[], code: string) {
   await assertRejects(
     () => q(sql, params),
     Error,
@@ -250,13 +266,17 @@ export const ROOM_CASES: Case[] = [
       await setToday(q, TODAY);
       await asUser(q, USERS.서연);
       const call = `select public.room_create($1,$2,$3::date,$4::date,$5,$6,$7)`;
-      await expectFail(q, call, ["   ", "소개", "2026-11-01", "2026-11-28", 4, true, "direct"], "INVALID_TITLE");
-      await expectFail(q, call, ["제목", "소개", "2026-11-28", "2026-11-01", 4, true, "direct"], "INVALID_PERIOD");
-      await expectFail(q, call, ["제목", "소개", "2026-10-11", "2026-11-01", 4, true, "direct"], "INVALID_PERIOD"); // 과거 시작일
-      await expectFail(q, call, ["제목", "소개", "2026-11-01", "2026-11-28", 1, true, "direct"], "VALIDATION_FAILED");
-      await expectFail(q, call, ["제목", "소개", "2026-11-01", "2026-11-28", 4, true, "open"], "VALIDATION_FAILED");
+      await expectFailSql(q, call, ["   ", "소개", "2026-11-01", "2026-11-28", 4, true, "direct"], "INVALID_TITLE");
+      await expectFailSql(q, call, ["제목", "소개", "2026-11-28", "2026-11-01", 4, true, "direct"], "INVALID_PERIOD");
+      await expectFailSql(q, call, ["제목", "소개", "2026-10-11", "2026-11-01", 4, true, "direct"], "INVALID_PERIOD"); // 과거 시작일
+      await expectFailSql(q, call, ["제목", "소개", "2026-11-01", "2026-11-28", 1, true, "direct"], "VALIDATION_FAILED");
+      await expectFailSql(q, call, ["제목", "소개", "2026-11-01", "2026-11-28", 4, true, "open"], "VALIDATION_FAILED");
+      await expectFailSql(q, call, ["제목", "소개", "2026-11-01", "2026-11-28", 4, true, null], "VALIDATION_FAILED");   // D11: NOT NULL 위반 대신
+      await expectFailSql(q, call, ["제목", "소개", "2026-11-01", "2026-11-28", 4, null, "direct"], "VALIDATION_FAILED");
+      await expectFailSql(q, `select public.room_create($1,$2,$3::date,$4::date,$5,$6,$7, p_cover_file_id => $8::uuid)`,
+        ["제목", "소개", "2026-11-01", "2026-11-28", 4, true, "direct", crypto.randomUUID()], "VALIDATION_FAILED");   // A8: 내 COVER 파일 아님
       await asAnon(q);
-      await expectFail(q, call, ["제목", "소개", "2026-11-01", "2026-11-28", 4, true, "direct"], "AUTH_REQUIRED");
+      await expectFailSql(q, call, ["제목", "소개", "2026-11-01", "2026-11-28", 4, true, "direct"], "AUTH_REQUIRED");
     },
   },
 ];
@@ -289,7 +309,9 @@ Expected: FAIL — `function public.room_create(...) does not exist`
 
 -- ───────── D4: 공통 과제 담당자 실체화 (멱등) ─────────
 -- 1. 보관 아닌 COMMON 리프 × 담당 자격자(ACTIVE 멤버, 그룹장은 leader_does_tasks) → 없으면 INSERT, released 면 복구
--- 2. 유효 행인데 (리프가 COMMON 아님 | 리프 보관 | 사용자가 담당 자격 없음) → released_at = now()
+-- 2. 유효 행인데 (리프가 COMMON 아님 | 리프 보관 | 사용자가 담당 자격 없음) → released
+--    보관 리프는 COMMON·DESIGNATED 모두 해제(D13 — is_task_assignee 가 거짓이 되어 Storage 업로드도 막힌다).
+--    이때 released_at = 리프의 archived_at(같은 트랜잭션의 now()) — 플랜 03 node_unarchive 가 이 값으로 "보관 때문에 풀린 지정 행"을 되살린다.
 --    DESIGNATED 행도 사용자가 ACTIVE 멤버가 아니면 released (CANCELED 참가자, INACTIVE 는 member_deactivate 가 먼저 결정)
 -- 3. 행은 절대 삭제하지 않는다(제출물 보존)
 create or replace function public.assignment_resync(p_room bigint) returns void
@@ -311,11 +333,11 @@ begin
     set released_at = null, source = 'COMMON'
     where public.task_assignments.released_at is not null or public.task_assignments.source <> 'COMMON';
 
-  -- 2a. COMMON 행인데 리프가 COMMON 이 아니거나 보관됨 → 해제
-  update public.task_assignments a set released_at = now()
+  -- 2a. 리프 보관 → COMMON·DESIGNATED 모두 해제(released_at = archived_at, D13) / COMMON 행인데 리프가 COMMON 아님 → 해제
+  update public.task_assignments a set released_at = coalesce(n.archived_at, now())
   from public.goal_nodes n
-  where n.id = a.node_id and n.room_id = p_room and a.released_at is null and a.source = 'COMMON'
-    and (n.task_type is distinct from 'COMMON' or n.archived_at is not null);
+  where n.id = a.node_id and n.room_id = p_room and a.released_at is null
+    and (n.archived_at is not null or (a.source = 'COMMON' and n.task_type is distinct from 'COMMON'));
 
   -- 2b. 사용자가 담당 자격이 없음 → 해제 (COMMON: 자격 규칙, DESIGNATED: ACTIVE 멤버가 아닐 때만)
   update public.task_assignments a set released_at = now()
@@ -416,8 +438,11 @@ declare v_token text;
 begin
   select token into v_token from public.room_invites where room_id = p_room and revoked_at is null;
   if v_token is null then
-    v_token := replace(gen_random_uuid()::text, '-', '');
-    insert into public.room_invites (token, room_id, created_by) values (v_token, p_room, p_by);
+    -- 동시 요청이면 ux_room_invites_active 에 걸린다 → 23505 원문 대신 이긴 쪽 토큰을 다시 읽는다 (D9)
+    insert into public.room_invites (token, room_id, created_by)
+    values (replace(gen_random_uuid()::text, '-', ''), p_room, p_by)
+    on conflict do nothing;
+    select token into v_token from public.room_invites where room_id = p_room and revoked_at is null;
   end if;
   return v_token;
 end $$;
@@ -528,7 +553,8 @@ begin
     into v_current;
   end if;
 
-  -- 내 진척률: 담당 자격이 있으면 상태 무관(모집중 sqld 0/2 도 D4 실체화 덕에 같은 쿼리)
+  -- 내 진척률: 담당 자격이 있으면 상태 무관(모집중 방도 D4 실체화 덕에 같은 쿼리 — 시드 sqld 는 leader_does_tasks=false 라 null)
+  -- nextDue 는 OPEN 만(D14): start ≤ today ≤ end ∧ 미제출. 시작 전·마감 지남은 제외
   if v_does_tasks then
     select jsonb_build_object(
       'submitted', count(*) filter (where s.id is not null),
@@ -540,7 +566,7 @@ begin
         join public.task_assignments a2 on a2.node_id = l2.node_id and a2.user_id = p_uid and a2.released_at is null
         join public.goal_nodes rn on rn.id = l2.round_id
         left join public.submissions s2 on s2.node_id = l2.node_id and s2.user_id = p_uid
-        where s2.id is null and l2.end_date >= v_today
+        where s2.id is null and l2.start_date <= v_today and l2.end_date >= v_today
         order by l2.end_date, rn.sort_order, l2.sort_order, l2.node_id
         limit 1))
     into v_my
@@ -604,8 +630,16 @@ begin
   if p_min_members is not null and (p_min_members < 1 or p_min_members > p_max_members) then
     perform public.fail('VALIDATION_FAILED', '최소 인원은 1~정원 사이예요', '{"field":"minMembers"}'::jsonb);
   end if;
-  if p_join_mode not in ('direct', 'approval') then
+  if coalesce(p_join_mode, '') not in ('direct', 'approval') then
     perform public.fail('VALIDATION_FAILED', '참가 방식은 direct 또는 approval 이에요', '{"field":"joinMode"}'::jsonb);
+  end if;
+  if p_is_public is null then
+    perform public.fail('VALIDATION_FAILED', '공개 여부를 정해 주세요', '{"field":"isPublic"}'::jsonb);
+  end if;
+  -- 커버는 내가 올린 COVER 용 파일만 (A8)
+  if p_cover_file_id is not null and not exists (
+       select 1 from public.files f where f.id = p_cover_file_id and f.owner_user_id = v_uid and f.purpose = 'COVER') then
+    perform public.fail('VALIDATION_FAILED', '커버 이미지를 찾을 수 없어요', '{"field":"coverFileId"}'::jsonb);
   end if;
   if coalesce(cardinality(p_tag_slugs), 0) > 8 then
     perform public.fail('TAG_LIMIT_EXCEEDED', '태그는 8개까지예요', '{"field":"tagSlugs"}'::jsonb);
@@ -640,6 +674,9 @@ begin
 
   return public.room_detail_json(v_id, v_uid);
 end $$;
+
+-- ───────── 공개 RPC GRANT (D7) — 위 헬퍼는 GRANT 없음 ─────────
+grant execute on function public.room_create(text, text, date, date, int, boolean, text, text, text, int, boolean, uuid, text[]) to authenticated;
 ```
 
 - [ ] **Step 6: 실행해서 통과 확인**
@@ -662,12 +699,13 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 ### Task 2: 방 상태 전환 · `room_tick` · `room_update` 필드 잠금
 
 **Files:**
-- Modify: `supabase/migrations/0004_rooms.sql` (끝에 추가)
+- Modify: `supabase/migrations/0005_membership.sql` (끝에 `room_transition_active/ended` — 개요 공통 계약의 위치)
+- Modify: `supabase/migrations/0004_rooms.sql` (끝에 `patch_*`, tick·그룹장 액션·update)
 - Modify: `supabase/tests/_cases-rooms.ts` (사례 추가)
 
 **Interfaces:**
 - Consumes: Task 1 의 `room_lock`, `room_detail_json`, `room_leaf_stats`, `notify_publish`, `assignment_resync`.
-- Produces: `room_transition_active(p_room bigint, p_actor uuid)`, `room_transition_ended(p_room bigint)`, `room_tick() returns jsonb {activated:int, ended:int}`, `room_open_recruit(p_slug)`, `room_start(p_slug)`, `room_archive(p_slug)`, `room_unarchive(p_slug)`, `room_delete(p_slug) returns void`, `room_update(p_slug text, p_patch jsonb)`. 플랜 04 의 `job_*` 는 `room_transition_*` 를 호출하지 않는다(tick 이 유일한 호출자). 플랜 03 `node_*` 는 `room_lock` + 편집 가능 상태 검사(DRAFT·RECRUIT·ACTIVE, 보관 아님)를 같은 방식으로 한다.
+- Produces: (0005) `room_transition_active(p_room bigint, p_actor uuid)`, `room_transition_ended(p_room bigint)` / (0004) `patch_date(p_patch jsonb, p_key text) returns date`, `patch_bool(…) returns boolean`, `patch_int(…) returns int`(형식 오류 → `VALIDATION_FAILED`, json null → null), `room_tick() returns jsonb {activated:int, ended:int}`, `room_open_recruit(p_slug)`, `room_start(p_slug)`, `room_archive(p_slug)`, `room_unarchive(p_slug)`, `room_delete(p_slug) returns void`, `room_update(p_slug text, p_patch jsonb)`. 플랜 04 의 `job_*` 는 `room_transition_*` 를 호출하지 않는다(tick 이 유일한 호출자). 플랜 03 `node_*` 는 `room_lock` + 편집 가능 상태 검사(DRAFT·RECRUIT·ACTIVE, 보관 아님)를 같은 방식으로 한다.
 
 - [ ] **Step 1: 실패하는 테스트 — 상태 전환·tick·잠금**
 
@@ -679,16 +717,21 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
     run: async (q) => {
       await setToday(q, TODAY);
       const d = await createRoom(q, USERS.서연);
-      await expectFail(q, `select public.room_open_recruit($1)`, [d.slug], "ROOM_NO_LEAF_TASK");
+      await expectFailSql(q, `select public.room_open_recruit($1)`, [d.slug], "ROOM_NO_LEAF_TASK");
       await seedLeaves(q, d.id, [{ title: "과제 1", type: "COMMON", s: "2026-11-01", e: "2026-11-07" }]);
       const [{ r }] = await q(`select public.room_open_recruit($1) as r`, [d.slug]);
       assertEquals(r.status, "recruit");
-      // 그룹장은 leader_does_tasks 기본 true → 공통 리프 1건 배정됨
-      assertEquals(r.myProgress, { submitted: 0, assigned: 1, nextDue: { nodeId: r.rounds[0] && (await q(`select id::text as id from public.goal_nodes where room_id = $1 and task_type is not null`, [d.id]))[0].id, title: "과제 1", roundLabel: "1주차", dueDate: "2026-11-07" } });
+      // 그룹장은 leader_does_tasks 기본 true → 공통 리프 1건 배정됨. 10/12 에는 11/01 시작 과제가 planned → nextDue 없음(OPEN 만, D14)
+      assertEquals(r.myProgress, { submitted: 0, assigned: 1, nextDue: null });
+      const [{ id: leafId }] = await q(`select id::text as id from public.goal_nodes where room_id = $1 and task_type is not null`, [d.id]);
+      await setToday(q, "2026-11-02");                                   // 과제 기간 안 → OPEN
+      const [{ j }] = await q(`select public.room_detail_json($1, $2) as j`, [d.id, USERS.서연]);
+      assertEquals(j.myProgress.nextDue, { nodeId: leafId, title: "과제 1", roundLabel: "1주차", dueDate: "2026-11-07" });
+      await setToday(q, TODAY);
       // 두 번 열면 ROOM_STATUS_INVALID, 다른 사람은 NOT_LEADER
-      await expectFail(q, `select public.room_open_recruit($1)`, [d.slug], "ROOM_STATUS_INVALID");
+      await expectFailSql(q, `select public.room_open_recruit($1)`, [d.slug], "ROOM_STATUS_INVALID");
       await asUser(q, USERS.민수);
-      await expectFail(q, `select public.room_open_recruit($1)`, [d.slug], "NOT_LEADER");
+      await expectFailSql(q, `select public.room_open_recruit($1)`, [d.slug], "NOT_LEADER");
     },
   },
   {
@@ -713,7 +756,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       assertEquals(m.status, "EXPIRED");
       const [row] = await q(`select started_at is not null as s from public.rooms where id = $1`, [d.id]);
       assertEquals(row.s, true);
-      await expectFail(q, `select public.room_start($1)`, [d.slug], "ROOM_STATUS_INVALID");
+      await expectFailSql(q, `select public.room_start($1)`, [d.slug], "ROOM_STATUS_INVALID");
     },
   },
   {
@@ -760,11 +803,18 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       // RECRUIT 단계(DRAFT 동일): startDate 변경 가능(≥ today), 과거는 INVALID_PERIOD
       let [{ r }] = await q(upd, [d.slug, JSON.stringify({ startDate: "2026-10-14", minMembers: 2, isPublic: false, joinMode: "approval", leaderDoesTasks: false })]);
       assertEquals([r.startDate, r.minMembers, r.isPublic, r.joinMode, r.leaderDoesTasks], ["2026-10-14", 2, false, "approval", false]);
-      await expectFail(q, upd, [d.slug, JSON.stringify({ startDate: "2026-10-11" })], "INVALID_PERIOD");
-      await expectFail(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-13" })], "INVALID_PERIOD");   // end < start
-      await expectFail(q, upd, [d.slug, JSON.stringify({ maxMembers: 1 })], "VALIDATION_FAILED");
-      await expectFail(q, upd, [d.slug, JSON.stringify({ slug: "x" })], "FIELD_LOCKED");               // I11
-      await expectFail(q, upd, [d.slug, JSON.stringify({ title: "" })], "INVALID_TITLE");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ startDate: "2026-10-11" })], "INVALID_PERIOD");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-13" })], "INVALID_PERIOD");   // end < start
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: 1 })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ slug: "x" })], "FIELD_LOCKED");               // I11
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ title: "" })], "INVALID_TITLE");
+      // D11: 형식 오류는 22007/22008/22P02 원문이 아니라 VALIDATION_FAILED, joinMode null 은 NOT NULL 위반 대신 VALIDATION_FAILED
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ startDate: "2026-13-01" })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ endDate: 20261101 })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ isPublic: "yes" })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: "many" })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ joinMode: null })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ coverFileId: "not-a-uuid" })], "VALIDATION_FAILED");   // A8
       // 정원 축소 < member_count → CAPACITY_BELOW_CURRENT (리프 만들고 모집 열어 민수 참가 후 2명)
       await seedLeaves(q, d.id, [{ title: "t", type: "COMMON", s: "2026-10-14", e: "2026-10-20" }]);
       await q(`select public.room_update($1, $2::jsonb)`, [d.slug, JSON.stringify({ joinMode: "direct", isPublic: true })]);
@@ -773,29 +823,29 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       await q(`select public.room_join($1)`, [d.slug]);
       await asUser(q, USERS.서연);
       await q(upd, [d.slug, JSON.stringify({ maxMembers: 2 })]);
-      await expectFail(q, upd, [d.slug, JSON.stringify({ maxMembers: 1 })], "VALIDATION_FAILED");      // 범위(2~100) 먼저
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: 1 })], "VALIDATION_FAILED");      // 범위(2~100) 먼저
       await q(upd, [d.slug, JSON.stringify({ maxMembers: 3 })]);
       await asUser(q, USERS.현우);
       await q(`select public.room_join($1)`, [d.slug]);                                                 // 3/3
       await asUser(q, USERS.서연);
-      await expectFail(q, upd, [d.slug, JSON.stringify({ maxMembers: 2 })], "CAPACITY_BELOW_CURRENT");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: 2 })], "CAPACITY_BELOW_CURRENT");
       // ACTIVE 단계
       await q(`select public.room_start($1)`, [d.slug]);
       for (const k of ["startDate", "minMembers", "isPublic", "joinMode", "leaderDoesTasks"]) {
-        await expectFail(q, upd, [d.slug, JSON.stringify({ [k]: k === "startDate" ? "2026-10-20" : k === "minMembers" ? 1 : k === "joinMode" ? "direct" : true })], "FIELD_LOCKED");
+        await expectFailSql(q, upd, [d.slug, JSON.stringify({ [k]: k === "startDate" ? "2026-10-20" : k === "minMembers" ? 1 : k === "joinMode" ? "direct" : true })], "FIELD_LOCKED");
       }
       [{ r }] = await q(upd, [d.slug, JSON.stringify({ title: "바뀐 제목", endDate: "2026-11-15", maxMembers: 5 })]);
       assertEquals([r.title, r.endDate, r.maxMembers], ["바뀐 제목", "2026-11-15", 5]);
-      await expectFail(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-19" })], "INVALID_PERIOD");  // 노드 e(10/20) 보다 앞
-      await expectFail(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-11" })], "INVALID_PERIOD");  // today 보다 앞
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-19" })], "INVALID_PERIOD");  // 노드 e(10/20) 보다 앞
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-11" })], "INVALID_PERIOD");  // today 보다 앞
       // ENDED 단계: 전부 잠금
       await setToday(q, "2026-11-16");
       await q(`select public.room_tick()`);
-      await expectFail(q, upd, [d.slug, JSON.stringify({ title: "x" })], "FIELD_LOCKED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ title: "x" })], "FIELD_LOCKED");
       // 보관: ROOM_NOT_EDITABLE
       await q(`select public.room_archive($1)`, [d.slug]);
-      await expectFail(q, upd, [d.slug, JSON.stringify({ title: "x" })], "ROOM_NOT_EDITABLE");
-      await expectFail(q, `select public.room_update($1, $2::jsonb)`, ["no-such-room", "{}"], "ROOM_NOT_FOUND");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ title: "x" })], "ROOM_NOT_EDITABLE");
+      await expectFailSql(q, `select public.room_update($1, $2::jsonb)`, ["no-such-room", "{}"], "ROOM_NOT_FOUND");
     },
   },
   {
@@ -819,18 +869,18 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
     run: async (q) => {
       await setToday(q, TODAY);
       const d = await createRoom(q, USERS.서연);
-      await expectFail(q, `select public.room_archive($1)`, [d.slug], "ROOM_STATUS_INVALID");   // DRAFT 는 보관 불가
-      await expectFail(q, `select public.room_unarchive($1)`, [d.slug], "ROOM_STATUS_INVALID"); // 보관 아님
+      await expectFailSql(q, `select public.room_archive($1)`, [d.slug], "ROOM_STATUS_INVALID");   // DRAFT 는 보관 불가
+      await expectFailSql(q, `select public.room_unarchive($1)`, [d.slug], "ROOM_STATUS_INVALID"); // 보관 아님
       await asUser(q, USERS.민수);
-      await expectFail(q, `select public.room_delete($1)`, [d.slug], "NOT_LEADER");
+      await expectFailSql(q, `select public.room_delete($1)`, [d.slug], "NOT_LEADER");
       await asUser(q, USERS.서연);
       await q(`select public.room_delete($1)`, [d.slug]);
       const [{ n }] = await q(`select count(*)::int as n from public.rooms where id = $1`, [d.id]);
       assertEquals(n, 0);
       // ACTIVE 방은 삭제 불가, 보관 가능, 해제 시 상태 복귀
-      await expectFail(q, `select public.room_delete($1)`, ["aws"], "NOT_LEADER");
+      await expectFailSql(q, `select public.room_delete($1)`, ["aws"], "NOT_LEADER");
       await asUser(q, USERS.민수);
-      await expectFail(q, `select public.room_delete($1)`, ["aws"], "ROOM_STATUS_INVALID");
+      await expectFailSql(q, `select public.room_delete($1)`, ["aws"], "ROOM_STATUS_INVALID");
       const [{ r }] = await q(`select public.room_archive($1) as r`, ["aws"]);
       assertEquals([r.archived, r.status], [true, "active"]);
       const [{ r: r2 }] = await q(`select public.room_unarchive($1) as r`, ["aws"]);
@@ -839,20 +889,16 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   },
 ```
 
-> 첫 사례의 `nextDue.nodeId` 단언이 길다. 아래처럼 바꿔 쓰는 편이 읽기 좋다 — 둘 중 하나만 남긴다:
-> ```ts
-> const [{ id: leafId }] = await q(`select id::text as id from public.goal_nodes where room_id = $1 and task_type is not null`, [d.id]);
-> assertEquals(r.myProgress, { submitted: 0, assigned: 1, nextDue: { nodeId: leafId, title: "과제 1", roundLabel: "1주차", dueDate: "2026-11-07" } });
-> ```
-
 - [ ] **Step 2: 실행해서 실패 확인**
 
 Run: `npm run test:db -- --filter "rooms:"`
 Expected: 새 사례 6개 FAIL — `function public.room_open_recruit(text) does not exist` 등.
 
-- [ ] **Step 3: 0004 에 상태 전환·tick·update 추가**
+- [ ] **Step 3: 0005 에 상태 전환 추가**
 
-`supabase/migrations/0004_rooms.sql` 끝에 추가:
+개요 공통 계약대로 `room_transition_*` 는 `0005_membership.sql` 에 둔다(`assignment_resync` 아래). plpgsql 은 호출 대상을 실행 시점에 찾으므로 0004 의 `room_start`·`room_tick` 이 0005 의 함수를 불러도 된다.
+
+`supabase/migrations/0005_membership.sql` 끝에 추가:
 
 ```sql
 -- ───────── 상태 전환 (D2) ─────────
@@ -895,6 +941,47 @@ begin
   select coalesce(array_agg(user_id), '{}') into v_members
   from public.room_members where room_id = p_room and status = 'ACTIVE';
   perform public.notify_publish('ROOM_ENDED', p_room, null, null, v_members, 'ROOM_ENDED:' || p_room, '{}'::jsonb);
+end $$;
+```
+
+- [ ] **Step 3b: 0004 에 `patch_*` · tick · 그룹장 액션 · update 추가**
+
+`supabase/migrations/0004_rooms.sql` 끝에 추가:
+
+```sql
+-- ───────── jsonb patch 값 캐스트 (D11) ─────────
+-- 키가 없거나 json null → null. 타입·형식이 틀리면 22007/22008/22P02 원문 대신 VALIDATION_FAILED {field}
+create or replace function public.patch_date(p_patch jsonb, p_key text) returns date
+language plpgsql stable set search_path = '' as $$
+begin
+  if p_patch->p_key is null or jsonb_typeof(p_patch->p_key) = 'null' then return null; end if;
+  if jsonb_typeof(p_patch->p_key) <> 'string' or (p_patch->>p_key) !~ '^\d{4}-\d{2}-\d{2}$' then
+    perform public.fail('VALIDATION_FAILED', '날짜는 YYYY-MM-DD 형식이어야 해요', jsonb_build_object('field', p_key));
+  end if;
+  return (p_patch->>p_key)::date;
+exception when invalid_datetime_format or datetime_field_overflow then
+  perform public.fail('VALIDATION_FAILED', '날짜는 YYYY-MM-DD 형식이어야 해요', jsonb_build_object('field', p_key));
+  return null;
+end $$;
+
+create or replace function public.patch_bool(p_patch jsonb, p_key text) returns boolean
+language plpgsql immutable set search_path = '' as $$
+begin
+  if p_patch->p_key is null or jsonb_typeof(p_patch->p_key) = 'null' then return null; end if;
+  if jsonb_typeof(p_patch->p_key) <> 'boolean' then
+    perform public.fail('VALIDATION_FAILED', 'true 또는 false 여야 해요', jsonb_build_object('field', p_key));
+  end if;
+  return (p_patch->p_key)::boolean;
+end $$;
+
+create or replace function public.patch_int(p_patch jsonb, p_key text) returns int
+language plpgsql immutable set search_path = '' as $$
+begin
+  if p_patch->p_key is null or jsonb_typeof(p_patch->p_key) = 'null' then return null; end if;
+  if jsonb_typeof(p_patch->p_key) <> 'number' or (p_patch->>p_key) !~ '^-?\d{1,9}$' then
+    perform public.fail('VALIDATION_FAILED', '정수여야 해요', jsonb_build_object('field', p_key));
+  end if;
+  return (p_patch->>p_key)::int;
 end $$;
 
 -- pg_cron 5분마다(0010, 플랜 04). 보관 방·DRAFT 는 건드리지 않는다. 결과 {activated, ended}
@@ -1012,6 +1099,7 @@ declare
   v_max    int;
   v_min    int;
   v_ldt    boolean;
+  v_pub    boolean;
   v_node_max_end date;
   v_warn   jsonb := '[]'::jsonb;
 begin
@@ -1039,13 +1127,14 @@ begin
     end if;
   end loop;
 
-  v_title := case when p_patch ? 'title' then trim(p_patch->>'title') else r.title end;
-  v_intro := case when p_patch ? 'intro' then trim(p_patch->>'intro') else r.intro end;
-  v_start := coalesce((p_patch->>'startDate')::date, r.start_date);
-  v_end   := coalesce((p_patch->>'endDate')::date, r.end_date);
-  v_max   := coalesce((p_patch->>'maxMembers')::int, r.max_members);
-  v_min   := case when p_patch ? 'minMembers' then (p_patch->>'minMembers')::int else r.min_members end;
-  v_ldt   := coalesce((p_patch->>'leaderDoesTasks')::boolean, r.leader_does_tasks);
+  v_title := case when p_patch ? 'title' then trim(coalesce(p_patch->>'title', '')) else r.title end;
+  v_intro := case when p_patch ? 'intro' then trim(coalesce(p_patch->>'intro', '')) else r.intro end;
+  v_start := coalesce(public.patch_date(p_patch, 'startDate'), r.start_date);
+  v_end   := coalesce(public.patch_date(p_patch, 'endDate'), r.end_date);
+  v_max   := coalesce(public.patch_int(p_patch, 'maxMembers'), r.max_members);
+  v_min   := case when p_patch ? 'minMembers' then public.patch_int(p_patch, 'minMembers') else r.min_members end;
+  v_ldt   := coalesce(public.patch_bool(p_patch, 'leaderDoesTasks'), r.leader_does_tasks);
+  v_pub   := coalesce(public.patch_bool(p_patch, 'isPublic'), r.visibility = 'PUBLIC');
 
   if length(v_title) < 1 or length(v_title) > 60 then
     perform public.fail('INVALID_TITLE', '제목은 1~60자예요', '{"field":"title"}'::jsonb);
@@ -1074,8 +1163,14 @@ begin
   if v_min is not null and (v_min < 1 or v_min > v_max) then
     perform public.fail('VALIDATION_FAILED', '최소 인원은 1~정원 사이예요', '{"field":"minMembers"}'::jsonb);
   end if;
-  if p_patch ? 'joinMode' and (p_patch->>'joinMode') not in ('direct', 'approval') then
+  if p_patch ? 'joinMode' and coalesce(p_patch->>'joinMode', '') not in ('direct', 'approval') then
     perform public.fail('VALIDATION_FAILED', '참가 방식은 direct 또는 approval 이에요', '{"field":"joinMode"}'::jsonb);
+  end if;
+  -- 커버는 내가 올린 COVER 용 파일만 (A8). 텍스트로 비교해 uuid 캐스트 오류(22P02)를 피한다. null 은 커버 제거
+  if p_patch ? 'coverFileId' and jsonb_typeof(p_patch->'coverFileId') <> 'null' and not exists (
+       select 1 from public.files f
+       where f.id::text = p_patch->>'coverFileId' and f.owner_user_id = v_uid and f.purpose = 'COVER') then
+    perform public.fail('VALIDATION_FAILED', '커버 이미지를 찾을 수 없어요', '{"field":"coverFileId"}'::jsonb);
   end if;
 
   update public.rooms set
@@ -1084,7 +1179,7 @@ begin
     rules_md       = coalesce(p_patch->>'rulesMd', rules_md),
     cover_file_id  = case when p_patch ? 'coverFileId' then (p_patch->>'coverFileId')::uuid else cover_file_id end,
     start_date = v_start, end_date = v_end, max_members = v_max, min_members = v_min,
-    visibility = case when p_patch ? 'isPublic' then (case when (p_patch->>'isPublic')::boolean then 'PUBLIC' else 'PRIVATE' end) else visibility end,
+    visibility = case when v_pub then 'PUBLIC' else 'PRIVATE' end,
     join_mode  = case when p_patch ? 'joinMode' then upper(p_patch->>'joinMode') else join_mode end,
     leader_does_tasks = v_ldt, updated_at = now()
   where id = r.id;
@@ -1101,12 +1196,27 @@ begin
 
   return public.room_detail_json(r.id, v_uid) || jsonb_build_object('warnings', v_warn);
 end $$;
+
+-- ───────── 공개 RPC GRANT (D7) — room_tick·patch_*·room_transition_* 는 GRANT 없음 ─────────
+grant execute on function public.room_open_recruit(text) to authenticated;
+grant execute on function public.room_start(text)        to authenticated;
+grant execute on function public.room_archive(text)      to authenticated;
+grant execute on function public.room_unarchive(text)    to authenticated;
+grant execute on function public.room_delete(text)       to authenticated;
+grant execute on function public.room_update(text, jsonb) to authenticated;
 ```
 
-- [ ] **Step 4: 실행해서 통과 확인**
+- [ ] **Step 4: 실행해서 결과 확인 (일부는 뒤 Task 에서 녹색)**
 
 Run: `npm run test:db -- --filter "rooms:"`
-Expected: PASS 9 사례. `room_start` 사례는 Task 5 의 `room_apply` 가 아직 없어 FAIL 한다 → 이 한 사례만 Task 5 Step 4 이후 통과(여기서는 "`function public.room_apply(text) does not exist`" 로 실패하는 것을 확인하고 넘어간다). `room_update` 잠금 사례도 `room_join` 을 쓰므로 동일.
+Expected: 9 사례 중 **PASS 5, FAIL 4**.
+- PASS: Task 1 의 3건 + `room_open_recruit` + `room_update: leaderDoesTasks 변경…`.
+- FAIL(예정된 것만):
+  - `room_start: …` — `function public.room_apply(text) does not exist` → Task 5 뒤 녹색.
+  - `room_tick: …` — 같은 이유(`room_apply`) → Task 5 뒤 녹색.
+  - `room_update: 상태별 필드 잠금 …` — `function public.room_join(text) does not exist` → Task 5 뒤 녹색.
+  - `room_archive/unarchive/delete: …` — 시드 aws 가 아직 없어 `ROOM_NOT_FOUND`(기대 `NOT_LEADER`) → Task 3 뒤 녹색.
+이 네 개가 다른 이유로 실패하면 멈추고 고친다.
 
 - [ ] **Step 5: Commit**
 
@@ -1189,10 +1299,12 @@ Expected: FAIL — `rows.map` 결과가 `[]`.
 
 - [ ] **Step 3: `supabase/seed.sql` 에 §2 추가**
 
-플랜 01 §1 블록 바로 아래에 붙인다. 사람은 닉네임으로 찾고, 방은 slug 로 찾는다.
+플랜 01 §1 블록 바로 아래(마지막 `app.today` 줄 위)에 붙인다. 사람은 닉네임으로 찾고, 방은 slug 로 찾는다.
 
 ```sql
--- ═══════════ §2 태그 사전 · 방 · 멤버 · 초대 · 알림 설정 (plan 02) ═══════════
+-- ═══════════ §2 태그 사전 · 방 · 멤버 · room_tags · 초대 · 알림 설정 (plan 02) ═══════════
+-- 태그(tags·room_tags)는 이 섹션이 소유한다. plan 04 의 §4 는 태그를 다시 넣지 않는다(0009 마이그레이션의 사전 INSERT 와는 on conflict 로 공존).
+-- 이 섹션은 §1 아래, 파일 마지막 `alter database postgres set app.today …` 줄 **위**에 넣는다.
 -- 기준일 2026-10-12. 숫자는 src/data/rooms.ts · src/data/room-view.ts 와 일치(docker 는 D3 에 따라 1/6).
 -- 태그 slug 는 0009_tags.sql(plan 04) 과 같아야 한다. 양쪽 모두 on conflict (slug) do nothing.
 insert into public.tags (slug, label, tone, aliases) values
@@ -1343,7 +1455,7 @@ select public.assignment_resync(r.id) from public.rooms r;
 - [ ] **Step 4: 실행해서 통과 확인**
 
 Run: `npm run test:db`
-Expected: `rooms: seed …` PASS. Task 2 의 `room_archive/unarchive/delete` 사례(aws·민수 참조)도 이제 PASS. 플랜 01 `seed: is idempotent` 도 그대로 PASS(§2 전부 `on conflict do nothing`). 아직 FAIL 인 것은 `room_start`·`room_update 잠금` 2건(`room_apply`/`room_join` 미구현 — Task 5 에서 해소).
+Expected: `rooms: seed …` PASS. Task 2 의 `room_archive/unarchive/delete` 사례(aws·민수 참조)도 이제 PASS. 플랜 01 `seed: is idempotent` 도 그대로 PASS(§2 전부 `on conflict do nothing`). 아직 FAIL 인 것은 `room_start`·`room_tick`·`room_update 잠금` 3건(`room_apply`/`room_join` 미구현 — Task 5 에서 해소).
 
 - [ ] **Step 5: Commit**
 
@@ -1366,17 +1478,19 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 **Interfaces:**
 - Consumes: Task 1 `room_leaf_stats`, `person_json`, `pct`, `kst_today`, `current_user_id`, `fail`; Task 3 시드.
 - Produces:
-  - `public.room_round_stats(p_room bigint) returns table(round_id bigint, label text, title text, start_date date, end_date date, sort_order int, leaf_count int, asg int, sub int)` — 보관 아닌 회차(depth 2) × 리프 합산. **플랜 03 이 0006 에서 `create or replace` 로 본문을 바꿀 수 있다**(시그니처 고정). 플랜 03 의 `room_progress(p_room)` 는 이 함수 위에 얹는다.
+  - `public.room_round_stats(p_room bigint) returns table(round_id bigint, label text, title text, start_date date, end_date date, sort_order int, leaf_count int, asg int, sub int)` — 보관 아닌 회차(depth 2) × `room_leaf_stats` 합산. 플랜 03 은 이 함수를 바꾸지 않는다 — 0006 이 `room_leaf_stats` 의 본문을 트리 롤업 `room_progress(p_room)` 를 읽도록 교체하면 이 함수와 `room_detail_json` 이 그대로 따라간다(계층: `room_progress` → `room_leaf_stats` → `room_round_stats`/`room_detail_json`).
+  - `public.like_escape(p_text text) returns text` — `\`·`%`·`_` 를 이스케이프(검색어 `%`·`_` 가 와일드카드로 먹지 않게, D10).
   - `public.room_current_round_id(p_room bigint, p_today date) returns bigint` — roomview §3.3 규칙(오늘 포함 회차 중 start 최신, 없으면 직전 회차). `room_detail_json` 이 인라인한 것과 같은 규칙.
   - `public.room_in_scope(p_room bigint, p_scope text, p_uid uuid) returns boolean` — public: 공개 ∧ DRAFT 아님 / mine: 내 MEMBER 행이 ACTIVE·PENDING / created: 내가 그룹장. 셋 다 보관 제외.
   - `public.room_matches(p_room bigint, p_status text, p_q text, p_tags text[]) returns boolean` — 상태 칩·검색(제목 + 태그 label/aliases ILIKE)·태그 OR.
   - `public.rooms_list(p_scope text default 'public', p_status text default 'all', p_q text default null, p_tags text[] default null, p_page int default 0, p_size int default 24, p_sort text default 'default') returns jsonb` — `RoomListResponse` + `today`.
-  - 정렬 `default`: ACTIVE → RECRUIT → DRAFT → ENDED, `start_date asc`, `created_at desc`, `id desc`. `latest`: `created_at desc, id desc`. `startDate`: `start_date asc, id desc`.
+  - 정렬 `default`: ACTIVE → RECRUIT → DRAFT → ENDED, `start_date asc`, `created_at desc`, `id desc`. `latest`: `created_at desc, id desc`. `startDate`: `start_date asc, id desc`. 페이지 순서는 `row_number() over (order by <같은 정렬식>)` 로 고정(D5 — `over ()` 는 서브쿼리 순서를 보장하지 않는다).
+  - 카드 `nextTask` 는 OPEN 만(D14) — `room_detail_json.nextDue` 와 같은 규칙.
   - 시드 기대값(철수 로그인): public 8장 순서 `react, aws, jcg, cs, sqld, toeic, docker, algo` · tabCounts `{public 8, mine 4, created 1}` · public facets 16개(자격증 3, 클라우드 2 선두) · mine facets 10개.
 
 - [ ] **Step 1: `seedAwsTree` 헬퍼 + 실패하는 테스트**
 
-`supabase/tests/_cases-rooms.ts` 에 헬퍼를 추가한다(Task 7 `room_get` 사례도 재사용). 플랜 03 시드 §3 가 생기면 이 헬퍼와 숫자가 겹치지 않도록 **사례 안에서만** 쓰고 롤백된다.
+`supabase/tests/_cases-rooms.ts` 에 헬퍼를 추가한다(Task 7 `room_get` 사례도 재사용). **부분 트리(3회차)** 라서 숫자는 목업 회귀값이 아니라 이 트리의 값이다(철수 2/4 등). 플랜 03 Task 2(시드 §3)가 들어오면 aws 에 회차가 중복으로 붙으므로 **플랜 03 Task 2 가 이 헬퍼를 쓰는 사례 2개와 빈 트리를 가정한 사례 1개를 전체 시드 값으로 다시 쓴다**(철수 aws 2/6=33%, react team 4/8, algo final 68/78·3회차, toeic rounds 8 — 플랜 03 Task 2 Step 5).
 
 ```ts
 /**
@@ -1384,7 +1498,9 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
  *   1주차 10/01–10/07: IAM 정책 이해(공통), VPC 실습(공통)
  *   2주차 10/08–10/14: EC2 인스턴스 유형 정리(지정: 지은·철수), S3 스토리지 클래스 발표자료(지정: 하나, 10/10–)
  *   3주차 10/15–10/21: ALB vs NLB 실습(공통)
- * 제출: IAM 민수D 지은L 철수D / VPC 민수D 철수D / EC2 지은D  → 1주차 5/8, 2주차 1/3, 3주차 0/4, 철수 2/4, 다음 마감 EC2 10/14
+ * 제출: IAM 민수D 지은L 철수D / VPC 민수D 철수D / EC2 지은D  → 1주차 5/8, 2주차 1/3, 3주차 0/4
+ * 이 부분 트리에서: 철수 2/4(IAM·VPC·EC2·ALB) 다음 마감 EC2 10/14, 민수 2/3(IAM·VPC·ALB — EC2 는 지은·철수 지정) 다음 마감 없음(ALB 는 10/15 시작 = planned)
+ * (전체 시드 회귀값 철수 2/6=33% 는 플랜 03 Task 2 가 단언한다)
  */
 export async function seedAwsTree(q: Q) {
   const AWS = "6";
@@ -1478,8 +1594,8 @@ export async function listRooms(q: Q, a: Partial<{ scope: string; status: string
       assertEquals(r.tabCounts, { public: 8, mine: 0, created: 0 });
       assertEquals(r.items.every((x: any) => x.membership === null), true);
       assertEquals(r.items.some((x: any) => x.slug === "spring"), false);
-      await expectFail(q, `select public.rooms_list('mine','all',null,null,0,24,'default')`, [], "AUTH_REQUIRED");
-      await expectFail(q, `select public.rooms_list('created','all',null,null,0,24,'default')`, [], "AUTH_REQUIRED");
+      await expectFailSql(q, `select public.rooms_list('mine','all',null,null,0,24,'default')`, [], "AUTH_REQUIRED");
+      await expectFailSql(q, `select public.rooms_list('created','all',null,null,0,24,'default')`, [], "AUTH_REQUIRED");
       // DRAFT 는 public 에 안 보이고 created 에만 status draft 로
       const d = await createRoom(q, USERS.서연, { title: "Draft Only" });
       await asAnon(q);
@@ -1492,8 +1608,9 @@ export async function listRooms(q: Q, a: Partial<{ scope: string; status: string
     },
   },
   {
-    name: "rooms_list: progress — aws mine 2/4 next EC2 10/14, 민수(그룹장·담당) mine, 서연 team 2/3, react team null/0, algo final 0/0/0",
+    name: "rooms_list: progress (seedAwsTree 부분 트리) — 철수 mine 2/4 next EC2 10/14, 민수 mine 2/3 next null(ALB planned), 서연 team 2/3, react team null/0, algo final 0/0/0",
     run: async (q) => {
+      // 플랜 03 Task 2 가 이 사례를 전체 시드 값으로 다시 쓴다(헬퍼 호출 제거)
       await setToday(q, TODAY);
       const t = await seedAwsTree(q);
       await asUser(q, USERS.철수);
@@ -1503,9 +1620,10 @@ export async function listRooms(q: Q, a: Partial<{ scope: string; status: string
       assertEquals(by.react.progress, { kind: "team", currentRound: null, totalRounds: 0 });
       assertEquals(by.algo.progress, { kind: "final", submitted: 0, assigned: 0, totalRounds: 0 });
       assertEquals(by.algo.membership, { role: "member", status: "active" });
+      // 민수(그룹장, leader_does_tasks) 는 IAM·VPC·ALB 3건(EC2·S3 는 지정 대상 아님). 10/12 에 OPEN 인 미제출이 없다 → nextTask null
       await asUser(q, USERS.민수);
       by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
-      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 4, nextTask: { nodeId: t.ec2, title: "EC2 인스턴스 유형 정리", dueDate: "2026-10-14" } });
+      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 3, nextTask: null });
       // 그룹장이 과제를 안 하면 team
       await q(`update public.rooms set leader_does_tasks = false where id = 6`);
       await q(`select public.assignment_resync(6)`);
@@ -1514,11 +1632,15 @@ export async function listRooms(q: Q, a: Partial<{ scope: string; status: string
       await asUser(q, USERS.서연);
       by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
       assertEquals(by.aws.progress, { kind: "team", currentRound: { index: 2, label: "2주차", title: "EC2·S3" }, totalRounds: 3 });
-      // 철수가 EC2 를 제출하면 nextTask 는 3주차 ALB(10/21)
+      // 철수가 EC2 를 제출하면 10/12 에는 OPEN 미제출이 없어 null, 3주차가 열리는 10/15 에 ALB(10/21)
       await asUser(q, USERS.철수);
       await q(`insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late) values ($1, $2, 'x', now(), false)`, [t.ec2, USERS.철수]);
       by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress.nextTask, null);
+      await setToday(q, "2026-10-15");
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
       assertEquals(by.aws.progress.nextTask, { nodeId: t.alb, title: "ALB vs NLB 실습", dueDate: "2026-10-21" });
+      await setToday(q, TODAY);
       // 도윤(INACTIVE) 은 mine 이 아니고 team
       await asUser(q, USERS.도윤);
       by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
@@ -1541,6 +1663,8 @@ export async function listRooms(q: Q, a: Partial<{ scope: string; status: string
       assertEquals(await slugs({ q: "k8s" }), ["docker"]);         // 태그 alias
       assertEquals(await slugs({ q: "  " }), ["react", "aws", "jcg", "cs", "sqld", "toeic", "docker", "algo"]);   // 공백은 무시
       assertEquals(await slugs({ q: "없는검색어" }), []);
+      assertEquals(await slugs({ q: "%" }), []);                   // D10: 와일드카드가 아니라 글자 그대로
+      assertEquals(await slugs({ q: "_" }), []);
       assertEquals(await slugs({ tags: ["cloud", "certificate"] }), ["aws", "jcg", "sqld", "docker"]);          // OR
       assertEquals(await slugs({ tags: ["cloud"], status: "recruit" }), ["docker"]);
       // 상태·검색·태그 필터는 tabCounts·facets 에 영향 없음
@@ -1554,9 +1678,9 @@ export async function listRooms(q: Q, a: Partial<{ scope: string; status: string
       assertEquals(await slugs({ sort: "latest" }), ["jcg", "docker", "sqld", "cs", "toeic", "aws", "react", "algo"]);   // created_at desc
       assertEquals(await slugs({ sort: "startDate" }), ["algo", "react", "aws", "jcg", "cs", "sqld", "toeic", "docker"]); // 같은 10/19 면 created_at desc → jcg(10/05) 가 cs(10/02) 앞
       // 검증
-      await expectFail(q, `select public.rooms_list('everyone','all',null,null,0,24,'default')`, [], "VALIDATION_FAILED");
-      await expectFail(q, `select public.rooms_list('public','full',null,null,0,24,'default')`, [], "VALIDATION_FAILED");
-      await expectFail(q, `select public.rooms_list('public','all',null,null,0,24,'popular')`, [], "VALIDATION_FAILED");
+      await expectFailSql(q, `select public.rooms_list('everyone','all',null,null,0,24,'default')`, [], "VALIDATION_FAILED");
+      await expectFailSql(q, `select public.rooms_list('public','full',null,null,0,24,'default')`, [], "VALIDATION_FAILED");
+      await expectFailSql(q, `select public.rooms_list('public','all',null,null,0,24,'popular')`, [], "VALIDATION_FAILED");
     },
   },
   {
@@ -1610,6 +1734,12 @@ language sql stable security definer set search_path = '' as $$
   limit 1
 $$;
 
+-- ILIKE 패턴용 이스케이프(기본 escape 문자 '\'). 검색어의 % _ 는 글자 그대로 (D10)
+create or replace function public.like_escape(p_text text) returns text
+language sql immutable set search_path = '' as $$
+  select replace(replace(replace(p_text, '\', '\\'), '%', '\%'), '_', '\_')
+$$;
+
 -- ───────── 목록 scope · 필터 (main §3-6, §3-8) ─────────
 create or replace function public.room_in_scope(p_room bigint, p_scope text, p_uid uuid) returns boolean
 language sql stable security definer set search_path = '' as $$
@@ -1630,11 +1760,11 @@ language sql stable security definer set search_path = '' as $$
     where r.id = p_room
       and (p_status = 'all' or r.status = upper(p_status))
       and (p_q is null
-           or r.title ilike '%' || p_q || '%'
+           or r.title ilike '%' || public.like_escape(p_q) || '%'
            or exists (select 1 from public.room_tags rt join public.tags t on t.slug = rt.tag_slug
                       where rt.room_id = r.id
-                        and (t.label ilike '%' || p_q || '%'
-                             or exists (select 1 from unnest(t.aliases) a where a ilike '%' || p_q || '%'))))
+                        and (t.label ilike '%' || public.like_escape(p_q) || '%'
+                             or exists (select 1 from unnest(t.aliases) a where a ilike '%' || public.like_escape(p_q) || '%'))))
       and (p_tags is null or exists (select 1 from public.room_tags rt where rt.room_id = r.id and rt.tag_slug = any(p_tags))))
 $$;
 
@@ -1695,16 +1825,17 @@ begin
   from public.rooms r
   where public.room_in_scope(r.id, v_scope, v_uid) and public.room_matches(r.id, v_status, v_q, v_tags);
 
-  with page as (
-    select r.*, row_number() over () as ord
+  with page as (   -- 순서는 row_number() over (order by …) 로 고정(D5). 창 함수는 limit 전에 계산된다
+    select o.*
     from (
-      select r.* from public.rooms r
-      where public.room_in_scope(r.id, v_scope, v_uid) and public.room_matches(r.id, v_status, v_q, v_tags)
-      order by
-        case when v_sort = 'default' then case r.status when 'ACTIVE' then 0 when 'RECRUIT' then 1 when 'DRAFT' then 2 else 3 end end,
-        case when v_sort in ('default', 'startDate') then r.start_date end,
-        r.created_at desc, r.id desc
-      limit v_size offset v_page * v_size) r
+      select r.*, row_number() over (order by
+               case when v_sort = 'default' then case r.status when 'ACTIVE' then 0 when 'RECRUIT' then 1 when 'DRAFT' then 2 else 3 end end,
+               case when v_sort in ('default', 'startDate') then r.start_date end,
+               r.created_at desc, r.id desc) as ord
+      from public.rooms r
+      where public.room_in_scope(r.id, v_scope, v_uid) and public.room_matches(r.id, v_status, v_q, v_tags)) o
+    order by o.ord
+    limit v_size offset v_page * v_size
   ),
   mem as (
     select m.room_id, lower(m.role) as role, lower(m.status) as status
@@ -1749,13 +1880,13 @@ begin
     where n.room_id in (select room_id from does) and n.task_type is not null and n.archived_at is null
     group by n.room_id
   ),
-  nxt as (   -- 미제출 ∧ end_date ≥ today 중 마감 빠른 것, 같은 날이면 트리 순서 (main §3-2)
+  nxt as (   -- OPEN(start ≤ today ≤ end) ∧ 미제출 중 마감 빠른 것, 같은 날이면 트리 순서 (main §3-2, D14)
     select distinct on (n.room_id) n.room_id, n.id as node_id, n.title, n.end_date
     from public.goal_nodes n
     join public.task_assignments a on a.node_id = n.id and a.user_id = v_uid and a.released_at is null
     left join public.submissions s on s.node_id = n.id and s.user_id = v_uid
     where n.room_id in (select room_id from does) and n.task_type is not null and n.archived_at is null
-      and s.id is null and n.end_date >= v_today
+      and s.id is null and n.start_date <= v_today and n.end_date >= v_today
     order by n.room_id, n.end_date, n.sort_order, n.id
   )
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -1793,12 +1924,15 @@ begin
     'items', v_items, 'page', v_page, 'size', v_size, 'totalElements', v_total,
     'tabCounts', v_counts, 'tagFacets', v_facets);
 end $$;
+
+-- ───────── 공개 RPC GRANT (D7) — 비로그인 허용(공개) ─────────
+grant execute on function public.rooms_list(text, text, text, text[], int, int, text) to anon, authenticated;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
 Run: `npm run test:db -- --filter "rooms: rooms_list"`
-Expected: 6 PASS. (`page` CTE 의 `row_number() over ()` 는 안쪽 서브쿼리의 정렬을 따른다 — 순서가 어긋나면 `order by p.ord` 대신 안쪽 서브쿼리에 `row_number() over (order by …)` 를 같은 정렬식으로 넣는다.)
+Expected: 6 PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -1828,7 +1962,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   - `public.room_members_get(p_slug text) returns jsonb` — `{ today, items: RoomDetail["members"] }` 전 상태, 그룹장.
   - 검사 순서(모든 참가 함수 공통): `require_user` → `room_lock` → 보관·상태(`ROOM_NOT_RECRUITING`) → 그룹장(`OWNER_CANNOT_JOIN`) → 비공개 접근(`ROOM_NOT_FOUND` / `INVITE_REVOKED`) → 참가 방식(`JOIN_MODE_MISMATCH`) → 기존 행(`ALREADY_MEMBER` / `ALREADY_PENDING` / `MEMBER_NOT_ACTIVE`) → 정원(`ROOM_FULL`).
   - 재신청·재참가는 **같은 행** 의 status 되돌림(D3). INACTIVE 는 재참가 거부(`MEMBER_NOT_ACTIVE`).
-  - 알림(자리표 호출): `JOIN_REQUESTED`(그룹장, prefix `JOIN_REQUESTED:<room>:<user>:<applied_at epoch>` — 거절 후 재신청도 다시 알림), `JOIN_APPROVED`/`JOIN_REJECTED`(신청자, prefix `<KIND>:<room>:<user>:<decided_at epoch>`).
+  - 알림(자리표 호출, 행위 이벤트 → D8 prefix `<KIND>:<room>:<user>:` || `txid_current()` — 거절 후 재신청도 다시 알림): `JOIN_REQUESTED`(그룹장), `JOIN_APPROVED`/`JOIN_REJECTED`(신청자). 행위자 제외는 `notify_publish` 몫이라 호출부는 신경 쓰지 않는다.
 
 - [ ] **Step 1: 실패하는 테스트 — 표 기반 상태 머신 + 정원**
 
@@ -1837,7 +1971,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 ```ts
 import { asAnon, asUser, setToday } from "./_harness.ts";
 import { assertEquals, assertNotEquals } from "@std/assert";
-import { type Case, type Q, TODAY, USERS, createRoom, expectFail, seedLeaves } from "./_cases-rooms.ts";
+import { type Case, type Q, TODAY, USERS, createRoom, expectFailSql, seedLeaves } from "./_cases-rooms.ts";
 
 /** 리프 1개(공통) + 지정 1개를 가진 RECRUIT 방. 반환: { id, slug, leafIds } */
 export async function openRoom(q: Q, leader: string, over: Parameters<typeof createRoom>[2] = {}) {
@@ -1862,7 +1996,7 @@ async function runTable(q: Q, slug: string, steps: Step[]) {
   for (const s of steps) {
     if (s.as === null) await asAnon(q); else await asUser(q, s.as);
     const sql = `select public.${s.fn}($1${(s.args ?? []).map((_, i) => `, $${i + 2}`).join("")}) as r`;
-    if (s.code) await expectFail(q, sql, [slug, ...(s.args ?? [])], s.code);
+    if (s.code) await expectFailSql(q, sql, [slug, ...(s.args ?? [])], s.code);
     else await q(sql, [slug, ...(s.args ?? [])]);
   }
 }
@@ -1900,8 +2034,8 @@ export const MEMBERSHIP_CASES: Case[] = [
       assertEquals([m2.id, m2.status, m2.left_at !== null], [m1.id, "CANCELED", true]);
       assertEquals(await count(q, r.id), 1);
       assertEquals(await asg(q, r.leafIds[0], USERS.민수), false);
-      await expectFail(q, `select public.room_leave($1)`, [r.slug], "NOT_MEMBER");
-      await expectFail(q, `select public.room_cancel_application($1)`, [r.slug], "NOT_FOUND");
+      await expectFailSql(q, `select public.room_leave($1)`, [r.slug], "NOT_MEMBER");
+      await expectFailSql(q, `select public.room_cancel_application($1)`, [r.slug], "NOT_FOUND");
       await q(`select public.room_join($1)`, [r.slug]);
       const m3 = await member(q, r.id, USERS.민수);
       assertEquals([m3.id, m3.status, m3.left_at], [m1.id, "ACTIVE", null]);
@@ -1909,21 +2043,21 @@ export const MEMBERSHIP_CASES: Case[] = [
       // INACTIVE 는 재참가 거부 (member_deactivate 는 플랜 04 — 여기선 행을 직접 바꾼다)
       await q(`update public.room_members set status = 'INACTIVE', left_at = now() where room_id = $1 and user_id = $2`, [r.id, USERS.민수]);
       await q(`select public.room_release_seat($1)`, [r.id]);
-      await expectFail(q, `select public.room_join($1)`, [r.slug], "MEMBER_NOT_ACTIVE");
+      await expectFailSql(q, `select public.room_join($1)`, [r.slug], "MEMBER_NOT_ACTIVE");
       // ACTIVE 방에서는 참가·취소 불가
       await asUser(q, USERS.현우);
       await q(`select public.room_join($1)`, [r.slug]);
       await asUser(q, USERS.서연);
       await q(`select public.room_start($1)`, [r.slug]);
       await asUser(q, USERS.현우);
-      await expectFail(q, `select public.room_leave($1)`, [r.slug], "ROOM_NOT_RECRUITING");
+      await expectFailSql(q, `select public.room_leave($1)`, [r.slug], "ROOM_NOT_RECRUITING");
       await asUser(q, USERS.지훈);
-      await expectFail(q, `select public.room_join($1)`, [r.slug], "ROOM_NOT_RECRUITING");
+      await expectFailSql(q, `select public.room_join($1)`, [r.slug], "ROOM_NOT_RECRUITING");
       // DRAFT 방도 모집중이 아니다
       const d = await createRoom(q, USERS.서연, { title: "Draft" });
       await asUser(q, USERS.지훈);
-      await expectFail(q, `select public.room_join($1)`, [d.slug], "ROOM_NOT_RECRUITING");
-      await expectFail(q, `select public.room_join($1)`, ["no-such-room"], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_join($1)`, [d.slug], "ROOM_NOT_RECRUITING");
+      await expectFailSql(q, `select public.room_join($1)`, ["no-such-room"], "ROOM_NOT_FOUND");
     },
   },
   {
@@ -1978,7 +2112,7 @@ export const MEMBERSHIP_CASES: Case[] = [
       // 신청 취소 → CANCELED, 두 번째는 NOT_FOUND
       await q(`select public.room_cancel_application($1)`, [r.slug]);
       assertEquals((await member(q, r.id, USERS.민수)).status, "CANCELED");
-      await expectFail(q, `select public.room_cancel_application($1)`, [r.slug], "NOT_FOUND");
+      await expectFailSql(q, `select public.room_cancel_application($1)`, [r.slug], "NOT_FOUND");
       // 세 번째 신청 → 승인 → ACTIVE, joined_at, 자리 +1, 배정 생성
       await q(`select public.room_apply($1)`, [r.slug]);
       await asUser(q, USERS.서연);
@@ -1990,17 +2124,17 @@ export const MEMBERSHIP_CASES: Case[] = [
       assertEquals(await count(q, r.id), 2);
       assertEquals(await asg(q, r.leafIds[0], USERS.민수), true);
       await asUser(q, USERS.민수);
-      await expectFail(q, `select public.room_cancel_application($1)`, [r.slug], "ALREADY_DECIDED");
-      await expectFail(q, `select public.room_apply($1)`, [r.slug], "ALREADY_MEMBER");
+      await expectFailSql(q, `select public.room_cancel_application($1)`, [r.slug], "ALREADY_DECIDED");
+      await expectFailSql(q, `select public.room_apply($1)`, [r.slug], "ALREADY_MEMBER");
       // 승인은 RECRUIT 에서만
       await asUser(q, USERS.현우);
       await q(`select public.room_apply($1)`, [r.slug]);
       await asUser(q, USERS.서연);
       await q(`select public.room_start($1)`, [r.slug]);                       // 현우 PENDING → EXPIRED
       assertEquals((await member(q, r.id, USERS.현우)).status, "EXPIRED");
-      await expectFail(q, `select public.room_approve($1, $2)`, [r.slug, USERS.현우], "ROOM_NOT_RECRUITING");
+      await expectFailSql(q, `select public.room_approve($1, $2)`, [r.slug, USERS.현우], "ROOM_NOT_RECRUITING");
       await asUser(q, USERS.현우);
-      await expectFail(q, `select public.room_cancel_application($1)`, [r.slug], "ALREADY_DECIDED");
+      await expectFailSql(q, `select public.room_cancel_application($1)`, [r.slug], "ALREADY_DECIDED");
     },
   },
   {
@@ -2008,9 +2142,9 @@ export const MEMBERSHIP_CASES: Case[] = [
     run: async (q) => {
       await setToday(q, TODAY);
       await asUser(q, USERS.철수);
-      await expectFail(q, `select public.room_apply($1)`, ["jcg"], "ROOM_FULL");
+      await expectFailSql(q, `select public.room_apply($1)`, ["jcg"], "ROOM_FULL");
       await q(`update public.rooms set join_mode = 'DIRECT' where slug = 'jcg'`);
-      await expectFail(q, `select public.room_join($1)`, ["jcg"], "ROOM_FULL");
+      await expectFailSql(q, `select public.room_join($1)`, ["jcg"], "ROOM_FULL");
       assertEquals(await member(q, "5", USERS.철수), null);
       assertEquals(await count(q, "5"), 4);
       // 승인 초과
@@ -2019,7 +2153,7 @@ export const MEMBERSHIP_CASES: Case[] = [
       await asUser(q, USERS.현우); await q(`select public.room_apply($1)`, [r.slug]);
       await asUser(q, USERS.서연);
       await q(`select public.room_approve($1, $2)`, [r.slug, USERS.민수]);
-      await expectFail(q, `select public.room_approve($1, $2)`, [r.slug, USERS.현우], "ROOM_FULL");
+      await expectFailSql(q, `select public.room_approve($1, $2)`, [r.slug, USERS.현우], "ROOM_FULL");
       assertEquals((await member(q, r.id, USERS.현우)).status, "PENDING");
       assertEquals(await count(q, r.id), 2);
       // 시드: 가은이 철수 승인 → sqld 2/5
@@ -2036,10 +2170,10 @@ export const MEMBERSHIP_CASES: Case[] = [
       const r = await openRoom(q, USERS.서연, { isPublic: false });
       const [{ token }] = await q(`select token from public.room_invites where room_id = $1 and revoked_at is null`, [r.id]);
       await asUser(q, USERS.민수);
-      await expectFail(q, `select public.room_join($1)`, [r.slug], "ROOM_NOT_FOUND");
-      await expectFail(q, `select public.room_join($1, $2)`, [r.slug, "bogus"], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_join($1)`, [r.slug], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_join($1, $2)`, [r.slug, "bogus"], "ROOM_NOT_FOUND");
       await q(`update public.room_invites set revoked_at = now() where token = $1`, [token]);
-      await expectFail(q, `select public.room_join($1, $2)`, [r.slug, token], "INVITE_REVOKED");
+      await expectFailSql(q, `select public.room_join($1, $2)`, [r.slug, token], "INVITE_REVOKED");
       await q(`update public.room_invites set revoked_at = null where token = $1`, [token]);
       const [{ res }] = await q(`select public.room_join($1, $2) as res`, [r.slug, token]);
       assertEquals(res.me, { state: "active" });
@@ -2161,7 +2295,7 @@ begin
         decided_at = null, decided_by = null, left_at = null, updated_at = now();
   perform public.assignment_resync(r.id);
   perform public.notify_publish('JOIN_REQUESTED', r.id, null, v_uid, array[r.leader_id],
-    'JOIN_REQUESTED:' || r.id || ':' || v_uid || ':' || floor(extract(epoch from v_now))::bigint,
+    'JOIN_REQUESTED:' || r.id || ':' || v_uid || ':' || txid_current(),
     jsonb_build_object('applicant', public.person_json(v_uid)));
   return public.membership_result(r.id, v_uid);
 end $$;
@@ -2226,7 +2360,7 @@ begin
    where id = m.id;
   perform public.assignment_resync(r.id);
   perform public.notify_publish('JOIN_APPROVED', r.id, null, v_uid, array[p_user],
-    'JOIN_APPROVED:' || r.id || ':' || p_user || ':' || floor(extract(epoch from v_now))::bigint, '{}'::jsonb);
+    'JOIN_APPROVED:' || r.id || ':' || p_user || ':' || txid_current(), '{}'::jsonb);
   return public.membership_result(r.id, v_uid);
 end $$;
 
@@ -2240,7 +2374,7 @@ begin
   update public.room_members set status = 'REJECTED', decided_at = v_now, decided_by = v_uid, updated_at = now() where id = m.id;
   perform public.assignment_resync(r.id);
   perform public.notify_publish('JOIN_REJECTED', r.id, null, v_uid, array[p_user],
-    'JOIN_REJECTED:' || r.id || ':' || p_user || ':' || floor(extract(epoch from v_now))::bigint, '{}'::jsonb);
+    'JOIN_REJECTED:' || r.id || ':' || p_user || ':' || txid_current(), '{}'::jsonb);
   return public.membership_result(r.id, v_uid);
 end $$;
 
@@ -2274,12 +2408,22 @@ begin
                order by (m.role = 'LEADER') desc, m.joined_at nulls last, m.applied_at nulls last, m.id)
       from public.room_members m where m.room_id = r.id), '[]'::jsonb));
 end $$;
+
+-- ───────── 공개 RPC GRANT (D7) — membership_result·invite_check·*_precheck 는 GRANT 없음 ─────────
+grant execute on function public.room_join(text, text)            to authenticated;
+grant execute on function public.room_apply(text, text)           to authenticated;
+grant execute on function public.room_leave(text)                 to authenticated;
+grant execute on function public.room_cancel_application(text)    to authenticated;
+grant execute on function public.room_approve(text, uuid)         to authenticated;
+grant execute on function public.room_reject(text, uuid)          to authenticated;
+grant execute on function public.room_applications(text)          to authenticated;
+grant execute on function public.room_members_get(text)           to authenticated;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인 (이전에 미뤄둔 rooms 사례 포함)**
 
 Run: `npm run test:db`
-Expected: `membership:` 4 PASS. `rooms: room_start …`, `rooms: room_update: 상태별 필드 잠금 …` 두 사례도 이제 PASS(`room_apply`/`room_join` 생김). 전체 녹색.
+Expected: `membership:` 4 PASS. `rooms: room_start …`, `rooms: room_tick …`, `rooms: room_update: 상태별 필드 잠금 …` 세 사례도 이제 PASS(`room_apply`/`room_join` 생김). 전체 녹색.
 
 - [ ] **Step 5: Commit**
 
@@ -2296,7 +2440,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 ### Task 6: 초대 — `invite_get` · `invite_rotate` · `invite_preview` · `invite_join`
 
 **Files:**
-- Modify: `supabase/migrations/0005_membership.sql` (끝에 추가 + 내부 함수 revoke)
+- Modify: `supabase/migrations/0005_membership.sql` (끝에 추가 + 공개 RPC GRANT)
 - Modify: `supabase/tests/_cases-membership.ts` (사례 추가)
 
 **Interfaces:**
@@ -2307,7 +2451,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   - `public.invite_resolve(p_token text) returns public.rooms` — 내부. 없음 `INVITE_NOT_FOUND`, 회전됨 `INVITE_REVOKED`, 방이 DRAFT·보관이면 `INVITE_NOT_FOUND`(숨김).
   - `public.invite_preview(p_token text) returns jsonb` — 비로그인 허용. `{ today, room: { slug, title, intro, startDate, endDate, memberCount, maxMembers, status, isPublic, joinMode, tags }, leader, me }`.
   - `public.invite_join(p_token text) returns jsonb` — 로그인. `join_mode` 가 DIRECT 면 `room_join(slug, token)`, APPROVAL 이면 `room_apply(slug, token)` 에 위임(비공개 우회·에러 코드 동일).
-  - 0004·0005 의 내부 전용 함수는 `revoke execute … from anon, authenticated`(플랜 01 종료 게이트 지침).
+  - 권한(D7, GRANT-only): `invite_preview` → `anon, authenticated`(공개), `invite_get`·`invite_rotate`·`invite_join` → `authenticated`. `invite_resolve` 는 GRANT 없음. 내부 함수에 `revoke` 를 따로 걸지 않는다(0002 default privileges 가 이미 비공개).
 
 - [ ] **Step 1: 실패하는 테스트**
 
@@ -2319,8 +2463,8 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
     run: async (q) => {
       await setToday(q, TODAY);
       await asUser(q, USERS.민수);
-      await expectFail(q, `select public.invite_get($1)`, ["docker"], "NOT_LEADER");
-      await expectFail(q, `select public.invite_rotate($1)`, ["docker"], "NOT_LEADER");
+      await expectFailSql(q, `select public.invite_get($1)`, ["docker"], "NOT_LEADER");
+      await expectFailSql(q, `select public.invite_rotate($1)`, ["docker"], "NOT_LEADER");
       await asUser(q, USERS.철수);
       const [{ g }] = await q(`select public.invite_get($1) as g`, ["docker"]);
       assertEquals(g, { today: TODAY, token: "seed-docker", url: "/invite/seed-docker" });
@@ -2330,8 +2474,8 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       const [{ cnt }] = await q(`select count(*)::int as cnt from public.room_invites where room_id = 4 and revoked_at is null`);
       assertEquals(cnt, 1);
       await asAnon(q);
-      await expectFail(q, `select public.invite_preview($1)`, ["seed-docker"], "INVITE_REVOKED");
-      await expectFail(q, `select public.invite_preview($1)`, ["no-such-token"], "INVITE_NOT_FOUND");
+      await expectFailSql(q, `select public.invite_preview($1)`, ["seed-docker"], "INVITE_REVOKED");
+      await expectFailSql(q, `select public.invite_preview($1)`, ["no-such-token"], "INVITE_NOT_FOUND");
       const [{ p }] = await q(`select public.invite_preview($1) as p`, [n.token]);
       assertEquals(p.room.slug, "docker");
       // 토큰이 없던 방(초대 행 삭제)도 invite_get 이 만들어 준다
@@ -2339,7 +2483,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       await q(`delete from public.room_invites where room_id = 4`);
       const [{ g2 }] = await q(`select public.invite_get($1) as g2`, ["docker"]);
       assertEquals(g2.token.length, 32);
-      await expectFail(q, `select public.invite_get($1)`, ["no-such-room"], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.invite_get($1)`, ["no-such-room"], "ROOM_NOT_FOUND");
     },
   },
   {
@@ -2367,12 +2511,12 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       const d = await createRoom(q, USERS.서연);
       const [{ token }] = await q(`select token from public.room_invites where room_id = $1`, [d.id]);
       await asAnon(q);
-      await expectFail(q, `select public.invite_preview($1)`, [token], "INVITE_NOT_FOUND");
+      await expectFailSql(q, `select public.invite_preview($1)`, [token], "INVITE_NOT_FOUND");
       // 보관된 방도 숨김
       await asUser(q, USERS.민수);
       await q(`select public.room_archive('aws')`);
       await asAnon(q);
-      await expectFail(q, `select public.invite_preview($1)`, ["seed-aws"], "INVITE_NOT_FOUND");
+      await expectFailSql(q, `select public.invite_preview($1)`, ["seed-aws"], "INVITE_NOT_FOUND");
     },
   },
   {
@@ -2384,26 +2528,26 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       const tok = async (id: string) => (await q(`select token from public.room_invites where room_id = $1 and revoked_at is null`, [id]))[0].token as string;
       const td = await tok(direct.id), ta = await tok(appr.id);
       await asAnon(q);
-      await expectFail(q, `select public.invite_join($1)`, [td], "AUTH_REQUIRED");
+      await expectFailSql(q, `select public.invite_join($1)`, [td], "AUTH_REQUIRED");
       await asUser(q, USERS.서연);
-      await expectFail(q, `select public.invite_join($1)`, [td], "OWNER_CANNOT_JOIN");
+      await expectFailSql(q, `select public.invite_join($1)`, [td], "OWNER_CANNOT_JOIN");
       await asUser(q, USERS.민수);
       const [{ a }] = await q(`select public.invite_join($1) as a`, [td]);
       assertEquals([a.me, a.memberCount], [{ state: "active" }, 2]);
       const [{ b }] = await q(`select public.invite_join($1) as b`, [ta]);
       assertEquals([b.me, b.memberCount], [{ state: "pending" }, 1]);
-      await expectFail(q, `select public.invite_join($1)`, [ta], "ALREADY_PENDING");
-      await expectFail(q, `select public.invite_join($1)`, [td], "ALREADY_MEMBER");
+      await expectFailSql(q, `select public.invite_join($1)`, [ta], "ALREADY_PENDING");
+      await expectFailSql(q, `select public.invite_join($1)`, [td], "ALREADY_MEMBER");
       // 회전 뒤 옛 토큰
       await asUser(q, USERS.서연);
       await q(`select public.invite_rotate($1)`, [direct.slug]);
       await asUser(q, USERS.현우);
-      await expectFail(q, `select public.invite_join($1)`, [td], "INVITE_REVOKED");
-      await expectFail(q, `select public.invite_join($1)`, ["no-such-token"], "INVITE_NOT_FOUND");
+      await expectFailSql(q, `select public.invite_join($1)`, [td], "INVITE_REVOKED");
+      await expectFailSql(q, `select public.invite_join($1)`, ["no-such-token"], "INVITE_NOT_FOUND");
       const [{ c }] = await q(`select public.invite_join($1) as c`, [await tok(direct.id)]);
       assertEquals(c.me, { state: "active" });
       // 공개 승인제(jcg, 4/4) 는 토큰으로 와도 ROOM_FULL
-      await expectFail(q, `select public.invite_join($1)`, ["seed-jcg"], "ROOM_FULL");
+      await expectFailSql(q, `select public.invite_join($1)`, ["seed-jcg"], "ROOM_FULL");
     },
   },
 ```
@@ -2413,7 +2557,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 Run: `npm run test:db -- --filter "membership: invite"`
 Expected: 3 FAIL — `function public.invite_get(text) does not exist`.
 
-- [ ] **Step 3: 0005 에 초대 함수 + revoke 추가**
+- [ ] **Step 3: 0005 에 초대 함수 + GRANT 추가**
 
 `supabase/migrations/0005_membership.sql` 끝에 추가:
 
@@ -2482,31 +2626,26 @@ begin
   return public.room_apply(r.slug, p_token);
 end $$;
 
--- ───────── 내부 전용 함수는 RPC 로 노출하지 않는다 (PostgREST 는 public 함수 전부를 노출) ─────────
-revoke execute on function
-  public.notify_publish(text, bigint, bigint, uuid, uuid[], text, jsonb),
-  public.room_lock(text), public.room_readable(bigint, uuid, text),
-  public.room_leaf_stats(bigint), public.room_round_stats(bigint), public.room_current_round_id(bigint, date),
-  public.room_me_json(bigint, uuid), public.room_members_json(bigint, uuid), public.room_detail_json(bigint, uuid),
-  public.invite_ensure(bigint, uuid), public.room_take_seat(bigint), public.room_release_seat(bigint),
-  public.room_transition_active(bigint, uuid), public.room_transition_ended(bigint), public.room_tick(),
-  public.room_in_scope(bigint, text, uuid), public.room_matches(bigint, text, text, text[]),
-  public.assignment_resync(bigint), public.membership_result(bigint, uuid), public.invite_check(bigint, text),
-  public.room_join_precheck(public.rooms, uuid, text, text), public.room_decide_precheck(public.rooms, uuid, uuid),
-  public.invite_resolve(text)
-from anon, authenticated;
+-- ───────── 공개 RPC GRANT (D7) ─────────
+-- 내부 함수(room_lock·*_json·invite_ensure·room_take/release_seat·room_transition_*·room_tick·assignment_resync·
+-- membership_result·invite_check·invite_resolve·*_precheck)는 0002 의 default privileges 로 이미 비공개 — 아무것도 하지 않는다.
+-- (`revoke … from anon, authenticated` 만으로는 PUBLIC 기본 EXECUTE 가 남아 anon 이 임의 uid 로 room_detail_json 을 부를 수 있었다 — 리뷰 D1)
+grant execute on function public.invite_preview(text) to anon, authenticated;
+grant execute on function public.invite_get(text)     to authenticated;
+grant execute on function public.invite_rotate(text)  to authenticated;
+grant execute on function public.invite_join(text)    to authenticated;
 ```
 
 - [ ] **Step 4: 실행해서 통과 확인**
 
 Run: `npm run test:db`
-Expected: `membership:` 7 PASS, 나머지 전부 PASS. PGlite 스텁의 `anon`/`authenticated` 역할이 있어 `revoke` 가 통과한다(플랜 01 `_pglite-stubs.ts` 첫 줄).
+Expected: `membership:` 7 PASS, 나머지 전부 PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add supabase/migrations/0005_membership.sql supabase/tests/_cases-membership.ts
-git commit -m "feat(db): invite get/rotate/preview/join, revoke internal functions from RPC
+git commit -m "feat(db): invite get/rotate/preview/join, grant public RPCs only
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
@@ -2522,7 +2661,8 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Interfaces:**
 - Consumes: Task 1 `room_readable`, `room_detail_json`(members/me/currentRound/rounds/stats/myProgress/invite/pendingCount 전부 여기서 만든다 — `goal_nodes`·`task_assignments`·`submissions` 를 직접 읽음); Task 4 `seedAwsTree`, `room_round_stats`; Task 3 시드; Task 6 `invite_rotate`.
-- Produces: `public.room_get(p_slug text, p_invite_token text default null) returns jsonb` — `RoomDetail` + `today`. 비공개·DRAFT·보관 방은 읽을 자격이 없으면 `ROOM_NOT_FOUND`(D7). 플랜 03 은 `room_round_stats` 를 `create or replace` 로 고도화할 수 있고(`room_progress(p_room)` 추가), `room_detail_json` 의 rounds/stats 가 그 함수를 쓰도록 바꾸려면 0006 에서 `room_detail_json` 도 같은 시그니처로 교체한다.
+- Produces: `public.room_get(p_slug text, p_invite_token text default null) returns jsonb` — `RoomDetail` + `today`. 비공개·DRAFT·보관 방은 읽을 자격이 없으면 `ROOM_NOT_FOUND`(D7). 권한: `anon, authenticated`(공개). 플랜 03 은 `room_detail_json`·`room_round_stats` 를 교체하지 않는다 — 0006 이 `room_leaf_stats` 본문을 `room_progress` 기반으로 바꾸면 rounds/stats/currentRound 가 그대로 따라온다(B3).
+- 이 Task 에서 함수 권한 단언 사례를 하나 추가한다(내부 헬퍼 anon·authenticated 실행 불가, 공개 RPC 실행 가능).
 
 - [ ] **Step 1: 실패하는 테스트**
 
@@ -2532,6 +2672,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   {
     name: "room_get: me.state matrix for 철수 (toeic none, sqld pending, docker leader, jcg none, aws active, react none, algo active)",
     run: async (q) => {
+      // toeic 빈 트리(rounds [], stats 0) 단언은 플랜 03 Task 2 가 시드 §3 값(rounds 8)으로 다시 쓴다
       await setToday(q, TODAY);
       await asUser(q, USERS.철수);
       const st = async (slug: string) => (await q(`select public.room_get($1) as r`, [slug]))[0].r.me.state;
@@ -2556,14 +2697,14 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       await asAnon(q);
       const [{ r }] = await q(`select public.room_get($1) as r`, ["toeic"]);
       assertEquals([r.me, r.myProgress, r.invite, r.pendingCount], [null, null, null, 0]);
-      await expectFail(q, `select public.room_get($1)`, ["spring"], "ROOM_NOT_FOUND");
-      await expectFail(q, `select public.room_get($1)`, ["nope"], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_get($1)`, ["spring"], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_get($1)`, ["nope"], "ROOM_NOT_FOUND");
       const d = await createRoom(q, USERS.서연, { title: "Draft Hidden" });
       await asAnon(q);
-      await expectFail(q, `select public.room_get($1)`, [d.slug], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_get($1)`, [d.slug], "ROOM_NOT_FOUND");
       await asUser(q, USERS.민수);
-      await expectFail(q, `select public.room_get($1)`, [d.slug], "ROOM_NOT_FOUND");   // 비멤버 로그인도 DRAFT 는 못 본다
-      await expectFail(q, `select public.room_get($1)`, ["spring"], "ROOM_NOT_FOUND"); // 비공개 비멤버
+      await expectFailSql(q, `select public.room_get($1)`, [d.slug], "ROOM_NOT_FOUND");   // 비멤버 로그인도 DRAFT 는 못 본다
+      await expectFailSql(q, `select public.room_get($1)`, ["spring"], "ROOM_NOT_FOUND"); // 비공개 비멤버
       await asUser(q, USERS.서연);
       assertEquals((await q(`select public.room_get($1) as r`, [d.slug]))[0].r.status, "draft");
     },
@@ -2585,8 +2726,9 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
     },
   },
   {
-    name: "room_get: aws with tree — currentRound 2주차 tasks/people, rounds 5/8·1/3·0/4, stats, myProgress 2/4 next EC2, 도윤 inactive listed",
+    name: "room_get: aws with tree (seedAwsTree 부분 트리) — currentRound 2주차 tasks/people, rounds 5/8·1/3·0/4, stats, myProgress 2/4 next EC2, 도윤 inactive listed",
     run: async (q) => {
+      // 플랜 03 Task 2 가 이 사례를 전체 시드 값으로 다시 쓴다(헬퍼 호출 제거, 철수 2/6)
       await setToday(q, TODAY);
       const t = await seedAwsTree(q);
       await asUser(q, USERS.철수);
@@ -2627,10 +2769,10 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       await asUser(q, USERS.철수);
       assertEquals((await q(`select public.room_get('aws') as r`))[0].r.archived, true);
       await asUser(q, USERS.서연);
-      await expectFail(q, `select public.room_get('aws')`, [], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_get('aws')`, [], "ROOM_NOT_FOUND");
       await asAnon(q);
-      await expectFail(q, `select public.room_get('aws')`, [], "ROOM_NOT_FOUND");
-      await expectFail(q, `select public.room_get('aws', 'seed-aws')`, [], "ROOM_NOT_FOUND");   // 토큰도 보관 방은 못 연다
+      await expectFailSql(q, `select public.room_get('aws')`, [], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_get('aws', 'seed-aws')`, [], "ROOM_NOT_FOUND");   // 토큰도 보관 방은 못 연다
       // 비공개 spring: 토큰으로 비멤버·비로그인 읽기
       const [{ r }] = await q(`select public.room_get('spring', 'seed-spring') as r`);
       assertEquals([r.slug, r.me], ["spring", null]);
@@ -2639,15 +2781,40 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
       await asUser(q, USERS.지훈);
       await q(`select public.invite_rotate('spring')`);
       await asUser(q, USERS.서연);
-      await expectFail(q, `select public.room_get('spring', 'seed-spring')`, [], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_get('spring', 'seed-spring')`, [], "ROOM_NOT_FOUND");
+    },
+  },
+  {
+    name: "privileges (D7): internal helpers not executable by anon/authenticated; public RPCs are",
+    run: async (q) => {
+      const can = async (role: string, fn: string) =>
+        (await q(`select has_function_privilege($1, $2, 'execute') as ok`, [role, fn]))[0].ok as boolean;
+      // 리뷰 D1 의 노출 경로: 임의 uid 를 받는 JSON 빌더·전환·초대 토큰 생성
+      for (const fn of [
+        "public.room_detail_json(bigint,uuid)", "public.membership_result(bigint,uuid)",
+        "public.room_transition_active(bigint,uuid)", "public.room_transition_ended(bigint)",
+        "public.invite_ensure(bigint,uuid)", "public.room_take_seat(bigint)", "public.room_release_seat(bigint)",
+        "public.room_tick()", "public.assignment_resync(bigint)", "public.room_lock(text)",
+        "public.notify_publish(text,bigint,bigint,uuid,uuid[],text,jsonb)", "public.patch_date(jsonb,text)",
+      ]) {
+        assertEquals(await can("anon", fn), false, `anon → ${fn}`);
+        assertEquals(await can("authenticated", fn), false, `authenticated → ${fn}`);
+      }
+      for (const fn of ["public.rooms_list(text,text,text,text[],integer,integer,text)", "public.room_get(text,text)", "public.invite_preview(text)"]) {
+        assertEquals(await can("anon", fn), true, fn);
+      }
+      for (const fn of ["public.room_join(text,text)", "public.room_update(text,jsonb)", "public.invite_join(text)"]) {
+        assertEquals(await can("anon", fn), false, fn);
+        assertEquals(await can("authenticated", fn), true, fn);
+      }
     },
   },
 ```
 
 - [ ] **Step 2: 실행해서 실패 확인**
 
-Run: `npm run test:db -- --filter "rooms: room_get"`
-Expected: 5 FAIL — `function public.room_get(text) does not exist`.
+Run: `npm run test:db -- --filter "rooms: room_get|rooms: privileges"`
+Expected: 6 FAIL — `function public.room_get(text) does not exist`(privileges 사례는 `has_function_privilege` 가 없는 함수 이름에서 실패).
 
 - [ ] **Step 3: 0004 에 `room_get` 추가**
 
@@ -2665,6 +2832,8 @@ begin
   end if;
   return public.room_detail_json(v_id, v_uid);
 end $$;
+
+grant execute on function public.room_get(text, text) to anon, authenticated;
 ```
 
 `room_detail_json` 이 그룹장에게 `invite_ensure` 로 토큰을 **만들 수 있으므로**(쓰기) `room_get` 은 `stable` 로 선언하지 않는다. PostgREST 는 volatile 함수도 `POST /rpc` 로 호출하므로 어댑터에는 영향 없다.
@@ -2672,7 +2841,7 @@ end $$;
 - [ ] **Step 4: 실행해서 통과 확인**
 
 Run: `npm run test:db`
-Expected: `rooms: room_get` 5 PASS, 전체 녹색. `startWeekdays: [4]` 는 2026-10-01·10-08·10-15 가 전부 목요일(isodow 4)이라는 뜻. 1주차 `pct 63` 은 `pct(8,5)` 의 half-up.
+Expected: `rooms: room_get` 5 + `rooms: privileges` 1 PASS, 전체 녹색. `startWeekdays: [4]` 는 2026-10-01·10-08·10-15 가 전부 목요일(isodow 4)이라는 뜻. 1주차 `pct 63` 은 `pct(8,5)` 의 half-up.
 
 - [ ] **Step 5: Commit**
 
@@ -2782,9 +2951,15 @@ dbTest("rpc error mapping: message = code, details = Korean, hint = json", async
   const r3 = await u.c.rpc("room_apply", { p_slug: "jcg" });
   assertEquals(r3.error?.message, "ROOM_FULL");
   assertEquals(JSON.parse(r3.error!.hint!), { field: "maxMembers" });
-  // 내부 함수는 RPC 로 보이지 않는다
+  // 내부 함수는 RPC 로 부를 수 없다 — Supabase 기본 GRANT 까지 걷어낸 0002 default privileges 의 실측(D1)
   const r4 = await u.c.rpc("assignment_resync", { p_room: 6 });
   assert(r4.error !== null, "assignment_resync must not be callable through PostgREST");
+  // 임의 uid(비공개 spring 그룹장 지훈)로 상세+초대 URL 을 빼내던 경로
+  const r5 = await anon().rpc("room_detail_json", { p_room: 9, p_uid: "00000000-0000-4000-8000-000000000004" });
+  assert(r5.error !== null, "room_detail_json must not be callable by anon");
+  assert(["42501", "PGRST202"].includes(r5.error!.code), `unexpected ${r5.error!.code}: ${r5.error!.message}`);
+  const r6 = await u.c.rpc("room_transition_active", { p_room: 6, p_actor: u.id });
+  assert(r6.error !== null, "room_transition_active must not be callable by authenticated");
 });
 
 dbTest("rooms_list/room_get through PostgREST for anon: 8 public rooms, aws detail", async () => {
@@ -2811,7 +2986,7 @@ npm run db:reset
 eval "$(supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY
 npm run test:db -- --filter "db:"
 ```
-Expected: reset 로그에 `0004_rooms.sql`, `0005_membership.sql` 적용 + 시드. `db:` 4 PASS(플랜 01 의 6 포함 10). race 사례는 `["OK","ROOM_FULL"]` — 두 번 돌려도 같다(방을 매번 새로 만들고 지운다). `assignment_resync` RPC 는 `permission denied for function` 또는 404 — 둘 다 "에러" 로 통과.
+Expected: reset 로그에 `0004_rooms.sql`, `0005_membership.sql` 적용 + 시드. `db:` 4 PASS(플랜 01 의 7 포함 11). race 사례는 `["OK","ROOM_FULL"]` — 두 번 돌려도 같다(방을 매번 새로 만들고 지운다). `rpc error mapping` 사례의 내부 함수 호출(`assignment_resync`·`room_detail_json`·`room_transition_active`)은 **에러여야 통과**한다 — `42501 permission denied for function …`(또는 스키마 캐시에서 빠진 `PGRST202`). 하나라도 `error === null` 이면 0002 첫 문장의 `alter default privileges … from public, anon, authenticated` 가 빠졌거나 어떤 Task 가 내부 함수에 GRANT 를 건 것이다 — 통과로 넘기지 말고 고친다.
 
 - [ ] **Step 4: Commit**
 
@@ -2827,20 +3002,22 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 ## Phase 종료 게이트
 
-- [ ] `npm run test:db` 전부 통과 — PGlite: 플랜 01 39 + `rooms:` 21(Task 1 3 · Task 2 6 · Task 3 1 · Task 4 6 · Task 7 5 — Task 2 의 "room_archive/unarchive/delete" 는 Task 3 뒤, `room_start`·`room_update 잠금` 은 Task 5 뒤에 녹색) + `membership:` 7. `SUPABASE_URL` 등이 있으면 `db:` 10.
+- [ ] `npm run test:db` 전부 통과 — PGlite: 플랜 01 46 + `rooms:` 22(Task 1 3 · Task 2 6 · Task 3 1 · Task 4 6 · Task 7 6 — Task 2 의 "room_archive/unarchive/delete" 는 Task 3 뒤, `room_start`·`room_tick`·`room_update 잠금` 은 Task 5 뒤에 녹색) + `membership:` 7. `SUPABASE_URL` 등이 있으면 `db:` 11.
 - [ ] `supabase db reset` 이 0001→0002→0003→0004→0005→seed 순으로 깨끗이 적용되고, Studio 에서 `rooms` 9행·`room_members` 33행·`tags` 19행·`room_invites` 9행이 보인다.
 - [ ] `npm run db:types` 로 `database.types.ts` 재생성 → `rooms_list`, `room_get`, `room_join` 등 RPC 가 `Functions` 에 잡힌다(플랜 05 어댑터가 쓴다).
 - [ ] 다음 계획(`…-03-curriculum-progress.md`)에 넘기는 것:
   - 노드 쓰기 함수는 `room_lock(p_slug)` → 편집 가능 상태(DRAFT·RECRUIT·ACTIVE ∧ 보관 아님) 검사 → 끝에 `assignment_resync(room_id)`. `seedLeaves`(테스트 헬퍼)가 직접 INSERT 하던 자리를 `node_create` 로 바꾸되 사례의 기대값은 유지.
-  - `room_round_stats(p_room)` 와 `room_leaf_stats(p_room)` 는 시그니처 고정, 본문은 0006 에서 `create or replace` 가능. `room_detail_json` 의 rounds/stats 를 바꾸고 싶으면 같은 시그니처로 교체.
-  - 시드 §3(트리·배정·제출)은 §2 뒤에 붙이고 마지막에 `select assignment_resync(id) from rooms` 를 다시 호출. aws 회귀값(24%, 1주차 5/8, 철수 2/4, 다음 마감 EC2 10/14)은 `seedAwsTree` 가 쓰는 제목·날짜와 같아야 한다 — 플랜 03 시드가 들어오면 `seedAwsTree` 호출 사례 둘(Task 4 progress, Task 7 aws)은 헬퍼 호출을 빼고 시드 값으로 단언한다(그때 rounds 가 3→5·13 개로 늘어난다는 점만 반영).
+  - 계층(B3): 0006 은 트리 롤업 `room_progress(p_room)` 를 새로 만들고 `room_leaf_stats(p_room)` 의 **본문**을 그걸 읽도록 `create or replace`(시그니처 고정). `room_round_stats`·`room_detail_json` 은 교체하지 않는다.
+  - 시드 §3(트리·배정·제출)은 §2 뒤(마지막 `app.today` 줄 위)에 붙이고 마지막에 `select assignment_resync(id) from rooms` 를 다시 호출. aws 제목·날짜는 `seedAwsTree` 와 같다.
+  - **사례 갱신 소유(B1)**: 시드 §3 이 들어오면 이 플랜의 사례 3개가 깨진다 — `rooms_list: progress (seedAwsTree 부분 트리)`(aws 회차 중복·react null/0·algo 0/0/0), `room_get: aws with tree`(회차 중복), `room_get: me.state matrix`(toeic `rounds: []`·stats 0). **플랜 03 Task 2 Step 5 가 이 세 사례를 전체 시드 값으로 다시 쓴다**(철수 aws mine 2/6=33% next EC2 10/14 · 민수 2/5 · react team {index 4, totalRounds 8} · algo final 68/78·totalRounds 3 · toeic rounds 8). 이 플랜에서 미리 고치지 않는다.
+  - 내부 헬퍼는 GRANT 하지 않는다. 플랜 03 은 `curriculum_json`·`me_schedule_leaves` 에 대해 같은 `has_function_privilege` 단언을 넣는다.
   - 플랜 04: `0009_tags.sql` 의 태그 slug 19개는 Task 3 시드와 같아야 하며 둘 다 `on conflict (slug) do nothing`. `notify_publish` 는 0004 의 자리표와 **같은 시그니처**로 `create or replace`. `member_deactivate` 는 `room_lock` → INACTIVE 전환 → `room_release_seat` → `assignment_resync` → `membership_result` 순서로 Task 5 함수들과 같은 꼴.
 
 ## Self-Review 메모
 
 - 스펙 커버리지: 03-api §2 `rooms_list`(Task 4)·`room_create`(Task 1)·`room_get`(Task 7)·`room_update`·`room_open_recruit`·`room_start`·`room_archive`/`unarchive`·`room_delete`(Task 2); §3 `room_join`·`room_apply`·`room_leave`·`room_cancel_application`·`room_applications`·`room_approve`·`room_reject`·`room_members_get`(Task 5), `invite_get`·`invite_rotate`·`invite_preview`·`invite_join`(Task 6). `member_deactivate_preview`/`member_deactivate` 는 플랜 04(개요 분담). 02 §3 I7(Task 1 seat 함수 + Task 8 race)·I8(모든 멤버십 함수 끝 resync)·I10(`invite_ensure` + partial unique)·I11(`room_update` slug 잠금); §4.3(Task 4 CTE); §6 방·멤버십·초대 행 전부; §7 `room_tick`(Task 2, 등록은 플랜 04 0010); §8 rooms/room_members/tags/room_tags/invites/settings 시드(Task 3). D2·D3·D4·D11·D13 반영. main §3-6/3-7/3-8/3-9 → Task 4. roomview §2.0 결정 순서는 `me.state` + 프론트 `actionOf`(플랜 05).
 - 플레이스홀더 점검: 없음. 모든 단계에 코드·실행 명령·기대값이 있다.
-- 이름 일치: `room_leaf_stats`·`room_round_stats`·`room_current_round_id`·`room_in_scope`·`room_matches`·`room_detail_json`·`room_me_json`·`room_members_json`·`invite_ensure`·`invite_check`·`invite_resolve`·`room_join_precheck`·`room_decide_precheck`·`membership_result`·`room_take_seat`/`room_release_seat` — 선언과 호출이 같다. 시그니처는 개요 공통 계약 및 플랜 04 의 가정(`room_apply(p_slug, p_invite_token)`, `room_approve(p_slug, p_user)`)과 일치. 테스트 헬퍼 `USERS`·`TODAY`·`expectFail(q, sql, params, code)`·`createRoom`·`seedLeaves`·`seedAwsTree`·`listRooms`·`openRoom` 은 `_cases-rooms.ts`/`_cases-membership.ts` 에 정의되고 그 이름으로만 쓰인다.
-- 하네스 정합성: Task 1·2 본문이 처음에 가정했던 `withCase(name, fn)`/`_seed-users.ts`/`asUser(q, null)` 는 플랜 01 의 실제 export(`withCase(db, fn)` + `sqlTest`, `asAnon`)에 맞춰 고쳤고, `USERS` 는 플랜 01 Task 8 의 seed_users 번호를 그대로 쓴다(철수 01 … 승호 29). `openDb()` 는 마이그레이션을 자동 탐색하므로 등록 단계가 없다.
+- 이름 일치: `room_leaf_stats`·`room_round_stats`·`room_current_round_id`·`room_in_scope`·`room_matches`·`room_detail_json`·`room_me_json`·`room_members_json`·`invite_ensure`·`invite_check`·`invite_resolve`·`room_join_precheck`·`room_decide_precheck`·`membership_result`·`room_take_seat`/`room_release_seat` — 선언과 호출이 같다. 시그니처는 개요 공통 계약 및 플랜 04 의 가정(`room_apply(p_slug, p_invite_token)`, `room_approve(p_slug, p_user)`)과 일치. 테스트 헬퍼 `USERS`·`TODAY`·`expectFailSql(q, sql, params, code)`(하네스 `expectFail(promise, code)` 와 별개 이름)·`createRoom`·`seedLeaves`·`seedAwsTree`·`listRooms`·`openRoom` 은 `_cases-rooms.ts`/`_cases-membership.ts` 에 정의되고 그 이름으로만 쓰인다.
+- 하네스 정합성: 하네스는 플랜 01 `_harness.ts` 하나(`withCase(db, fn)` + `sqlTest`, `asAnon`, `expectFail(promise, code)` 등)를 import 만 한다. 사례 파일의 SQL 형 단언은 `expectFailSql` 로 이름을 달리했다. `USERS` 는 플랜 01 Task 8 의 seed_users 번호를 그대로 쓴다(철수 01 … 승호 29). `openDb()` 는 마이그레이션을 자동 탐색하므로 등록 단계가 없다.
 - Review Focus 5건: 1→Task 8(race), 2→Task 5(approval 표: 같은 행·applied_at 갱신), 3→Task 4(보관 사례)+Task 7(보관 읽기), 4→Task 2(tick 사례), 5→Task 6(rotate 뒤 preview/join)+Task 7(rotate 뒤 room_get).
 - 의도적 미포함: `room_get` 의 커버 이미지 URL(파일은 플랜 04 Storage 뒤 `coverUrl` 로 확장), 태그 facet 의 한국어 collation 정렬(`label` 기본 정렬 — 프론트가 `localeCompare('ko')` 로 최종 정렬), `rooms_list` 의 `popular` 정렬(스펙 미정).

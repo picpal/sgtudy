@@ -1,14 +1,23 @@
-# 슥터디 백엔드 Implementation Plan — 05 프론트 통합 (Phase 7)
+# 슥터디 백엔드 Implementation Plan — 05 프론트 통합 (Phase 7a)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 목업 상수(`src/data/*.ts`)로 돌아가는 4개 화면을 `src/lib/api/*` 어댑터로 Supabase RPC 에 연결하고, 로그인·온보딩·초대·프로필·방 만들기 라우트와 알림 드롭다운을 추가해 Vercel 에 배포한다.
 
-**Architecture:** 화면 컴포넌트는 기존 `src/data/*.ts` 타입을 그대로 받는다. 어댑터가 `03-api.md` DTO → 화면 타입 변환(문구 조립·D-day·회차 창·glance)을 담당하고, 순수 변환 함수는 Vitest 로 목업 숫자(toeic 8주, aws 50% D-2, algo 87%)를 회귀값으로 검증한다. 세션은 `@supabase/ssr` 쿠키(Phase 0 의 `src/lib/supabase/*`), "오늘"과 로그인 사용자는 루트 레이아웃이 한 번 받아 React Context 로 내려준다. 쓰기는 전부 RPC, 낙관적 갱신은 서버 응답으로 교체한다.
+**Architecture:** 화면 컴포넌트는 기존 `src/data/*.ts` 타입을 그대로 받는다. 어댑터가 `03-api.md` DTO → 화면 타입 변환(문구 조립·D-day·회차 창·glance)을 담당하고, 순수 변환 함수는 Vitest 로 목업·시드 숫자(toeic 8주, aws 내 진척률 **33%(2/6, D5)** D-2, algo 87%)를 회귀값으로 검증한다. 세션은 `@supabase/ssr` 쿠키(Phase 0 의 `src/lib/supabase/*`), "오늘"과 로그인 사용자는 루트 레이아웃이 한 번 받아 React Context 로 내려준다. 쓰기는 전부 RPC, 낙관적 갱신은 서버 응답으로 교체한다.
 
 **Tech Stack:** Next.js 16 App Router(기존), React 19, `@supabase/ssr` 0.5 + `supabase-js` 2(Phase 0 설치), Vitest 3(신규 devDependency), ego-browser 스킬(E2E), Vercel CLI.
 
-**Spec:** `docs/superpowers/plans/2026-10-13-backend-00-overview.md`(공통 계약), `docs/backend/01-decisions.md`(D1·D6·D7·D13·D14), `docs/backend/03-api.md`(DTO), `docs/backend/analysis/{main,roomview,mystudy,schedule,cross-cutting}.md` §3·§6, `docs/claude-design-prompt.md` §4.1·§4.3·§4.12·§4.13·§4.14·§5, `docs/specs/*.md`(UI 수치·문구).
+**Spec:** `docs/superpowers/plans/2026-10-13-backend-00-overview.md`(공통 계약), `docs/backend/01-decisions.md`(D1·D5·D6·D7·D13·D14), `docs/backend/03-api.md`(DTO), `docs/backend/analysis/{main,roomview,mystudy,schedule,cross-cutting}.md` §3·§6, `docs/claude-design-prompt.md` §4.1·§4.3·§4.12·§4.13·§4.14·§5, `docs/specs/*.md`(UI 수치·문구).
+
+> **범위 밖 → plan 06 (`…-06-leader-and-submission-ui.md`, Phase 7b, 00 개요에 등록됨).** 이 플랜은 "목업 화면을 실데이터로 교체 + 인증 라우트 + 알림"까지만 한다. 아래는 **만들지 않는다** — 해당 자리에 `{/* plan 06 */}` 주석만 남긴다:
+> - §4.10 과제 상세·제출 화면(마크다운 본문·링크·파일 업로드 → `task_get`/`file_register`/`submission_upsert`). 알림 `?task=` 링크는 이 플랜에서 커리큘럼 탭 리프 포커스까지만(Task 12).
+> - §4.4 그룹장 사이드 패널: 승인 대기 목록 승인/거절(`room_approve`/`room_reject`), 초대 링크 복사(`invite_get`).
+> - 방 상태 버튼: **모집 시작**(`room_open_recruit`, DRAFT → RECRUIT), **지금 시작**(`room_start`). → plan 05 만 끝낸 시점에 `/rooms/new` 로 만든 방은 DRAFT 에 머문다(알려진 한계 — E2E 는 시드 방만 쓴다).
+> - §2.6 태그 수동 편집(`room_tags_put`/`room_tags_suggest`), §4.6 들여쓰기·내어쓰기·드래그(`node_move`).
+> - §5 공통 상태 중 라우트별 `loading.tsx`·`not-found.tsx`·권한 없음 화면. 이 플랜은 **루트 `error.tsx` + `meta_get` 실패 폴백만**(Task 2).
+>
+> 따라서 이 플랜의 종료 = **Phase 7a 종료**(백엔드 전체 종료 아님).
 
 ## 선행 조건 (Phase 0–6 완료 가정)
 
@@ -52,13 +61,13 @@
 
 | 경로 | 책임 | 태스크 |
 |---|---|---|
-| `vitest.config.ts`, `package.json` | Vitest 설정, `test` 스크립트 | 1 |
+| (plan 01 Task 3 소유) `vitest.config.ts`, `npm test` | Vitest 설정 — 이 플랜은 재사용만 | — |
 | `src/lib/api/types.ts` | `03-api.md` DTO 타입(단일 출처) | 1 |
 | `src/lib/api/errors.ts` | `ApiError`, `toApiError`, `rpc<T>` | 1 |
-| `src/lib/routes.ts` | 라우트 추가(`login/onboarding/me/invite/createRoom`), `safeReturnTo` | 2 |
+| `src/lib/routes.ts` | 라우트 추가(`login/onboarding/me/invite/createRoom`), plan 01 `safeReturnTo`·`loginUrl` **re-export** | 2 |
 | `src/lib/today.ts` | `TodayProvider` / `useToday` | 2 |
 | `src/lib/me.ts` | `MeProvider` / `useMe` | 2 |
-| `src/app/layout.tsx` | `meta_get`·`me_get` 1회 → Provider | 2 |
+| `src/app/layout.tsx`, `src/app/error.tsx` | `meta_get`·`me_get` 1회 → Provider(실패 시 클라이언트 KST 폴백), 루트 에러 경계 | 2 |
 | `src/lib/api/me.ts`, `src/lib/api/me.server.ts` | `fetchMe`, `updateMe`, `checkNickname`, `requireMe` | 3 |
 | `src/components/ui/AppHeader.tsx` | 익명 변형, 프로필 메뉴, 알림 벨 슬롯 | 3 |
 | `src/lib/api/notifications.ts`, `src/components/ui/NotificationBell.tsx` | 60초 폴링 배지 + 드롭다운 | 4 |
@@ -76,11 +85,9 @@
 
 ---
 
-### Task 1: Vitest 설정 + DTO 타입 + `errors.ts`
+### Task 1: DTO 타입 + `errors.ts` (Vitest 는 plan 01 것 재사용)
 
 **Files:**
-- Create: `vitest.config.ts`
-- Modify: `package.json` (scripts, devDependencies)
 - Create: `src/lib/api/types.ts`
 - Create: `src/lib/api/errors.ts`
 - Test: `src/lib/api/errors.test.ts`
@@ -89,35 +96,12 @@
 - Consumes: `src/lib/supabase/client.ts` 의 `createClient()`, `src/lib/supabase/database.types.ts` 의 `Database`.
 - Produces: `type Db = SupabaseClient<Database>`, `type ApiError`, `class ApiException`, `toApiError(e: unknown): ApiError`, `rpc<T>(name: string, args?: Record<string, unknown>, client?: Db): Promise<T>`, 그리고 `types.ts` 의 모든 DTO 타입. 이후 모든 어댑터는 `rpc` 만 호출한다. 서버 컴포넌트는 세 번째 인자로 `await createClient()`(server) 를 넘기고, 클라이언트 컴포넌트는 생략한다(브라우저 클라이언트 싱글턴).
 
-- [ ] **Step 1: Vitest 설치·설정**
+- [ ] **Step 1: Vitest 확인 (설치·설정하지 않는다)**
 
-```bash
-npm install -D vitest@^3
-```
+plan 01 Task 1·3 이 `vitest` devDependency, `npm test`(= `vitest run`), `vitest.config.ts`(`@` alias, `src/**/*.test.ts`, node 환경)를 이미 만들었다. 다시 만들지 않고 확인만 한다.
 
-`package.json` scripts 에 추가:
-
-```json
-"test": "vitest run",
-"test:watch": "vitest"
-```
-
-`vitest.config.ts`:
-
-```ts
-import path from "node:path";
-import { defineConfig } from "vitest/config";
-
-export default defineConfig({
-  test: {
-    include: ["src/**/*.test.ts"],
-    environment: "node",
-  },
-  resolve: {
-    alias: { "@": path.resolve(__dirname, "src") },
-  },
-});
-```
+Run: `test -f vitest.config.ts && npm pkg get scripts.test && npx vitest run src/lib/supabase/return-to.test.ts`
+Expected: `"vitest run"` 출력, plan 01 의 `return-to` 테스트 통과. 파일이 없으면 이 플랜을 멈추고 plan 01 Task 3 을 먼저 끝낸다.
 
 - [ ] **Step 2: DTO 타입 작성** — `src/lib/api/types.ts` (03-api.md 와 1:1. 모든 읽기 응답은 `today` 포함)
 
@@ -497,23 +481,23 @@ Expected: 6 passed, tsc 에러 0
 - [ ] **Step 7: Commit**
 
 ```bash
-git add vitest.config.ts package.json package-lock.json src/lib/api/types.ts src/lib/api/errors.ts src/lib/api/errors.test.ts
-git commit -m "feat(web): add vitest, api DTO types and rpc/toApiError wrapper"
+git add src/lib/api/types.ts src/lib/api/errors.ts src/lib/api/errors.test.ts
+git commit -m "feat(web): add api DTO types and rpc/toApiError wrapper"
 ```
 
 ---
 
-### Task 2: `routes` 확장 + `TodayProvider` / `MeProvider` + 루트 레이아웃
+### Task 2: `routes` 확장 + `TodayProvider` / `MeProvider` + 루트 레이아웃(폴백·에러 경계)
 
 **Files:**
 - Modify: `src/lib/routes.ts`
-- Create: `src/lib/today.ts`, `src/lib/me.ts`
+- Create: `src/lib/today.ts`, `src/lib/me.ts`, `src/lib/kst.ts`, `src/app/error.tsx`
 - Modify: `src/app/layout.tsx`
-- Test: `src/lib/routes.test.ts`
+- Test: `src/lib/routes.test.ts`, `src/lib/kst.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1 `rpc`, `types.ts` `MetaDto`·`Me`; Phase 0 `createClient`(server).
-- Produces: `routes.login(returnTo?)`, `routes.onboarding(returnTo?)`, `routes.me()`, `routes.invite(token)`, `routes.createRoom() === "/rooms/new"`, `safeReturnTo(raw: string | null | undefined): string`; `TodayProvider({ today, children })`, `useToday(): string`; `MeProvider({ me, children })`, `useMe(): Me | null`. `TODAY`·`ME` 상수는 남기되 화면에서 import 하지 않는다.
+- Consumes: Task 1 `rpc`, `types.ts` `MetaDto`·`Me`; plan 01 `src/lib/supabase/return-to.ts` 의 `safeReturnTo`·`loginUrl`(백슬래시·`..`·공백·제어문자까지 거르는 강한 버전 — **이 플랜은 재구현하지 않고 re-export**), Phase 0 `createClient`(server).
+- Produces: `routes.login(returnTo?)`(= `loginUrl`), `routes.onboarding(returnTo?)`, `routes.me()`, `routes.invite(token)`, `routes.createRoom() === "/rooms/new"`, re-export `safeReturnTo`·`loginUrl`; `kstToday(now?: Date): string`(Intl `Asia/Seoul`, `meta_get` 실패 폴백); `TodayProvider({ today, children })`, `useToday(): string`; `MeProvider({ me, children })`, `useMe(): Me | null`; 루트 `error.tsx`(§5 오류 상태 — 라우트별 `loading/not-found` 는 plan 06). `TODAY`·`ME` 상수는 남기되 화면에서 import 하지 않는다.
 
 **TODAY/ME 를 import 하는 파일 전수(grep 결과) — 각 소유 태스크에서 교체한다:**
 
@@ -536,9 +520,14 @@ git commit -m "feat(web): add vitest, api DTO types and rpc/toApiError wrapper"
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { routes, safeReturnTo } from "./routes";
+import { loginUrl, routes, safeReturnTo } from "./routes";
 
-describe("safeReturnTo", () => {
+describe("safeReturnTo (re-export of plan 01 return-to.ts)", () => {
+  it("is the same function as plan 01", async () => {
+    const p01 = await import("./supabase/return-to");
+    expect(safeReturnTo).toBe(p01.safeReturnTo);
+    expect(loginUrl).toBe(p01.loginUrl);
+  });
   it("allows the four prefixes", () => {
     expect(safeReturnTo("/rooms/aws")).toBe("/rooms/aws");
     expect(safeReturnTo("/my-study")).toBe("/my-study");
@@ -551,6 +540,8 @@ describe("safeReturnTo", () => {
     expect(safeReturnTo("//evil.com")).toBe("/");
     expect(safeReturnTo("/roomsx")).toBe("/");
     expect(safeReturnTo("/me")).toBe("/");
+    expect(safeReturnTo("/\\evil.com")).toBe("/");
+    expect(safeReturnTo("/rooms/../me")).toBe("/");
     expect(safeReturnTo(null)).toBe("/");
     expect(safeReturnTo(undefined)).toBe("/");
   });
@@ -571,11 +562,16 @@ describe("routes", () => {
 - [ ] **Step 2: 실패 확인**
 
 Run: `npx vitest run src/lib/routes.test.ts`
-Expected: FAIL — `safeReturnTo is not a function`
+Expected: FAIL — `safeReturnTo is not a function`(아직 re-export 전)
 
 - [ ] **Step 3: `routes.ts` 수정** (전체 교체)
 
 ```ts
+import { loginUrl } from "@/lib/supabase/return-to";
+
+/** returnTo 검증·로그인 URL 은 plan 01 return-to.ts 가 단일 출처 — 여기서는 다시 내보내기만 한다 */
+export { loginUrl, safeReturnTo } from "@/lib/supabase/return-to";
+
 /** 화면 간 이동 경로. 아트보드 ↔ 라우트 매핑의 단일 출처. */
 const withReturn = (path: string, returnTo?: string) =>
   returnTo ? `${path}?returnTo=${encodeURIComponent(returnTo)}` : path;
@@ -591,8 +587,8 @@ export const routes = {
   schedule: () => "/schedule",
   /** 방 만들기 (디자인 §4.3) */
   createRoom: () => "/rooms/new",
-  /** 이메일 OTP 로그인 (§4.1) */
-  login: (returnTo?: string) => withReturn("/login", returnTo),
+  /** 이메일 OTP 로그인 (§4.1) — returnTo 가 있으면 plan 01 loginUrl 과 같은 값 */
+  login: (returnTo?: string) => (returnTo ? loginUrl(returnTo) : "/login"),
   /** 닉네임 설정 (§4.1) */
   onboarding: (returnTo?: string) => withReturn("/onboarding", returnTo),
   /** 내 프로필 (§4.13) */
@@ -600,14 +596,6 @@ export const routes = {
   /** 초대 링크 진입 (§4.12) */
   invite: (token: string) => `/invite/${token}`,
 } as const;
-
-const RETURN_PREFIXES = ["/rooms/", "/my-study", "/schedule", "/invite/"];
-
-/** D6 — returnTo 는 네 접두사만. 그 외(절대 URL, //host, 알 수 없는 경로)는 홈. */
-export function safeReturnTo(raw: string | null | undefined): string {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
-  return RETURN_PREFIXES.some((p) => raw === p || raw.startsWith(p) || raw.startsWith(`${p}?`)) ? raw : "/";
-}
 
 /** @deprecated 목업 기준 '오늘'. 화면 코드는 useToday() 를 쓴다. 테스트 픽스처 전용. */
 export const TODAY = "2026-10-12";
@@ -619,7 +607,7 @@ export const ME = { name: "철수", initial: "철", tone: "blue" } as const;
 - [ ] **Step 4: 통과 확인**
 
 Run: `npx vitest run src/lib/routes.test.ts`
-Expected: PASS (`/roomsx` 는 `/rooms/` 접두사에 안 맞으므로 `/`; `/my-study/aws?tab=board` 는 `/my-study` 로 시작하므로 통과)
+Expected: PASS (`/roomsx` 는 `/rooms/` 접두사에 안 맞으므로 `/`; `/\evil.com`·`/rooms/../me` 는 plan 01 규칙이 거른다). 이후 모든 태스크는 `safeReturnTo` 를 `@/lib/routes` 에서 import 해도 plan 01 구현을 쓴다(두 번째 구현 없음).
 
 - [ ] **Step 5: `src/lib/today.ts`** (JSX 없이 createElement — `.ts` 유지)
 
@@ -671,6 +659,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans_KR } from "next/font/google";
 import { rpc } from "@/lib/api/errors";
 import type { Me, MetaDto } from "@/lib/api/types";
+import { kstToday } from "@/lib/kst";
 import { MeProvider } from "@/lib/me";
 import { createClient } from "@/lib/supabase/server";
 import { TodayProvider } from "@/lib/today";
@@ -688,23 +677,40 @@ export const metadata: Metadata = {
   description: "함께 목표를 세우고, 누가 어디까지 왔는지 한눈에 확인하세요.",
 };
 
-/** 로그인 안 했으면 null. me_get 은 온보딩 전에도 허용(03-api §1). */
-async function loadMe(client: Awaited<ReturnType<typeof createClient>>): Promise<Me | null> {
-  const {
-    data: { user },
-  } = await client.auth.getUser();
-  if (!user) return null;
-  return rpc<Me>("me_get", {}, client);
+type Server = Awaited<ReturnType<typeof createClient>>;
+
+/** 로그인 안 했으면 null. me_get 은 온보딩 전에도 허용(03-api §1). 실패해도 사이트 전체를 죽이지 않는다 → 익명 취급 */
+async function loadMe(client: Server): Promise<Me | null> {
+  try {
+    const {
+      data: { user },
+    } = await client.auth.getUser();
+    if (!user) return null;
+    return await rpc<Me>("me_get", {}, client);
+  } catch (e) {
+    console.error("[layout] me_get failed — rendering as anonymous", e);
+    return null;
+  }
+}
+
+/** meta_get 실패(DB 다운·네트워크) 시 전 페이지 500 대신 KST 오늘로 폴백(S13). 화면별 응답 today 가 다시 덮어쓴다 */
+async function loadToday(client: Server): Promise<string> {
+  try {
+    return (await rpc<MetaDto>("meta_get", {}, client)).today;
+  } catch (e) {
+    console.error("[layout] meta_get failed — falling back to Intl Asia/Seoul today", e);
+    return kstToday();
+  }
 }
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const client = await createClient();
-  const [meta, me] = await Promise.all([rpc<MetaDto>("meta_get", {}, client), loadMe(client)]);
+  const [today, me] = await Promise.all([loadToday(client), loadMe(client)]);
   return (
     <html lang="ko" className={`${plex.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <MeProvider me={me}>
-          <TodayProvider today={meta.today}>{children}</TodayProvider>
+          <TodayProvider today={today}>{children}</TodayProvider>
         </MeProvider>
       </body>
     </html>
@@ -712,16 +718,74 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 }
 ```
 
-- [ ] **Step 8: 빌드 가능 확인**
+- [ ] **Step 8: `src/lib/kst.ts` + 테스트 + 루트 `src/app/error.tsx`**
+
+`src/lib/kst.test.ts`:
+
+```ts
+import { describe, expect, it } from "vitest";
+import { kstToday } from "./kst";
+
+describe("kstToday", () => {
+  it("uses Asia/Seoul, not the host timezone", () => {
+    expect(kstToday(new Date("2026-10-11T15:30:00Z"))).toBe("2026-10-12");   // KST 10/12 00:30
+    expect(kstToday(new Date("2026-10-11T14:59:59Z"))).toBe("2026-10-11");   // KST 10/11 23:59:59
+  });
+});
+```
+
+`src/lib/kst.ts`(지시어 없음 — 서버·클라이언트 공용):
+
+```ts
+/** KST 오늘(YYYY-MM-DD). 서버 meta_get 이 정본이고, 이건 그 호출이 실패했을 때만 쓰는 폴백이다. */
+export function kstToday(now: Date = new Date()): string {
+  // en-CA 로케일은 YYYY-MM-DD 로 포맷한다
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+```
+
+`src/app/error.tsx` — 루트 에러 경계(§5 "오류" 상태). Next 16 의 `error.js` 는 `retry` 를 받는다(`node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/error.md`). 라우트별 `loading.tsx`·`not-found.tsx` 는 plan 06.
+
+```tsx
+"use client";
+
+import { useEffect } from "react";
+import { routes } from "@/lib/routes";
+
+export default function RootError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+  useEffect(() => {
+    console.error("[app/error]", error);
+  }, [error]);
+
+  return (
+    <main className="mx-auto flex w-full max-w-[480px] flex-1 flex-col items-center justify-center gap-3 px-6 py-24 text-center">
+      <p className="m-0 text-[15px] font-semibold text-ink">화면을 불러오지 못했어요</p>
+      <p className="m-0 text-[13px] text-muted">잠시 후 다시 시도해 주세요.</p>
+      <div className="mt-2 flex gap-2">
+        <button type="button" onClick={() => retry()} className="rounded-lg bg-ink px-4 py-2 text-[13px] font-semibold text-white">
+          다시 시도
+        </button>
+        <a href={routes.home()} className="rounded-lg border border-line px-4 py-2 text-[13px] font-semibold text-ink">
+          홈으로
+        </a>
+      </div>
+    </main>
+  );
+}
+```
+
+- [ ] **Step 9: 빌드 가능 확인**
 
 Run: `npm run lint && npx tsc --noEmit && npx vitest run`
 Expected: 통과. (`npm run dev` 로 http://localhost:3000 열면 기존 목업 화면이 그대로 뜨고 서버 콘솔에 `meta_get` 에러가 없어야 한다 — 로컬 supabase 가 떠 있어야 함)
 
-- [ ] **Step 9: Commit**
+확인: 로컬 supabase 를 멈춘 상태(`supabase stop`)로 `npm run dev` → `/` 가 500 이 아니라 목록 화면 골격 + 목록 영역의 오류 문구로 뜨고, 서버 콘솔에 `[layout] meta_get failed — falling back …` 1줄.
+
+- [ ] **Step 10: Commit**
 
 ```bash
-git add src/lib/routes.ts src/lib/routes.test.ts src/lib/today.ts src/lib/me.ts src/app/layout.tsx
-git commit -m "feat(web): add auth routes, safeReturnTo, Today/Me providers in root layout"
+git add src/lib/routes.ts src/lib/routes.test.ts src/lib/today.ts src/lib/me.ts src/lib/kst.ts src/lib/kst.test.ts src/app/layout.tsx src/app/error.tsx
+git commit -m "feat(web): auth routes re-using plan 01 safeReturnTo, Today/Me providers, meta_get fallback and root error boundary"
 ```
 
 ---
@@ -748,7 +812,7 @@ grep -n -A6 '"rooms_list": {' src/lib/supabase/database.types.ts
 | `curriculum_get` | `p_slug, p_include_archived` | 플랜 03 (가정) |
 | `node_create` | `p_slug, p_parent_id, p_title?, p_label?, p_task_type?, p_start_date?, p_end_date?, p_index?` | 플랜 03 (가정) |
 | `node_update` | `p_slug, p_node_id, p_patch(jsonb: NodePatch)` | 플랜 03 (가정, `room_update(p_slug, p_patch)` 와 같은 꼴) |
-| `node_move` | `p_slug, p_node_id, p_parent_id, p_index` | 플랜 03 (가정) |
+| `node_move` | `p_slug, p_node_id, p_parent_id, p_index` | 플랜 03 확정 — **이 플랜은 호출하지 않는다**(들여쓰기·드래그 UI 는 plan 06) |
 | `node_delete`, `node_archive`, `node_unarchive` | `p_slug, p_node_id` | 플랜 03 (가정) |
 | `me_studies` | 없음 | 플랜 03 (가정) |
 | `me_schedule` | `p_from, p_to` | 플랜 03 (가정) |
@@ -1313,7 +1377,7 @@ export function NotificationBell() {
 - [ ] **Step 7: 검증**
 
 Run: `npm run lint && npx tsc --noEmit && npx vitest run`
-Expected: 통과. 로그인 상태에서 벨 클릭 시 드롭다운이 열리고(시드에 알림이 없으면 "아직 알림이 없어요") 60초 뒤 콘솔 네트워크에 `notifications_unread_count` 호출이 1회 보인다.
+Expected: 통과. 철수로 로그인하면 배지 `3`(plan 04 시드 §4 의 미읽음 3건), 벨 클릭 시 드롭다운에 최신순 3건(일정 변경 → 2주차 시작 → EC2 마감 3일 전). 시드 없는 신규 사용자로 로그인하면 "아직 알림이 없어요". 60초 뒤 네트워크에 `notifications_unread_count` 호출이 1회 보인다.
 
 - [ ] **Step 8: Commit**
 
@@ -2065,7 +2129,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - Test: `src/lib/api/invite.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1 `rpc`, `InvitePreview`, `MembershipResult`, `ApiException`; Task 2 `useMe`, `routes`; Task 5 `AuthShell`; Task 8 의 `periodLong` 은 아직 없으므로 여기서는 `start.replaceAll("-", ".")` 식 단순 표기를 쓰지 않고 **Task 8 보다 먼저 실행된다면** 아래 `periodOf` 를 이 파일에 둔다(Task 8 이 생기면 `format.ts` 의 `periodLong` 으로 교체).
+- Consumes: Task 1 `rpc`, `InvitePreview`, `MembershipResult`, `ApiException`; Task 2 `useMe`, `routes`; Task 5 `AuthShell`; Task 8 `periodLong`(`format.ts` — 기간 표기는 이 함수 하나만 쓴다. 별도 `periodOf` 는 두지 않는다). **실행 순서: Task 8 Step 3 의 `ymd`·`periodLong` 이 먼저 있어야 한다**(아래 Step 5 끝 주의 참조).
 - Produces:
   ```ts
   export type InviteAction = "login" | "owner" | "joined" | "pending" | "ended" | "activeClosed" | "full" | "apply" | "join";
@@ -2308,6 +2372,7 @@ RoomView(Task 11)·MyStudy(Task 12)·Main(Task 9)·Invite(Task 7) 가 같은 문
   export const ymd: (iso: string) => string;                       // "2026.10.01"
   export const mmdd: (iso: string) => string;                      // "10.01" (월 두 자리 — 카드·회차 표기)
   export const uiStatus: (s: RoomStatusDto) => RoomStatus;          // draft → recruit
+  export function periodWeeks(start: string, end: string): number; // round((일수+1)/7) — "N주"·"N주 완주" 의 N (D14)
   export function periodCard(start: string, end: string): string;  // "2026.11.02 – 12.27 · 8주"
   export function periodLong(start: string, end: string): string;  // "2026.10.01(목) – 12.31(목)"
   export function ddayOf(status: RoomStatusDto, today: string, start: string, end: string): { short: string; long: string };
@@ -2329,7 +2394,7 @@ RoomView(Task 11)·MyStudy(Task 12)·Main(Task 9)·Invite(Task 7) 가 같은 문
 ```ts
 import { describe, expect, it } from "vitest";
 import { addDays } from "@/lib/date";
-import { curIndexOf, curOf, ddayOf, glanceOf, periodCard, periodLong, roundRow, roundsWindow, rulesOf } from "./format";
+import { curIndexOf, curOf, ddayOf, glanceOf, periodCard, periodLong, periodWeeks, roundRow, roundsWindow, rulesOf } from "./format";
 import type { RoomDetail, RoundSummary } from "./types";
 
 const TODAY = "2026-10-12";
@@ -2451,11 +2516,15 @@ describe("curOf (roomview §1.3 / mystudy §3.8)", () => {
     expect(v.tasks[0]).toEqual({ title: "EC2 인스턴스 유형 정리", type: "지정", dates: "10.08 – 10.14",
       people: [{ userId: "u-jieun", name: "지은", tone: "peach", status: "done" }, { userId: "u-1", name: "철수", tone: "blue", status: "open" }] });
   });
-  it("ended algo", () => {
-    expect(curOf({ status: "ended", startDate: "2026-07-01", endDate: "2026-09-30", currentRound: null, rounds: weekly(13, "2026-07-01"),
-      stats: stats({ roundCount: 13, totalAssignments: 78, totalSubmissions: 68, overallPct: 87 }) }, TODAY)).toEqual({
+  it("ended algo — 'N주 완주' is period weeks (13), not round count (seed has 3 depth-2 rounds) (D14, S10)", () => {
+    expect(curOf({ status: "ended", startDate: "2026-07-01", endDate: "2026-09-30", currentRound: null, rounds: weekly(3, "2026-07-01"),
+      stats: stats({ roundCount: 3, totalAssignments: 78, totalSubmissions: 68, overallPct: 87 }) }, TODAY)).toEqual({
       pill: "종료", title: "13주 완주 · 전체 달성률 87%", meta: "07.01 – 09.30 · 제출 68 / 78건", tasks: [],
     });
+  });
+  it("periodWeeks", () => {
+    expect(periodWeeks("2026-07-01", "2026-09-30")).toBe(13);                // 92일
+    expect(periodWeeks("2026-11-02", "2026-12-27")).toBe(8);
   });
   it("active without current round (Review Focus 2)", () => {
     const gap = [{ ...weekly(1, "2026-10-01")[0], endDate: "2026-10-05" }, { ...weekly(1, "2026-10-15")[0], id: "2", label: "2주차" }];
@@ -2471,7 +2540,7 @@ describe("glanceOf (roomview §3.7)", () => {
     expect(glanceOf(stats({ roundCount: 12, leafCount: 24, commonCount: 24, startWeekdays: [1, 4] }), "recruit").rounds).toBe("12회차 · 월·목 시작");
     expect(glanceOf(stats({ roundCount: 2, leafCount: 6, commonCount: 6 }), "recruit")).toEqual({ rounds: "2회차", tasks: "6개 · 모두 공통 과제" });
     expect(glanceOf(stats({ roundCount: 4, leafCount: 9, commonCount: 7, designatedCount: 2 }), "recruit").tasks).toBe("9개 · 공통 7 · 지정 2");
-    expect(glanceOf(stats({ roundCount: 13, leafCount: 13, totalAssignments: 78, totalSubmissions: 68, startWeekdays: [3] }), "ended")).toEqual({ rounds: "13회차 · 완료", tasks: "78건 중 68건 제출" });
+    expect(glanceOf(stats({ roundCount: 3, leafCount: 13, totalAssignments: 78, totalSubmissions: 68, startWeekdays: [3] }), "ended")).toEqual({ rounds: "3회차 · 완료", tasks: "78건 중 68건 제출" });   // algo 시드 = depth-2 3개(D14)
     expect(glanceOf(stats({ roundCount: 13, leafCount: 8, commonCount: 5, designatedCount: 3, startWeekdays: [4] }), "active")).toEqual({ rounds: "13회차 · 매주 목요일 시작", tasks: "8개 · 공통 5 · 지정 3" });
   });
 });
@@ -2505,10 +2574,12 @@ export const TASK_TYPE_KO: Record<TaskTypeDto, "공통" | "지정"> = { common: 
 
 const sameYear = (a: string, b: string) => a.slice(0, 4) === b.slice(0, 4);
 
+/** D14: 기간 주 수 = round((일수+1)/7). 카드 "· N주" 와 종료 방 "N주 완주" 가 같은 값을 쓴다(회차 수와 무관) */
+export const periodWeeks = (start: string, end: string): number => Math.round((diffDays(start, end) + 1) / 7);
+
 /** main §3-5: "{YYYY.MM.DD} – {같은 해면 MM.DD} · {round(일수/7)}주" */
 export function periodCard(start: string, end: string): string {
-  const weeks = Math.round((diffDays(start, end) + 1) / 7);
-  return `${ymd(start)} – ${sameYear(start, end) ? mmdd(end) : ymd(end)} · ${weeks}주`;
+  return `${ymd(start)} – ${sameYear(start, end) ? mmdd(end) : ymd(end)} · ${periodWeeks(start, end)}주`;
 }
 
 /** roomview §1.2: 요일 포함 */
@@ -2590,7 +2661,7 @@ export function curOf(dto: CurInput, today: string): CurView {
   if (dto.status === "ended") {
     return {
       pill: "종료",
-      title: `${stats.roundCount}주 완주 · 전체 달성률 ${stats.overallPct ?? 0}%`,
+      title: `${periodWeeks(dto.startDate, dto.endDate)}주 완주 · 전체 달성률 ${stats.overallPct ?? 0}%`,   // N주 = 기간 주 수(D14), N회차 = roundCount
       meta: `${mmdd(dto.startDate)} – ${mmdd(dto.endDate)} · 제출 ${stats.totalSubmissions} / ${stats.totalAssignments}건`,
       tasks: [],
     };
@@ -2664,7 +2735,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - Test: `src/lib/api/rooms.test.ts`
 
 **Interfaces:**
-- Consumes: Task 1 `rpc`, `RoomCardDto`, `RoomListResponse`; Task 2 `useMe`, `useToday`; Task 6 `useDebounced`; Task 8 `periodCard`, `mmdd`.
+- Consumes: Task 1 `rpc`, `RoomCardDto`, `RoomListResponse`; Task 2 `useMe`, `useToday`; Task 6 `useDebounced`; Task 8 `periodCard`, `periodWeeks`, `mmdd`.
 - Produces:
   ```ts
   export type RoomsParams = { scope: Tab; status: StatusFilter; q: string; tags: string[]; page?: number; size?: number };
@@ -2701,23 +2772,24 @@ describe("toRoomCard (main §3)", () => {
     expect(r.created).toBe(false);
     expect(r.leaderTone).toBe("mint");
   });
-  it("aws mine 50% with next task D-2", () => {
+  it("aws mine 33% (철수 2/6, 전체 트리 — D5) with next OPEN task D-2", () => {
+    // 목업 카드의 50%(2/4)는 폐기 — 시드·rooms_list 의 mine 분모는 전체 트리 기준 6 (D5, D14)
     const r = toRoomCard(dto({ slug: "aws", status: "active", joinMode: "approval", memberCount: 4, maxMembers: 6, leader: leader("민수"),
       startDate: "2026-10-01", endDate: "2026-12-31", membership: { role: "member", status: "active" },
-      progress: { kind: "mine", submitted: 2, assigned: 4, nextTask: { nodeId: "21", title: "EC2 인스턴스 유형 정리", dueDate: "2026-10-14" } } }), TODAY);
+      progress: { kind: "mine", submitted: 2, assigned: 6, nextTask: { nodeId: "21", title: "EC2 인스턴스 유형 정리", dueDate: "2026-10-14" } } }), TODAY);
     expect(r.status).toBe("active");
     expect(r.approval).toBe(true);
     expect(r.mine).toBe(true);
     expect(r.period).toBe("2026.10.01 – 12.31 · 13주");
-    expect(r.slot).toEqual({ label: "내 진척률", value: "50%", pct: 50, note: "EC2 인스턴스 유형 정리", em: "D-2" });
+    expect(r.slot).toEqual({ label: "내 진척률", value: "33%", pct: 33, note: "EC2 인스턴스 유형 정리", em: "D-2" });
   });
   it("mine with nothing left", () => {
     const r = toRoomCard(dto({ status: "active", membership: { role: "member", status: "active" }, progress: { kind: "mine", submitted: 4, assigned: 4, nextTask: null } }), TODAY);
     expect(r.slot).toEqual({ label: "내 진척률", value: "100%", pct: 100, note: "남은 과제가 없어요", em: "" });
   });
-  it("algo final 87%", () => {
+  it("algo final 87% — 'N주 완주' = period weeks 13 even though the seed has 3 rounds (D14, S10)", () => {
     const r = toRoomCard(dto({ slug: "algo", status: "ended", memberCount: 6, maxMembers: 6, startDate: "2026-07-01", endDate: "2026-09-30",
-      membership: { role: "member", status: "active" }, progress: { kind: "final", submitted: 68, assigned: 78, totalRounds: 13 } }), TODAY);
+      membership: { role: "member", status: "active" }, progress: { kind: "final", submitted: 68, assigned: 78, totalRounds: 3 } }), TODAY);
     expect(r.status).toBe("ended");
     expect(r.slot).toEqual({ label: "최종 달성률", value: "87%", pct: 87, note: "13주 완주 · 제출 68/78건", em: "" });
   });
@@ -2767,18 +2839,36 @@ import type { RoomStatus } from "@/lib/types";
 export type CardStatus = RoomStatus | "full" | "draft";
 ```
 
-`Room` 타입에 한 줄 추가:
+`Room` 타입 전체(기존 필드 그대로 + `leaderTone` 한 줄):
 
 ```ts
+export type Room = {
+  id: string;
+  title: string;
+  intro: string;
+  status: CardStatus;
+  pub: boolean;
+  approval: boolean;
+  cur: number;
+  max: number;
+  leader: string;
   /** 리더 아바타 색 — DTO leader.tone (목업은 toneOf(name)) */
   leaderTone?: Tone;
+  tags: string[];
+  mine: boolean;
+  created: boolean;
+  period: string;
+  slot: Slot;
+};
 ```
+
+`ROOMS` 상수의 aws 슬롯(목업 `50%`)은 고치지 않는다 — 화면이 더 이상 import 하지 않는 픽스처이고, 실데이터는 D5 대로 33%.
 
 - [ ] **Step 4: `src/lib/api/rooms.ts`**
 
 ```ts
 import { rpc, type Db } from "@/lib/api/errors";
-import { mmdd, periodCard } from "@/lib/api/format";
+import { mmdd, periodCard, periodWeeks } from "@/lib/api/format";
 import type { RoomCardDto, RoomListResponse } from "@/lib/api/types";
 import type { StatusFilter, Tab } from "@/components/main/FilterBar";
 import { dday, weekdayKo } from "@/lib/date";
@@ -2828,7 +2918,8 @@ function slotOf(d: RoomCardDto, today: string): Slot {
     }
     case "final": {
       const v = pct(p.submitted, p.assigned);
-      return { label: "최종 달성률", value: `${v}%`, pct: v, note: `${p.totalRounds}주 완주 · 제출 ${p.submitted}/${p.assigned}건`, em: "" };
+      // "N주 완주" 의 N 은 기간 주 수(D14) — totalRounds(회차 수)가 아니다
+      return { label: "최종 달성률", value: `${v}%`, pct: v, note: `${periodWeeks(d.startDate, d.endDate)}주 완주 · 제출 ${p.submitted}/${p.assigned}건`, em: "" };
     }
   }
 }
@@ -3037,6 +3128,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   export function validateNewRoom(v: NewRoomValues, today: string): Partial<Record<keyof NewRoomValues, string>>;
   export function toCreateRoom(v: NewRoomValues): CreateRoom;
   ```
+- **범위 밖 → plan 06:** 만든 방은 **DRAFT** 로 남는다. DRAFT → RECRUIT 의 "모집 시작"(`room_open_recruit`)·"지금 시작"(`room_start`) 버튼과 커버 이미지 업로드는 plan 06(그룹장 운영 UI). 이 태스크는 생성 → 커리큘럼 편집 모드 이동까지만 한다. 편집 화면 상단의 상태 버튼 자리에는 `{/* plan 06: 모집 시작 / 지금 시작 */}` 주석만 둔다.
 
 - [ ] **Step 1: 실패하는 테스트** — `src/components/room-new/validate.test.ts` (+ `routes.test.ts` 에 `expect(routes.myStudyEdit("aws")).toBe("/my-study/aws?tab=curriculum&mode=edit");` 한 줄)
 
@@ -3140,7 +3232,7 @@ export function toCreateRoom(v: NewRoomValues): CreateRoom {
 Run: `npx vitest run src/components/room-new src/lib/routes.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: `src/components/room-new/NewRoomForm.tsx`** — 필수 6항목 펼침, "더 설정하기" 접힘(§4.3). 커버 이미지는 Phase 7 범위 밖(목록 DTO 에 없음).
+- [ ] **Step 5: `src/components/room-new/NewRoomForm.tsx`** — 필수 6항목 펼침, "더 설정하기" 접힘(§4.3). 커버 이미지는 plan 06 범위(목록 DTO 에 없음).
 
 ```tsx
 "use client";
@@ -3278,7 +3370,7 @@ export default async function NewRoomPage() {
 - [ ] **Step 7: 검증**
 
 Run: `npm run lint && npx tsc --noEmit && npx vitest run`
-Expected: 통과. 철수로 `/rooms/new` → 제목 "테스트 방", 소개, 기간(오늘~+30일), 6명 → "방 만들기" → `/my-study/<slug>?tab=curriculum&mode=edit` 로 이동(Task 12 전에는 쿼리를 무시하고 개요 탭이 뜬다). 목록 "내가 만든 방" 에 "준비중" 배지 카드.
+Expected: 통과. 철수로 `/rooms/new` → 제목 "테스트 방", 소개, 기간(오늘~+30일), 6명 → "방 만들기" → `/my-study/<slug>?tab=curriculum&mode=edit` 로 이동(Task 12 전에는 쿼리를 무시하고 개요 탭이 뜬다). 목록 "내가 만든 방" 에 "준비중" 배지 카드. 이 방을 모집 상태로 바꾸는 버튼은 아직 없다(plan 06) — 확인 후 Studio 에서 지우거나 그대로 둔다(로컬 전용).
 
 - [ ] **Step 8: Commit**
 
@@ -3296,7 +3388,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Files:**
 - Create: `src/lib/api/room-view.ts`, `src/components/ui/ConfirmDialog.tsx`, `src/components/ui/Toast.tsx`
-- Modify: `src/data/room-view.ts` (타입 확장: `RoomId = string`, `Action` 에 `"login"`, `RoomMember` 에 `userId/tone/pending`, `Room` 에 `pub`, `slug`), `src/components/room-view/{RoomViewScreen,RoomSidebar,JoinCard,RoomInfo,CurrentRoundCard}.tsx`, `src/app/rooms/[id]/page.tsx`
+- Modify: `src/data/room-view.ts` (타입 확장: `RoomId = string`, `Action` 에 `"login"`, `RoomMember` 에 `userId/tone/pending`, `RoomTask.people` 에 `tone`, `Room` 에 `pub`·`leaderTone` — `Room.id` 가 곧 slug), `src/components/room-view/{RoomViewScreen,RoomSidebar,JoinCard,RoomInfo,CurrentRoundCard}.tsx`, `src/app/rooms/[id]/page.tsx`
 - Test: `src/lib/api/room-view.test.ts`
 
 **Interfaces:**
@@ -3317,6 +3409,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   // ConfirmDialog({ open, title, body, confirmLabel, danger?, onConfirm, onCancel })
   // Toast({ text, tone: "ok"|"bad", onClose })  — 4초 뒤 자동 닫힘
   ```
+- **범위 밖 → plan 06 (§4.4 그룹장 사이드 패널):** 승인 대기 목록과 승인/거절 버튼(`room_approve`/`room_reject`), 초대 링크 복사(`invite_get`), 그룹장용 "모집 시작/지금 시작"(`room_open_recruit`/`room_start`). 이 태스크의 `JoinCard` 는 `act === "owner"` 일 때 기존 목업 문구("내가 만든 방이에요")만 보이고, 그 아래에 `{/* plan 06: 그룹장 패널(승인 대기 ${pendingCount}명 · 초대 링크 복사 · 모집 시작) */}` 주석을 남긴다. `RoomDetail.pendingCount`·`invite` 는 어댑터가 받아 두기만 한다.
 
 - [ ] **Step 1: 실패하는 테스트** — `src/lib/api/room-view.test.ts`
 
@@ -3437,13 +3530,58 @@ Expected: FAIL — `Cannot find module './room-view'`
 
 - [ ] **Step 3: `src/data/room-view.ts` 타입 확장** (상수 `ROOMS` 등은 그대로 둔다 — 화면은 더 이상 import 하지 않는다)
 
+바꾸는 타입 전체(나머지 타입·상수는 그대로):
+
 ```ts
 /** 공개 식별자 = slug (D1). 목업 8개 리터럴에서 string 으로 넓힘 */
 export type RoomId = string;
 export type Action = "login" | "join" | "apply" | "leave" | "pending" | "joined" | "owner" | "full" | "activeClosed" | "ended";
-export type RoomMember = { name: string; leader?: boolean; me?: boolean; userId?: string; tone?: Tone; /** 내 승인 대기 행 */ pending?: boolean };
+export type RoomMember = {
+  name: string;
+  leader?: boolean;
+  me?: boolean;
+  userId?: string;
+  tone?: Tone;
+  /** 내 승인 대기 행 */
+  pending?: boolean;
+};
+export type RoomTask = {
+  title: string;
+  type: "공통" | "지정";
+  dates: string;
+  people: { name: string; status: TaskStatus; tone?: Tone }[];
+};
+export type Room = {
+  /** = slug */
+  id: RoomId;
+  title: string;
+  intro: string;
+  status: RoomStatus;
+  base: BaseAction;
+  approval: boolean;
+  /** 비공개면 false */
+  pub?: boolean;
+  period: string;
+  when: string;
+  dday: string;
+  ddayLong: string;
+  leader: string;
+  /** 그룹장 아바타 색 — DTO leader.tone */
+  leaderTone?: Tone;
+  tags: RoomTag[];
+  capCur: number;
+  capMax: number;
+  minNeed: number;
+  members: RoomMember[];
+  cur: { pill: string; title: string; meta: string; tasks: RoomTask[] };
+  about: string;
+  rules: string[];
+  rounds: RoomRound[];
+  moreRounds: string;
+  glance: { rounds: string; tasks: string };
+};
 ```
-`RoomTask.people` 항목에 `tone?: Tone`, `Room` 에 `/** 비공개면 false */ pub?: boolean;` 추가. `ROOMS: Record<RoomId, Room>` 은 `Record<string, Room>` 이 되어 그대로 컴파일된다. `ROOM_GROUPS` 의 `ids: RoomId[]` 도 그대로.
+`ROOMS: Record<RoomId, Room>` 은 `Record<string, Room>` 이 되어 그대로 컴파일된다. `ROOM_GROUPS` 의 `ids: RoomId[]` 도 그대로.
 
 - [ ] **Step 4: `src/lib/api/room-view.ts`**
 
@@ -3503,6 +3641,7 @@ export function toRoom(d: RoomDetail, today: string, meId: string | null): Room 
     dday: dd.short,
     ddayLong: dd.long,
     leader: d.leader.nickname,
+    leaderTone: d.leader.tone,
     tags: d.tags.map((t) => ({ label: t.label, tone: t.tone, auto: t.auto })),
     capCur: d.memberCount,
     capMax: d.maxMembers,
@@ -3655,8 +3794,23 @@ export function JoinCard(props: Props) {
 
 - [ ] **Step 9: `RoomInfo.tsx`·`CurrentRoundCard.tsx` 소폭 수정**
 
-- `RoomInfo`: 공개 범위 `<dd className="font-medium">{room.pub === false ? "비공개 · 초대 링크로만 참가" : "공개"}</dd>`; 그룹장 아바타는 그대로(`toneOf` fallback — 그룹장 tone 은 `Room.leaderTone?: Tone` 을 추가해 `tone={room.leaderTone}` 으로 넘긴다. `toRoom` 에 `leaderTone: d.leader.tone` 한 줄 추가).
-- `CurrentRoundCard`: `<Avatar name={p.name} tone={p.tone} size={30} />`, 제출 수 계산을 `p.status === "done" || p.status === "late"` 로(지각 제출도 제출).
+- `RoomInfo`: 공개 범위 `<dd className="font-medium">{room.pub === false ? "비공개 · 초대 링크로만 참가" : "공개"}</dd>`; 그룹장 아바타 `tone={room.leaderTone}`(Step 3 타입·Step 4 `toRoom` 에 이미 있음, 없으면 `toneOf` fallback).
+- `CurrentRoundCard`: `<Avatar name={p.name} tone={p.tone} size={30} />`, 제출 수 계산을 `p.status === "done" || p.status === "late"` 로(지각 제출도 제출). **담당자 0명 지정 과제(서버 허용, `UNASSIGNED_TASK` 경고) 가드** — `t.people.length === 0` 이면 진행 막대·`n/0 제출` 대신 "담당자 미정" 을 보여 `NaN%` 를 막는다:
+
+```tsx
+                <div className="flex w-24 flex-col gap-[5px]">
+                  {t.people.length === 0 ? (
+                    <span className="text-right text-[12px] font-semibold text-muted">담당자 미정</span>
+                  ) : (
+                    <>
+                      <span className="text-right text-[12px] font-semibold">
+                        {allPlanned ? `${t.dates.split(" – ")[0]} 시작` : `${subs}/${t.people.length} 제출`}
+                      </span>
+                      <ProgressBar pct={Math.round((subs / t.people.length) * 100)} height={5} />
+                    </>
+                  )}
+                </div>
+```
 
 - [ ] **Step 10: `RoomViewScreen.tsx` 전체 교체**
 
@@ -3826,8 +3980,10 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   export function toSidebarGroups(ms: MeStudies, today: string): SidebarGroup[];
   export function patchOf(n: TreeNode, ov: Overrides): NodePatch;     // 편집 패널 "저장" 이 보낼 부분 갱신
   // useCurriculumApi(slug, setCur, update, toast) → { create, remove, archive, save }
-  // MyStudyScreen({ detail, curriculum, studies, initialTab?, initialMode? })
+  // MyStudyScreen({ detail, curriculum, studies, initialTab?, initialMode?, initialLeaf? })
+  //   initialLeaf = 알림 링크 `/my-study/{slug}?task={nodeId}`(D8) — 커리큘럼 탭 + goLeaf 포커스
   ```
+- **범위 밖 → plan 06:** 리프 상세의 "제출하기"·제출물 보기(§4.10 — `task_get`·`submission_upsert`·`file_register`), 커리큘럼 들여쓰기/내어쓰기·드래그 정렬(`node_move` — §4.6), 태그 수동 편집(§2.6), 설정 탭(이탈 처리 `member_deactivate*`·알림 설정 `settings_*`). `?task=` 는 이 태스크에서 **리프 포커스까지만** 연결한다(LeafDetail 의 제출 영역 자리에 `{/* plan 06: 제출 */}` 주석).
 
 - [ ] **Step 1: `src/data/my-study.ts` 타입 확장** (상수 `ROOMS`·`PLANS`·`SIDEBAR_GROUPS` 는 남기되 화면은 import 하지 않는다)
 
@@ -3835,13 +3991,39 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 export type RoomId = string;                       // slug (D1)
 export const ROOM_IDS: RoomId[] = ["aws", "spring", "sqld", "algo"];
 ```
-각 타입에 필드 추가:
+바꾸는 타입 전체(필드 추가만 — 기존 필드는 그대로, 나머지 타입·상수는 손대지 않는다):
 ```ts
 export type MemberInfo = { name: string; done: number; total: number; leader?: boolean; me?: boolean; left?: boolean; pending?: boolean; noBar?: boolean; userId?: string; tone?: Tone };
 export type CurTask = { title: string; type: TaskType; dates: string; people: [string, TaskStatus][]; /** 이름 → DTO tone */ tones?: Record<string, Tone> };
 export type RoundRow = { label: string; title: string; dates: string; state: string; sub: number; total: number; current?: boolean; alt?: string; /** tree.roots 매칭용 */ roundId?: string };
 export type NextDue = { title: string; path: string; due: string; dday: string; nodeId?: string };
-export type Room = { …기존…; leaderTone?: Tone };
+export type Room = {
+  id: RoomId;
+  title: string;
+  intro: string;
+  status: RoomStatus;
+  period: string;
+  dday: string;
+  ddayLong: string;
+  joinMode: string;
+  visibility: string;
+  leader: string;
+  /** 그룹장 아바타 색 — DTO leader.tone */
+  leaderTone?: Tone;
+  tags: RoomTag[];
+  capCur: number;
+  capMax: number;
+  minText: string;
+  minOk: boolean;
+  members: MemberInfo[];
+  cur: { pill: string; title: string; meta: string; tasks: CurTask[] };
+  about: string;
+  rules: string[];
+  rounds: RoundRow[];
+  moreRounds: string;
+  action: RoomAction;
+  next: NextDue | null;
+};
 export type SidebarItem = { id: RoomId; when: string; left?: number; title?: string; intro?: string };
 ```
 
@@ -3943,7 +4125,7 @@ describe("buildTree with overrides (optimistic edits)", () => {
   it("added round appends a temp root after the last round", () => {
     const t = buildTree(AWS, { ...EMPTY_OVERRIDES, added: { root: ["새 회차"] } }, TODAY);
     expect(t.rootCount).toBe(6);
-    expect(t.roots[5]).toMatchObject({ id: "root.new0", label: "6회차", s: "2026-11-05", e: "2026-11-11", kids: [] });
+    expect(t.roots[5]).toMatchObject({ id: "root.new0", label: "6주차", s: "2026-11-05", e: "2026-11-11", kids: [] });   // 서버 기본 라벨 "{n}주차"(D14)와 같게 — 응답 후 깜빡임 없음
   });
 });
 ```
@@ -4117,7 +4299,7 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
   const tempRoots: NodeDto[] = (ov.added.root ?? []).map((t, i) => {
     const s = addDays(lastE, 1 + i * 7);
     const id = tempId("root", i);
-    return { id, parentId: null, roundId: id, depth: 2, sortOrder: TEMP_ORDER + i, label: `${baseRoots.length + i + 1}회차`, title: t, descriptionMd: "", startDate: s, endDate: addDays(s, 6), archived: false, task: null, assigned: 0, submitted: 0, pct: null };
+    return { id, parentId: null, roundId: id, depth: 2, sortOrder: TEMP_ORDER + i, label: `${baseRoots.length + i + 1}주차`, title: t, descriptionMd: "", startDate: s, endDate: addDays(s, 6), archived: false, task: null, assigned: 0, submitted: 0, pct: null };
   });
   const rootList = [...baseRoots, ...tempRoots];
   const roots: ParentNode[] = [];
@@ -4340,6 +4522,12 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
   it("ended + member → closed; no minMembers → empty minText", () => {
     expect(toStudyRoom({ ...aws, status: "ended", minMembers: null }, tree, TODAY, "u1")).toMatchObject({ action: "closed", minText: "", minOk: true });
   });
+  it("designated task with 0 assignees in the current round → people [] (OverviewTab shows 담당자 미정, no NaN — S15)", () => {
+    const cr = aws.currentRound!;
+    const noOne = { id: "23", title: "담당자 없는 과제", type: "designated" as const, startDate: "2026-10-08", endDate: "2026-10-14", people: [] };
+    const r0 = toStudyRoom({ ...aws, currentRound: { ...cr, tasks: [...cr.tasks!, noOne] } }, tree, TODAY, "u1");
+    expect(r0.cur.tasks[1]).toEqual({ title: "담당자 없는 과제", type: "지정", dates: "10.08 – 10.14", people: [], tones: {} });
+  });
 });
 
 describe("toSidebarGroups (mystudy §1.1)", () => {
@@ -4467,7 +4655,7 @@ export function patchOf(n: TreeNode, ov: Overrides): NodePatch {
 - [ ] **Step 9: 통과 확인**
 
 Run: `npx vitest run src/lib/api/my-study.test.ts`
-Expected: 8 passed (`model.test.ts` 가 `AWS` 를 export 하므로 vitest 가 그 파일의 describe 도 함께 실행한다 — 정상)
+Expected: my-study 9 passed + import 된 `model.test.ts` 의 describe 도 함께 실행(`AWS` 를 export 하므로 — 정상). 숫자보다 FAIL 0 을 본다.
 
 - [ ] **Step 10: `useCurriculumApi.ts` + `state.ts`** — 구조 변경은 즉시 RPC(낙관적 Overrides → 응답으로 교체), 내용 변경은 "저장" 1회(D9).
 
@@ -4610,14 +4798,21 @@ import { CalendarTab } from "./tabs/CalendarTab";
 import { GanttTab } from "./tabs/GanttTab";
 import { useCurriculumApi } from "./useCurriculumApi";
 
-type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode };
+type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string };
 
-export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view" }: Props) {
+export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf }: Props) {
   const me = useMe();
   const router = useRouter();
   const isLeader = detail.me?.state === "leader";
   const [cur, setCur] = useState(curriculum);
-  const [S, setS] = useState<ScreenState>({ ...INITIAL_STATE, tab: initialTab, curMode: isLeader ? initialMode : "view" });
+  // 알림 링크 ?task={nodeId}(D8): 그 리프가 이 방 커리큘럼에 있으면 커리큘럼 탭 + 리프 열림으로 시작(goLeafPatch 가 tab 을 curriculum 으로 바꾼다)
+  const focusLeaf = initialLeaf && curriculum.nodes.some((n) => n.id === initialLeaf && n.task) ? initialLeaf : null;
+  const [S, setS] = useState<ScreenState>({
+    ...INITIAL_STATE,
+    tab: initialTab,
+    curMode: isLeader ? initialMode : "view",
+    ...(focusLeaf ? goLeafPatch(focusLeaf) : {}),
+  });
   const [toast, setToast] = useState<ToastMsg>(null);
   const update = useCallback((patch: Patch) => setS((prev) => ({ ...prev, ...(typeof patch === "function" ? patch(prev) : patch) })), []);
   const today = cur.today;
@@ -4671,7 +4866,24 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
 
 `bits.tsx`: `AvatarStack` 의 `key={p.userId}`, `<Avatar name={p.name} size={size} tone={p.tone} />`.
 
-`OverviewTab.tsx`: 아바타 `tone={t.tones?.[name] ?? toneOfName(name)}`; 전체 일정 루프의 `const rt = tree.roots[i]` → `const rt = tree.roots.find((r) => r.id === rd.roundId)`.
+`OverviewTab.tsx`: 아바타 `tone={t.tones?.[name] ?? toneOfName(name)}`; 전체 일정 루프의 `const rt = tree.roots[i]` → `const rt = tree.roots.find((r) => r.id === rd.roundId)`. **담당자 0명 과제 가드(S15)** — 현재 회차에 담당자 없는 지정 과제가 있으면 `subs / t.people.length` 가 `NaN` 이 된다. `const pct = …` 줄과 진행 칸을 다음으로 바꾼다:
+
+```tsx
+                const pct = t.people.length === 0 ? 0 : Math.round((subs / t.people.length) * 100);
+```
+```tsx
+                    <div className="flex w-24 flex-col gap-[5px]">
+                      {t.people.length === 0 ? (
+                        <span className="text-right text-[12px] font-semibold text-muted">담당자 미정</span>
+                      ) : (
+                        <>
+                          <span className="text-right text-[12px] font-semibold">{allPlanned ? `${t.dates.split(" – ")[0]} 시작` : `${subs}/${t.people.length} 제출`}</span>
+                          <ProgressBar pct={pct} height={5} fill={subs === t.people.length ? "#1E9E6A" : "#12A386"} />
+                        </>
+                      )}
+                    </div>
+```
+어댑터 쪽은 Step 6 의 "designated task with 0 assignees" 사례가 `people: []` 를 고정한다.
 
 `JoinInfoCard.tsx`: props 에 `onCancelPending: () => void` 추가 → "신청 취소" 버튼 `onClick={onCancelPending}`; `memberStats(tree.leaves, m.userId ?? "")`; `<Avatar … tone={m.tone ?? toneOfName(m.name)} …>`; `nextLeaf = room.next?.nodeId ? tree.leaves.find((l) => l.id === room.next!.nodeId) : undefined`; `key={m.userId ?? m.name}`.
 
@@ -4745,7 +4957,7 @@ import { createClient } from "@/lib/supabase/server";
 
 const TABS: TabId[] = ["overview", "curriculum", "board", "calendar", "gantt"];
 
-export default async function MyStudyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; mode?: string }> }) {
+export default async function MyStudyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; mode?: string; task?: string }> }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   await requireMe(routes.myStudy(id));
   const client = await createClient();
@@ -4753,7 +4965,12 @@ export default async function MyStudyPage({ params, searchParams }: { params: Pr
     const [detail, curriculum, studies] = await Promise.all([fetchRoomDetail(id, client), fetchCurriculum(id, client), fetchMyStudies(client)]);
     const tab = TABS.includes(sp.tab as TabId) ? (sp.tab as TabId) : "overview";
     // key 로 방 변경 시 화면 상태(탭·편집 오버라이드 등)를 리셋한다.
-    return <MyStudyScreen key={id} detail={detail} curriculum={curriculum} studies={studies} initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} />;
+    // ?task= 는 알림(D8) 진입 — 리프 포커스. 숫자 id 가 아니면 무시
+    const task = sp.task && /^\d+$/.test(sp.task) ? sp.task : undefined;
+    return (
+      <MyStudyScreen key={`${id}:${task ?? ""}`} detail={detail} curriculum={curriculum} studies={studies}
+        initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} initialLeaf={task} />
+    );
   } catch (e) {
     if (toApiError(e).code === "ROOM_NOT_FOUND") notFound();
     throw e;
@@ -4767,7 +4984,8 @@ Run: `npm run lint && npx tsc --noEmit && npx vitest run`
 Expected: 통과. 확인:
 - 철수 `/my-study` → `/my-study/aws`. 개요: 전체 진척률 24%, 참가자 민수 2/5·지은 2/7·철수 2/6·하나 0/7·도윤 "–"(이탈), 내 다음 마감 EC2 D-2. "그룹장 편집 미리보기" 세그먼트 **없음**.
 - 보드 회차 칩 "2주차" → EC2·S3 만.
-- 민수(`minsu` 계정)로 `/my-study/aws?tab=curriculum&mode=edit` → 편집 모드로 열림 → "회차 추가" → 즉시 "6회차 새 회차" 행 + 네트워크 `node_create` → 응답으로 id 교체. 제목 수정 → 저장 → "저장했어요 · …" + `node_update` 1회.
+- 민수(`minsu` 계정)로 `/my-study/aws?tab=curriculum&mode=edit` → 편집 모드로 열림 → "회차 추가" → 즉시 "6주차 새 회차" 행 + 네트워크 `node_create` → 응답으로 id 교체(라벨은 서버 기본값과 같아 바뀌지 않음). 제목 수정 → 저장 → "저장했어요 · …" + `node_update` 1회.
+- 철수로 헤더 벨 → "EC2 인스턴스 유형 정리 마감 3일 전" 클릭 → `/my-study/aws?task=<EC2 id>` → 커리큘럼 탭에서 EC2 리프가 열려 있다(S11).
 - `grep -rn "TODAY\|\bME\b" src/components/my-study` 결과 없음. `grep -rn "PLANS\|SIDEBAR_GROUPS" src/components src/app` 결과 없음.
 
 - [ ] **Step 14: Commit**
@@ -4851,6 +5069,7 @@ const res: ScheduleResponse = {
     { id: "b", slug: "spring", title: "싱글톤 컨테이너 실습 코드", s: "2026-10-15", e: "2026-10-18", st: "planned", round: "2주차" },
     { id: "a", slug: "spring", title: "섹션 6~7 정리 노트", s: "2026-10-12", e: "2026-10-18", st: "open", round: "2주차" },
     { id: "21", slug: "aws", title: "EC2 인스턴스 유형 정리", s: "2026-10-08", e: "2026-10-14", st: "open", round: "2주차" },
+    { id: "90", slug: "docker", title: "리더 전용", s: "2026-10-08", e: "2026-10-14", st: null, round: "1주차" },   // leaderDoesTasks=false 방 — upcoming 에서 빠져야 한다
   ],
 };
 
@@ -4871,6 +5090,11 @@ describe("toScheduleData (schedule §6)", () => {
   });
   it("upcoming is sorted e ASC then study, title (schedule §3-4)", () => {
     expect(d.upcoming.map((t) => t.title)).toEqual(["EC2 인스턴스 유형 정리", "섹션 6~7 정리 노트", "싱글톤 컨테이너 실습 코드"]);
+  });
+  it("upcoming drops st:null items even if the server sent them (Review Focus 3, S17)", () => {
+    expect(res.upcoming.some((t) => t.st === null)).toBe(true);                // 픽스처에 null 항목이 실제로 있다
+    expect(d.upcoming.map((t) => t.id)).not.toContain("90");
+    expect(d.upcoming).toHaveLength(3);
   });
 });
 
@@ -5079,7 +5303,7 @@ export default async function SchedulePage() {
 - [ ] **Step 8: 검증**
 
 Run: `npm run lint && npx tsc --noEmit && npx vitest run`
-Expected: 통과. 철수 `/schedule` → 현재 달(DB `today`) 격자, 칩 3개(AWS…, Spring…, SQLD … · 승인 대기), 다가오는 마감에 EC2(D-2 빨강)·섹션 6~7·싱글톤. "다음 달" → 네트워크 `me_schedule` 1회, 11월 격자에 sqld 1주차 마커(10-26 은 11월 격자 첫 주에 포함). `grep -rn "TODAY\|STUDIES\|STUDY\b\|TASKS\|MARKERS" src/components/schedule` 결과 없음(`shortName` 만 남는다).
+Expected: 통과. 철수 `/schedule` → DB `today`(로컬 고정 2026-10-12)의 달 = 2026년 10월 격자, 칩 5개(AWS…, Spring…, SQLD … · 승인 대기, Docker…(그룹장), 알고리즘…(종료) — `me_schedule.studies`), 다가오는 마감에 EC2(D-2 빨강)·섹션 6~7·싱글톤. "다음 달" → 네트워크 `me_schedule` 1회, 11월 격자에 sqld 1주차 마커(10-26 은 11월 격자 첫 주에 포함). `grep -rn "TODAY\|STUDIES\|STUDY\b\|TASKS\|MARKERS" src/components/schedule` 결과 없음(`shortName` 만 남는다).
 
 - [ ] **Step 9: Commit**
 
@@ -5183,20 +5407,27 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 
 **Interfaces:**
 - Consumes: 시드(플랜 01~04), 로컬 Supabase, 플랜 01 의 `supabase/seed.sql` §1 이메일(`cheolsu@sgtudy.local`, 민수는 §1 표의 `email_local` + `@sgtudy.local`), 초대 토큰 `seed-<slug>`, Inbucket API.
-- 범위 밖(명시): **과제 제출·파일 업로드 화면(§4.10)** 은 이 플랜의 파일 구조에 없다. 제출 E2E 는 §4.10 화면을 만드는 후속 플랜으로 이월하고, 여기서는 시드에 있는 제출(aws 철수 IAM·VPC done)로 보드 "제출 완료" 칸만 검증한다.
+- 범위 밖(명시) → **plan 06**: 과제 제출·파일 업로드(§4.10), 그룹장 승인/거절·초대 링크 복사(§4.4), 모집 시작/지금 시작. 제출은 시드 제출(aws 철수 IAM·VPC done)로 보드 "제출 완료" 칸만, 승인은 Step 8 에서 SQL 로 대신한다.
 
-주의: 로컬 DB 의 `kst_today()` 는 **실제 오늘**이다(`app.today` 는 테스트에서만 고정). 시드가 2026-10 기준이므로 실행일에 따라 D-day 숫자가 달라진다 — 구조·문구 형식만 검증하고 숫자는 `D-\d+` 패턴으로 본다.
+**기준일 고정(B6):** plan 01~04 의 `seed.sql` 마지막 줄 `alter database postgres set app.today = '2026-10-12';`(00 개요) 때문에 로컬 DB 의 `kst_today()` 는 실행일과 무관하게 **2026-10-12** 다. 아래 단언은 전부 이 날짜 기준의 정확값이다(D-day 패턴 매칭 없음). Step 1 에서 이 고정을 먼저 확인하고, 아니면 진행하지 않는다.
 
 - [ ] **Step 1: 환경 기동** (메모리 — 빌드와 supabase 를 동시에 돌리지 않는다)
 
 ```bash
 vm_stat | grep -E 'free|compressor'
-supabase start && supabase db reset            # 시드 포함
+supabase start && supabase db reset            # 시드 포함 — 마지막 줄이 app.today 를 2026-10-12 로 고정
 eval "$(supabase status -o env)"; grep -q "$API_URL" .env.local || echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL" >> .env.local   # anon key 도 같은 방식으로 확인
-npm run build                                  # supabase 가 떠 있으면 메모리 확인 후. 실패 시 supabase stop → build → supabase start
-PORT=3100 npm run start &                      # 백그라운드
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3100/   # 200
+
+# 기준일 고정 확인 (B6) — DB 세션과 PostgREST(앱이 실제로 타는 경로) 둘 다
+psql "$DB_URL" -tAc "select public.kst_today()"                                    # → 2026-10-12
+curl -s "$API_URL/rest/v1/rpc/meta_get" -H "apikey: $ANON_KEY" -H "Content-Type: application/json" -d '{}'   # → {"today":"2026-10-12",…}
+# 둘 중 하나라도 다르면: PostgREST 커넥션이 ALTER 이전 세션이다 → supabase stop && supabase start 후 다시 확인. 그래도 다르면 seed.sql 마지막 줄을 확인하고 멈춘다.
+
 mkdir -p "$TMPDIR/sgtudy-e2e"
+npm run build                                  # supabase 가 떠 있으면 메모리 확인 후. 실패 시 supabase stop → build → supabase start
+PORT=3100 nohup npm run start > "$TMPDIR/sgtudy-e2e/next.log" 2>&1 &
+echo $! > "$TMPDIR/sgtudy-e2e/next.pid"        # 매 Bash 호출이 새 셸이라 잡 번호(%1)를 못 쓴다 — pid 파일로 정리
+sleep 3; curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3100/   # 200
 ```
 
 OTP 읽기 헬퍼(Inbucket v1 API — 메일함 이름 = 이메일 local part):
@@ -5204,7 +5435,7 @@ OTP 읽기 헬퍼(Inbucket v1 API — 메일함 이름 = 이메일 local part):
 otp() { local box="$1"; local id; id=$(curl -s "http://127.0.0.1:54324/api/v1/mailbox/$box" | python3 -c 'import sys,json; m=json.load(sys.stdin); print(m[-1]["id"] if m else "")'); curl -s "http://127.0.0.1:54324/api/v1/mailbox/$box/$id" | python3 -c 'import sys,json,re; print(re.search(r"\b(\d{6})\b", json.load(sys.stdin)["body"]["text"]).group(1))'; }
 ```
 
-- [ ] **Step 2: 신규 사용자 로그인 → 온보딩** (ego-browser, 공간 하나를 끝까지 재사용. 첫 라운드에서 `spaceId` 를 출력해 두고 이후 `taskSpace(<id>)` 로 재개)
+- [ ] **Step 2: 신규 사용자 로그인 → 온보딩** (ego-browser, 공간 하나를 끝까지 재사용. 첫 라운드에서 `spaceId` 를 출력해 두고 이후 `SPACE_ID=<id>` 환경변수로 넘겨 `taskSpace(process.env.SPACE_ID)` 로 재개)
 
 ```bash
 ego-browser nodejs <<'EOF'
@@ -5217,25 +5448,25 @@ await p.waitForSelector("loc=role:group[name='6자리 인증 코드']");
 console.log({ spaceId: task.spaceId });
 EOF
 CODE=$(otp e2e-new); echo $CODE
-ego-browser nodejs -e '
-const task = await taskSpace(SPACE_ID); const p = task.page("p1");
+SPACE_ID=<첫 라운드의 spaceId> CODE=$CODE ego-browser nodejs -e '
+const task = await taskSpace(process.env.SPACE_ID); const p = task.page("p1");
 await p.click("loc=css:input[aria-label=\"1번째 자리\"]");
 await p.keyboard.type(process.env.CODE);
 await p.waitForURL(/\/onboarding/);
 await p.fill("loc=css:input[autocomplete=nickname]", "이투이");
-await p.waitForSelector("loc=text:사용할 수 있어요");
+await p.waitForSelector("text=사용할 수 있어요");
 await p.click("loc=role:button[name=\"시작하기\"]");
 await p.waitForURL(/\/rooms\/toeic$/);
 await p.screenshot({ path: process.env.TMPDIR + "/sgtudy-e2e/01-onboarded.png" });
 console.log(await p.snapshot());
 ' 
 ```
-(`SPACE_ID` 는 앞 라운드 출력값으로 치환, `CODE` 는 `CODE=$CODE ego-browser …` 로 환경에 넘긴다.)
+(`SPACE_ID`·`CODE` 는 환경변수로 넘긴다 — 스크립트 안에 식별자를 그대로 쓰지 않는다. 이후 Step 도 같은 방식.)
 체크: URL 이 `/rooms/toeic`, 헤더에 "이" 아바타, 참가 카드 CTA "참가하기".
 
 - [ ] **Step 3: 로그아웃 → 철수 로그인**
 
-프로필 메뉴 → 로그아웃 → 헤더가 "로그인" 버튼으로 바뀜(스냅샷 확인) → `/login` → `cheolsu@sgtudy.local` → `otp cheolsu` → `/`. 체크: 탭 카운트 `8 / 4 / 1`, 카드 8장, aws 카드 "내 진척률 50%" + `D-\d+`, spring 카드 없음(비공개), "내가 참가한 방" 탭에 spring 포함 4장, "내가 만든 방" 에 docker 1장. 검색 "토익" → 1장. 태그 `#자격증` 토글 → 3장. 스크린샷 `02-main.png`.
+프로필 메뉴 → 로그아웃 → 헤더가 "로그인" 버튼으로 바뀜(스냅샷 확인) → `/login` → `cheolsu@sgtudy.local` → `otp cheolsu` → `/`. 체크: 탭 카운트 `8 / 4 / 1`, 카드 8장, aws 카드 "내 진척률 33%"(철수 2/6 — D5) + 강조 `D-2`(EC2 10/14 마감, OPEN), toeic 카드 `D-21`, spring 카드 없음(비공개), "내가 참가한 방" 탭에 spring 포함 4장, "내가 만든 방" 에 docker 1장. 검색 "토익" → 1장. 태그 `#자격증` 토글 → 3장. 스크린샷 `02-main.png`.
 
 - [ ] **Step 4: 모바일 390** (CDP 로 뷰포트 변경 — ego-browser 의 허용된 탈출구)
 
@@ -5257,30 +5488,30 @@ await p.cdp("Emulation.clearDeviceMetricsOverride", {});
 1. `/rooms/toeic` → "참가하기" 클릭 → 토스트 "참가했어요", 인원 `3 / 8명`, 버튼 "참가 완료" + "참가 취소", 사이드바 toeic 항목에 "참가함" 마크(`router.refresh` 뒤).
 2. "참가 취소" → `role=alertdialog` "참가를 취소할까요?" → "참가 취소" 확인 → 인원 `2 / 8명`, CTA 다시 "참가하기".
 3. `/rooms/sqld` → "승인 대기중" + "신청 취소" 버튼, 참가자 목록에 "철수 · 승인 대기" 회색 행(클릭하지 않는다 — Step 8 이 승인 흐름에 쓴다).
-4. `/rooms/jcg` → "정원 마감" 비활성. `/rooms/nope` → 404 페이지.
+4. `/rooms/jcg` → "정원 마감" 비활성(10/19 시작 전이라 RECRUIT 유지 — 기준일 고정 덕에 실행일과 무관). `/rooms/nope` → 404 페이지.
 스크린샷 `04-roomview-join.png`.
 
 - [ ] **Step 6: MyStudy (철수 → 민수 편집)**
 
-1. `/my-study` → `/my-study/aws` 로 리다이렉트. 개요: "전체 진척률 24%", 참가자 행 "도윤 · 이탈 · –", "내 다음 마감 EC2 인스턴스 유형 정리". 커리큘럼 탭에 "그룹장 편집 미리보기" 세그먼트 **없음**. 보드 → "내 칸반" 제출 완료 칸에 IAM·VPC 2장, 회차 칩 "2주차" → 진행중 칸에 EC2 1장.
+1. `/my-study` → `/my-study/aws` 로 리다이렉트. 개요: "전체 진척률 24%", 참가자 행 "철수 2/6"·"도윤 · 이탈 · –", "내 다음 마감 EC2 인스턴스 유형 정리 · D-2", 현재 회차 카드 "2주차 · 진행중". 커리큘럼 탭에 "그룹장 편집 미리보기" 세그먼트 **없음**. 보드 → "내 칸반" 제출 완료 칸에 IAM·VPC 2장, 회차 칩 "2주차" → 진행중 칸에 EC2 1장.
 2. 로그아웃 → 민수(`seed.sql` §1 의 민수 email_local)로 로그인 → `/my-study/aws?tab=curriculum&mode=edit` → 편집 모드로 열림(세그먼트 "그룹장 편집 미리보기" 선택됨).
 3. "EC2 인스턴스 유형 정리" 행 클릭 → 우측 패널 제목을 `EC2 인스턴스 유형 정리 (E2E)` 로 → "저장" → "저장했어요 · 태그를 자동으로 다시 골랐어요" → 새로고침 → 제목 유지 → 다시 원래 제목으로 저장.
-4. "회차 추가" → 행 "6회차 새 회차" 즉시 추가, 1초 안에 임시 id 가 서버 id 로 바뀜(스냅샷에서 `6회차` 행 존재) → 그 행 선택 → "삭제" → 다이얼로그 → 삭제 → 행 사라짐.
+4. "회차 추가" → 행 "6주차 새 회차" 즉시 추가, 1초 안에 임시 id 가 서버 id 로 바뀜(라벨은 서버 기본값 `"{n}주차"` 와 같아 그대로 — 스냅샷에서 `6주차` 행 존재) → 그 행 선택 → "삭제" → 다이얼로그 → 삭제 → 행 사라짐.
 스크린샷 `05-mystudy-edit.png`.
 
 - [ ] **Step 7: Schedule**
 
-철수로 다시 로그인 → `/schedule`: 칩 3개(`AWS …`, `Spring …`, `SQLD … · 승인 대기`), 격자 달 = 실행일의 달, "다가오는 마감" 패널 렌더. "다음 달" 클릭 → 헤더 월 +1, 네트워크/스냅샷 상 과제 막대 갱신. "오늘" → 원래 달, 오늘 셀에 "오늘" 배지(DayPanel). "목록" 탭 → 주 단위 그룹. 스크린샷 `06-schedule.png`.
+철수로 다시 로그인 → `/schedule`: 칩 **5개**(`me_schedule.studies` — aws·spring·sqld(` · 승인 대기`)·docker(그룹장)·algo(종료), plan 03 시드 기준), 격자 달 = **2026년 10월**, 10/12 셀에 "오늘" 배지, "다가오는 마감" 첫 항목 "EC2 인스턴스 유형 정리"(10/14). "다음 달" 클릭 → 헤더 "2026년 11월", 과제 막대 갱신. "오늘" → 10월로 복귀. "목록" 탭 → 주 단위 그룹. 스크린샷 `06-schedule.png`.
 
 - [ ] **Step 8: 알림 — 승인 처리로 알림 생성 → 배지 → 읽음**
 
-가은(sqld 그룹장) 승인 UI 는 이 Phase 에 없으므로 SQL 로 승인한다(`current_user_id()` 는 `request.jwt.claims.sub` 를 읽는다):
+가은(sqld 그룹장) 승인 UI 는 plan 06(§4.4 그룹장 패널) 소관이라 SQL 로 승인한다(`current_user_id()` 는 `request.jwt.claims.sub` 를 읽는다):
 ```bash
 GAEUN=$(psql "$DB_URL" -tAc "select id from public.profiles where nickname='가은'")
 CHEOLSU=$(psql "$DB_URL" -tAc "select id from public.profiles where nickname='철수'")
 psql "$DB_URL" -c "begin; select set_config('request.jwt.claims', '{\"sub\":\"$GAEUN\",\"role\":\"authenticated\"}', true); select public.room_approve('sqld', '$CHEOLSU'); commit;"
 ```
-브라우저(철수): 60초 안에 벨 배지 `1`(또는 새로고침) → 벨 클릭 → 드롭다운에 "참가 승인" 항목(읽지 않음 점) → 클릭 → `/my-study/sqld` 로 이동, 배지 사라짐 → 벨 다시 열면 항목이 읽음 상태(배경 흰색), "모두 읽음" 비활성. 스크린샷 `07-notifications.png`.
+브라우저(철수): 승인 전 배지는 `3`(plan 04 시드 §4 미읽음 3건). 60초 안에(또는 새로고침) 배지 `4` → 벨 클릭 → 드롭다운 맨 위 "SQLD 4주 벼락치기 참가가 승인됐어요"(읽지 않음 점) → 클릭 → `/my-study/sqld` 로 이동, 배지 `3` → 벨 다시 열면 그 항목은 읽음 상태(배경 흰색), "모두 읽음" **활성**(시드 3건이 남음) → "모두 읽음" 클릭 → 배지 사라짐, 버튼 비활성. 시드 항목 "EC2 인스턴스 유형 정리 마감 3일 전" 은 링크 `/my-study/aws?task=<id>` — 클릭 시 커리큘럼 탭에서 EC2 리프가 열린다(Task 12, S11). 스크린샷 `07-notifications.png`.
 
 - [ ] **Step 9: 초대 링크**
 
@@ -5289,7 +5520,9 @@ psql "$DB_URL" -c "begin; select set_config('request.jwt.claims', '{\"sub\":\"$G
 - [ ] **Step 10: 정리**
 
 ```bash
-kill %1 2>/dev/null; supabase db reset   # E2E 가 바꾼 상태(toeic 참가 취소 이력, sqld 승인, cs 참가, 신규 사용자) 복구
+kill "$(cat "$TMPDIR/sgtudy-e2e/next.pid")" 2>/dev/null          # npm
+lsof -ti tcp:3100 | xargs kill 2>/dev/null                       # npm 이 띄운 next 자식까지
+supabase db reset   # E2E 가 바꾼 상태(toeic 참가 취소 이력, sqld 승인, cs 참가, 신규 사용자) 복구 — app.today 고정도 다시 걸린다
 ```
 결과를 `docs/superpowers/plans/2026-10-13-backend-05-frontend-integration.md` 의 이 태스크 체크박스에 체크하고, 실패한 단계는 원인·수정 커밋 해시를 Self-Review 메모 아래에 한 줄씩 적는다(이 문서 수정 커밋: `docs: phase 7 e2e results`).
 
@@ -5328,12 +5561,12 @@ vercel logs https://sgtudy.vercel.app --since 10m | grep -i "meta_get\|error" ||
 
 ## Phase 종료 게이트
 
-아래가 전부 참이어야 Phase 7 (= 백엔드 계획 00~05 전체) 종료다.
+아래가 전부 참이어야 **Phase 7a 종료**다(백엔드 전체 종료가 아니다 — §4.10 제출 UI·§4.4 그룹장 패널·모집 시작/지금 시작·태그 편집·`node_move` UI·라우트별 loading/not-found 는 plan 06 = Phase 7b).
 
-1. `npm run lint && npx tsc --noEmit && npx vitest run` 통과 — Vitest 파일 14개(`errors`, `routes`, `me`, `notifications`, `otp`, `nickname`, `invite`, `format`, `rooms`, `validate`, `room-view`, `model`, `my-study`, `schedule`) 전부 PASS.
+1. `npm run lint && npx tsc --noEmit && npx vitest run` 통과 — 이 플랜의 Vitest 파일 15개(`errors`, `routes`, `kst`, `me`, `notifications`, `otp`, `nickname`, `invite`, `format`, `rooms`, `validate`, `room-view`, `model`, `my-study`, `schedule`) + plan 01 의 `return-to` 전부 PASS.
 2. `npm run build` 통과, 새 라우트 5개(`/login`, `/onboarding`, `/me`, `/invite/[token]`, `/rooms/new`) 가 빌드 출력에 보인다.
 3. Task 14 Step 1 의 grep 세 개가 비어 있다(목업 상수·`NEXT_PUBLIC_API_URL` 잔재 없음).
-4. Task 15 체크리스트 10단계 전부 체크, 스크린샷 7장 존재.
+4. Task 15 체크리스트 10단계 전부 체크(Step 1 의 `kst_today()`·`meta_get` = 2026-10-12 확인 포함), 스크린샷 7장 존재.
 5. Task 16 스모크 6항목 체크, Vercel 로그에 RPC 에러 없음.
 6. `git log --oneline` 에 Task 1~14 커밋 14개 + 결과 문서 커밋이 있고, 모든 커밋에 `Co-Authored-By`·`Claude-Session` 트레일러가 있다(`git log --format=%B -n 16 | grep -c Claude-Session` ≥ 16).
 
@@ -5342,12 +5575,13 @@ vercel logs https://sgtudy.vercel.app --since 10m | grep -i "meta_get\|error" ||
 작성 후 스펙(00 개요 · 01 결정 · 03 API · analysis §6 · 디자인 §4.1/4.3/4.12/4.13/4.14) 을 다시 대조한 결과와, 실행자가 알아야 할 결정 사항.
 
 - **태스크 번호**: 이 파일 상단 "파일 구조" 표와 Review Focus 가 16-태스크 번호(Task 8 = `format.ts`, Task 13 = schedule)를 이미 가리키고 있어 그 번호를 따랐다. 팀 리드 요청의 "Task 3~10" 묶음은 각각 3+4 / 5+6+7 / 8+9+10 / 11 / 12 / 13 / 14 / 15+16 에 대응한다.
-- **스펙 커버리지**: §4.1 로그인·온보딩(5·6), §4.3 방 만들기(10), §4.12 초대(7), §4.13 프로필(6), §4.14 헤더·알림(3·4), analysis main/roomview/mystudy/schedule §6 전환표(9·11·12·13), D1 slug·문자열 id(어댑터 전부), D6 returnTo(2·5), D7 비로그인·404(11·12 페이지), D13 문구 조립(8), D14 ended+member→joined(11), round(days/7)주(8). **커버하지 않는 것**: §4.10 과제 제출·파일 업로드 화면, §4.11 설정 탭(승인/거절·이탈 처리·방 삭제 UI), 태그 수동 편집 UI, 알림 Realtime — 03-api 에 RPC 는 있으나 이 플랜의 파일 구조에 화면이 없다. 후속 플랜(06) 대상이며, Task 15 는 그래서 제출 E2E 를 시드 데이터로 대체했다.
+- **스펙 커버리지**: §4.1 로그인·온보딩(5·6), §4.3 방 만들기(10), §4.12 초대(7), §4.13 프로필(6), §4.14 헤더·알림(3·4), analysis main/roomview/mystudy/schedule §6 전환표(9·11·12·13), D1 slug·문자열 id(어댑터 전부), D6 returnTo(2·5), D7 비로그인·404(11·12 페이지), D13 문구 조립(8), D14 ended+member→joined(11), round(days/7)주(8). **커버하지 않는 것 → plan 06(00 개요 등록, Phase 7b)**: §4.10 과제 제출·파일 업로드 화면, §4.4 그룹장 사이드 패널(승인/거절·초대 링크 복사), 모집 시작·지금 시작 버튼, §2.6 태그 수동 편집, §4.6 들여쓰기·드래그(`node_move`), §4.11 설정 탭(이탈 처리·알림 설정·방 삭제), §5 라우트별 `loading`/`not-found`/권한 없음. 이 플랜은 루트 `error.tsx` + `meta_get` 폴백만 둔다. 알림 Realtime 은 2단계. Task 15 는 제출을 시드 데이터로, 승인을 SQL 로 대체했다.
 - **RPC 인자 이름**은 플랜 03·04 가 아직 확정되지 않아 가정값이다(상단 표). 실행자는 각 어댑터 태스크 첫 단계에서 `database.types.ts` 와 대조한다. `rpc()` 가 `Record<string, unknown>` 을 받는 것은 의도된 느슨함이며, 이름이 틀리면 PostgREST 가 `PGRST202`(함수 없음) → `toApiError` 가 `UNKNOWN` + 원문으로 떨어뜨리므로 화면에서 바로 보인다.
-- **`safeReturnTo` 중복**: 플랜 01 Task 3 이 `src/lib/supabase/return-to.ts` 에 같은 함수를 만든다. Task 2 가 `routes.ts` 에 다시 정의했는데, 실행 시 `routes.ts` 의 구현을 `export { safeReturnTo } from "@/lib/supabase/return-to";` 로 바꿔 한 곳만 남기는 것이 맞다(테스트 기대값은 동일). Task 2 를 이미 실행했다면 Task 14 에서 정리한다.
+- **`safeReturnTo` 단일 출처**: plan 01 `src/lib/supabase/return-to.ts` 의 `safeReturnTo`·`loginUrl` 을 Task 2 가 `routes.ts` 에서 re-export 만 한다(재구현 없음 — `routes.test.ts` 가 같은 함수 참조인지 단언). Vitest 설정도 plan 01 것을 재사용(Task 1 Step 1 은 확인만).
+- **기준일·숫자**: aws 내 진척률은 D5 의 2/6 = **33%**(목업 50% 폐기), "N주 완주" = 기간 주 수(`periodWeeks`, algo 13), "N회차" = depth-2 노드 수(algo 시드 3) — D14. E2E 는 seed 의 `app.today` 고정(2026-10-12)으로 정확값을 단언한다.
 - **타입 변경 범위**: `RoomId`(room-view·my-study) 와 `StudyId` 를 리터럴 유니온 → `string` 으로 넓히고, `Task.id` 를 number → string 으로 바꿨다. Global Constraints 의 "유니온 확장만 허용" 범위 안으로 해석했으며, 목업 상수(`ROOMS` 등)는 그대로 컴파일된다. `CurTask.people` 튜플은 유지하고 `tones` 맵을 덧붙였다(상수 호환).
 - **glance 규칙 차이**: 회차가 2개뿐인 jcg 는 목업 "2회차" 를 지키기 위해 "매주 X요일 시작" 을 회차 ≥ 3 일 때만 붙인다(roomview §3.7 의 "1종이면 매주" 보다 좁음). active 방의 tasks 문구는 목업 상수 "진행 중 · 공통·지정 혼합" 대신 analysis 제안 `"{leaf}개 · 공통 c · 지정 d"` 를 채택했다.
 - **sidebar `left`·`when`** 은 `me_studies.when` 으로만 만들고, 사이드바는 `room_get` 을 다시 부르지 않는다(제목·소개는 `StudyItem` 에 있음).
 - **낙관적 갱신 범위**: 구조 변경(생성·삭제·보관)만 Overrides 로 즉시 반영하고 응답으로 교체한다. 내용 변경은 저장 전까지 로컬이며, 다른 노드로 이동해도 유지된다(기존 동작). 저장 실패 시 오버라이드를 지우지 않으므로 사용자가 다시 시도할 수 있다.
-- **Review Focus 재확인**: 1 → Task 8 `periodCard` spring 사례 ✓, 2 → Task 8 `curIndexOf`/`roundsWindow`/`curOf` gap 사례 ✓, 3 → Task 13 `toScheduleData` st null 사례 ✓, 4 → Task 1 ✓(기존), 5 → Task 2 ✓(기존).
-- **Placeholder 검사**: "TBD/TODO/나중에/similar to" 없음. 모든 코드 단계에 실제 코드. Task 7 의 `periodLong` 선행 의존은 본문에 명시.
+- **Review Focus 재확인**: 1 → Task 8 `periodCard` spring 사례 ✓, 2 → Task 8 `curIndexOf`/`roundsWindow`/`curOf` gap 사례 ✓, 3 → Task 13 `toScheduleData` st null 사례 + upcoming 의 null 항목 제외 사례 ✓, 4 → Task 1 ✓(기존), 5 → Task 2 ✓(plan 01 강한 버전 재사용, `/\evil.com`·`/rooms/../me` 포함).
+- **Placeholder 검사**: "TBD/TODO/나중에/similar to" 없음. 타입 확장은 전체 타입 블록으로 적었다(말줄임 없음). Task 7 은 `format.ts` 의 `periodLong` 하나만 쓴다(별도 `periodOf` 없음) — 선행 의존은 본문에 명시. `RoomSidebar`·MyStudy 컴포넌트 다수는 "바꿀 곳만" 산문으로 지시한다(파일 전체 재작성 아님).
