@@ -73,6 +73,7 @@ public.notify_publish(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p
    -- Phase 2 자리표: 항상 0. 0008 이 CREATE OR REPLACE 로 교체(시그니처 동일). 0008 은 p_actor 를 수신자에서 빼고(호출자는 빼지 않는다),
    -- prefix || ':' || recipient 를 dedupe_key 로 쓴다. prefix(D8): 상태성 = 자연키 'KIND:room[:node][:date]', 행위성 = 'KIND:room:<extra>:' || txid_current()
 public.room_lock(p_slug text) returns public.rooms            -- FOR UPDATE, 없으면 ROOM_NOT_FOUND
+public.require_leader(r public.rooms, p_uid uuid, p_msg text default '그룹장만 할 수 있어요') returns void   -- (최종 리뷰 I-2, p_msg 로 NOT_LEADER 문구 지정) 그룹장 아님: 방을 못 읽으면 ROOM_NOT_FOUND(존재 은닉), 읽으면 NOT_LEADER. 모든 그룹장 RPC 는 bare NOT_LEADER 대신 이것
 public.room_readable(p_room bigint, p_uid uuid, p_token text default null) returns boolean
 public.room_leaf_stats(p_room bigint) returns table(node_id bigint, round_id bigint, parent_id bigint, title text, task_type text, start_date date, end_date date, sort_order int, asg int, sub int)
    -- 보관 아닌 리프 × (유효 배정 수, 그중 제출 수). 플랜 03 curriculum_get·me_studies 가 재사용
@@ -95,6 +96,7 @@ public.room_get(p_slug text, p_invite_token text default null) returns jsonb
 public.room_create(...), room_update(p_slug, p_patch jsonb), room_open_recruit, room_start, room_archive, room_unarchive, room_delete
 -- 0005_membership.sql
 public.assignment_resync(p_room bigint) returns void
+public.room_hide_unless_known(r public.rooms, p_uid uuid, p_token text default null) returns void   -- (최종 리뷰 I-1) 못 읽는 방 ∧ 멤버 행 없음 → ROOM_NOT_FOUND. 멤버 측 RPC 의 상태 검사 앞에서 호출. GRANT 없음
 public.room_transition_active(p_room bigint, p_actor uuid) returns void   -- 개요 공통 계약대로 0005 (Task 2 가 추가)
 public.room_transition_ended(p_room bigint) returns void
 public.membership_result(p_room bigint, p_user uuid) returns jsonb
@@ -3006,7 +3008,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - [ ] `supabase db reset` 이 0001→0002→0003→0004→0005→seed 순으로 깨끗이 적용되고, Studio 에서 `rooms` 9행·`room_members` 33행·`tags` 19행·`room_invites` 9행이 보인다.
 - [ ] `npm run db:types` 로 `database.types.ts` 재생성 → `rooms_list`, `room_get`, `room_join` 등 RPC 가 `Functions` 에 잡힌다(플랜 05 어댑터가 쓴다).
 - [ ] 다음 계획(`…-03-curriculum-progress.md`)에 넘기는 것:
-  - 노드 쓰기 함수는 `room_lock(p_slug)` → 편집 가능 상태(DRAFT·RECRUIT·ACTIVE ∧ 보관 아님) 검사 → 끝에 `assignment_resync(room_id)`. `seedLeaves`(테스트 헬퍼)가 직접 INSERT 하던 자리를 `node_create` 로 바꾸되 사례의 기대값은 유지.
+  - 노드 쓰기 함수는 `room_lock(p_slug)` → `require_leader(r, uid)`(비공개·DRAFT·보관 방 외부인은 ROOM_NOT_FOUND) → 편집 가능 상태(DRAFT·RECRUIT·ACTIVE ∧ 보관 아님) 검사 → 끝에 `assignment_resync(room_id)`. `seedLeaves`(테스트 헬퍼)가 직접 INSERT 하던 자리를 `node_create` 로 바꾸되 사례의 기대값은 유지.
   - 계층(B3): 0006 은 트리 롤업 `room_progress(p_room)` 를 새로 만들고 `room_leaf_stats(p_room)` 의 **본문**을 그걸 읽도록 `create or replace`(시그니처 고정). `room_round_stats`·`room_detail_json` 은 교체하지 않는다.
   - 시드 §3(트리·배정·제출)은 §2 뒤(마지막 기준일(`internal.settings` 'today') 줄 위)에 붙이고 마지막에 `select assignment_resync(id) from rooms` 를 다시 호출. aws 제목·날짜는 `seedAwsTree` 와 같다.
   - **사례 갱신 소유(B1)**: 시드 §3 이 들어오면 이 플랜의 사례 3개가 깨진다 — `rooms_list: progress (seedAwsTree 부분 트리)`(aws 회차 중복·react null/0·algo 0/0/0), `room_get: aws with tree`(회차 중복), `room_get: me.state matrix`(toeic `rounds: []`·stats 0). **플랜 03 Task 2 Step 5 가 이 세 사례를 전체 시드 값으로 다시 쓴다**(철수 aws mine 2/6=33% next EC2 10/14 · 민수 2/5 · react team {index 4, totalRounds 8} · algo final 68/78·totalRounds 3 · toeic rounds 8). 이 플랜에서 미리 고치지 않는다.
