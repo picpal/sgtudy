@@ -687,3 +687,80 @@ begin
 end $$;
 
 grant execute on function public.me_studies() to authenticated;
+
+-- ───────── me_schedule (03-api §6, schedule §3·§5, 02 §4.4) ─────────
+-- 내 방(그룹장|ACTIVE|PENDING, 보관 아님)의 보관 아닌 리프 중 "내 것":
+--   유효 배정 → st = task_code / PENDING 방 → 전체 리프 미리보기(st 는 날짜 기준) / 그룹장 leader_does_tasks=false → 보이되 st null
+create or replace function public.me_schedule_leaves(p_uid uuid, p_today date)
+returns table (node_id bigint, room_id bigint, slug text, title text, s date, e date, st text, round text)
+language sql stable security definer set search_path = '' as $$
+  select n.id, r.id, r.slug::text, n.title::text, n.start_date, n.end_date,
+         case when m.status = 'PENDING' or a.id is not null
+              then public.task_code(n.start_date, n.end_date, sub.first_submitted_at, sub.is_late, p_today)
+              else null end,
+         coalesce(rn.label::text, (rn.sort_order + 1) || '주차')
+  from public.rooms r
+  join public.room_members m on m.room_id = r.id and m.user_id = p_uid and m.status in ('ACTIVE', 'PENDING')
+  join public.goal_nodes n on n.room_id = r.id and n.task_type is not null and n.archived_at is null
+  join public.goal_nodes rn on rn.id = n.round_id
+  left join public.task_assignments a on a.node_id = n.id and a.user_id = p_uid and a.released_at is null
+  left join public.submissions sub on sub.node_id = n.id and sub.user_id = p_uid
+  where r.archived_at is null
+    and (a.id is not null or m.status = 'PENDING' or (r.leader_id = p_uid and not r.leader_does_tasks))
+$$;
+-- me_schedule_leaves 는 임의 p_uid 를 받는 내부 함수 — GRANT 없음(D7)
+
+create or replace function public.me_schedule(p_from date, p_to date) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid      uuid := public.require_user();
+  v_today    date := public.kst_today();
+  v_studies  jsonb;
+  v_tasks    jsonb;
+  v_markers  jsonb;
+  v_upcoming jsonb;
+begin
+  if p_from is null or p_to is null or p_from > p_to or p_to - p_from > 62 then
+    perform public.fail('SCHEDULE_RANGE_INVALID', '조회 기간은 62일 이내여야 해요', jsonb_build_object('from', to_char(p_from, 'YYYY-MM-DD'), 'to', to_char(p_to, 'YYYY-MM-DD')));
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'slug', r.slug, 'title', r.title,
+           'membership', case when r.leader_id = v_uid then 'leader' when m.status = 'PENDING' then 'pending' else 'joined' end,
+           'tone', (array['mint', 'blue', 'peach', 'lav', 'amber', 'slate'])[1 + (r.id % 6)],
+           'status', lower(r.status),
+           'startDate', to_char(r.start_date, 'YYYY-MM-DD'), 'endDate', to_char(r.end_date, 'YYYY-MM-DD'))
+           order by r.id), '[]'::jsonb)
+  into v_studies
+  from public.rooms r
+  join public.room_members m on m.room_id = r.id and m.user_id = v_uid
+  where r.archived_at is null and (r.leader_id = v_uid or m.status in ('ACTIVE', 'PENDING'));
+
+  -- 리프 집합은 한 번만 평가하고 tasks(창 겹침)·upcoming(오늘~+7, 미제출) 이 같은 JSON 을 공유한다(E6)
+  with l as materialized (select * from public.me_schedule_leaves(v_uid, v_today)),
+       o as (select l.*, jsonb_build_object(
+               'id', l.node_id::text, 'slug', l.slug, 'title', l.title,
+               's', to_char(l.s, 'YYYY-MM-DD'), 'e', to_char(l.e, 'YYYY-MM-DD'), 'st', l.st, 'round', l.round) as j
+             from l)
+  select (select coalesce(jsonb_agg(o.j order by o.s, o.e, o.slug, o.node_id), '[]'::jsonb)
+            from o where o.s <= p_to and o.e >= p_from),
+         (select coalesce(jsonb_agg(o.j order by o.e, o.slug, o.s, o.node_id), '[]'::jsonb)
+            from o where o.st in ('open', 'planned') and o.e between v_today and v_today + 7)
+  into v_tasks, v_upcoming;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'date', to_char(n.start_date, 'YYYY-MM-DD'), 'slug', r.slug,
+           'round', coalesce(n.label::text, (n.sort_order + 1) || '주차'))
+           order by n.start_date, r.slug, n.sort_order), '[]'::jsonb)
+  into v_markers
+  from public.rooms r
+  join public.room_members m on m.room_id = r.id and m.user_id = v_uid and m.status in ('ACTIVE', 'PENDING')
+  join public.goal_nodes n on n.room_id = r.id and n.parent_id is null and n.archived_at is null
+  where r.archived_at is null and n.start_date between p_from and p_to;
+
+  return jsonb_build_object(
+    'today', to_char(v_today, 'YYYY-MM-DD'),
+    'studies', v_studies, 'tasks', v_tasks, 'markers', v_markers, 'upcoming', v_upcoming);
+end $$;
+
+grant execute on function public.me_schedule(date, date) to authenticated;
