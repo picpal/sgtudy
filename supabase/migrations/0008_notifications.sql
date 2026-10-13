@@ -398,3 +398,120 @@ end $$;
 -- 공개 RPC 만 GRANT(D7). deactivate_pending·deactivate_check 는 내부 헬퍼라 GRANT 하지 않는다
 grant execute on function public.member_deactivate_preview(text, uuid)     to authenticated;
 grant execute on function public.member_deactivate(text, uuid, jsonb)      to authenticated;
+
+-- ───────── pg_cron 잡 (02 §7, cross-cutting §2.4). 전부 멱등: dedupe_key 또는 조건부 UPDATE ─────────
+-- room_tick() 은 0004(플랜 02). 여기 잡들은 상태를 바꾸지 않고 알림·정리만 한다.
+
+-- DRAFT 인데 start_date 가 지남 → 그룹장에게 하루 1건
+create or replace function public.job_draft_blocked() returns int
+language plpgsql security definer set search_path = '' as $$
+declare v_today date := public.kst_today(); r record; v_n int := 0;
+begin
+  for r in select id, leader_id from public.rooms where status = 'DRAFT' and archived_at is null and start_date <= v_today order by id loop
+    v_n := v_n + public.notify_publish('ROOM_START_BLOCKED', r.id, null, null, array[r.leader_id],
+                                       'ROOM_START_BLOCKED:' || r.id || ':' || to_char(v_today, 'YYYY-MM-DD'), '{}'::jsonb);
+  end loop;
+  return v_n;
+end $$;
+
+-- 회차(depth 2) 시작일 = today, 방 ACTIVE → ACTIVE 전원
+create or replace function public.job_round_started() returns int
+language plpgsql security definer set search_path = '' as $$
+declare v_today date := public.kst_today(); r record; v_members uuid[]; v_n int := 0;
+begin
+  for r in
+    select n.id, n.room_id
+    from public.goal_nodes n join public.rooms rm on rm.id = n.room_id
+    where n.depth = 2 and n.archived_at is null and n.start_date = v_today and rm.status = 'ACTIVE' and rm.archived_at is null
+    order by n.id
+  loop
+    select coalesce(array_agg(user_id), '{}'::uuid[]) into v_members from public.room_members where room_id = r.room_id and status = 'ACTIVE';
+    v_n := v_n + public.notify_publish('ROUND_STARTED', r.room_id, r.id, null, v_members, 'ROUND_STARTED:' || r.room_id || ':' || r.id, '{}'::jsonb);
+  end loop;
+  return v_n;
+end $$;
+
+-- 리프 end_date = today + 1 (D-1) / + 3 (D-3), 유효 배정 중 미제출자만. 설정 필터는 notify_enabled(days) 가 한다
+create or replace function public.job_deadline_reminder() returns int
+language plpgsql security definer set search_path = '' as $$
+declare v_today date := public.kst_today(); v_d int; r record; v_n int := 0;
+begin
+  foreach v_d in array array[1, 3] loop
+    for r in
+      select n.id, n.room_id, array_agg(a.user_id) as users
+      from public.goal_nodes n
+      join public.rooms rm on rm.id = n.room_id
+      join public.task_assignments a on a.node_id = n.id and a.released_at is null
+      left join public.submissions s on s.node_id = n.id and s.user_id = a.user_id
+      where n.task_type is not null and n.archived_at is null and rm.status = 'ACTIVE' and rm.archived_at is null
+        and n.start_date <= v_today and n.end_date = v_today + v_d and s.id is null
+      group by n.id, n.room_id order by n.id
+    loop
+      v_n := v_n + public.notify_publish('DEADLINE_REMINDER', r.room_id, r.id, null, r.users,
+                                         'DEADLINE_REMINDER:' || r.room_id || ':' || r.id || ':d' || v_d, jsonb_build_object('days', v_d));
+    end loop;
+  end loop;
+  return v_n;
+end $$;
+
+-- DAILY_DIGEST 방: 어제(KST) 마지막 제출로 전원 제출이 된 리프 수 → 그룹장 1건
+create or replace function public.job_completion_digest() returns int
+language plpgsql security definer set search_path = '' as $$
+declare v_today date := public.kst_today(); r record; v_n int := 0;
+begin
+  for r in
+    select rm.id, rm.leader_id, count(*)::int as cnt
+    from public.rooms rm
+    left join public.room_notification_settings st on st.room_id = rm.id
+    join lateral (
+      select n.id
+      from public.goal_nodes n
+      join public.task_assignments a on a.node_id = n.id and a.released_at is null
+      left join public.submissions s on s.node_id = n.id and s.user_id = a.user_id
+      where n.room_id = rm.id and n.task_type is not null and n.archived_at is null
+      group by n.id
+      having count(a.id) > 0 and count(s.id) = count(a.id)
+         and (max(s.first_submitted_at) at time zone 'Asia/Seoul')::date = v_today - 1) done on true
+    where rm.status = 'ACTIVE' and rm.archived_at is null and coalesce(st.completion_mode, 'DAILY_DIGEST') = 'DAILY_DIGEST'
+    group by rm.id, rm.leader_id order by rm.id
+  loop
+    v_n := v_n + public.notify_publish('TASK_COMPLETION_DIGEST', r.id, null, null, array[r.leader_id],
+                                       'TASK_COMPLETION_DIGEST:' || r.id || ':' || to_char(v_today, 'YYYY-MM-DD'),
+                                       jsonb_build_object('count', r.cnt));
+  end loop;
+  return v_n;
+end $$;
+
+-- 1시간 넘게 PENDING 인 첨부 → DELETED. 제출에 연결되지 않은 READY 고아 24시간 경과 → DELETED. SENT 메일 30일 경과 삭제.
+-- Storage 객체는 SQL 로 지우지 않는다(00 개요): storage.objects 메타 행만 지우면 실제 객체가 고아로 남고, 최신 Supabase 는 직접 DELETE 를 막기도 한다.
+-- DELETED 행은 남겨 두고 2단계 Edge Function(cleanup-files)이 Storage API remove() 후 행을 정리한다.
+create or replace function public.job_cleanup() returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_expired int; v_orphans int; v_mail int;
+begin
+  update public.files set status = 'DELETED', deleted_at = now()
+  where status = 'PENDING' and created_at < now() - interval '1 hour';
+  get diagnostics v_expired = row_count;
+
+  update public.files set status = 'DELETED', deleted_at = now()
+  where status = 'READY' and purpose = 'ATTACHMENT' and submission_id is null and created_at < now() - interval '24 hours';
+  get diagnostics v_orphans = row_count;
+
+  delete from public.mail_outbox where status = 'SENT' and sent_at < now() - interval '30 days';
+  get diagnostics v_mail = row_count;
+
+  return jsonb_build_object('filesExpired', v_expired, 'orphansExpired', v_orphans, 'mailPurged', v_mail);
+end $$;
+
+-- I7 보정: member_count = COUNT(ACTIVE). 원자 증감이 어긋났을 때만 UPDATE
+create or replace function public.member_count_audit() returns int
+language plpgsql security definer set search_path = '' as $$
+declare v_n int;
+begin
+  with c as (select room_id, count(*)::int as n from public.room_members where status = 'ACTIVE' group by room_id)
+  update public.rooms r set member_count = c.n from c where c.room_id = r.id and r.member_count <> c.n;
+  get diagnostics v_n = row_count;
+  return v_n;
+end $$;
+
+-- job_* · member_count_audit 은 GRANT 하지 않는다(D7). pg_cron 은 postgres 로 실행하므로 권한이 필요 없다.
