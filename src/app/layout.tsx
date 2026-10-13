@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_KR } from "next/font/google";
+import { unstable_rethrow } from "next/navigation";
 import { getMe, getToday } from "@/lib/api/me.server";
 import type { Me } from "@/lib/api/types";
 import { kstToday } from "@/lib/kst";
@@ -24,6 +25,7 @@ async function loadMe(): Promise<Me | null> {
   try {
     return await getMe();
   } catch (e) {
+    unstable_rethrow(e); // cookies() 동적 렌더 신호는 삼키지 않는다(/_not-found 정적 프리렌더 방지)
     console.error("[layout] me_get failed — rendering as anonymous", e);
     return null;
   }
@@ -34,6 +36,7 @@ async function loadToday(): Promise<string> {
   try {
     return await getToday();
   } catch (e) {
+    unstable_rethrow(e);
     console.error("[layout] meta_get failed — falling back to Intl Asia/Seoul today", e);
     return kstToday();
   }
