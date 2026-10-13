@@ -204,3 +204,158 @@ begin
 end $$;
 
 grant execute on function public.curriculum_get(text, boolean) to anon, authenticated;
+
+-- ───────── 내부 헬퍼 (GRANT 없음 — node_create / node_move 가 공유, E5) ─────────
+-- 리프 → 부모 전환 (I1): 제출물이 있으면 불가. task_type 을 비우고 배정을 해제한다. 호출자가 이후 assignment_resync 한다.
+create or replace function public.node_make_parent(p public.goal_nodes, p_msg text) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if public.node_has_submissions(p.id) then
+    perform public.fail('NODE_HAS_SUBMISSIONS', p_msg, jsonb_build_object('nodeId', p.id::text));
+  end if;
+  update public.goal_nodes set task_type = null, updated_at = now() where id = p.id;
+  update public.task_assignments set released_at = now() where node_id = p.id and released_at is null;
+end $$;
+
+-- 형제 sort_order 를 0..n-1 로 재부여 (p_except 노드는 제외 — 이동 중인 노드)
+create or replace function public.node_renumber(p_room bigint, p_parent bigint, p_except bigint default null) returns void
+language sql security definer set search_path = '' as $$
+  update public.goal_nodes g set sort_order = s.rn - 1
+  from (select id, row_number() over (order by sort_order, id) as rn
+        from public.goal_nodes
+        where room_id = p_room and parent_id is not distinct from p_parent and id is distinct from p_except) s
+  where g.id = s.id and g.sort_order <> s.rn - 1
+$$;
+
+-- ───────── node_create (03-api §4 기본값, mystudy E1·E2) ─────────
+create or replace function public.node_create(
+  p_slug text, p_parent_id bigint default null, p_title text default null, p_label text default null,
+  p_task_type text default null, p_start_date date default null, p_end_date date default null, p_index int default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  r        public.rooms;
+  p        public.goal_nodes;
+  v_uid    uuid;
+  v_id     bigint;
+  v_depth  int;
+  v_round  bigint;
+  v_title  text := nullif(trim(coalesce(p_title, '')), '');
+  v_label  text := nullif(trim(coalesce(p_label, '')), '');
+  -- 회차: taskType 이 없으면 빈 부모, 있으면 회차 자체가 과제인 depth-2 리프(A7). 하위: 기본 common
+  v_type   text := upper(coalesce(p_task_type, case when p_parent_id is null then null else 'common' end));
+  v_s      date;
+  v_e      date;
+  v_n      int;
+  v_idx    int;
+begin
+  r := public.node_assert_editable(p_slug);
+  v_uid := public.current_user_id();
+  if v_type is not null and v_type not in ('COMMON', 'DESIGNATED') then
+    perform public.fail('VALIDATION_FAILED', '과제 유형은 common 또는 designated 예요', '{"field":"taskType"}'::jsonb);
+  end if;
+
+  if p_parent_id is null then
+    select count(*)::int, max(end_date) + 1 into v_n, v_s from public.goal_nodes where room_id = r.id and parent_id is null;
+    v_depth := 2;
+    v_title := coalesce(v_title, '새 회차');
+    v_label := coalesce(v_label, (v_n + 1) || '주차');
+    v_s     := coalesce(p_start_date, v_s, r.start_date);
+    v_e     := coalesce(p_end_date, v_s + 6);
+  else
+    p := public.node_get(r.id, p_parent_id);
+    if p.archived_at is not null then
+      perform public.fail('PARENT_ARCHIVED', '보관된 항목 아래에는 추가할 수 없어요', jsonb_build_object('nodeId', p.id::text));
+    end if;
+    if p.depth >= 5 then
+      perform public.fail('NODE_DEPTH_EXCEEDED', '최대 5단계까지만 만들 수 있어요', jsonb_build_object('nodeId', p.id::text));
+    end if;
+    if v_label is not null then
+      perform public.fail('VALIDATION_FAILED', '회차 라벨은 회차에만 줄 수 있어요', '{"field":"label"}'::jsonb);
+    end if;
+    select count(*)::int into v_n from public.goal_nodes where parent_id = p.id;
+    v_depth := p.depth + 1;
+    v_round := p.round_id;
+    v_title := coalesce(v_title, '새 과제');
+    v_s := coalesce(p_start_date, p.start_date);
+    v_e := coalesce(p_end_date, p.end_date);
+  end if;
+
+  if length(v_title) > 80 then perform public.fail('INVALID_TITLE', '제목은 1~80자예요', '{"field":"title"}'::jsonb); end if;
+  if v_label is not null and length(v_label) > 20 then perform public.fail('VALIDATION_FAILED', '회차 라벨은 20자까지예요', '{"field":"label"}'::jsonb); end if;
+  if v_s > v_e then perform public.fail('INVALID_PERIOD', '종료일은 시작일 이후여야 해요', '{"field":"endDate"}'::jsonb); end if;
+
+  -- 제출물 없는 리프 아래에 자식을 만들면 그 리프는 부모로 전환 (I1)
+  if p.id is not null and p.task_type is not null then
+    perform public.node_make_parent(p, '제출물이 있는 과제 아래에는 추가할 수 없어요. 보관해 주세요');
+  end if;
+
+  v_idx := least(greatest(coalesce(p_index, v_n), 0), v_n);
+  update public.goal_nodes set sort_order = sort_order + 1
+  where room_id = r.id and parent_id is not distinct from p_parent_id and sort_order >= v_idx;
+
+  insert into public.goal_nodes (room_id, parent_id, round_id, depth, sort_order, label, title, start_date, end_date, task_type)
+  values (r.id, p_parent_id, v_round, v_depth, v_idx, v_label, v_title, v_s, v_e, v_type)
+  returning id into v_id;
+  if p_parent_id is null then update public.goal_nodes set round_id = v_id where id = v_id; end if;
+
+  perform public.assignment_resync(r.id);
+  return public.curriculum_json(r.id, v_uid, true);
+end $$;
+
+-- ───────── node_delete (E8) ─────────
+create or replace function public.node_delete(p_slug text, p_node_id bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare r public.rooms; n public.goal_nodes; v_uid uuid;
+begin
+  r := public.node_assert_editable(p_slug);
+  v_uid := public.current_user_id();
+  n := public.node_get(r.id, p_node_id);
+  if public.node_has_submissions(n.id) then
+    perform public.fail('NODE_HAS_SUBMISSIONS', '제출물이 있는 항목은 삭제할 수 없어요. 보관해 주세요', jsonb_build_object('nodeId', n.id::text));
+  end if;
+  -- 서브트리를 한 문장으로 지운다: round_id FK(NO ACTION)가 parent_id cascade 의 중첩 문장에서 먼저 걸리기 때문. 배정은 node_id cascade
+  delete from public.goal_nodes where id in (select public.node_subtree(n.id));
+  perform public.node_renumber(r.id, n.parent_id);
+  perform public.assignment_resync(r.id);
+  return public.curriculum_json(r.id, v_uid, true);
+end $$;
+
+-- ───────── node_archive / node_unarchive (E9·E10, I5) ─────────
+create or replace function public.node_archive(p_slug text, p_node_id bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare r public.rooms; n public.goal_nodes; v_uid uuid;
+begin
+  r := public.node_assert_editable(p_slug);
+  v_uid := public.current_user_id();
+  n := public.node_get(r.id, p_node_id);
+  update public.goal_nodes set archived_at = now(), updated_at = now()
+  where id in (select public.node_subtree(n.id)) and archived_at is null;
+  perform public.assignment_resync(r.id);                  -- 보관 리프의 COMMON·DESIGNATED 행 released (released_at = archived_at, D13)
+  return public.curriculum_json(r.id, v_uid, true);
+end $$;
+
+create or replace function public.node_unarchive(p_slug text, p_node_id bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare r public.rooms; n public.goal_nodes; v_uid uuid;
+begin
+  r := public.node_assert_editable(p_slug);
+  v_uid := public.current_user_id();
+  n := public.node_get(r.id, p_node_id);
+  if n.parent_id is not null and exists (select 1 from public.goal_nodes p where p.id = n.parent_id and p.archived_at is not null) then
+    perform public.fail('PARENT_ARCHIVED', '상위 항목이 보관 중이에요. 상위 항목을 먼저 해제해 주세요', jsonb_build_object('nodeId', n.parent_id::text));
+  end if;
+  -- 보관 때문에 풀린 DESIGNATED 행만 되살린다: resync 가 released_at = 리프의 archived_at 으로 찍어 두었다(D13)
+  update public.task_assignments a set released_at = null
+  from public.goal_nodes g
+  where g.id = a.node_id and g.id in (select public.node_subtree(n.id)) and g.archived_at is not null
+    and a.source = 'DESIGNATED' and a.released_at = g.archived_at;
+  update public.goal_nodes set archived_at = null, updated_at = now()
+  where id in (select public.node_subtree(n.id)) and archived_at is not null;
+  perform public.assignment_resync(r.id);                  -- COMMON 행 복구, 그사이 ACTIVE 가 아니게 된 담당자의 DESIGNATED 는 다시 해제
+  return public.curriculum_json(r.id, v_uid, true);
+end $$;
+
+grant execute on function public.node_create(text, bigint, text, text, text, date, date, int) to authenticated;
+grant execute on function public.node_delete(text, bigint)    to authenticated;
+grant execute on function public.node_archive(text, bigint)   to authenticated;
+grant execute on function public.node_unarchive(text, bigint) to authenticated;

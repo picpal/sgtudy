@@ -775,7 +775,7 @@ export const ROOM_CASES: Case[] = [
             and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
             and p.proname <> 'handle_new_auth_user' order by 1`, [role])).map((x) => x.f as string);
       // 출처: 0002(me_get·me_update·nickname_check·meta_get·current_user_id 의 GRANT), 0003(can_read_*·is_room_*·is_my_task),
-      // 0004(room_create·room_open_recruit…room_update·rooms_list·room_get), 0005(room_join…room_members_get·invite_preview/get/rotate/join), 0006(curriculum_get)
+      // 0004(room_create·room_open_recruit…room_update·rooms_list·room_get), 0005(room_join…room_members_get·invite_preview/get/rotate/join), 0006(curriculum_get·node_create/delete/archive/unarchive)
       const ANON = [
         "can_read_room(bigint)", "can_read_submission(bigint,uuid)", "can_read_submissions(bigint)", "current_user_id()",
         "invite_preview(text)", "curriculum_get(text,boolean)", "is_room_leader(bigint)", "is_room_member(bigint)", "meta_get()",
@@ -785,6 +785,7 @@ export const ROOM_CASES: Case[] = [
         ...ANON,
         "invite_get(text)", "invite_join(text)", "invite_rotate(text)", "is_my_task(bigint)",
         "me_get()", "me_update(text,boolean)", "nickname_check(text)",
+        "node_archive(text,bigint)", "node_create(text,bigint,text,text,text,date,date,integer)", "node_delete(text,bigint)", "node_unarchive(text,bigint)",
         "room_apply(text,text)", "room_approve(text,uuid)", "room_applications(text)", "room_archive(text)",
         "room_cancel_application(text)", "room_create(text,text,date,date,integer,boolean,text,text,text,integer,boolean,uuid,text[])",
         "room_delete(text)", "room_join(text,text)", "room_leave(text)", "room_members_get(text)",
