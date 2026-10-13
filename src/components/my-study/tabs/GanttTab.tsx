@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { addDays, diffDays, md } from "@/lib/date";
-import { TODAY } from "@/lib/routes";
+import { useToday } from "@/lib/today";
 import { CodeIcons, Seg } from "../bits";
 import { ganttRange, visibleNodes, type LeafState, type Tree } from "../model";
 import type { ScreenState, Update, Zoom } from "../state";
@@ -20,7 +21,8 @@ const GBAR: Record<LeafState, [string, string, string]> = {
 export function GanttTab({ tree, S, update, goLeaf }: Props) {
   const dayZoom = S.zoom !== "week";
   const dw = dayZoom ? 28 : 10;
-  const { start, nDays } = ganttRange(tree.roots);
+  const today = useToday();
+  const { start, nDays } = ganttRange(tree.roots, today);
   const W = nDays * dw;
   const rows = visibleNodes(tree.roots, S.closed);
 
@@ -32,10 +34,19 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
   months.forEach((m, idx) => {
     if (idx + 1 < months.length) m.end = months[idx + 1].i;
   });
-  const tIdx = diffDays(start, TODAY);
+  const tIdx = diffDays(start, today);
   const hasToday = tIdx >= 0 && tIdx < nDays;
   const todayX = tIdx * dw + dw / 2;
   const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !p.closed[id] } }));
+  // 처음(및 확대 단위 변경 시) 오늘이 차트 영역 가운데쯤 오도록 가로 스크롤 (Q1-21/Q3-08)
+  const scroller = useRef<HTMLDivElement>(null);
+  const labelCol = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || !hasToday) return;
+    const left = labelCol.current?.offsetWidth ?? 0;
+    el.scrollLeft = Math.max(0, todayX - (el.clientWidth - left) / 2);
+  }, [hasToday, todayX]);
 
   return (
     <div className="mt-[18px] flex flex-col gap-3">
@@ -51,10 +62,11 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
         </span>
       </div>
 
-      <div className="thin-scroll overflow-x-auto rounded-[16px] border border-line [--gantt-left:300px] max-sm:[--gantt-left:180px]">
+      {/* 좁은 화면은 이름 열을 ≈96px 로 줄이고 아이콘·퍼센트를 숨겨 차트 폭을 확보한다 */}
+      <div ref={scroller} className="thin-scroll overflow-x-auto rounded-[16px] border border-line [--gantt-left:300px] max-sm:[--gantt-left:96px]">
         <div className="relative min-w-full" style={{ width: `calc(var(--gantt-left) + ${W}px)` }}>
           <div className="flex h-16 border-b border-line">
-            <div className="sticky left-0 z-[3] flex w-[var(--gantt-left)] shrink-0 items-end border-r border-line bg-surface-3 px-[14px] pb-3 text-[12px] font-semibold text-ink-3">목표 · 과제</div>
+            <div ref={labelCol} className="sticky left-0 z-[3] flex w-[var(--gantt-left)] shrink-0 items-end border-r border-line bg-surface-3 px-[14px] pb-3 text-[12px] font-semibold text-ink-3 max-sm:px-2">목표 · 과제</div>
             <div className="relative h-16 shrink-0 bg-surface-3" style={{ width: W }}>
               {months.map((m) => (
                 <span key={m.i} className="absolute top-0 h-[26px] overflow-hidden whitespace-nowrap border-l border-line px-2 pt-[6px] text-[12px] font-bold text-ink" style={{ left: m.i * dw, width: (m.end - m.i) * dw }}>
@@ -66,7 +78,7 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
                 const dow = i % 7;
                 if (dayZoom)
                   return (
-                    <span key={k} className="absolute top-7 text-center text-[11px]" style={{ left: i * dw, width: dw, color: dow === 0 ? "#C0453A" : dow === 6 ? "#2F5BC2" : "#5B6675", fontWeight: k === TODAY ? 700 : 500 }}>
+                    <span key={k} className="absolute top-7 text-center text-[11px]" style={{ left: i * dw, width: dw, color: dow === 0 ? "#C0453A" : dow === 6 ? "#2F5BC2" : "#5B6675", fontWeight: k === today ? 700 : 500 }}>
                       {+k.slice(8, 10)}
                     </span>
                   );
@@ -93,10 +105,10 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
             const tip = `${n.title} · ${md(n.s)}–${md(n.e)} · ${n.leaf ? (n.asg ? `${n.sub}/${n.asg} 제출` : "담당자 미정") : `${n.pct}%`}`;
             return (
               <div key={n.id} className="flex h-11 border-b border-line-2">
-                <div className="sticky left-0 z-[2] flex w-[var(--gantt-left)] shrink-0 items-center gap-[6px] border-r border-line pl-2 pr-3" style={{ background: n.d === 0 ? "#FAFCFB" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}>
-                  <span className="shrink-0" style={{ width: n.d * 16 }} />
+                <div className="sticky left-0 z-[2] flex w-[var(--gantt-left)] shrink-0 items-center gap-[6px] border-r border-line pl-2 pr-3 max-sm:gap-[2px] max-sm:pl-1 max-sm:pr-1" style={{ background: n.d === 0 ? "#FAFCFB" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}>
+                  <span className="w-[calc(var(--d)*16px)] shrink-0 max-sm:w-[calc(var(--d)*4px)]" style={{ "--d": n.d } as React.CSSProperties} />
                   {n.leaf ? (
-                    <span className="w-[26px] shrink-0" />
+                    <span className="w-[26px] shrink-0 max-sm:w-0" />
                   ) : (
                     <button type="button" aria-label={`${n.title} ${open ? "접기" : "펼치기"}`} aria-expanded={open} onClick={() => toggle(n.id)} className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] bg-transparent text-ink-3">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="block transition-transform duration-150" style={{ transform: `rotate(${open ? 90 : 0}deg)` }}>
@@ -105,12 +117,12 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
                     </button>
                   )}
                   <button type="button" onClick={() => (n.leaf ? goLeaf(n.id) : toggle(n.id))} title={tip} className="flex h-9 min-w-0 flex-1 items-center gap-[6px] bg-transparent p-0 text-left text-ink">
-                    {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[6px] bg-navy px-[6px] py-[2px] text-[11px] font-bold text-white">{n.label}</span>}
-                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px]" style={{ fontWeight: n.d === 0 ? 700 : n.leaf ? 500 : 600 }}>
+                    {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[6px] bg-navy px-[6px] py-[2px] text-[11px] font-bold text-white max-sm:hidden">{n.label}</span>}
+                    <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] max-sm:text-[12px]" style={{ fontWeight: n.d === 0 ? 700 : n.leaf ? 500 : 600 }}>
                       {n.title}
                     </span>
                   </button>
-                  {n.leaf ? <CodeIcons codes={n.people.map((p) => p.c)} size={13} max={4} /> : <span className="shrink-0 text-[12px] font-bold">{n.pct}%</span>}
+                  <span className="flex shrink-0 max-sm:hidden">{n.leaf ? <CodeIcons codes={n.people.map((p) => p.c)} size={13} max={4} /> : <span className="text-[12px] font-bold">{n.pct}%</span>}</span>
                 </div>
                 <div className="relative shrink-0" style={{ width: W, backgroundImage: `repeating-linear-gradient(to right, #EEF2F1 0 1px, transparent 1px ${7 * dw}px)` }}>
                   {hasToday && <span className="absolute bottom-0 top-0 z-[1] w-[2px] bg-danger opacity-55" style={{ left: todayX - 1 }} />}

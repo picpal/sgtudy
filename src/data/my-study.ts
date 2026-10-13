@@ -6,7 +6,7 @@ import type { Tone } from "@/lib/palette";
 import type { RoomStatus, TaskStatus } from "@/lib/types";
 import { addDays } from "@/lib/date";
 
-export type RoomId = "aws" | "spring" | "sqld" | "algo";
+export type RoomId = string; // slug (D1)
 export const ROOM_IDS: RoomId[] = ["aws", "spring", "sqld", "algo"];
 export const isRoomId = (s: string): s is RoomId => (ROOM_IDS as string[]).includes(s);
 
@@ -25,6 +25,8 @@ export type MemberInfo = {
   pending?: boolean;
   /** 막대·점수 없이 "–" */
   noBar?: boolean;
+  userId?: string;
+  tone?: Tone;
 };
 
 export type CurTask = {
@@ -33,6 +35,8 @@ export type CurTask = {
   /** "10.08 – 10.14" */
   dates: string;
   people: [string, TaskStatus][];
+  /** 이름 → DTO tone */
+  tones?: Record<string, Tone>;
 };
 
 export type RoundRow = {
@@ -45,11 +49,13 @@ export type RoundRow = {
   current?: boolean;
   /** 요약 대체 문구 ("과제 2개") */
   alt?: string;
+  /** tree.roots 매칭용 */
+  roundId?: string;
 };
 
 export type RoomTag = { label: string; tone: Tone; auto: boolean };
 
-export type NextDue = { title: string; path: string; due: string; dday: string };
+export type NextDue = { title: string; path: string; due: string; dday: string; nodeId?: string };
 
 export type Room = {
   id: RoomId;
@@ -62,6 +68,8 @@ export type Room = {
   joinMode: string;
   visibility: string;
   leader: string;
+  /** 그룹장 아바타 색 — DTO leader.tone */
+  leaderTone?: Tone;
   tags: RoomTag[];
   capCur: number;
   capMax: number;
@@ -274,7 +282,7 @@ export const ROOMS: Record<RoomId, Room> = {
 
 /* ---------------- 사이드바 목록 ---------------- */
 
-export type SidebarItem = { id: RoomId; when: string; /** 남은 일수 — 있으면 D-day 배지 */ left?: number };
+export type SidebarItem = { id: RoomId; when: string; /** 남은 일수 — 있으면 D-day 배지 */ left?: number; title?: string; intro?: string };
 export type SidebarGroup = { label: string; items: SidebarItem[] };
 
 export const SIDEBAR_GROUPS: SidebarGroup[] = [

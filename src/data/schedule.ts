@@ -2,7 +2,7 @@ import type { TaskStatus } from "@/lib/types";
 
 /** MySchedule.dc.html 목 데이터 — docs/specs/myschedule.md §3·§4 */
 
-export type StudyId = "aws" | "spring" | "sqld";
+export type StudyId = string; // slug
 
 export type Study = {
   id: StudyId;
@@ -12,6 +12,7 @@ export type Study = {
   dot: string;
   /** 승인 대기 — 막대 줄무늬, RoomView 로 연결 */
   pending?: boolean;
+  membership?: "leader" | "joined" | "pending";
 };
 
 export const STUDIES: Study[] = [
@@ -26,7 +27,7 @@ export const STUDY = Object.fromEntries(STUDIES.map((s) => [s.id, s])) as Record
 export const shortName = (s: Study) => s.name.split(" · ")[0];
 
 export type Task = {
-  id: number;
+  id: string;
   study: StudyId;
   title: string;
   /** 시작일 YYYY-MM-DD */
@@ -35,6 +36,8 @@ export type Task = {
   e: string;
   st: TaskStatus;
   round: string;
+  /** false = 내 담당 아님(st null 보정, 아이콘 없음) */
+  mine?: boolean;
 };
 
 const RAW: [StudyId, string, string, string, TaskStatus, string][] = [
@@ -55,7 +58,7 @@ const RAW: [StudyId, string, string, string, TaskStatus, string][] = [
   ["sqld", "1과목 기출 풀이", "2026-10-29", "2026-11-01", "planned", "1주차"],
 ];
 
-export const TASKS: Task[] = RAW.map(([study, title, s, e, st, round], id) => ({ id, study, title, s, e, st, round }));
+export const TASKS: Task[] = RAW.map(([study, title, s, e, st, round], id) => ({ id: String(id), study, title, s, e, st, round }));
 
 export type Marker = { date: string; study: StudyId; round: string };
 

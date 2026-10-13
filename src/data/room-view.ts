@@ -3,20 +3,28 @@ import type { RoomStatus, TaskStatus } from "@/lib/types";
 
 /** RoomView.dc.html ROOMS 객체를 그대로 옮긴 목업. 문구·숫자는 원본과 동일. */
 
-export type RoomId = "toeic" | "cs" | "sqld" | "docker" | "jcg" | "aws" | "react" | "algo";
-
 /** 참가 CTA 의 기본 상태. recruit 는 사용자의 join 값에 따라 join/apply/leave/pending 으로 갈린다. */
-export type BaseAction = "recruit" | "owner" | "full" | "joined" | "activeClosed" | "ended";
+export type BaseAction = "recruit" | "owner" | "full" | "joined" | "inactive" | "activeClosed" | "ended";
 export type JoinState = "none" | "joined" | "pending";
-export type Action = "join" | "apply" | "leave" | "pending" | "joined" | "owner" | "full" | "activeClosed" | "ended";
+/** 공개 식별자 = slug (D1). 목업 8개 리터럴에서 string 으로 넓힘 */
+export type RoomId = string;
+export type Action = "login" | "join" | "apply" | "leave" | "pending" | "inactive" | "joined" | "owner" | "full" | "activeClosed" | "ended";
 
 export type RoomTag = { label: string; tone: Tone; auto: boolean };
-export type RoomMember = { name: string; leader?: boolean; me?: boolean };
+export type RoomMember = {
+  name: string;
+  leader?: boolean;
+  me?: boolean;
+  userId?: string;
+  tone?: Tone;
+  /** 내 승인 대기 행 */
+  pending?: boolean;
+};
 export type RoomTask = {
   title: string;
   type: "공통" | "지정";
   dates: string;
-  people: { name: string; status: TaskStatus }[];
+  people: { name: string; status: TaskStatus; tone?: Tone }[];
 };
 export type RoomRound = {
   label: string;
@@ -30,17 +38,22 @@ export type RoomRound = {
 };
 
 export type Room = {
+  /** = slug */
   id: RoomId;
   title: string;
   intro: string;
   status: RoomStatus;
   base: BaseAction;
   approval: boolean;
+  /** 비공개면 false */
+  pub?: boolean;
   period: string;
   when: string;
   dday: string;
   ddayLong: string;
   leader: string;
+  /** 그룹장 아바타 색 — DTO leader.tone */
+  leaderTone?: Tone;
   tags: RoomTag[];
   capCur: number;
   capMax: number;

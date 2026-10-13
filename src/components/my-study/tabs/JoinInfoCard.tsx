@@ -2,24 +2,24 @@
 
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import type { Room } from "@/data/my-study";
+import type { StudyRoom } from "@/lib/api/my-study";
 import { toneOfName } from "../bits";
 import { memberStats, overallPct, type Tree } from "../model";
 import { StatusBadge } from "../StudyHeaderInfo";
 
-type Props = { room: Room; tree: Tree; onMyTasks: () => void; goLeaf: (id: string) => void };
+type Props = { room: StudyRoom; tree: Tree; onMyTasks: () => void; goLeaf: (id: string) => void; onCancel: (kind: "leave" | "cancel") => void; busy: boolean };
 
 /** 우측 aside "참가 정보" + "내 다음 마감" */
-export function JoinInfoCard({ room, tree, onMyTasks, goLeaf }: Props) {
+export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy }: Props) {
   const overall = overallPct(tree.roots);
   const full = room.capCur >= room.capMax;
-  const nextLeaf = room.next ? tree.leaves.find((l) => l.title === room.next!.title) : undefined;
+  const nextLeaf = room.next?.nodeId ? tree.leaves.find((l) => l.id === room.next!.nodeId) : undefined;
 
   return (
-    <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px] max-[900px]:max-w-none">
+    <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px] max-[901px]:max-w-none">
       <div className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
         <div className="flex items-center justify-between">
-          <StatusBadge status={room.status} />
+          <StatusBadge status={room.status} draft={room.draft} />
           <span className="text-[13px] font-semibold text-ink">{room.ddayLong}</span>
         </div>
 
@@ -32,20 +32,23 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf }: Props) {
             </span>
           </div>
           <ProgressBar pct={Math.round((room.capCur / room.capMax) * 100)} height={8} fill={full ? "#B4462B" : "#12A386"} />
-          <span className="inline-flex items-center gap-[5px] text-[12px] font-medium" style={{ color: room.minOk ? "#0D7A64" : "#8A5A00" }}>
-            {room.minOk ? (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m5 12.5 4.5 4.5L19 7.5" />
-              </svg>
-            ) : (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7.5v5.5" />
-                <circle cx="12" cy="16.5" r=".6" />
-              </svg>
-            )}
-            {room.minText}
-          </span>
+          {/* 최소 인원이 없는 방은 문구가 비어 있다 — 아이콘만 남기지 않는다 (V2-05) */}
+          {room.minText && (
+            <span className="inline-flex items-center gap-[5px] text-[12px] font-medium" style={{ color: room.minOk ? "#0D7A64" : "#8A5A00" }}>
+              {room.minOk ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m5 12.5 4.5 4.5L19 7.5" />
+                </svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7.5v5.5" />
+                  <circle cx="12" cy="16.5" r=".6" />
+                </svg>
+              )}
+              {room.minText}
+            </span>
+          )}
         </div>
 
         <div className="flex flex-col gap-[6px] rounded-[14px] bg-surface-2 px-[14px] py-3">
@@ -64,12 +67,12 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf }: Props) {
           <ul className="m-0 flex list-none flex-col gap-[2px] p-0">
             {room.members.map((m) => {
               const dim = !!(m.left || m.pending);
-              const { done, total } = memberStats(tree.leaves, m.name);
+              const { done, total } = memberStats(tree.leaves, m.userId ?? "");
               const hasBar = !dim && !m.noBar;
               const pct = total ? Math.round((done / total) * 100) : 0;
               return (
-                <li key={m.name} className="flex items-center gap-[10px] rounded-[10px] px-2 py-[7px]" style={{ background: m.me ? "#F3F7FF" : "transparent" }}>
-                  <Avatar name={m.name} size={30} tone={toneOfName(m.name)} pending={m.pending} className={m.left ? "bg-slate-soft! text-[#8C97A4]!" : ""} />
+                <li key={m.userId ?? m.name} className="flex items-center gap-[10px] rounded-[10px] px-2 py-[7px]" style={{ background: m.me ? "#F3F7FF" : "transparent" }}>
+                  <Avatar name={m.name} size={30} tone={m.tone ?? toneOfName(m.name)} pending={m.pending} className={m.left ? "bg-slate-soft! text-[#8C97A4]!" : ""} />
                   <span className="flex min-w-0 flex-1 items-center gap-[6px]">
                     <span className="whitespace-nowrap text-[14px]" style={{ fontWeight: m.me ? 700 : 500, color: dim ? "#7A8594" : "#1B2230" }}>
                       {m.name}
@@ -90,12 +93,20 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf }: Props) {
           </ul>
         </div>
 
-        {room.action === "joined" && (
+        {/* 상태별 문구·버튼 (Q1-12/Q2-13): 모집 기간 참가자는 /rooms 처럼 참가 취소 가능, 진행 중은 불가, 그룹장은 취소 없음 */}
+        {(room.action === "joined" || room.action === "leave" || room.action === "owner") && (
           <div className="flex flex-col gap-[6px]">
             <button type="button" onClick={onMyTasks} className="flex h-12 items-center justify-center rounded-[24px] bg-navy text-[15px] font-semibold text-white">
               내 과제 보기
             </button>
-            <span className="text-center text-[12px] text-muted">진행 중에는 참가 취소를 할 수 없어요</span>
+            {room.action === "leave" && (
+              <button type="button" onClick={() => onCancel("leave")} disabled={busy} className="h-11 rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink disabled:opacity-60">
+                참가 취소
+              </button>
+            )}
+            <span className="text-center text-[12px] text-muted">
+              {room.action === "leave" ? "모집 기간에만 참가를 취소할 수 있어요" : room.action === "owner" ? (room.draft ? "내가 만든 방이에요 · 아직 모집을 시작하지 않았어요" : "내가 만든 방이에요") : "진행 중에는 참가 취소를 할 수 없어요"}
+            </span>
           </div>
         )}
         {room.action === "pending" && (
@@ -107,7 +118,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf }: Props) {
               </svg>
               승인 대기중
             </div>
-            <button type="button" className="h-11 rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink">
+            <button type="button" onClick={() => onCancel("cancel")} disabled={busy} className="h-11 rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink disabled:opacity-60">
               신청 취소
             </button>
             <span className="text-center text-[12px] text-muted">시작일까지 승인되지 않으면 신청이 자동 만료돼요</span>

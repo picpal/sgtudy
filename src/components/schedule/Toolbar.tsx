@@ -1,4 +1,4 @@
-import { STUDIES, type StudyId } from "@/data/schedule";
+import type { Study } from "@/data/schedule";
 
 export type View = "month" | "list";
 
@@ -6,17 +6,18 @@ type Props = {
   y: number;
   m: number;
   view: View;
-  off: StudyId[];
+  off: string[];
+  studies: Study[];
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
-  onToggle: (id: StudyId) => void;
+  onToggle: (id: string) => void;
   onView: (v: View) => void;
 };
 
 const roundBtn = "flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2";
 
-export function Toolbar({ y, m, view, off, onPrev, onNext, onToday, onToggle, onView }: Props) {
+export function Toolbar({ y, m, view, off, studies, onPrev, onNext, onToday, onToggle, onView }: Props) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3">
       <h1 className="m-0 min-w-[150px] text-[26px] font-bold tracking-[-0.02em]">
@@ -43,7 +44,7 @@ export function Toolbar({ y, m, view, off, onPrev, onNext, onToday, onToggle, on
       </div>
       <div className="flex-[1_1_20px]" />
       <div role="group" aria-label="스터디 필터" className="flex flex-wrap gap-[6px]">
-        {STUDIES.map((s) => {
+        {studies.map((s) => {
           const active = !off.includes(s.id);
           return (
             <button

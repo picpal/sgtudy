@@ -10,12 +10,14 @@ const STATUS_BADGE: Record<CardStatus, { label: string; bg: string; fg: string }
   active: { label: "진행중", bg: "#0D7A64", fg: "#FFFFFF" },
   ended: { label: "종료", bg: "#E9EEF0", fg: "#4A5563" },
   full: { label: "정원 마감", bg: "#FDE8E1", fg: "#B4462B" },
+  draft: { label: "준비중", bg: "#E9EEF0", fg: "#4A5563" },
 };
 
 /** 상태 슬롯 톤 [배경, 라벨색, 막대색, 트랙색] */
 const SLOT_TONE: Record<CardStatus, { bg: string; label: string; bar: string; track: string }> = {
   recruit: { bg: "#EFF4FE", label: "#2F5BC2", bar: "#3B6FE0", track: "#D6E2FA" },
   full: { bg: "#FDF1EC", label: "#B4462B", bar: "#C9583A", track: "#F4D9CF" },
+  draft: { bg: "#F4F6F7", label: "#4A5563", bar: "#7A8594", track: "#DDE2E5" },
   active: { bg: "#EEF8F4", label: "#0D7A64", bar: "#12A386", track: "#CFE8E0" },
   ended: { bg: "#F4F6F7", label: "#4A5563", bar: "#7A8594", track: "#DDE2E5" },
 };
@@ -93,7 +95,7 @@ export function RoomCard({ room, selectedTags }: Props) {
 
       <div className="flex items-center justify-between gap-2 border-t border-line-2 px-[18px] py-3 text-[13px] text-muted">
         <span className="flex items-center gap-2">
-          <Avatar name={room.leader} size={24} strong />
+          <Avatar name={room.leader} tone={room.leaderTone} size={24} strong />
           <span>
             by <b className="font-semibold text-ink">{room.leader}</b>
           </span>

@@ -24,6 +24,10 @@ describe("safeReturnTo", () => {
       expect(safeReturnTo(bad)).toBe("/");
     }
   });
+  it("404 paths: unknown top-level → / (by design), unknown room keeps its path (V1-03)", () => {
+    expect(safeReturnTo("/zzz")).toBe("/");
+    expect(safeReturnTo("/rooms/nope")).toBe("/rooms/nope");
+  });
 });
 
 describe("loginUrl", () => {

@@ -20,18 +20,23 @@ type Props = {
   onTab: (t: Tab) => void;
   status: StatusFilter;
   onStatus: (s: StatusFilter) => void;
-  tagCounts: { tag: string; count: number }[];
+  /** 서버 tagFacets — label 표시, slug 로 선택 */
+  tagCounts: { slug: string; tag: string; count: number }[];
+  /** 선택된 slug */
   tags: string[];
-  onToggleTag: (t: string) => void;
+  onToggleTag: (slug: string) => void;
   onResetTags: () => void;
+  /** 비로그인: 전체 공개 방 탭만 */
+  anonymous?: boolean;
 };
 
-export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, tags, onToggleTag, onResetTags }: Props) {
+export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, tags, onToggleTag, onResetTags, anonymous }: Props) {
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line">
-        <div role="tablist" aria-label="방 범위" className="flex gap-1">
-          {TABS.map((t) => {
+        {/* 390 폭에서 탭 3개가 358px 를 넘는다 — 페이지가 아니라 탭 줄만 가로로 스크롤(Q1-03). pb-px: -mb-px 밑줄이 세로 스크롤을 만들지 않게 */}
+        <div role="tablist" aria-label="방 범위" className="thin-scroll flex min-w-0 max-w-full gap-1 max-sm:overflow-x-auto max-sm:pb-px">
+          {TABS.filter((t) => !anonymous || t.key === "public").map((t) => {
             const on = t.key === tab;
             return (
               <button
@@ -40,7 +45,7 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
                 role="tab"
                 aria-selected={on}
                 onClick={() => onTab(t.key)}
-                className={`-mb-px flex h-12 items-center gap-[6px] whitespace-nowrap border-b-2 bg-transparent px-[14px] text-[15px] ${
+                className={`-mb-px flex h-12 shrink-0 items-center gap-[6px] whitespace-nowrap border-b-2 bg-transparent px-[14px] text-[15px] max-sm:px-[10px] max-sm:text-[14px] ${
                   on ? "border-ink font-bold text-ink" : "border-transparent font-medium text-muted"
                 }`}
               >
@@ -84,14 +89,14 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
           </svg>
           태그
         </span>
-        {tagCounts.map(({ tag, count }) => {
-          const on = tags.includes(tag);
+        {tagCounts.map(({ slug, tag, count }) => {
+          const on = tags.includes(slug);
           return (
             <button
-              key={tag}
+              key={slug}
               type="button"
               aria-pressed={on}
-              onClick={() => onToggleTag(tag)}
+              onClick={() => onToggleTag(slug)}
               className={`flex h-8 items-center gap-[6px] whitespace-nowrap rounded-2xl border px-3 text-[13px] ${
                 on ? "border-mint bg-mint-soft font-semibold text-mint-deep" : "border-line-3 bg-surface font-medium text-ink-2"
               }`}

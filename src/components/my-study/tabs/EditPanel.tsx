@@ -1,23 +1,51 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import type { TaskType } from "@/data/my-study";
-import { Seg, toneOfName } from "../bits";
-import type { TreeNode } from "../model";
-import { patchOv, type ScreenState, type Update } from "../state";
+import { Seg } from "../bits";
+import { dropFieldOv, periodWarnings, type TreeMember, type TreeNode } from "../model";
+import { patchOv, type Leave, type ScreenState, type Update } from "../state";
+import type { CurriculumApi } from "../useCurriculumApi";
+import { InlineConfirm } from "./InlineConfirm";
 
-type Props = { n: TreeNode; members: string[]; S: ScreenState; update: Update };
+type Props = {
+  n: TreeNode;
+  parent: TreeNode | null;
+  period: { start: string; end: string };
+  members: TreeMember[];
+  S: ScreenState;
+  update: Update;
+  api: CurriculumApi;
+  /** 보류했던 목적지로 이동 (Q2-05) */
+  go: (to: Leave) => void;
+  /** 미저장 수정이 있으면 먼저 묻고 이동 */
+  request: (to: Leave) => void;
+};
 
 const field = "h-[42px] rounded-[10px] border border-line-3 text-ink";
 
-/** 그룹장 편집 미리보기 — 우측 "항목 편집" 패널. 모두 메모리 오버라이드. */
-export function EditPanel({ n, members, S, update }: Props) {
+/** 그룹장 편집 — 우측 "항목 편집" 패널. 내용 변경은 오버라이드에 모았다가 "저장" 1회(node_update), 삭제·보관은 즉시 RPC. */
+export function EditPanel({ n, parent, period, members, S, update, api, go, request }: Props) {
   const id = n.id;
-  const names = n.leaf ? n.people.map((p) => p.name) : [];
-  const hasSub = n.sub > 0;
+  const panel = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const removeBtn = useRef<HTMLButtonElement>(null);
+  // 넓은 화면은 sticky 로 트리 옆에 붙어 있다. 좁은 화면(패널이 트리 아래로 내려감)에서는 고른 항목의 편집기로 스크롤 + 제목 포커스 (Q2-06/Q2-07/Q3-04)
+  useEffect(() => {
+    const el = panel.current;
+    if (!el || getComputedStyle(el).position === "sticky") return;
+    el.scrollIntoView({ block: "start", behavior: "smooth" });
+    heading.current?.focus({ preventScroll: true });
+  }, [id]);
+  const warns = periodWarnings(n, parent, period);
+  const ids = n.leaf ? n.people.map((p) => p.userId) : [];
+  // 보관된 하위의 제출도 센다 — 서버는 하위 어디에든 제출이 있으면 삭제를 막는다
+  const hasSub = n.subAll > 0;
   const isGong = n.leaf && n.type === "공통";
-  const removeLabel = hasSub ? (n.archived ? "보관 해제" : "보관") : "삭제";
-  const path = `${n.crumb ? n.crumb + " › " : ""}${!n.leaf && n.d === 0 ? n.label : n.title} · ${n.d + 2}단계`;
+  const removeLabel = n.archived ? "보관 해제" : hasSub ? "보관" : "삭제";
+  // 내부 depth("2단계")는 보여 주지 않는다 (Q1-17)
+  const path = `${n.crumb ? n.crumb + " › " : ""}${!n.leaf && n.d === 0 ? n.label : n.title}`;
 
   const setDate = (k: "s" | "e", v: string) => {
     if (!v) return;
@@ -25,28 +53,52 @@ export function EditPanel({ n, members, S, update }: Props) {
   };
   const setType = (t: TaskType) =>
     update((p) => ({
-      ov: { ...p.ov, typeOv: { ...p.ov.typeOv, [id]: t }, assignOv: t === "지정" ? { ...p.ov.assignOv, [id]: p.ov.assignOv[id] ?? names } : p.ov.assignOv },
+      ov: { ...p.ov, typeOv: { ...p.ov.typeOv, [id]: t }, assignOv: t === "지정" ? { ...p.ov.assignOv, [id]: p.ov.assignOv[id] ?? ids } : p.ov.assignOv },
       saved: "",
     }));
-  const toggleMember = (m: string) => {
+  const toggleMember = (m: TreeMember) => {
     if (isGong) return;
-    const next = names.includes(m) ? names.filter((x) => x !== m) : [...names, m];
+    const next = ids.includes(m.userId) ? ids.filter((x) => x !== m.userId) : [...ids, m.userId];
     update((p) => ({ ...patchOv(p, "assignOv", { ...p.ov.assignOv, [id]: next }), saved: "" }));
   };
   const askRemove = () => {
-    if (n.archived) update((p) => ({ ...patchOv(p, "archived", { ...p.ov.archived, [id]: false }), saved: "보관을 해제했어요" }));
-    else update({ confirm: true, saved: "" });
+    if (n.archived) void api.archive(id, false);
+    else update({ confirm: true, leave: null, saved: "" });
   };
   const confirmYes = () => {
-    if (hasSub) update((p) => ({ ...patchOv(p, "archived", { ...p.ov.archived, [id]: true }), confirm: false, saved: "보관했어요 · 제출물은 그대로 남아요" }));
-    else update((p) => ({ ...patchOv(p, "removed", { ...p.ov.removed, [id]: true }), confirm: false, editSel: null, saved: "" }));
+    if (hasSub) void api.archive(id, true);
+    else void api.remove(id);
+  };
+  const cancelConfirm = () => update({ confirm: false });
+  // 확인 상자가 닫히면(취소·Esc) 포커스를 원래 버튼으로 돌린다
+  const wasConfirm = useRef(S.confirm);
+  useEffect(() => {
+    if (wasConfirm.current && !S.confirm) removeBtn.current?.focus();
+    wasConfirm.current = S.confirm;
+  }, [S.confirm]);
+  const leaveSave = async () => {
+    const to = S.leave;
+    if (to && (await api.save(n, S.ov))) go(to);
+    else update({ leave: null });
+  };
+  const leaveDiscard = () => {
+    const to = S.leave;
+    update((p) => ({ ov: dropFieldOv(p.ov, id) }));
+    if (to) go(to);
   };
 
   return (
-    <aside aria-label="항목 편집" className="flex max-w-[340px] flex-[1_1_280px] flex-col gap-[14px] rounded-[16px] border border-line p-[18px] shadow-[0_10px_30px_rgba(27,34,48,.06)] max-[900px]:max-w-none">
+    <aside
+      ref={panel}
+      aria-labelledby="edit-panel-title"
+      className="flex scroll-mt-4 flex-col gap-[14px] rounded-[16px] border border-line bg-surface p-[18px] shadow-[0_10px_30px_rgba(27,34,48,.06)] @min-[760px]:sticky @min-[760px]:top-4 @min-[760px]:max-w-[340px] @min-[760px]:flex-[1_1_280px] @min-[760px]:self-start"
+    >
       <div className="flex items-center justify-between gap-2">
-        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] text-muted">{path}</span>
-        <button type="button" aria-label="편집 닫기" onClick={() => update({ editSel: null, confirm: false, saved: "" })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-transparent text-ink-3">
+        <h3 id="edit-panel-title" ref={heading} tabIndex={-1} className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-normal text-muted outline-none" title={path}>
+          <span className="sr-only">항목 편집 · </span>
+          {path}
+        </h3>
+        <button type="button" aria-label="편집 닫기" onClick={() => request({ sel: null })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-transparent text-ink-3">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
             <path d="M6 6l12 12M18 6 6 18" />
           </svg>
@@ -57,19 +109,28 @@ export function EditPanel({ n, members, S, update }: Props) {
         제목
         <input type="text" value={n.title} onChange={(e) => update((p) => ({ ...patchOv(p, "titles", { ...p.ov.titles, [id]: e.target.value }), saved: "" }))} className={`${field} px-3 text-[14px] font-medium`} />
       </label>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
+      {/* 날짜 입력은 달력 아이콘까지 ≈150px 가 필요하다 — 패널이 좁으면(트리 옆 1280 등) 한 줄씩 쌓는다 (V2-03) */}
+      <div className="flex flex-wrap gap-2">
+        <label className="flex min-w-0 flex-[1_1_150px] flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
           시작일
           <input type="date" value={n.s} onChange={(e) => setDate("s", e.target.value)} className={`${field} min-w-0 px-[10px] text-[13px]`} />
         </label>
-        <label className="flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
+        <label className="flex min-w-0 flex-[1_1_150px] flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
           마감일
           <input type="date" value={n.e} onChange={(e) => setDate("e", e.target.value)} className={`${field} min-w-0 px-[10px] text-[13px]`} />
         </label>
       </div>
+      {/* E4: 기간 경고 — 저장은 막지 않는다 (Q1-10/Q2-21) */}
+      {warns.length > 0 && (
+        <div role="status" className="flex flex-col gap-[2px] rounded-[9px] bg-[#FDF4E1] px-[10px] py-2 text-[12px] font-semibold text-amber-text">
+          {warns.map((w) => (
+            <span key={w}>{w} · 저장은 할 수 있어요</span>
+          ))}
+        </div>
+      )}
       <label className="flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
         설명 (마크다운)
-        <textarea rows={3} placeholder="목표, 참고 링크, 제출 형식 등을 적어 주세요" className="resize-y rounded-[10px] border border-line-3 px-3 py-[10px] text-[13px] font-normal text-ink" />
+        <textarea rows={3} value={n.desc} onChange={(e) => update((p) => ({ ...patchOv(p, "descs", { ...p.ov.descs, [id]: e.target.value }), saved: "" }))} placeholder="목표, 참고 링크, 제출 형식 등을 적어 주세요" className="resize-y rounded-[10px] border border-line-3 px-3 py-[10px] text-[13px] font-normal text-ink" />
       </label>
 
       {n.leaf && (
@@ -80,14 +141,14 @@ export function EditPanel({ n, members, S, update }: Props) {
           </div>
           <div className="flex flex-col gap-2">
             <span className="text-[12px] font-semibold text-ink-3">
-              담당자 <span className="font-medium text-muted">· {isGong ? "활성 참가자 전원 자동 배정" : `${names.length}명 선택됨`}</span>
+              담당자 <span className="font-medium text-muted">· {isGong ? "활성 참가자 전원 자동 배정" : `${ids.length}명 선택됨`}</span>
             </span>
             <div className="flex flex-wrap gap-[6px]">
               {members.map((m) => {
-                const on = names.includes(m);
+                const on = ids.includes(m.userId);
                 return (
                   <button
-                    key={m}
+                    key={m.userId}
                     type="button"
                     aria-pressed={on}
                     aria-disabled={isGong}
@@ -95,13 +156,13 @@ export function EditPanel({ n, members, S, update }: Props) {
                     className={`inline-flex h-[34px] items-center gap-[6px] rounded-[17px] border py-0 pl-[6px] pr-3 text-[13px] text-ink ${on ? "border-[#3FB89C] bg-[#E8F7F2] font-semibold" : "border-line-3 bg-surface font-medium"}`}
                     style={{ opacity: isGong ? 0.7 : 1, cursor: isGong ? "default" : "pointer" }}
                   >
-                    <Avatar name={m} size={22} tone={toneOfName(m)} />
-                    {m}
+                    <Avatar name={m.name} size={22} tone={m.tone} />
+                    {m.name}
                   </button>
                 );
               })}
             </div>
-            {!isGong && names.length === 0 && (
+            {!isGong && ids.length === 0 && (
               <span role="status" className="rounded-[9px] bg-[#FDF4E1] px-[10px] py-2 text-[12px] font-semibold text-amber-text">
                 담당자 미정 · 시작 전에 한 명 이상 지정해 주세요
               </span>
@@ -124,28 +185,37 @@ export function EditPanel({ n, members, S, update }: Props) {
         </div>
       )}
 
+      {S.leave && (
+        <InlineConfirm
+          text="저장하지 않은 수정이 있어요. 저장할까요?"
+          cancelLabel="계속 편집"
+          onCancel={() => update({ leave: null })}
+          actions={[
+            { label: "버리기", onClick: leaveDiscard },
+            { label: "저장하고 이동", onClick: () => void leaveSave(), tone: "primary" },
+          ]}
+        />
+      )}
+
       {S.confirm && (
-        <div role="alertdialog" aria-label="확인" className="flex flex-col gap-[10px] rounded-[12px] border border-[#F0C9C4] bg-[#FFF7F6] p-3">
-          <span className="text-[13px] leading-[1.6] text-ink-2">
-            {hasSub ? "제출물이 있어 삭제할 수 없어요. 대신 보관하면 참가자 화면에서 숨겨지고 제출물은 그대로 남아요. 보관할까요?" : "이 항목과 하위 항목을 삭제할까요? 되돌릴 수 없어요."}
-          </span>
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => update({ confirm: false })} className="h-[38px] rounded-[19px] border border-line-3 bg-surface px-[14px] text-[13px]">
-              취소
-            </button>
-            <button type="button" onClick={confirmYes} className="h-[38px] rounded-[19px] bg-warn px-[14px] text-[13px] font-semibold text-white">
-              {removeLabel}
-            </button>
-          </div>
-        </div>
+        <InlineConfirm
+          text={hasSub ? "제출물이 있어 삭제할 수 없어요. 대신 보관하면 참가자 화면에서 숨겨지고 제출물은 그대로 남아요. 보관할까요?" : "이 항목과 하위 항목을 삭제할까요? 되돌릴 수 없어요."}
+          onCancel={cancelConfirm}
+          actions={[{ label: removeLabel, onClick: confirmYes, tone: "danger" }]}
+        />
       )}
 
       <div className="flex items-center gap-2">
-        <button type="button" onClick={askRemove} className="h-[42px] rounded-[21px] border border-[#EBC3BD] bg-surface px-[14px] text-[13px] font-semibold text-warn">
-          {removeLabel}
-        </button>
+        {/* 상위 보관으로 함께 숨겨진 항목은 자기 보관이 아니라 해제할 대상이 없다 → 버튼을 숨긴다 */}
+        {/* 확인 상자가 떠 있는 동안 아래 버튼은 숨긴다 — 빨간 "삭제" 가 두 개 보이지 않게 (Q2-22) */}
+        {!n.archivedByParent && !S.confirm && (
+          <button ref={removeBtn} type="button" disabled={n.temp} onClick={askRemove} className="h-[42px] rounded-[21px] border border-[#EBC3BD] bg-surface px-[14px] text-[13px] font-semibold text-warn disabled:opacity-50">
+            {removeLabel}
+          </button>
+        )}
         <span className="flex-1" />
-        <button type="button" onClick={() => update({ saved: "저장했어요 · 태그를 자동으로 다시 골랐어요" })} className="h-[42px] rounded-[21px] bg-navy px-5 text-[14px] font-semibold text-white">
+        {n.temp && <span className="text-[12px] text-muted">서버에 만드는 중…</span>}
+        <button type="button" disabled={n.temp} onClick={() => void api.save(n, S.ov)} className="h-[42px] rounded-[21px] bg-navy px-5 text-[14px] font-semibold text-white disabled:opacity-50">
           저장
         </button>
       </div>

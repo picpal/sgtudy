@@ -1,5 +1,9 @@
 import { addDays, diffDays, parseISO, toISO } from "@/lib/date";
-import type { Task } from "@/data/schedule";
+import { routes } from "@/lib/routes";
+import type { Study, Task } from "@/data/schedule";
+
+/** 진행 중(open)이면서 내 담당인 과제만 급함으로 그린다 — 그룹장 전용(st:null → mine:false) 과제는 빼낸다 */
+export const isUrgent = (t: Pick<Task, "st" | "mine">) => t.st === "open" && t.mine !== false;
 
 /** 달력 격자: 1일이 속한 주(일요일 시작)부터 말일이 속한 주까지, 주별 7개 ISO 날짜 */
 export function monthWeeks(y: number, m: number): string[][] {
@@ -15,6 +19,16 @@ export const monthRange = (y: number, m: number) => ({
   start: toISO(Date.UTC(y, m, 1)),
   end: toISO(Date.UTC(y, m + 1, 0)),
 });
+
+/** 달을 옮겼을 때의 선택일 — 그 달에 오늘이 있으면 오늘, 아니면 그 달 1일 */
+export const monthSel = (y: number, m: number, today: string) => {
+  const first = toISO(Date.UTC(y, m, 1));
+  return today.slice(0, 7) === first.slice(0, 7) ? today : first;
+};
+
+/** 과제 막대·일 패널·다가오는 마감 → 내 스터디의 그 리프(?task=). 승인 대기 스터디는 공개 방 화면으로 */
+export const taskHref = (t: Pick<Task, "id" | "study">, s: Pick<Study, "pending">) =>
+  s.pending ? routes.room(t.study) : `${routes.myStudy(t.study)}?task=${encodeURIComponent(t.id)}`;
 
 /** 그 날이 속한 주의 일요일 */
 export const weekStartOf = (k: string) => addDays(k, -new Date(parseISO(k)).getUTCDay());

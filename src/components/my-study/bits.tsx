@@ -87,8 +87,8 @@ export function AvatarStack({ people, size, ring, iconSize, max = 4, overflowSiz
   return (
     <span className="flex items-center">
       {shown.map((p, i) => (
-        <span key={p.name} title={`${p.name} · ${CODE_LABEL[p.c]}`} className="relative inline-flex shrink-0 rounded-full" style={{ marginLeft: i === 0 ? 0 : -6, border: `2px solid ${ring}` }}>
-          <Avatar name={p.name} size={size} tone={toneOfName(p.name)} />
+        <span key={p.userId} title={`${p.name} · ${CODE_LABEL[p.c]}`} className="relative inline-flex shrink-0 rounded-full" style={{ marginLeft: i === 0 ? 0 : -6, border: `2px solid ${ring}` }}>
+          <Avatar name={p.name} size={size} tone={p.tone} />
           <span className="absolute -right-[3px] -bottom-[3px] flex">
             <RingedStatus status={CODE_STATUS[p.c]} size={iconSize} />
           </span>

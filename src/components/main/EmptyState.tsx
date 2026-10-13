@@ -1,21 +1,14 @@
 import Link from "next/link";
 import { routes } from "@/lib/routes";
-import type { Tab } from "./FilterBar";
+import { emptyCopy } from "./empty-copy";
+import type { StatusFilter, Tab } from "./FilterBar";
 
-type Props = { q: string; tab: Tab };
+type Props = { q: string; tab: Tab; status: StatusFilter; tagLabels: string[]; onReset: () => void; onBrowse: () => void };
 
-const BODY = "채팅방 만들듯 30초면 충분해요. 첫 스터디를 열어 보세요.";
+const cta = "mt-2 flex h-11 items-center rounded-[12px] bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white";
 
-/** 빈 상태 문구 우선순위 — spec §4 */
-function copy(q: string, tab: Tab): { title: string; body: string } {
-  if (q) return { title: `‘${q}’ 검색 결과가 없어요`, body: "다른 키워드나 태그로 다시 찾아보세요." };
-  if (tab === "created") return { title: "아직 만든 방이 없어요", body: BODY };
-  if (tab === "mine") return { title: "참가한 방이 없어요", body: BODY };
-  return { title: "조건에 맞는 방이 없어요", body: BODY };
-}
-
-export function EmptyState({ q, tab }: Props) {
-  const { title, body } = copy(q.trim(), tab);
+export function EmptyState({ q, tab, status, tagLabels, onReset, onBrowse }: Props) {
+  const { title, body, action } = emptyCopy(q.trim(), tab, status, tagLabels);
   return (
     <div className="mb-6 flex flex-col items-center gap-3 rounded-[20px] border border-dashed border-line-dash bg-surface px-6 py-16 text-center">
       <svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true">
@@ -26,12 +19,21 @@ export function EmptyState({ q, tab }: Props) {
       </svg>
       <p className="m-0 text-[17px] font-semibold">{title}</p>
       <p className="m-0 text-[14px] text-muted">{body}</p>
-      <Link
-        href={routes.createRoom()}
-        className="mt-2 flex h-11 items-center rounded-[12px] bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white"
-      >
-        방 만들기
-      </Link>
+      {action === "create" && (
+        <Link href={routes.createRoom()} className={cta}>
+          방 만들기
+        </Link>
+      )}
+      {action === "browse" && (
+        <button type="button" onClick={onBrowse} className={cta}>
+          방 둘러보기
+        </button>
+      )}
+      {action === "reset" && (
+        <button type="button" onClick={onReset} className={cta}>
+          필터 초기화
+        </button>
+      )}
     </div>
   );
 }

@@ -4,6 +4,8 @@ import { EMPTY_OVERRIDES, type CalMode, type Overrides } from "./model";
 export type CurMode = "view" | "edit";
 export type BoardMode = "mine" | "team";
 export type Zoom = "day" | "week";
+/** 저장하지 않은 수정이 있는 채로 다른 노드·모드·추가로 가려 할 때 보류한 목적지 (Q2-05) */
+export type Leave = { sel: string | null } | { mode: CurMode } | { add: string | null };
 
 /** 화면 안 모든 상태 — 방(URL) 이 바뀌면 통째로 리셋된다 */
 export type ScreenState = {
@@ -14,6 +16,7 @@ export type ScreenState = {
   curMode: CurMode;
   editSel: string | null;
   confirm: boolean;
+  leave: Leave | null;
   saved: string;
   ov: Overrides;
   bMode: BoardMode;
@@ -21,7 +24,7 @@ export type ScreenState = {
   bRound: string;
   calMode: CalMode;
   calAnchor: string | null;
-  /** 'all' | 'me' | 멤버 이름 */
+  /** "all" | "me" | 멤버 userId */
   calWho: string;
   calPick: string | null;
   zoom: Zoom;
@@ -34,6 +37,7 @@ export const INITIAL_STATE: ScreenState = {
   curMode: "view",
   editSel: null,
   confirm: false,
+  leave: null,
   saved: "",
   ov: EMPTY_OVERRIDES,
   bMode: "mine",
