@@ -291,6 +291,10 @@ sqlTest("node_update: 제목·설명·기간·라벨, 경고 PERIOD_OUTSIDE_PARE
   await expectFail(upd(q, "aws", ec2, { endDate: 20261014 }), "VALIDATION_FAILED");
   await expectFail(upd(q, "aws", ec2, { nope: 1 }), "VALIDATION_FAILED");
   await expectFail(upd(q, "aws", ec2, { title: "  " }), "INVALID_TITLE");
+  await expectFail(upd(q, "aws", ec2, { title: 123 }), "VALIDATION_FAILED");              // M3: 문자열 아닌 값은 거부
+  await expectFail(upd(q, "aws", ec2, { descriptionMd: {} }), "VALIDATION_FAILED");
+  await expectFail(upd(q, "aws", ec2, { descriptionMd: null }), "VALIDATION_FAILED");     // description_md NOT NULL → 지우기 불가
+  await expectFail(upd(q, "aws", w1, { label: 5 }), "VALIDATION_FAILED");
   await expectFail(upd(q, "aws", ec2, { startDate: "2026-10-20" }), "INVALID_PERIOD");  // start > end(10-16)
   await expectFail(upd(q, "aws", ec2, { descriptionMd: "x".repeat(20001) }), "VALIDATION_FAILED");
   await expectFail(q(`select public.node_update($1, $2, 'null'::jsonb)`, ["aws", ec2]), "VALIDATION_FAILED");
@@ -346,6 +350,8 @@ sqlTest("node_update(assigneeIds): 교체·해제·0명 경고, ASSIGNEE_NOT_MEM
   await expectFail(upd(q, "aws", s3, { assigneeIds: [도윤] }), "ASSIGNEE_NOT_MEMBER");   // INACTIVE
   await expectFail(upd(q, "aws", s3, { assigneeIds: [서연] }), "ASSIGNEE_NOT_MEMBER");   // 비멤버
   await expectFail(upd(q, "aws", s3, { assigneeIds: ["not-a-uuid"] }), "VALIDATION_FAILED");
+  await expectFail(upd(q, "aws", s3, { assigneeIds: [지은, null] }), "VALIDATION_FAILED");   // I2: 23502 대신
+  await expectFail(upd(q, "aws", s3, { assigneeIds: [1] }), "VALIDATION_FAILED");
   await expectFail(upd(q, "aws", ec2, { assigneeIds: [철수] }), "ASSIGNEE_HAS_SUBMISSION");   // 지은(제출) 제거
   c = await upd(q, "aws", ec2, { assigneeIds: [지은] });                   // 철수(미제출) 제거는 가능
   assertEquals(peopleOf(byTitle(c, "EC2 인스턴스 유형 정리")), { 지은: "done" });
@@ -361,16 +367,43 @@ sqlTest("node_update: ACTIVE 방 기간 변경·담당자 교체가 notify_publi
   const s3 = await nodeByTitle(q, aws, "S3 스토리지 클래스 발표자료");
   const [지은, 하나] = [await uid(q, "지은"), await uid(q, "하나")];
   // 0008 전의 자리표를 이 사례 안에서만 스파이로 바꾼다(롤백됨)
-  await q("create temp table spy(kind text, rcpt uuid[], prefix text)");
+  await q("create temp table spy(kind text, rcpt uuid[], prefix text, actor uuid)");
   await q(`create or replace function public.notify_publish(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p_recipients uuid[], p_dedupe_prefix text, p_model jsonb)
-    returns int language sql security definer set search_path = '' as $$ insert into pg_temp.spy values (p_kind, p_recipients, p_dedupe_prefix) returning 0 $$`);
+    returns int language sql security definer set search_path = '' as $$ insert into pg_temp.spy values (p_kind, p_recipients, p_dedupe_prefix, p_actor) returning 0 $$`);
   const c = await upd(q, "aws", s3, { endDate: "2026-10-15", assigneeIds: [지은] });
   assertEquals([byTitle(c, "S3 스토리지 클래스 발표자료").endDate, c.warnings], ["2026-10-15", [{ code: "PERIOD_OUTSIDE_PARENT", nodeId: s3 }]]);
   const rows = await q("select user_id::text as u, source, released_at is null as live from public.task_assignments where node_id = $1", [s3]);
   assertEquals(rows.map((x) => [x.u, x.source, x.live]).sort(), [[지은, "DESIGNATED", true], [하나, "DESIGNATED", false]].sort());
-  const spy = await q("select kind, cardinality(rcpt)::int as n, rcpt[1]::text as first, prefix from spy order by kind");
+  const spy = await q("select kind, cardinality(rcpt)::int as n, rcpt[1]::text as first, prefix, actor::text as actor from spy order by kind");
   assertEquals(spy.map((x) => [x.kind, x.n, x.first]), [["SCHEDULE_CHANGED", 1, 지은], ["TASK_ASSIGNED", 1, 지은], ["TASK_UNASSIGNED", 1, 하나]]);
   for (const x of spy) assertEquals(new RegExp(`^${x.kind}:${aws}:${s3}:\\d+$`).test(x.prefix as string), true, String(x.prefix));
+  assertEquals(spy.map((x) => x.actor), [await uid(q, "민수"), await uid(q, "민수"), await uid(q, "민수")]);   // M6: 행위자
+  // M6: ACTIVE 가 아닌 방은 아무것도 publish 하지 않는다
+  await q("truncate spy");
+  await q("update public.rooms set status = 'RECRUIT' where id = $1", [aws]);
+  await upd(q, "aws", s3, { endDate: "2026-10-14", assigneeIds: [하나] });
+  assertEquals((await q("select count(*)::int as n from spy"))[0].n, 0);
+}));
+
+sqlTest("node_update: 보관된 노드는 변경 전에 거부된다(리프 TASK_ARCHIVED · 비리프 PARENT_ARCHIVED), 배정·알림 불변", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const aws = await roomId(q, "aws");
+  await asUser(q, await uid(q, "민수"));
+  const s3 = await nodeByTitle(q, aws, "S3 스토리지 클래스 발표자료");    // 지정, 하나
+  const w1 = await nodeByTitle(q, aws, "IAM·VPC");
+  const 철수 = await uid(q, "철수");
+  await q("create temp table spy(kind text)");
+  await q(`create or replace function public.notify_publish(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p_recipients uuid[], p_dedupe_prefix text, p_model jsonb)
+    returns int language sql security definer set search_path = '' as $$ insert into pg_temp.spy values (p_kind) returning 0 $$`);
+  await call(q, "node_archive", ["aws", s3]);
+  await call(q, "node_archive", ["aws", w1]);
+  const snap = () => q("select user_id::text as u, source, released_at is null as live from public.task_assignments where node_id = $1 order by id", [s3]);
+  const before = await snap();
+  await expectFail(upd(q, "aws", s3, { assigneeIds: [철수] }), "TASK_ARCHIVED");
+  await expectFail(upd(q, "aws", s3, { endDate: "2026-10-15" }), "TASK_ARCHIVED");
+  await expectFail(upd(q, "aws", w1, { title: "x" }), "PARENT_ARCHIVED");
+  assertEquals(await snap(), before);
+  assertEquals((await q("select count(*)::int as n from spy"))[0].n, 0);
 }));
 
 sqlTest("privileges: node_update runs under real roles (authenticated 그룹장), anon 은 permission denied", withCase(db, async (q) => {

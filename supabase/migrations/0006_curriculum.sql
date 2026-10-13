@@ -387,6 +387,10 @@ begin
   r := public.node_assert_editable(p_slug);
   v_uid := public.current_user_id();
   n := public.node_get(r.id, p_node_id);
+  if n.archived_at is not null then   -- I1: 보관된 노드는 변경 전에 거부 (배정·알림 오염 방지)
+    if n.task_type is null then perform public.fail('PARENT_ARCHIVED', '보관된 항목은 수정할 수 없어요', jsonb_build_object('nodeId', n.id::text)); end if;
+    perform public.fail('TASK_ARCHIVED', '보관된 과제는 수정할 수 없어요', jsonb_build_object('nodeId', n.id::text));
+  end if;
   if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
     perform public.fail('VALIDATION_FAILED', '수정 내용이 올바르지 않아요');
   end if;
@@ -396,7 +400,12 @@ begin
     end if;
   end loop;
 
-  -- 제목·설명·기간·라벨
+  -- 제목·설명·기간·라벨 (M3: 문자열이 아니면 거부. description_md 는 NOT NULL 이라 null 로 지울 수 없다)
+  for k in select unnest(array['title', 'descriptionMd', 'label']) loop
+    if p_patch ? k and jsonb_typeof(p_patch->k) <> 'string' then
+      perform public.fail('VALIDATION_FAILED', '문자열이어야 해요', jsonb_build_object('field', k));
+    end if;
+  end loop;
   v_title := case when p_patch ? 'title' then trim(coalesce(p_patch->>'title', '')) else n.title end;
   if v_title is null or length(v_title) < 1 or length(v_title) > 80 then
     perform public.fail('INVALID_TITLE', '제목은 1~80자예요', '{"field":"title"}'::jsonb);
@@ -438,6 +447,9 @@ begin
   if v_type = 'DESIGNATED' and p_patch ? 'assigneeIds' then
     if jsonb_typeof(p_patch->'assigneeIds') <> 'array' then
       perform public.fail('VALIDATION_FAILED', '담당자 목록이 올바르지 않아요', '{"field":"assigneeIds"}'::jsonb);
+    end if;
+    if exists (select 1 from jsonb_array_elements(p_patch->'assigneeIds') e where jsonb_typeof(e) <> 'string') then   -- I2
+      perform public.fail('VALIDATION_FAILED', '담당자 id 가 올바르지 않아요', '{"field":"assigneeIds"}'::jsonb);
     end if;
     begin
       select coalesce(array_agg(distinct x::uuid), '{}') into v_ids from jsonb_array_elements_text(p_patch->'assigneeIds') x;
