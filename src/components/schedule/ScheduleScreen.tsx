@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
+import { NotificationBell } from "@/components/ui/NotificationBell";
 import { TODAY } from "@/lib/routes";
 import { MARKERS, TASKS, type StudyId } from "@/data/schedule";
 import { Toolbar, type View } from "./Toolbar";
@@ -36,7 +37,7 @@ export function ScheduleScreen() {
 
   return (
     <div className="box-border flex h-screen flex-col p-4 max-[900px]:h-auto max-[900px]:min-h-screen">
-      <AppHeader active="schedule" variant="card" />
+      <AppHeader active="schedule" variant="card" bell={<NotificationBell />} />
       <div className="mx-auto flex w-full max-w-[1408px] min-h-0 flex-1 items-stretch gap-4 max-[900px]:flex-wrap">
         <main className="flex min-h-0 min-w-0 flex-[999_1_720px] flex-col rounded-[20px] bg-surface px-6 pt-6 pb-[18px] max-sm:px-4 max-sm:pt-4">
           <Toolbar y={y} m={m} view={view} off={off} onPrev={() => shift(-1)} onNext={() => shift(1)} onToday={goToday} onToggle={toggle} onView={setView} />
