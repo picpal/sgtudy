@@ -775,10 +775,10 @@ export const ROOM_CASES: Case[] = [
             and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
             and p.proname <> 'handle_new_auth_user' order by 1`, [role])).map((x) => x.f as string);
       // 출처: 0002(me_get·me_update·nickname_check·meta_get·current_user_id 의 GRANT), 0003(can_read_*·is_room_*·is_my_task),
-      // 0004(room_create·room_open_recruit…room_update·rooms_list·room_get), 0005(room_join…room_members_get·invite_preview/get/rotate/join)
+      // 0004(room_create·room_open_recruit…room_update·rooms_list·room_get), 0005(room_join…room_members_get·invite_preview/get/rotate/join), 0006(curriculum_get)
       const ANON = [
         "can_read_room(bigint)", "can_read_submission(bigint,uuid)", "can_read_submissions(bigint)", "current_user_id()",
-        "invite_preview(text)", "is_room_leader(bigint)", "is_room_member(bigint)", "meta_get()",
+        "invite_preview(text)", "curriculum_get(text,boolean)", "is_room_leader(bigint)", "is_room_member(bigint)", "meta_get()",
         "room_get(text,text)", "rooms_list(text,text,text,text[],integer,integer,text)",
       ];
       const AUTH = [

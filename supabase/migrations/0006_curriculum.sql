@@ -117,3 +117,90 @@ language sql stable security definer set search_path = '' as $$
   join public.room_progress(p_room) p on p.node_id = n.id
   where n.room_id = p_room and n.task_type is not null and n.archived_at is null
 $$;
+
+-- ───────── Curriculum JSON (03-api §4) ─────────
+create or replace function public.curriculum_json(p_room bigint, p_uid uuid, p_include_archived boolean) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  r         public.rooms;
+  v_today   date := public.kst_today();
+  v_people  boolean;     -- people 노출: 그룹장 | ACTIVE·INACTIVE·PENDING 멤버
+  v_members jsonb;
+  v_nodes   jsonb;
+  v_stats   jsonb;
+begin
+  select * into r from public.rooms where id = p_room;
+  v_people := p_uid is not null and (r.leader_id = p_uid or exists (
+    select 1 from public.room_members m where m.room_id = p_room and m.user_id = p_uid and m.status in ('ACTIVE', 'INACTIVE', 'PENDING')));
+
+  select coalesce(jsonb_agg(
+           public.person_json(m.user_id) || jsonb_build_object(
+             'role', lower(m.role), 'status', lower(m.status),
+             'doesTasks', m.status = 'ACTIVE' and (m.role = 'MEMBER' or r.leader_does_tasks))
+           order by (m.role = 'LEADER') desc, m.joined_at nulls last, m.id), '[]'::jsonb)
+  into v_members
+  from public.room_members m
+  where m.room_id = p_room and m.status in ('ACTIVE', 'INACTIVE');
+
+  -- nodes·stats 는 같은 room_progress 결과(prog)를 공유한다 (한 번만 계산)
+  with recursive prog as materialized (
+    select * from public.room_progress(p_room)),
+  t as (
+    select n.*, array[n.sort_order::bigint, n.id] as path
+    from public.goal_nodes n where n.room_id = p_room and n.parent_id is null
+    union all
+    select c.*, t.path || array[c.sort_order::bigint, c.id]
+    from public.goal_nodes c join t on c.parent_id = t.id),
+  nodes as (
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'id', t.id::text, 'parentId', t.parent_id::text, 'roundId', t.round_id::text,
+             'depth', t.depth, 'sortOrder', t.sort_order, 'label', t.label, 'title', t.title,
+             'descriptionMd', t.description_md,
+             'startDate', to_char(t.start_date, 'YYYY-MM-DD'), 'endDate', to_char(t.end_date, 'YYYY-MM-DD'),
+             'archived', t.archived_at is not null,
+             'assigned', p.asg, 'submitted', p.sub, 'pct', p.pct,
+             'task', case when t.task_type is null then null else jsonb_build_object(
+               'type', lower(t.task_type),
+               'assigned', p.asg, 'submitted', p.sub,
+               'state', public.leaf_state(p.asg, p.sub, t.start_date, t.end_date, v_today),
+               -- people 은 의도적으로 멤버 순서(그룹장, joined_at, id) — room_get 의 assigned_at 순서와 다르다
+               'people', case when not v_people then '[]'::jsonb else coalesce((
+                 select jsonb_agg(public.person_json(a.user_id)
+                          || jsonb_build_object('status', public.task_code(t.start_date, t.end_date, s.first_submitted_at, s.is_late, v_today))
+                          order by (m.role = 'LEADER') desc, m.joined_at nulls last, m.id)
+                 from public.task_assignments a
+                 join public.room_members m on m.room_id = p_room and m.user_id = a.user_id
+                 left join public.submissions s on s.node_id = a.node_id and s.user_id = a.user_id
+                 where a.node_id = t.id and a.released_at is null and t.archived_at is null), '[]'::jsonb) end) end)
+             order by t.path), '[]'::jsonb) as j
+    from t join prog p on p.node_id = t.id
+    where p_include_archived or t.archived_at is null),
+  stats as (
+    select jsonb_build_object(
+      'overallPct', public.pct(coalesce(sum(p.asg), 0)::int, coalesce(sum(p.sub), 0)::int),
+      'leafCount', count(*),
+      'unassignedCount', count(*) filter (where n.task_type = 'DESIGNATED' and p.asg = 0)) as j
+    from public.goal_nodes n join prog p on p.node_id = n.id
+    where n.room_id = p_room and n.task_type is not null and n.archived_at is null)
+  select (select j from nodes), (select j from stats) into v_nodes, v_stats;
+
+  return jsonb_build_object(
+    'today', to_char(v_today, 'YYYY-MM-DD'),
+    'room', jsonb_build_object('slug', r.slug, 'status', lower(r.status), 'leaderDoesTasks', r.leader_does_tasks),
+    'members', v_members, 'nodes', v_nodes, 'stats', v_stats);
+end $$;
+-- curriculum_json 은 임의 p_uid 를 받는 내부 빌더 — GRANT 없음(D7)
+
+-- 공개 RPC. 비공개 방 비멤버·보관 방 비멤버는 ROOM_NOT_FOUND (D7)
+create or replace function public.curriculum_get(p_slug text, p_include_archived boolean default false) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.current_user_id(); v_room bigint;
+begin
+  select id into v_room from public.rooms where slug = p_slug;
+  if v_room is null or not public.room_readable(v_room, v_uid) then
+    perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요');
+  end if;
+  return public.curriculum_json(v_room, v_uid, coalesce(p_include_archived, false));
+end $$;
+
+grant execute on function public.curriculum_get(text, boolean) to anon, authenticated;
