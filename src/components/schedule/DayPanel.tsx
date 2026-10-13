@@ -45,7 +45,7 @@ export function DayPanel({ sel, today, studies, tasks, markers, ref }: Props) {
   ).filter(([, items]) => items.length);
 
   return (
-    <section ref={ref} className="thin-scroll box-border flex min-h-0 flex-[1_1_0] flex-col gap-[14px] overflow-auto rounded-[20px] bg-surface p-5 max-[900px]:flex-none max-[900px]:overflow-visible">
+    <section ref={ref} className="thin-scroll box-border flex min-h-0 flex-[1_1_0] flex-col gap-[14px] overflow-auto rounded-[20px] bg-surface p-5 max-[901px]:flex-none max-[901px]:overflow-visible">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="m-0 text-[18px] font-bold">
           {Number(sel.slice(5, 7))}월 {Number(sel.slice(8, 10))}일 ({weekdayKo(sel)})
@@ -61,20 +61,23 @@ export function DayPanel({ sel, today, studies, tasks, markers, ref }: Props) {
               <Link
                 key={it.key}
                 href={it.href}
-                className="box-border flex min-h-11 items-center gap-[10px] rounded-[12px] border border-line-2 px-3 py-[10px] text-ink hover:text-ink"
+                className="box-border flex min-h-11 flex-col gap-[6px] rounded-[12px] border border-line-2 px-3 py-[10px] text-ink hover:text-ink"
               >
-                <span className="shrink-0 whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[11px] font-bold" style={{ background: S.bg, color: S.fg }}>
-                  {shortName(S)}
+                {/* 배지는 윗줄로 — 제목이 배지 폭에 밀려 0px 이 되지 않게 한 줄을 통째로 준다 (V2-01) */}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate rounded-[7px] px-2 py-[3px] text-[11px] font-bold" style={{ background: S.bg, color: S.fg }}>
+                    {shortName(S)}
+                  </span>
+                  <span
+                    className="shrink-0 whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[11px] font-bold"
+                    style={{ color: it.urgent ? "#FFFFFF" : "#3A4452", background: it.urgent ? "#B4462B" : "#EEF2F1" }}
+                  >
+                    {it.badge}
+                  </span>
                 </span>
-                <span className="min-w-0 flex-1">
+                <span className="min-w-0">
                   <span className="block truncate text-[14px] font-semibold text-ink">{it.title}</span>
                   <span className="mt-[2px] block text-[12px] text-muted">{it.sub}</span>
-                </span>
-                <span
-                  className="shrink-0 whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[11px] font-bold"
-                  style={{ color: it.urgent ? "#FFFFFF" : "#3A4452", background: it.urgent ? "#B4462B" : "#EEF2F1" }}
-                >
-                  {it.badge}
                 </span>
               </Link>
             );

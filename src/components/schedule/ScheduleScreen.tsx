@@ -77,7 +77,7 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   };
   const toggle = (id: string) => setOff(on(id) ? [...off, id] : off.filter((x) => x !== id));
 
-  // ≤900 에서는 일 패널이 달력 아래라, 날짜를 누르면 패널을 화면으로 끌어온다 (Q3-05)
+  // ≤900 (CSS 는 Tailwind max-[901px] = width < 901, JS 는 max-width: 900px — 같은 구간) 에서는 일 패널이 달력 아래라, 날짜를 누르면 패널을 화면으로 끌어온다 (Q3-05)
   const dayRef = useRef<HTMLElement>(null);
   const pick = (k: string) => {
     setSel(k);
@@ -89,9 +89,9 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   if (data.studies.length === 0) return <ScheduleEmpty />;
 
   return (
-    <div className="box-border flex h-screen flex-col p-4 max-[900px]:h-auto max-[900px]:min-h-screen">
+    <div className="box-border flex h-screen flex-col p-4 max-[901px]:h-auto max-[901px]:min-h-screen">
       <AppHeader active="schedule" variant="card" bell={<NotificationBell />} />
-      <div className="mx-auto flex w-full max-w-[1408px] min-h-0 flex-1 items-stretch gap-4 max-[900px]:flex-wrap">
+      <div className="mx-auto flex w-full max-w-[1408px] min-h-0 flex-1 items-stretch gap-4 max-[901px]:flex-wrap">
         <main className="flex min-h-0 min-w-0 flex-[999_1_720px] flex-col rounded-[20px] bg-surface px-6 pt-6 pb-[18px] max-sm:px-4 max-sm:pt-4" aria-busy={loading}>
           <Toolbar y={y} m={m} view={view} off={off} studies={data.studies} onPrev={() => shift(-1)} onNext={() => shift(1)} onToday={goToday} onToggle={toggle} onView={setView} />
           {view === "month" ? (
@@ -101,7 +101,8 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
           )}
           {view === "month" && <Legend />}
         </main>
-        <aside aria-label="일정 요약" className="flex min-h-0 min-w-0 flex-[1_1_320px] max-w-[380px] flex-col gap-4 max-[900px]:max-w-none max-[900px]:basis-full">
+        {/* >900 에서는 폭을 고정해(340, 넓으면 380) 일 패널 제목이 줄어들지 않게 한다 (V2-01). ≤900 은 달력 아래로 내려간다 */}
+        <aside aria-label="일정 요약" className="flex min-h-0 min-w-0 flex-col gap-4 max-[901px]:basis-full min-[901px]:flex-[0_0_340px] min-[1201px]:basis-[380px]">
           <DayPanel ref={dayRef} sel={sel} today={today} studies={data.studyMap} tasks={tasks} markers={markers} />
           <UpcomingPanel today={today} studies={data.studyMap} upcoming={upcoming} />
         </aside>

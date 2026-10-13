@@ -14,8 +14,8 @@ export function StudySidebar({ selected, groups }: { selected: string; groups: S
   const total = groups.reduce((a, g) => a + g.items.length, 0);
   const body = open ? "flex" : "hidden min-[901px]:flex";
   return (
-    <aside aria-label="내 스터디 목록" className="flex min-h-0 flex-[1_1_300px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[900px]:max-w-none max-[900px]:py-[14px] min-[901px]:max-w-[380px]">
-      <h2 className="m-0 text-[18px] font-bold max-[900px]:hidden">내 스터디</h2>
+    <aside aria-label="내 스터디 목록" className="flex min-h-0 flex-[1_1_300px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[901px]:max-w-none max-[901px]:py-[14px] min-[901px]:max-w-[380px]">
+      <h2 className="m-0 text-[18px] font-bold max-[901px]:hidden">내 스터디</h2>
       <button
         type="button"
         aria-expanded={open}
@@ -41,7 +41,7 @@ export function StudySidebar({ selected, groups }: { selected: string; groups: S
           {/* 필터 버튼은 동작이 없어 뺐다 (Q3-06) — 상태는 아래 그룹 라벨로 구분된다 */}
         </div>
 
-        <div className="thin-scroll -mx-[10px] flex min-h-0 flex-1 flex-col gap-[14px] overflow-y-auto px-[10px] py-[6px] max-[900px]:overflow-visible">
+        <div className="thin-scroll -mx-[10px] flex min-h-0 flex-1 flex-col gap-[14px] overflow-y-auto px-[10px] py-[6px] max-[901px]:overflow-visible">
           {q.trim() && shown.length === 0 && <p className="m-0 py-4 text-center text-[13px] text-muted">‘{q.trim()}’에 맞는 스터디가 없어요</p>}
           {shown.map((g) => (
             <div key={g.label} className="flex flex-col gap-[10px]">

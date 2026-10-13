@@ -84,11 +84,11 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
 
   return (
     <TodayProvider today={today}>
-      <div className="flex h-screen flex-col p-4 max-[900px]:h-auto max-[900px]:min-h-screen">
+      <div className="flex h-screen flex-col p-4 max-[901px]:h-auto max-[901px]:min-h-screen">
         <AppHeader active="myStudy" variant="card" bell={<NotificationBell />} />
-        <div className="mx-auto flex min-h-0 w-full max-w-[1408px] flex-1 items-stretch gap-4 max-[900px]:flex-wrap">
+        <div className="mx-auto flex min-h-0 w-full max-w-[1408px] flex-1 items-stretch gap-4 max-[901px]:flex-wrap">
           <StudySidebar selected={detail.slug} groups={groups} />
-          <main className="thin-scroll min-h-0 min-w-0 flex-[999_1_640px] overflow-y-auto rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[900px]:overflow-visible max-[900px]:px-4">
+          <main className="thin-scroll min-h-0 min-w-0 flex-[999_1_640px] overflow-y-auto rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:overflow-visible max-[901px]:px-4">
             <div className="flex flex-wrap items-start gap-7">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                 <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} />
