@@ -330,8 +330,8 @@ can_read_submissions(room_id)  → is_room_leader OR EXISTS room_members(uid, st
 | mail_outbox | 없음(service_role 만) |
 
 Storage 버킷 `attachments`(private, `file_size_limit=10485760`, `allowed_mime_types` = D10 목록):
-- INSERT: `auth.role()='authenticated'` AND path 의 3번째 세그먼트 = `auth.uid()` AND `is_task_assignee(node_id, uid)`
-- SELECT: `can_read_submissions(room_id)` (path 1번째 세그먼트)
+- INSERT: `authenticated` AND 키가 `^\d+/\d+/<uuid>/[^/]+$` 형식 AND 3번째 세그먼트 = `auth.uid()` AND `is_task_assignee(node_id, uid)` AND 1번째 세그먼트 = 그 노드의 `room_id`(교차 방 업로드·비숫자 세그먼트 차단, 구현 리뷰 반영 2026-10-13)
+- SELECT: `can_read_submission(node_id, author)` (path 2·3번째 세그먼트) — 보관 노드 첨부는 제출물과 같이 그룹장·작성자만(D10)
 - DELETE: 소유자 본인
 
 ## 6. 함수 목록 — 시그니처는 `03-api.md` 가 출처, 파일은 도메인별(0002~0009)
