@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { asAnon, asUser, newUser, openDb, sqlTest, withCase, type Q } from "./_harness.ts";
+import { asAnon, asUser, expectFail, newUser, openDb, sqlTest, withCase, type Q } from "./_harness.ts";
 
 const db = await openDb();
 
@@ -106,8 +106,28 @@ sqlTest("rls: is_task_assignee ignores released rows; archived node submissions 
 }));
 
 sqlTest("rls: public_profiles exposes only id/nickname/avatar_tone", withCase(db, async (q) => {
-  const cols = await q("select column_name from information_schema.columns where table_name = 'public_profiles' order by ordinal_position");
+  const cols = await q("select column_name from information_schema.columns where table_schema = 'public' and table_name = 'public_profiles' order by ordinal_position");
   assertEquals(cols.map((c) => c.column_name), ["id", "nickname", "avatar_tone"]);
+}));
+
+sqlTest("rls: public_profiles is read-only for anon/authenticated even under Supabase's default table grants (C1)", withCase(db, async (q) => {
+  // 회귀 가드: 마이그레이션 자체가 쓰기 권한을 남기지 않았어야 한다
+  assertEquals((await q("select has_table_privilege('anon', 'public.public_profiles', 'update') as ok"))[0].ok, false);
+  // 호스팅 기본값 흉내: anon/authenticated 에 ALL 이 있었더라도 0003 의 revoke 뒤에는 select 만 남아야 한다
+  await q("grant all on public.public_profiles to anon, authenticated");
+  await q("revoke all on public.public_profiles from anon, authenticated, public");
+  await q("grant select on public.public_profiles to anon, authenticated");
+  for (const role of ["anon", "authenticated"]) {
+    assertEquals((await q("select has_table_privilege($1, 'public.public_profiles', 'select') as ok", [role]))[0].ok, true, role);
+    for (const priv of ["insert", "update", "delete"]) {
+      assertEquals((await q("select has_table_privilege($1, 'public.public_profiles', $2) as ok", [role, priv]))[0].ok, false, `${role} ${priv}`);
+    }
+  }
+  const uid = await newUser(q, "view@example.com");
+  await q("set local role anon");
+  await expectFail(q("update public.public_profiles set nickname = 'pwned' where id = $1::uuid", [uid]), "permission denied");
+  await expectFail(q("delete from public.public_profiles where id = $1::uuid", [uid]), "permission denied");
+  await q("reset role");
 }));
 
 sqlTest("rls: attachments bucket and storage policies exist", withCase(db, async (q) => {

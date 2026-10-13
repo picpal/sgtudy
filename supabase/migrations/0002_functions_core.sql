@@ -9,6 +9,8 @@
 -- → PUBLIC 은 전역 형태로 먼저 걷어내고, Supabase 가 anon·authenticated 에 명시 부여하는 기본 GRANT 는 스키마 한정 형태로 걷어낸다.
 alter default privileges revoke execute on functions from public;
 alter default privileges in schema public revoke execute on functions from anon, authenticated;
+-- 쓰기는 전부 RPC(SECURITY DEFINER) 로만 한다 — 이후 만드는 테이블·뷰에 anon/authenticated 쓰기 권한을 기본으로 주지 않는다(뷰 write-through 방어, D7).
+alter default privileges in schema public revoke insert, update, delete, truncate on tables from anon, authenticated;
 
 -- ───────── 에러 ─────────
 create or replace function public.fail(p_code text, p_detail text, p_hint jsonb default null)

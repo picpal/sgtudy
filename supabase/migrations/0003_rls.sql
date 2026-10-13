@@ -122,6 +122,8 @@ create policy notifications_select_own on public.notifications for select
 -- 소유자(postgres) 권한으로 실행되는 뷰 → profiles 의 self 정책을 거치지 않고 세 컬럼만 보여 준다(의도된 security definer 뷰).
 create view public.public_profiles as
   select id, nickname, avatar_tone from public.profiles;
+-- Supabase 는 public 스키마의 테이블·뷰에 anon/authenticated ALL 을 기본 GRANT 한다 → 자동 갱신 가능 뷰로 profiles RLS 를 우회해 쓸 수 있다. 뷰는 항상 revoke all + grant select.
+revoke all on public.public_profiles from anon, authenticated, public;
 grant select on public.public_profiles to anon, authenticated;
 
 -- ───────── Storage 버킷 attachments (D10) ─────────
