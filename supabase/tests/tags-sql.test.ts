@@ -130,7 +130,7 @@ cases("tags", db, [
     assertEquals((await one(q, "select public.tags_search('%') as r")).r.items, []);   // C4: % 는 글자 그대로
   } },
 
-  { name: "new room: 0 AUTO tags right after room_create; room_tags_suggest fills them; first node_update re-runs autoselect (S6)", run: async (q) => {
+  { name: "new room: 0 AUTO tags right after room_create (no hook); room_tags_suggest fills them (S6)", run: async (q) => {
     const minsu = await uidOf(q, "민수");
     await asUser(q, minsu);
     const d = (await one(q, "select public.room_create('도커 컨테이너 입문 Docker 101', '도커와 컨테이너 기초를 함께', '2026-11-02'::date, '2026-11-29'::date, 6, true, 'direct') as d")).d;
@@ -138,6 +138,36 @@ cases("tags", db, [
     assertEquals((await tagsOf(q, d.slug)).filter((x) => x.source === "AUTO").length, 0);
     const r = (await one(q, "select public.room_tags_suggest($1) as r", [d.slug])).r;
     assert(r.items.some((x: { slug: string; auto: boolean }) => x.slug === "docker" && x.auto), JSON.stringify(r.items));
+  } },
+
+  { name: "autoselect uses CURATED tags only: a CUSTOM label from another room is never auto-applied", run: async (q) => {
+    await asUser(q, await uidOf(q, "민수"));
+    await put(q, "aws", ["aws"], ["입문"]);
+    assertEquals((await one(q, "select kind from public.tags where label = '입문'")).kind, "CUSTOM");
+    await q("update public.rooms set title = title || ' 입문 과정' where slug = 'algo'");
+    const algo = await roomId(q, "algo");
+    await autoselect(q, algo);
+    const t = await tagsOf(q, "algo");
+    assert(!t.some((x) => x.source === "AUTO" && x.slug.startsWith("c-")), JSON.stringify(t));
+    const n = await one(q, "select count(*)::int as n from public.room_tags where room_id = $1::bigint and tag_slug = (select slug from public.tags where label = '입문')", [algo]);
+    assertEquals(n.n, 0);
+  } },
+
+  { name: "tag_apply_auto: unknown room -> ROOM_NOT_FOUND; CUSTOM slug ignored", run: async (q) => {
+    await expectFail(q("select public.tag_apply_auto(999999999::bigint, array['aws']::text[])"), "ROOM_NOT_FOUND");
+    await asUser(q, await uidOf(q, "민수"));
+    await put(q, "aws", ["aws"], ["입문"]);
+    const slug = (await one(q, "select slug from public.tags where label = '입문'")).slug;
+    const algo = await roomId(q, "algo");
+    await q("select public.tag_apply_auto($1::bigint, array[$2]::text[])", [algo, slug]);
+    assertEquals((await tagsOf(q, "algo")).some((x) => x.slug === slug), false);
+  } },
+
+  { name: "archived room: room_tags_put and room_tags_suggest -> ROOM_NOT_EDITABLE", run: async (q) => {
+    await q("update public.rooms set archived_at = now() where slug = 'aws'");
+    await asUser(q, await uidOf(q, "민수"));
+    await expectFail(put(q, "aws", ["aws"]), "ROOM_NOT_EDITABLE");
+    await expectFail(q("select public.room_tags_suggest('aws')"), "ROOM_NOT_EDITABLE");
   } },
 
   { name: "node_update in plan 03 re-runs tag_autoselect (hook guard present)", run: async (q) => {

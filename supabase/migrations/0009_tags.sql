@@ -135,9 +135,11 @@ create or replace function public.tag_apply_auto(p_room bigint, p_slugs text[]) 
 language plpgsql security definer set search_path = '' as $$
 declare v_slugs text[]; v_room int;
 begin
+  perform 1 from public.rooms where id = p_room for update;
+  if not found then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
   select coalesce(array_agg(s.slug order by s.ord), '{}') into v_slugs
   from (select distinct on (x.slug) x.slug, x.ord from unnest(coalesce(p_slugs, '{}')) with ordinality as x(slug, ord) order by x.slug, x.ord) s
-  join public.tags t on t.slug = s.slug
+  join public.tags t on t.slug = s.slug and t.kind = 'CURATED'
   where not exists (select 1 from public.room_tag_suppressions sp where sp.room_id = p_room and sp.tag_slug = s.slug);
   v_slugs := v_slugs[1:5];
 
@@ -172,6 +174,7 @@ begin
              + case when public.tag_term_hit(v_nodes, x.term) then 1 else 0 end) as score
     from public.tags t
     cross join lateral unnest(array_append(t.aliases, t.label)) as x(term)
+    where t.kind = 'CURATED'
     group by t.slug
     having sum(case when public.tag_term_hit(v_title, x.term) then 3 else 0 end
              + case when public.tag_term_hit(v_intro, x.term) then 2 else 0 end
