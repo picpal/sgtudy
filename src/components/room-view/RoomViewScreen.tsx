@@ -49,14 +49,25 @@ export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; l
     }
   };
 
+  // 공유: 초대 토큰 없이 방 주소만 복사한다 (비공개 방 토큰은 그룹장 패널 몫 — plan 06)
+  const share = async () => {
+    try {
+      await navigator.clipboard.writeText(new URL(routes.room(dto.slug), window.location.origin).href);
+      setToast({ text: "링크를 복사했어요", tone: "ok" });
+    } catch {
+      setToast({ text: "링크를 복사하지 못했어요 · 주소창의 링크를 복사해 주세요", tone: "bad" });
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col p-4 min-[901px]:h-screen">
       <AppHeader active="home" variant="card" bell={<NotificationBell />} />
-      <div className="mx-auto flex w-full min-h-0 max-w-[1408px] flex-1 gap-4 max-[900px]:flex-wrap">
+      {/* ≤900(포함): 선택한 방이 먼저, 목록은 그 아래에서 접힌다 (Q1-08/Q3-07). Tailwind max-[901px] = width < 901 */}
+      <div className="mx-auto flex w-full min-h-0 max-w-[1408px] flex-1 gap-4 max-[901px]:flex-wrap">
         <RoomSidebar selected={dto.slug} items={sidebar} total={list.tabCounts.public} />
-        <main className="thin-scroll min-h-0 min-w-0 flex-[999_1_640px] overflow-y-auto rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[900px]:overflow-visible max-sm:px-4">
+        <main className="thin-scroll min-h-0 min-w-0 flex-[999_1_640px] overflow-y-auto rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:order-first max-[901px]:overflow-visible max-sm:px-4">
           <div className="flex flex-wrap items-start gap-7">
-            <RoomInfo room={room} />
+            <RoomInfo room={room} onShare={share} />
             <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px]">
               <JoinCard
                 room={room}

@@ -22,20 +22,25 @@ export const cancelApplication = (slug: string) => rpc<MembershipResult>("room_c
 
 type ActionInput = Pick<RoomDetail, "status" | "joinMode" | "memberCount" | "maxMembers" | "me">;
 
-/** 03-api §3: 비로그인→login · leader→owner · active&recruit→leave · active&(active|ended)→joined · pending→pending · inactive→inactive · ended→ended · active→activeClosed · full→full · approval→apply · direct→join */
+/** 지금 참가할 수 없는 방 상태 — 비로그인도 로그인 전에 알 수 있게 먼저 보여 준다 (Q2-11) */
+export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "maxMembers">): "ended" | "activeClosed" | "full" | null {
+  if (d.status === "ended") return "ended";
+  if (d.status === "active") return "activeClosed";
+  if (d.memberCount >= d.maxMembers) return "full";
+  return null;
+}
+
+/** 03-api §3: 비로그인→(종료·진행중·정원 마감이면 그 상태, 아니면 login) · leader→owner · active&recruit→leave · active&(active|ended)→joined · pending→pending · inactive→inactive · ended→ended · active→activeClosed · full→full · approval→apply · direct→join */
 export function actionOf(d: ActionInput): Action {
   const st = d.me?.state;
-  if (!d.me) return "login";
+  if (!d.me) return closedAction(d) ?? "login";
   if (st === "leader") return "owner";
   const recruiting = d.status === "recruit" || d.status === "draft";
   if (st === "active") return recruiting ? "leave" : "joined";
   if (st === "pending") return "pending";
   // 이탈 처리된 멤버는 서버가 MEMBER_NOT_ACTIVE 로 막는다 → 참가 버튼 대신 비활성 안내 (초대 화면과 같은 규칙)
   if (st === "inactive") return "inactive";
-  if (d.status === "ended") return "ended";
-  if (d.status === "active") return "activeClosed";
-  if (d.memberCount >= d.maxMembers) return "full";
-  return d.joinMode === "approval" ? "apply" : "join";
+  return closedAction(d) ?? (d.joinMode === "approval" ? "apply" : "join");
 }
 
 const baseOf = (act: Action): BaseAction => (act === "join" || act === "apply" || act === "leave" || act === "pending" || act === "login" ? "recruit" : act);

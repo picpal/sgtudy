@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { routes } from "@/lib/routes";
-import { type Action, type Room } from "@/data/room-view";
+import { type Action, type Room, type RoomMember } from "@/data/room-view";
 import { StatusBadge } from "./StatusBadge";
 
 /** loginHref: 로그인 후 돌아올 주소(초대 토큰 포함)까지 담은 /login 링크 */
@@ -98,10 +98,31 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
   }
 }
 
+function MemberRow({ mb }: { mb: RoomMember }) {
+  return (
+    <li className={`flex items-center gap-[10px] rounded-[10px] px-2 py-[7px] ${mb.me ? "bg-[#F3F7FF]" : ""}`}>
+      <Avatar name={mb.name} tone={mb.tone} size={30} pending={mb.pending} />
+      <span className="flex min-w-0 flex-1 items-center gap-[6px]">
+        <span className={`whitespace-nowrap text-[14px] ${mb.me ? "font-bold" : "font-medium"} ${mb.pending ? "text-faint" : "text-ink"}`}>{mb.name}</span>
+        {mb.leader && (
+          <svg width="15" height="15" viewBox="0 0 24 24" role="img" aria-label="그룹장">
+            <path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5z" fill="#E7A913" stroke="#B07F00" strokeWidth="1.2" strokeLinejoin="round" />
+          </svg>
+        )}
+        {mb.me && <span className="rounded-md bg-blue-soft px-[6px] py-[1px] text-[11px] font-semibold text-blue-text">나</span>}
+        {mb.pending && <span className="rounded-md bg-slate-soft px-[6px] py-[1px] text-[11px] font-semibold text-ink-3">승인 대기</span>}
+      </span>
+      <span className="text-[12px] text-muted">{mb.leader ? "그룹장" : mb.pending ? "" : "참가자"}</span>
+    </li>
+  );
+}
+
 export function JoinCard(props: Props) {
   const { room } = props;
   const recruit = room.status === "recruit";
-  const rows = room.members;            // 어댑터가 내 pending 행까지 넣어 준다
+  // 어댑터가 내 pending 행까지 넣어 준다 → 확정 참가자와 승인 대기를 나눠 보여 준다 (Q2-23)
+  const rows = room.members.filter((m) => !m.pending);
+  const waiting = room.members.filter((m) => m.pending);
   const capCur = room.capCur;           // 서버 값 그대로 (roomview §3.5)
   const full = capCur >= room.capMax;
   const minOk = room.minNeed === 0 || capCur >= room.minNeed;
@@ -152,22 +173,7 @@ export function JoinCard(props: Props) {
         </div>
         {rows.length > 0 ? (
           <ul className="flex flex-col gap-[2px]">
-            {rows.map((mb) => (
-              <li key={mb.userId ?? mb.name} className={`flex items-center gap-[10px] rounded-[10px] px-2 py-[7px] ${mb.me ? "bg-[#F3F7FF]" : ""}`}>
-                <Avatar name={mb.name} tone={mb.tone} size={30} pending={mb.pending} />
-                <span className="flex min-w-0 flex-1 items-center gap-[6px]">
-                  <span className={`whitespace-nowrap text-[14px] ${mb.me ? "font-bold" : "font-medium"} ${mb.pending ? "text-faint" : "text-ink"}`}>{mb.name}</span>
-                  {mb.leader && (
-                    <svg width="15" height="15" viewBox="0 0 24 24" role="img" aria-label="그룹장">
-                      <path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5z" fill="#E7A913" stroke="#B07F00" strokeWidth="1.2" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                  {mb.me && <span className="rounded-md bg-blue-soft px-[6px] py-[1px] text-[11px] font-semibold text-blue-text">나</span>}
-                  {mb.pending && <span className="rounded-md bg-slate-soft px-[6px] py-[1px] text-[11px] font-semibold text-ink-3">승인 대기</span>}
-                </span>
-                <span className="text-[12px] text-muted">{mb.leader ? "그룹장" : mb.pending ? "" : "참가자"}</span>
-              </li>
-            ))}
+            {rows.map((mb) => <MemberRow key={mb.userId ?? mb.name} mb={mb} />)}
           </ul>
         ) : (
           <div className="flex flex-col items-center gap-[6px] rounded-[14px] border border-dashed border-line-dash px-[14px] py-[18px] text-center">
@@ -181,6 +187,18 @@ export function JoinCard(props: Props) {
           </div>
         )}
       </div>
+
+      {waiting.length > 0 && (
+        <div>
+          <div className="mb-2 flex justify-between text-[13px] font-semibold">
+            <span>승인 대기</span>
+            <span className="font-medium text-muted">그룹장 승인 전 · 인원에 포함 안 됨</span>
+          </div>
+          <ul className="flex flex-col gap-[2px]">
+            {waiting.map((mb) => <MemberRow key={mb.userId ?? mb.name} mb={mb} />)}
+          </ul>
+        </div>
+      )}
 
       <Cta {...props} />
     </div>

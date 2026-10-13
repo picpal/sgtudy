@@ -25,6 +25,20 @@ describe("actionOf — inactive viewer (T7 rule)", () => {
   });
 });
 
+describe("actionOf — anonymous viewer sees the room state first (Q2-11/Q3-12)", () => {
+  it("full / active / ended rooms show the disabled state instead of login", () => {
+    expect(actionOf(detail({ me: null, memberCount: 8 }))).toBe("full");
+    expect(actionOf(detail({ me: null, status: "active" }))).toBe("activeClosed");
+    expect(actionOf(detail({ me: null, status: "ended" }))).toBe("ended");
+    expect(toRoom(detail({ me: null, status: "ended" }), TODAY, null).base).toBe("ended");
+  });
+  it("joinable rooms still ask to log in", () => {
+    expect(actionOf(detail({ me: null }))).toBe("login");
+    expect(actionOf(detail({ me: null, joinMode: "approval" }))).toBe("login");
+    expect(actionOf(detail({ me: null, status: "draft" }))).toBe("login");
+  });
+});
+
 describe("roomReturnTo / firstParam (private invite entry)", () => {
   it("keeps the invite token and survives safeReturnTo", () => {
     expect(roomReturnTo("spring", "abc_DEF-123")).toBe("/rooms/spring?invite=abc_DEF-123");
