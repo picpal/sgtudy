@@ -139,3 +139,111 @@ create trigger trg_submissions_immutable before update on public.submissions
 -- 이메일 변경 동기화 (0001 의 트리거는 INSERT 만). handle_new_auth_user 의 ON CONFLICT … SET email 이 UPDATE 도 처리한다.
 create trigger on_auth_user_email_updated after update of email on auth.users
   for each row when (old.email is distinct from new.email) execute function public.handle_new_auth_user();
+
+-- ───────── 닉네임 (03-api §1) ─────────
+-- 2~16자, 한글 음절·영문·숫자·'_'·'.'·단일 공백(앞뒤 불가). 정규화 = trim → NFC → lower, UNIQUE 는 정규화값.
+create or replace function public.nickname_normalize(p_value text)
+returns text language sql immutable set search_path = '' as $$
+  select lower(normalize(btrim(p_value), NFC))
+$$;
+
+create or replace function public.nickname_problem(p_value text)
+returns text language plpgsql immutable set search_path = '' as $$
+declare
+  v text := normalize(coalesce(p_value, ''), NFC);
+  v_norm text;
+  v_reserved constant text[] := array['관리자', 'admin', 'sgtudy', '슥터디'];
+  w text;
+begin
+  -- 앞뒤 공백·탭·전각 공백·제어문자는 그대로 거부(사용자가 보낸 문자열 그대로 검사)
+  if v <> btrim(v) or char_length(v) < 2 or char_length(v) > 16 then return 'invalid'; end if;
+  if v !~ '^[가-힣A-Za-z0-9._]+( [가-힣A-Za-z0-9._]+)*$' then return 'invalid'; end if;
+  v_norm := public.nickname_normalize(v);
+  foreach w in array v_reserved loop
+    if position(w in v_norm) > 0 then return 'reserved'; end if;
+  end loop;
+  return null;
+end $$;
+
+-- ───────── 메타 ─────────
+create or replace function public.meta_get()
+returns jsonb language sql stable set search_path = '' as $$
+  select jsonb_build_object('today', to_char(public.kst_today(), 'YYYY-MM-DD'), 'serverTime', public.iso(now()))
+$$;
+
+-- ───────── 나 ─────────
+-- 온보딩 전에도 호출 가능(require_user 아님). initial = 닉네임 첫 글자, 없으면 이메일 첫 글자.
+create or replace function public.me_get()
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_uid uuid := public.current_user_id();
+  v jsonb;
+begin
+  if v_uid is null then perform public.fail('AUTH_REQUIRED', '로그인이 필요해요'); end if;
+  select jsonb_build_object(
+           'id', p.id::text,
+           'email', p.email::text,
+           'nickname', p.nickname,
+           'initial', left(coalesce(p.nickname, p.email::text), 1),
+           'tone', p.avatar_tone,
+           'onboarded', p.nickname is not null,
+           'optionalMailEnabled', p.optional_mail_enabled,
+           'unreadCount', (select count(*)::int from public.notifications n where n.user_id = p.id and n.read_at is null),
+           'today', to_char(public.kst_today(), 'YYYY-MM-DD'))
+    into v
+  from public.profiles p where p.id = v_uid;
+  if v is null then perform public.fail('NOT_FOUND', '프로필이 없어요'); end if;
+  return v;
+end $$;
+
+create or replace function public.me_update(p_nickname text default null, p_optional_mail_enabled boolean default null)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid uuid := public.current_user_id();
+  v_problem text;
+  v_nick text;
+begin
+  if v_uid is null then perform public.fail('AUTH_REQUIRED', '로그인이 필요해요'); end if;
+  if p_nickname is not null then
+    v_problem := public.nickname_problem(p_nickname);
+    if v_problem = 'invalid' then
+      perform public.fail('NICKNAME_INVALID', '닉네임은 2~16자, 한글·영문·숫자·_·.·공백만 쓸 수 있어요', '{"field":"nickname"}'::jsonb);
+    elsif v_problem = 'reserved' then
+      perform public.fail('NICKNAME_RESERVED', '사용할 수 없는 닉네임이에요', '{"field":"nickname"}'::jsonb);
+    end if;
+    v_nick := normalize(btrim(p_nickname), NFC);
+    begin
+      update public.profiles
+         set nickname = v_nick, nickname_normalized = public.nickname_normalize(v_nick)
+       where id = v_uid;
+    exception when unique_violation then
+      perform public.fail('NICKNAME_TAKEN', '이미 쓰고 있는 닉네임이에요', '{"field":"nickname"}'::jsonb);
+    end;
+  end if;
+  if p_optional_mail_enabled is not null then
+    update public.profiles set optional_mail_enabled = p_optional_mail_enabled where id = v_uid;
+  end if;
+  return public.me_get();
+end $$;
+
+create or replace function public.nickname_check(p_value text)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_uid uuid := public.current_user_id();
+  v_problem text;
+begin
+  if v_uid is null then perform public.fail('AUTH_REQUIRED', '로그인이 필요해요'); end if;
+  v_problem := public.nickname_problem(p_value);
+  if v_problem is not null then return jsonb_build_object('available', false, 'reason', v_problem); end if;
+  if exists (select 1 from public.profiles p
+             where p.nickname_normalized = public.nickname_normalize(p_value) and p.id <> v_uid) then
+    return jsonb_build_object('available', false, 'reason', 'taken');
+  end if;
+  return jsonb_build_object('available', true);
+end $$;
+
+-- ───────── 공개 RPC GRANT (D7, 03-api §1) ─────────
+grant execute on function public.meta_get()                        to anon, authenticated;
+grant execute on function public.me_get()                          to authenticated;
+grant execute on function public.me_update(text, boolean)          to authenticated;
+grant execute on function public.nickname_check(text)              to authenticated;
