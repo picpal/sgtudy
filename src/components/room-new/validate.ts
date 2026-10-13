@@ -10,8 +10,16 @@ const int = (s: string) => (/^\d+$/.test(s.trim()) ? Number(s) : NaN);
 /** 서버 length() 와 같은 코드 포인트 길이 (이모지 1자 = 1) */
 export const cpLength = (s: string) => [...s].length;
 
+/** 입력을 N 코드 포인트에서 자른다 — input maxLength 는 UTF-16 단위라 이모지가 2칸으로 세여 서버 한도와 어긋난다 */
+export const clampCp = (s: string, n: number) => (cpLength(s) > n ? [...s].slice(0, n).join("") : s);
+
 /** 인라인 오류를 그리는 입력 — 서버 details.field 가 이 중 하나면 그 칸 아래에 보여 준다 */
 const FIELD_KEYS = ["title", "intro", "startDate", "endDate", "maxMembers", "minMembers"] as const;
+
+/** 폼 순서상 첫 오류 칸 — 제출 시 그 칸으로 포커스를 옮긴다 */
+export function firstErrorKey(errs: Partial<Record<keyof NewRoomValues, string>>): (typeof FIELD_KEYS)[number] | null {
+  return FIELD_KEYS.find((k) => errs[k]) ?? null;
+}
 
 /** room_create 오류 → 필드 오류. 그릴 칸이 없는 field(또는 field 없음)면 null → 폼 하단 문구로 */
 export function serverFieldError(details: Record<string, string> | undefined, message: string): Partial<Record<keyof NewRoomValues, string>> | null {

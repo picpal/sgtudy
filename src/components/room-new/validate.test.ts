@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cpLength, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
+import { clampCp, cpLength, firstErrorKey, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
 const TODAY = "2026-10-12";
 const ok: NewRoomValues = { title: "Docker·K8s 입문 6주", intro: "컨테이너 기초부터", startDate: "2026-11-09", endDate: "2026-12-20", maxMembers: "6", isPublic: true, joinMode: "direct", descriptionMd: "", rulesMd: "", minMembers: "", leaderDoesTasks: true };
@@ -49,5 +49,22 @@ describe("toCreateRoom", () => {
       title: "Docker", intro: "컨테이너 기초부터", startDate: "2026-11-09", endDate: "2026-12-20", maxMembers: 6, isPublic: true, joinMode: "direct", leaderDoesTasks: true,
     });
     expect(toCreateRoom({ ...ok, minMembers: "2", descriptionMd: "소개", rulesMd: "- 규칙" })).toMatchObject({ minMembers: 2, descriptionMd: "소개", rulesMd: "- 규칙" });
+  });
+});
+
+describe("clampCp (Q2-16 · 입력 한도 = 서버 코드 포인트 한도)", () => {
+  it("cuts at N code points, not UTF-16 units", () => {
+    const s = "🚀" + "가".repeat(70);
+    expect(cpLength(clampCp(s, 60))).toBe(60);
+    expect(clampCp(s, 60).startsWith("🚀")).toBe(true);
+    expect(clampCp("abc", 60)).toBe("abc");
+  });
+});
+
+describe("firstErrorKey (Q2-19 · 제출 시 첫 오류 칸으로 포커스)", () => {
+  it("follows the form order", () => {
+    expect(firstErrorKey({ maxMembers: "x", intro: "y" })).toBe("intro");
+    expect(firstErrorKey({ minMembers: "x" })).toBe("minMembers");
+    expect(firstErrorKey({})).toBeNull();
   });
 });
