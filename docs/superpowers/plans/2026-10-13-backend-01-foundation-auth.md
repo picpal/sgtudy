@@ -20,7 +20,7 @@
 - 에러: `public.fail('<CODE>', '<한국어>', '<json>'::jsonb)` 만 사용. `<CODE>` 는 `03-api.md` §0 목록. I9 위반은 `FIELD_LOCKED`.
 - "오늘"은 `public.kst_today()`. 테스트는 `setToday(q, '2026-10-12')`.
 - `current_user_id()` 는 `auth.uid()` **만** 반환한다(GUC 폴백 없음, D13). 테스트에서는 PGlite 스텁의 `auth.uid()` 가 `app.uid` 를 읽으므로 따로 뒷문이 필요 없다.
-- **함수 권한(D7)**: `0002` 첫 문장이 `alter default privileges in schema public revoke execute on functions from public, anon, authenticated;`(개요의 `FROM PUBLIC` 에 Supabase 가 기본으로 주는 anon·authenticated GRANT 회수를 더한 것). 이후 만드는 함수는 전부 기본 비공개. `03-api.md` RPC 열의 공개 함수만 명시 `grant execute … to anon, authenticated`(권한 "공개") 또는 `to authenticated`("로그인"·"그룹장"·"본인" 등). 내부 헬퍼(`fail`·`kst_*`·`pct`·`person_json`·`slugify`·`nickname_*`·RLS 헬퍼 등)는 GRANT 하지 않는다 — RLS 정책이 호출하는 헬퍼는 정책 평가가 **정책 소유자가 아니라 호출 역할 권한**으로 돌므로 예외적으로 `grant execute … to anon, authenticated`(Task 6 에 명시). `revoke … from anon, authenticated` 같은 개별 회수는 쓰지 않는다.
+- **함수 권한(D7)**: `0002` 첫 두 문장이 `alter default privileges revoke execute on functions from public;`(전역 — 스키마 한정 default ACL 은 전역 기본값에 **더해질 뿐** PUBLIC 의 내장 EXECUTE 를 걷어내지 못한다, 실행 중 확인 2026-10-13) + `alter default privileges in schema public revoke execute on functions from anon, authenticated;`(Supabase 가 기본으로 주는 anon·authenticated GRANT 회수). 이후 만드는 함수는 전부 기본 비공개. `03-api.md` RPC 열의 공개 함수만 명시 `grant execute … to anon, authenticated`(권한 "공개") 또는 `to authenticated`("로그인"·"그룹장"·"본인" 등). 내부 헬퍼(`fail`·`kst_*`·`pct`·`person_json`·`slugify`·`nickname_*`·RLS 헬퍼 등)는 GRANT 하지 않는다 — RLS 정책이 호출하는 헬퍼는 정책 평가가 **정책 소유자가 아니라 호출 역할 권한**으로 돌므로 예외적으로 `grant execute … to anon, authenticated`(Task 6 에 명시). `revoke … from anon, authenticated` 같은 개별 회수는 쓰지 않는다.
 - **SECURITY DEFINER 가 아닌 함수에도** `set search_path = ''`(Supabase linter `function_search_path_mutable`). 트리거 함수 포함. 예외는 `handle_new_auth_user()` 하나.
 - pg_cron 확장 문장은 `create extension if not exists pg_cron;` **한 형태만** 쓴다(`with schema …` 금지). 하네스가 정확히 이 줄을 걷어낸다. `cron.schedule(name, sched, cmd)`·`cron.unschedule(name)` 은 스텁이 받는다.
 - 테스트: PGlite `*-sql.test.ts`(Docker 불필요, 사례마다 `begin … rollback`), 로컬 supabase `*-db.test.ts`(`SUPABASE_URL` 없으면 `ignore`). 조건 없는 delete·truncate 금지. 로컬 DB 테스트 사용자는 `sgtudy-test-<n>@example.com`.
@@ -1007,7 +1007,8 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   public.set_updated_at() returns trigger                     -- rooms·room_members·goal_nodes·submissions
   public.submissions_guard_immutable() returns trigger        -- I9 → FIELD_LOCKED
   trigger on_auth_user_email_updated on auth.users            -- Review Focus 5
-  alter default privileges in schema public revoke execute on functions from public, anon, authenticated  -- 파일 첫 문장(D7)
+  alter default privileges revoke execute on functions from public                                        -- 파일 첫 문장(D7, 전역)
+  alter default privileges in schema public revoke execute on functions from anon, authenticated          -- 둘째 문장(Supabase 기본 GRANT 회수)
   ```
   권한: 이 Task 의 함수는 전부 **GRANT 없음**(내부 헬퍼). `current_user_id()` 만 Task 6 이 RLS 정책용으로 `anon, authenticated` 에 GRANT 한다.
 
@@ -1173,7 +1174,8 @@ Expected: FAIL — `function public.kst_today() does not exist`.
 -- Postgres 는 새 함수에 EXECUTE TO PUBLIC 을, Supabase 는 public 스키마 함수에 anon·authenticated GRANT 를 기본으로 준다.
 -- PostgREST 는 public 의 실행 가능한 함수를 전부 RPC 로 연다 → 이후 만드는 함수는 기본 비공개로 하고,
 -- 03-api RPC 열의 공개 함수만 각 마이그레이션이 명시적으로 GRANT 한다. 개별 `revoke … from anon, authenticated` 는 쓰지 않는다.
-alter default privileges in schema public revoke execute on functions from public, anon, authenticated;
+alter default privileges revoke execute on functions from public;                                   -- 전역: PUBLIC 기본 EXECUTE 제거(스키마 한정으로는 불가)
+alter default privileges in schema public revoke execute on functions from anon, authenticated;     -- Supabase 가 public 스키마에 주는 기본 GRANT 회수
 
 -- ───────── 에러 ─────────
 create or replace function public.fail(p_code text, p_detail text, p_hint jsonb default null)
@@ -2183,7 +2185,7 @@ Expected: 53 passed, 0 ignored. `status -o env` 가 `ANON_KEY`/`SERVICE_ROLE_KEY
 문제가 나면:
 - `42501` 대신 다른 코드 → 0003 의 `enable row level security` 누락 테이블 확인.
 - `anon` 의 `profiles` select 가 권한 오류(`42501`) → Supabase 기본 테이블 GRANT 가 빠진 환경(정상 로컬 스택에서는 나지 않는다). 마이그레이션을 고치지 말고 `supabase stop --no-backup && supabase start` 로 스택을 새로 만든다.
-- 내부 헬퍼 사례가 `error === null` → 0002 첫 문장 `alter default privileges … revoke execute on functions from public, anon, authenticated` 가 함수 생성보다 뒤에 있거나 빠졌다.
+- 내부 헬퍼 사례가 `error === null` → 0002 첫 두 문장(`alter default privileges revoke execute on functions from public` 전역 + `in schema public … from anon, authenticated`)이 함수 생성보다 뒤에 있거나 빠졌다.
 
 - [ ] **Step 4: 타입 생성**
 

@@ -106,7 +106,7 @@ leaf_state            = asg=0 ? unassigned : sub=asg ? complete : today<s ? plan
 
 - 쓰기 RPC 는 전부 `SECURITY DEFINER` + 내부에서 `auth.uid()`·역할 검사. 테이블 직접 INSERT/UPDATE 는 RLS 로 막는다(프론트는 RPC 만 호출).
 - 읽기 집계 함수도 **`SECURITY DEFINER`** 로 두고 함수 안에서 `can_read_room()` 등으로 직접 거른다(RLS 를 거치면 PENDING·INACTIVE 분기와 비로그인 `people=[]` 같은 부분 노출을 표현하기 어렵다). RLS SELECT 정책은 테이블을 직접 읽는 경로(PostgREST `from()`)의 **2차 방어선**이다.
-- **함수 노출 통제**: PostgREST 는 `public` 의 모든 함수를 RPC 로 연다. 내부 헬퍼(uid·room_id 를 인자로 받는 JSON 빌더, 전환·동기화·잡 함수)는 만들 때마다 `REVOKE EXECUTE ON FUNCTION … FROM PUBLIC, anon, authenticated;` 를 건다 — `anon, authenticated` 만 회수하면 PUBLIC 기본 권한이 남는다. 0002 첫머리에 `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;` 를 선언하고, 공개 RPC 만 명시적으로 `GRANT EXECUTE … TO anon, authenticated`.
+- **함수 노출 통제**: PostgREST 는 `public` 의 모든 함수를 RPC 로 연다. 내부 헬퍼(uid·room_id 를 인자로 받는 JSON 빌더, 전환·동기화·잡 함수)는 만들 때마다 `REVOKE EXECUTE ON FUNCTION … FROM PUBLIC, anon, authenticated;` 를 건다 — `anon, authenticated` 만 회수하면 PUBLIC 기본 권한이 남는다. 0002 첫머리에 `ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;`(전역 — 스키마 한정 default ACL 은 전역 기본값에 더해질 뿐이라 `IN SCHEMA public … FROM PUBLIC` 은 무효, 구현 중 확인 2026-10-13) + `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM anon, authenticated;`(Supabase 기본 GRANT 회수) 를 선언하고, 공개 RPC 만 명시적으로 `GRANT EXECUTE … TO anon, authenticated`.
 
 ## D8. 알림
 
