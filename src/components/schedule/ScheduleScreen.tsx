@@ -13,6 +13,8 @@ import { ListView } from "./ListView";
 import { Legend } from "./Legend";
 import { DayPanel } from "./DayPanel";
 import { UpcomingPanel } from "./UpcomingPanel";
+import { ScheduleEmpty } from "./ScheduleEmpty";
+import { monthSel } from "./calc";
 
 export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   const [data, setData] = useState(() => toScheduleData(initial));
@@ -59,10 +61,13 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
       }
     }
   };
+  /** 달을 옮기면 선택일은 그 달의 오늘, 아니면 1일 — 이전 선택일을 끌고 가지 않는다 (Q1-19/Q3-20) */
   const shift = (dm: number) => {
-    const from = target.current ?? { y, m, sel };
+    const from = target.current ?? { y, m };
     const d = new Date(Date.UTC(from.y, from.m + dm, 1));
-    void load(d.getUTCFullYear(), d.getUTCMonth(), from.sel);
+    const ny = d.getUTCFullYear();
+    const nm = d.getUTCMonth();
+    void load(ny, nm, monthSel(ny, nm, today));
   };
   const goToday = () => {
     const ty = +today.slice(0, 4);
@@ -72,6 +77,17 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   };
   const toggle = (id: string) => setOff(on(id) ? [...off, id] : off.filter((x) => x !== id));
 
+  // ≤900 에서는 일 패널이 달력 아래라, 날짜를 누르면 패널을 화면으로 끌어온다 (Q3-05)
+  const dayRef = useRef<HTMLElement>(null);
+  const pick = (k: string) => {
+    setSel(k);
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    dayRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+  };
+
+  if (data.studies.length === 0) return <ScheduleEmpty />;
+
   return (
     <div className="box-border flex h-screen flex-col p-4 max-[900px]:h-auto max-[900px]:min-h-screen">
       <AppHeader active="schedule" variant="card" bell={<NotificationBell />} />
@@ -79,14 +95,14 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
         <main className="flex min-h-0 min-w-0 flex-[999_1_720px] flex-col rounded-[20px] bg-surface px-6 pt-6 pb-[18px] max-sm:px-4 max-sm:pt-4" aria-busy={loading}>
           <Toolbar y={y} m={m} view={view} off={off} studies={data.studies} onPrev={() => shift(-1)} onNext={() => shift(1)} onToday={goToday} onToggle={toggle} onView={setView} />
           {view === "month" ? (
-            <MonthGrid y={y} m={m} sel={sel} today={today} studies={data.studyMap} tasks={tasks} markers={markers} onPick={setSel} />
+            <MonthGrid y={y} m={m} sel={sel} today={today} studies={data.studyMap} tasks={tasks} markers={markers} onPick={pick} />
           ) : (
             <ListView y={y} m={m} today={today} studies={data.studyMap} tasks={tasks} />
           )}
-          <Legend />
+          {view === "month" && <Legend />}
         </main>
-        <aside aria-label="일정 요약" className="flex min-h-0 flex-[1_1_320px] max-w-[380px] flex-col gap-4 max-[900px]:max-w-none">
-          <DayPanel sel={sel} today={today} studies={data.studyMap} tasks={tasks} markers={markers} />
+        <aside aria-label="일정 요약" className="flex min-h-0 min-w-0 flex-[1_1_320px] max-w-[380px] flex-col gap-4 max-[900px]:max-w-none max-[900px]:basis-full">
+          <DayPanel ref={dayRef} sel={sel} today={today} studies={data.studyMap} tasks={tasks} markers={markers} />
           <UpcomingPanel today={today} studies={data.studyMap} upcoming={upcoming} />
         </aside>
       </div>
