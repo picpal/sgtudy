@@ -1030,7 +1030,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
   public.notifications_unread_count() returns jsonb                            -- {count}
   public.notifications_read(p_id bigint) returns void                          -- 본인 것 아니면 NOT_FOUND
   public.notifications_read_all() returns jsonb                                -- {updated}
-  public.leader_room(p_slug text, p_lock boolean default false) returns public.rooms   -- require_user + NOT_LEADER
+  public.leader_room(p_slug text, p_lock boolean default false) returns public.rooms   -- require_user + require_leader(plan 02 I-2: 못 읽는 외부인 ROOM_NOT_FOUND, 그 외 NOT_LEADER)
   public.settings_json(p_room bigint) returns jsonb                            -- NotificationSettings
   public.settings_get(p_slug text) returns jsonb
   public.settings_put(p_slug text, p_settings jsonb) returns jsonb             -- 전체 교체

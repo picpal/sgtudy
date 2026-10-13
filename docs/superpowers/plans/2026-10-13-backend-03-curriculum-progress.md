@@ -24,7 +24,7 @@
 - **`goal_nodes` 형태 트리거**(02 §6, Task 1): 루트 = depth 2·round_id 자기 자신·label 필수, 하위 = label 없음·depth = 부모+1·round_id = 부모 round_id. 직접 INSERT(시드·테스트·service_role)도 막힌다.
 - **depth-2 리프 허용(A7)**: 회차가 곧 과제인 depth-2 리프(task_type 있음)를 허용한다 — `node_create(parent=null, taskType=…)` 로 만들 수 있고, `node_move` 로 리프를 회차로 올리면 `task_type` 을 유지하고 label 은 `{n}주차` 로 채운다. 회차 label 은 null 로 지울 수 없다(`node_update` → `VALIDATION_FAILED`).
 - 알림 호출은 `notify_publish` 계약(개요): 행위자 제외는 0008 이 하므로 호출부는 수신자에서 본인을 빼지 않는다. dedupe prefix(D8): 행위 이벤트(`SCHEDULE_CHANGED`·`TASK_ASSIGNED`·`TASK_UNASSIGNED`) = `KIND:room:node:` || `txid_current()`.
-- 편집 가능 상태: 방 `DRAFT·RECRUIT·ACTIVE` ∧ `archived_at IS NULL`. 그 외 `ROOM_NOT_EDITABLE`. 그룹장 아니면 `NOT_LEADER`.
+- 편집 가능 상태: 방 `DRAFT·RECRUIT·ACTIVE` ∧ `archived_at IS NULL`. 그 외 `ROOM_NOT_EDITABLE`. 그룹장 아니면 `public.require_leader(r, uid)` — 방을 읽을 수 없는 외부인은 `ROOM_NOT_FOUND`(존재 은닉, plan 02 최종 리뷰 I-2), 읽을 수 있으면 `NOT_LEADER`. bare `NOT_LEADER` 직접 raise 금지.
 - 노드 쓰기 함수는 전부 편집용 `Curriculum` JSON(보관 노드 포함)을 돌려준다. `curriculum_get(p_slug, p_include_archived default false)` 만 보관 제외가 기본.
 - 커밋 메시지 끝 두 줄 트레일러:
   ```
@@ -82,7 +82,7 @@ export function sqlTest(name: string, fn: () => Promise<void>): void;
 -- 0006_curriculum.sql
 public.node_subtree(p_node bigint) returns setof bigint               -- 자기 포함 서브트리 id (플랜 04 member_deactivate·task_get 재사용)
 public.node_has_submissions(p_node bigint) returns boolean            -- 서브트리 어느 리프에든 제출물
-public.node_assert_editable(p_slug text) returns public.rooms         -- room_lock + NOT_LEADER + ROOM_NOT_EDITABLE
+public.node_assert_editable(p_slug text) returns public.rooms         -- room_lock + require_leader + ROOM_NOT_EDITABLE
 public.node_get(p_room bigint, p_node bigint) returns public.goal_nodes   -- 방 소속 검사, 없으면 NODE_NOT_FOUND
 public.goal_nodes_guard() returns trigger + trigger trg_goal_nodes_guard  -- depth·round_id·label 형태 검사(A1)
 public.room_progress(p_room bigint) returns table(node_id bigint, asg int, sub int, pct int)   -- 전 노드 롤업(보관 제외), 플랜 04 task_get·job_* 재사용
@@ -418,7 +418,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms;
 begin
   r := public.room_lock(p_slug);
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 커리큘럼을 편집할 수 있어요'); end if;
+  perform public.require_leader(r, v_uid);   -- 외부인(못 읽음) ROOM_NOT_FOUND, 그 외 NOT_LEADER (plan 02 I-2)
   if r.archived_at is not null or r.status not in ('DRAFT', 'RECRUIT', 'ACTIVE') then
     perform public.fail('ROOM_NOT_EDITABLE', '종료되었거나 보관된 방은 편집할 수 없어요', jsonb_build_object('status', lower(r.status)));
   end if;
