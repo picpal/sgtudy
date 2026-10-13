@@ -29,9 +29,3 @@ export const routes = {
   /** 초대 링크 진입 (§4.12) */
   invite: (token: string) => `/invite/${token}`,
 } as const;
-
-/** @deprecated 목업 기준 '오늘'. 화면 코드는 useToday() 를 쓴다. 테스트 픽스처 전용. */
-export const TODAY = "2026-10-12";
-
-/** @deprecated 목업 로그인 사용자. 화면 코드는 useMe() 를 쓴다. 테스트 픽스처 전용. */
-export const ME = { name: "철수", initial: "철", tone: "blue" } as const;

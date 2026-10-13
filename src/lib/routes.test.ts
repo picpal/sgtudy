@@ -37,3 +37,11 @@ describe("routes", () => {
     expect(routes.myStudyEdit("aws")).toBe("/my-study/aws?tab=curriculum&mode=edit");
   });
 });
+
+describe("mock constants removed", () => {
+  it("does not export TODAY / ME", async () => {
+    const mod = (await import("./routes")) as Record<string, unknown>;
+    expect(mod).not.toHaveProperty("TODAY");
+    expect(mod).not.toHaveProperty("ME");
+  });
+});
