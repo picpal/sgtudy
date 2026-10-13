@@ -9,7 +9,7 @@ import { rpc, toApiError } from "@/lib/api/errors";
 import type { RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
-import { EMPTY_VALUES, clampCp, firstErrorKey, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
+import { EMPTY_VALUES, clampCp, firstErrorKey, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
 const field = "h-12 w-full rounded-[12px] border border-line-3 px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE]";
 const JOIN_MODES = [["direct", "바로 참가", "누구나 바로 들어와요"], ["approval", "승인제", "그룹장이 승인해야 참가돼요"]] as const;
@@ -34,7 +34,11 @@ export function NewRoomForm() {
   const [busy, setBusy] = useState(false);
   const [serverError, setServerError] = useState("");
   const inFlight = useRef(false); // 같은 프레임 두 번 제출(disabled 반영 전) 막기 — DRAFT 방 중복 생성 방지
-  const set = <K extends keyof NewRoomValues>(k: K, val: NewRoomValues[K]) => setV((p) => ({ ...p, [k]: val }));
+  const set = <K extends keyof NewRoomValues>(k: K, val: NewRoomValues[K]) => {
+    const next = { ...v, [k]: val };
+    setV(next);
+    setErrors((e) => revalidateOnChange(e, k, next, today)); // 고친 칸의 오류·aria-invalid 를 바로 걷는다 (V1-01)
+  };
   const formRef = useRef<HTMLFormElement>(null);
   // 제출로 생긴 오류의 첫 칸 — 렌더(더 설정하기 펼침 포함) 뒤 그 칸으로 포커스(Q2-19). 입력 중 오류 갱신에는 움직이지 않는다
   const focusKey = useRef<string | null>(null);

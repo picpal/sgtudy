@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampCp, cpLength, firstErrorKey, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
+import { EMPTY_VALUES, clampCp, cpLength, firstErrorKey, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
 const TODAY = "2026-10-12";
 const ok: NewRoomValues = { title: "Docker·K8s 입문 6주", intro: "컨테이너 기초부터", startDate: "2026-11-09", endDate: "2026-12-20", maxMembers: "6", isPublic: true, joinMode: "direct", descriptionMd: "", rulesMd: "", minMembers: "", leaderDoesTasks: true };
@@ -66,5 +66,33 @@ describe("firstErrorKey (Q2-19 · 제출 시 첫 오류 칸으로 포커스)", (
     expect(firstErrorKey({ maxMembers: "x", intro: "y" })).toBe("intro");
     expect(firstErrorKey({ minMembers: "x" })).toBe("minMembers");
     expect(firstErrorKey({})).toBeNull();
+  });
+});
+
+describe("revalidateOnChange (V1-01 · 고친 칸의 오류를 바로 걷기)", () => {
+  const T = "2026-10-12";
+  const empty = { ...EMPTY_VALUES };
+  const submitted = validateNewRoom(empty, T);
+
+  it("clears the edited field once it is valid and leaves the others", () => {
+    const next = { ...empty, title: "AWS 스터디" };
+    const out = revalidateOnChange(submitted, "title", next, T);
+    expect(out.title).toBeUndefined();
+    expect(out.intro).toBe(submitted.intro);
+  });
+
+  it("keeps an error while the field is still invalid, with the current message", () => {
+    const next = { ...empty, title: "가".repeat(61) };
+    expect(revalidateOnChange(submitted, "title", next, T).title).toBe("제목은 60자까지예요");
+  });
+
+  it("does not add errors that were not shown yet", () => {
+    expect(revalidateOnChange({}, "title", { ...empty, title: " " }, T)).toEqual({});
+  });
+
+  it("re-checks linked fields (start date fixes the end-date error)", () => {
+    const v = { ...empty, startDate: "2026-10-20", endDate: "2026-10-15" };
+    const errs = { endDate: "종료일은 시작일 이후여야 해요" };
+    expect(revalidateOnChange(errs, "startDate", { ...v, startDate: "2026-10-14" }, T)).toEqual({});
   });
 });
