@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toApiError } from "@/lib/api/errors";
-import { badgeText, fetchNotifications, fetchUnreadCount, markAllRead, markRead, relativeTime } from "@/lib/api/notifications";
+import { badgeText, fetchNotifications, fetchUnreadCount, markAllRead, markRead, panelShift, pollGuard, relativeTime, visibleBody } from "@/lib/api/notifications";
 import type { NotificationDto } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 
@@ -20,11 +20,21 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
   const [items, setItems] = useState<NotificationDto[] | null>(null);
   const [error, setError] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
+  // 패널은 벨 오른쪽 끝에 붙는데, 390 폭에선 벨 오른쪽에 아바타가 있어 왼쪽이 화면 밖으로 나간다 — 열 때 오른쪽으로 민다(Q1-02)
+  const [shift, setShift] = useState(0);
+  // 읽음 처리 직전·직후로 올려, 그 전에 시작한 카운트 조회가 낙관적 감소를 덮어쓰지 않게 한다(Q1-13)
+  const [guard] = useState(pollGuard);
+  const fetchCount = useCallback(
+    () => guard.run(fetchUnreadCount()).then((r) => (r.fresh ? r.value : null)),
+    [guard],
+  );
 
   const poll = useCallback(() => {
     if (document.visibilityState !== "visible") return;
-    fetchUnreadCount().then(setUnread).catch(() => undefined);
-  }, []);
+    fetchCount()
+      .then((n) => n !== null && setUnread(n))
+      .catch(() => undefined);
+  }, [fetchCount]);
 
   useEffect(() => {
     if (!me) return;
@@ -44,8 +54,8 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
     fetchNotifications()
       .then((r) => live && setItems(r.items))
       .catch((e) => live && setError(toApiError(e).message));
-    fetchUnreadCount()
-      .then((n) => live && setUnread(n))
+    fetchCount()
+      .then((n) => live && n !== null && setUnread(n))
       .catch(() => undefined);
     const onDown = (e: MouseEvent) => {
       if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
@@ -58,7 +68,7 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, fetchCount]);
 
   if (!me) return null;
 
@@ -66,14 +76,18 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
     if (!open) {
       setError("");
       setItems(null);
+      setShift(panelShift(boxRef.current?.getBoundingClientRect().right ?? 0, document.documentElement.clientWidth));
     }
     setOpen((v) => !v);
   };
   const markItemRead = (n: NotificationDto) => {
     if (n.readAt) return;
+    guard.bump();
     setUnread((u) => Math.max(0, u - 1));
     setItems((list) => list?.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)) ?? null);
-    markRead(n.id).catch(() => undefined);
+    markRead(n.id)
+      .catch(() => undefined)
+      .finally(guard.bump);
   };
   const onItemClick = (e: ReactMouseEvent<HTMLAnchorElement>, n: NotificationDto) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) {
@@ -86,8 +100,10 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
     router.push(n.link);
   };
   const onReadAll = async () => {
+    guard.bump();
     try {
       await markAllRead();
+      guard.bump();
       setUnread(0);
       setItems((list) => list?.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })) ?? null);
     } catch (e) {
@@ -116,7 +132,7 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
         )}
       </button>
       {open && (
-        <div role="dialog" aria-label="알림" className="absolute right-0 top-[52px] z-20 flex w-[360px] max-w-[calc(100vw-32px)] flex-col rounded-[16px] border border-line bg-surface shadow-[0_16px_40px_rgba(27,34,48,.16)]">
+        <div role="dialog" aria-label="알림" style={{ right: -shift }} className="absolute right-0 top-[52px] z-20 flex w-[360px] max-w-[calc(100vw-32px)] flex-col rounded-[16px] border border-line bg-surface shadow-[0_16px_40px_rgba(27,34,48,.16)]">
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-[15px] font-bold">알림</span>
             <button type="button" onClick={onReadAll} disabled={unread === 0 && !items?.some((n) => !n.readAt)} className="h-9 rounded-[18px] px-3 text-[13px] font-semibold text-mint disabled:text-faint">
@@ -138,7 +154,7 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
                   {!n.readAt && <span className="h-2 w-2 shrink-0 rounded-full bg-mint"><span className="sr-only">읽지 않음</span></span>}
                   <span className="truncate text-[14px] font-semibold">{n.title}</span>
                 </span>
-                {n.body && <span className="clamp-2 text-[13px] text-ink-2">{n.body}</span>}
+                {visibleBody(n) && <span className="clamp-2 text-[13px] text-ink-2">{visibleBody(n)}</span>}
                 <span className="text-[12px] text-muted">
                   {n.room ? `${n.room.title} · ` : ""}
                   {relativeTime(n.createdAt, new Date())}

@@ -23,3 +23,35 @@ export function relativeTime(iso: string, now: Date): string {
 }
 
 export const badgeText = (n: number) => (n > 99 ? "99+" : String(n));
+
+const PANEL_W = 360;
+const GUTTER = 16;
+
+/** 벨 오른쪽 끝(anchorRight)에 right-0 으로 붙인 패널이 왼쪽 16px 여백 안에 들도록 오른쪽으로 밀 거리 */
+export function panelShift(anchorRight: number, viewport: number): number {
+  const w = Math.min(PANEL_W, viewport - GUTTER * 2);
+  return Math.max(0, GUTTER - (anchorRight - w));
+}
+
+/** 본문이 방 제목과 같으면 메타 줄(방 제목 · 시간)과 겹치므로 숨긴다 — 백엔드 문구는 그대로(Q1-14) */
+export function visibleBody(n: { body: string | null; room: { title: string } | null }): string {
+  const body = n.body?.trim() ?? "";
+  return body && body !== n.room?.title.trim() ? body : "";
+}
+
+/**
+ * 로컬 변경(낙관적 읽음 처리) 뒤에 시작하지 않은 조회 결과는 버린다.
+ * bump() 는 로컬 변경 때와 그 서버 반영이 끝났을 때 부른다 — 사이에 시작한 폴링은 커밋 전 값을 받을 수 있다.
+ */
+export function pollGuard() {
+  let seq = 0;
+  return {
+    bump: () => {
+      seq++;
+    },
+    run: <T>(p: Promise<T>) => {
+      const at = seq;
+      return p.then((value) => ({ fresh: at === seq, value }));
+    },
+  };
+}
