@@ -17,7 +17,7 @@ begin
     new.round_id := coalesce(new.round_id, new.id);
     if new.depth <> 2 or new.round_id <> new.id then
       perform public.fail('VALIDATION_FAILED', '회차는 depth 2 이고 round_id 가 자기 자신이어야 해요',
-                          jsonb_build_object('nodeId', new.id::text, 'field', 'depth'));
+                          jsonb_build_object('nodeId', new.id::text, 'field', case when new.depth <> 2 then 'depth' else 'roundId' end));
     end if;
     if new.label is null or btrim(new.label) = '' then
       perform public.fail('VALIDATION_FAILED', '회차에는 라벨이 있어야 해요', jsonb_build_object('nodeId', new.id::text, 'field', 'label'));
@@ -84,6 +84,8 @@ end $$;
 
 -- ───────── 진척률 롤업 (D5, 02 §4.1) ─────────
 -- 모든 노드 한 행씩. 리프 = (유효 배정, 그중 제출), 부모 = 보관 아닌 후손 리프의 합. 보관 노드와 그 하위는 0/0(pct null).
+-- 전제: 보관은 항상 서브트리 전체에 전파된다(node_archive). 그래서 "보관되지 않은 리프만 센다" 가 곧 "보관 서브트리 제외" 이고,
+-- 보관된 부모 밑에 살아 있는 리프가 남지 않는다. 직접 UPDATE 로 일부만 보관하면 이 롤업은 부모 숫자에서 그 리프를 그냥 뺀다.
 create or replace function public.room_progress(p_room bigint)
 returns table (node_id bigint, asg int, sub int, pct int)
 language sql stable security definer set search_path = '' as $$
@@ -341,6 +343,7 @@ begin
   r := public.node_assert_editable(p_slug);
   v_uid := public.current_user_id();
   n := public.node_get(r.id, p_node_id);
+  -- 해제는 서브트리 전체를 푼다: 따로 먼저 보관해 둔 하위 노드도 함께 풀린다(보관 시점을 기억하지 않는다). 부모가 보관 중이면 먼저 부모를 해제해야 한다.
   if n.parent_id is not null and exists (select 1 from public.goal_nodes p where p.id = n.parent_id and p.archived_at is not null) then
     perform public.fail('PARENT_ARCHIVED', '상위 항목이 보관 중이에요. 상위 항목을 먼저 해제해 주세요', jsonb_build_object('nodeId', n.parent_id::text));
   end if;
@@ -564,6 +567,10 @@ begin
   r := public.node_assert_editable(p_slug);
   v_uid := public.current_user_id();
   n := public.node_get(r.id, p_node_id);
+  if n.archived_at is not null then   -- I1: 보관된 노드는 이동 전에 거부 (대상 리프의 부모 전환·배정 해제 방지). indent/outdent 도 여기를 지난다
+    if n.task_type is null then perform public.fail('PARENT_ARCHIVED', '보관된 항목은 옮길 수 없어요', jsonb_build_object('nodeId', n.id::text)); end if;
+    perform public.fail('TASK_ARCHIVED', '보관된 과제는 옮길 수 없어요', jsonb_build_object('nodeId', n.id::text));
+  end if;
 
   if p_parent_id is not null then
     p := public.node_get(r.id, p_parent_id);
@@ -659,6 +666,7 @@ begin
     from public.rooms r
     join public.room_members m on m.room_id = r.id and m.user_id = v_uid
     where r.archived_at is null
+      -- 그룹장 분기: 방장은 room_members 행의 status 와 무관하게 자기 방을 항상 본다(DRAFT 포함). 멤버는 ACTIVE, 대기자는 모집 중인 방만.
       and (r.leader_id = v_uid or m.status = 'ACTIVE' or (m.status = 'PENDING' and r.status in ('RECRUIT', 'DRAFT')))),
   due as (
     -- 내 OPEN 과제(미제출, 기간 안, 보관 아님) 중 가장 빠른 마감

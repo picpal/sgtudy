@@ -70,8 +70,28 @@ sqlTest("me_schedule: leader_does_tasks=false 그룹장(가은)은 st=null 로 �
   assertEquals((await sched(q, "2026-09-01", "2026-11-02")).today, "2026-10-27");                                     // 62일은 허용
   await expectFail(q("select public.me_schedule('2026-11-03'::date, '2026-11-01'::date)"), "SCHEDULE_RANGE_INVALID");
   await expectFail(q("select public.me_schedule(null, '2026-11-01'::date)"), "SCHEDULE_RANGE_INVALID");
-  await asAnon(q);
+  await asAnon(q);   // superuser 아래에서 claims 만 비운 경우 → EXECUTE 는 있으니 AUTH_REQUIRED. 실제 anon 역할은 아래 privileges 사례(42501/permission denied)
   await expectFail(q("select public.me_schedule('2026-10-01'::date, '2026-10-31'::date)"), "AUTH_REQUIRED");
+}));
+
+sqlTest("me_schedule: 보관 리프 술어 격리(resync 없이 archived_at 만 찍어도 tasks·upcoming 에서 빠진다)", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const aws = await roomId(q, "aws");
+  const ec2 = await nodeByTitle(q, aws, "EC2 인스턴스 유형 정리");
+  await q("update public.goal_nodes set archived_at = now() where id = $1", [ec2]);     // 배정 행은 그대로 live — 리프의 archived_at 술어만 검증
+  assertEquals((await q("select count(*)::int as n from public.task_assignments where node_id = $1 and released_at is null", [ec2]))[0].n as number > 0, true);
+  await asUser(q, await uid(q, "철수"));
+  const s = await sched(q, "2026-09-27", "2026-11-07");
+  assertEquals(s.tasks.find((x: R) => x.title === "EC2 인스턴스 유형 정리"), undefined);
+  assertEquals(s.upcoming.map((x: R) => x.title), ["섹션 6~7 정리 노트", "싱글톤 컨테이너 실습 코드"]);
+}));
+
+sqlTest("me_schedule: upcoming 경계 — 오늘(10-14)에 끝나는 과제와 오늘+7(10-21)에 끝나는 과제를 포함", withCase(db, async (q) => {
+  await setToday(q, "2026-10-14");
+  await asUser(q, await uid(q, "철수"));
+  const s = await sched(q, "2026-09-27", "2026-11-07");
+  assertEquals(s.upcoming.map((x: R) => [x.title, x.e]),
+    [["EC2 인스턴스 유형 정리", "2026-10-14"], ["섹션 6~7 정리 노트", "2026-10-18"], ["싱글톤 컨테이너 실습 코드", "2026-10-18"], ["ALB vs NLB 실습", "2026-10-21"]]);   // e=오늘, e=오늘+7 포함. MVC(10-25)는 밖
 }));
 
 sqlTest("privileges (D7): 플랜 03 내부 함수는 anon·authenticated 실행 불가, me_schedule 은 실제 역할로 실행", withCase(db, async (q) => {

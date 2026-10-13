@@ -229,7 +229,7 @@ $seed2$;
 
 -- ═══════════ §3 커리큘럼 (plan 03) ═══════════
 -- src/data/my-study.ts PLANS 원본(aws·spring·sqld·algo)과 src/data/room-view.ts 회차(toeic·cs·docker·jcg·react).
--- 코드 문자열은 PLANS.members 순서: D 기한내(end_date 18:00 KST) / L 지각(end_date+1 09:00 KST) / M·O·P 미제출 / - 미배정.
+-- 코드 문자열은 PLANS.members 순서: D 기한내(end_date 18:00 KST, 기준일 10/12 10:00 KST 를 넘으면 그 시각으로 clamp) / L 지각(end_date+1 09:00 KST) / M·O·P 미제출 / - 미배정.
 -- 공통 리프의 배정은 섹션 끝 assignment_resync 가 만든다. 지정 리프는 '-' 아닌 자리만 DESIGNATED 행.
 -- 멱등: goal_nodes 가 하나라도 있으면 건너뛴다(플랜 01 seed 테스트가 seed.sql 을 두 번 적용한다).
 
@@ -313,11 +313,12 @@ begin
       insert into public.task_assignments (node_id, user_id, source) values (v_id, v_user, 'DESIGNATED');
     end if;
     if v_c = 'D' then
-      insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late)
-      values (v_id, v_user, '## ' || p_title || E'\n\n' || p_names[i] || ' 제출', least(pg_temp.kst_at(p_e, 18), timestamptz '2026-10-12 10:00+09'), false);
+      insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late, updated_at)
+      values (v_id, v_user, '## ' || p_title || E'\n\n' || p_names[i] || ' 제출', least(pg_temp.kst_at(p_e, 18), timestamptz '2026-10-12 10:00+09'), false,
+              least(pg_temp.kst_at(p_e, 18), timestamptz '2026-10-12 10:00+09'));
     elsif v_c = 'L' then
-      insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late)
-      values (v_id, v_user, '## ' || p_title || E'\n\n' || p_names[i] || ' 지각 제출', pg_temp.kst_at(p_e + 1, 9), true);
+      insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late, updated_at)
+      values (v_id, v_user, '## ' || p_title || E'\n\n' || p_names[i] || ' 지각 제출', pg_temp.kst_at(p_e + 1, 9), true, pg_temp.kst_at(p_e + 1, 9));
     end if;
   end loop;
   return v_id;
@@ -428,13 +429,17 @@ end $f$;
   select n.id, p.id, 'COMMON', pg_temp.kst_at('2026-10-01', 0), pg_temp.kst_at('2026-10-06', 10)
   from public.goal_nodes n join public.rooms r on r.id = n.room_id, public.profiles p
   where r.slug = 'aws' and n.title = 'IAM 정책 이해' and p.nickname = '도윤';
-  insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late)
-  select n.id, p.id, '## IAM 정책 이해' || E'\n\n' || '도윤 제출(이탈 전)', pg_temp.kst_at('2026-10-03', 18), false
+  insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late, updated_at)
+  select n.id, p.id, '## IAM 정책 이해' || E'\n\n' || '도윤 제출(이탈 전)', pg_temp.kst_at('2026-10-03', 18), false, pg_temp.kst_at('2026-10-03', 18)
   from public.goal_nodes n join public.rooms r on r.id = n.room_id, public.profiles p
   where r.slug = 'aws' and n.title = 'IAM 정책 이해' and p.nickname = '도윤';
 
   -- ── 공통 리프 배정 실체화 (D4) ──
   perform public.assignment_resync(id) from public.rooms;
+  -- 배정 시각은 db reset 시각이 아니라 리프 시작일 00:00 KST 로 고정한다(제출 시각보다 항상 앞선다 — 플랜 04 불변식·리마인더가 이 값을 본다).
+  -- (submissions.updated_at = first_submitted_at 은 BEFORE UPDATE 트리거가 덮어쓰므로 위 insert 에서 직접 지정했다.)
+  update public.task_assignments a set assigned_at = pg_temp.kst_at(g.start_date, 0)
+  from public.goal_nodes g where g.id = a.node_id;
   execute 'drop function pg_temp.seed_leaf(bigint,text,text,date,date,text,text[])';
   execute 'drop function pg_temp.seed_node(bigint,text,date,date)';
   execute 'drop function pg_temp.seed_round(text,text,text,date,date)';

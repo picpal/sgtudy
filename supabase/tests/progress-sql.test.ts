@@ -18,6 +18,9 @@ sqlTest("goal_nodes_guard: 직접 INSERT/UPDATE 도 depth=부모+1·round_id 일
   const base = "room_id, parent_id, depth, sort_order, title, start_date, end_date";
   await expectFail(ins(base, [room.id, root.id, 4, 1, "깊이 틀림", "2026-11-01", "2026-11-03"]), "VALIDATION_FAILED");
   await expectFail(ins(base + ", round_id", [room.id, root.id, 3, 1, "회차 틀림", "2026-11-01", "2026-11-03", child.id]), "VALIDATION_FAILED");
+  // 루트의 round_id 불일치는 field 가 depth 가 아니라 roundId 여야 한다 (final review M2)
+  const rootErr = await ins(base + ", round_id, label", [room.id, null, 2, 1, "루트 회차 틀림", "2026-11-01", "2026-11-03", child.id, "x주차"]).then(() => null, (e: Error & { hint?: string }) => e);
+  assertEquals(JSON.parse(rootErr!.hint!).field, "roundId");
   await expectFail(ins(base + ", label", [room.id, root.id, 3, 1, "하위 라벨", "2026-11-01", "2026-11-03", "x"]), "VALIDATION_FAILED");
   await expectFail(ins(base, [room.id, null, 3, 1, "루트 깊이 3", "2026-11-01", "2026-11-03"]), "VALIDATION_FAILED");
   await expectFail(ins(base, [room.id, null, 2, 1, "루트 라벨 없음", "2026-11-01", "2026-11-03"]), "VALIDATION_FAILED");
@@ -250,4 +253,14 @@ sqlTest("RF3: RECRUIT 방의 INACTIVE 행은 room_apply·room_join 모두 MEMBER
   await asUser(q, chulsoo);
   await expectFail(q("select public.room_apply('sqld')"), "MEMBER_NOT_ACTIVE");
   await expectFail(q("select public.room_join('cs')"), "MEMBER_NOT_ACTIVE");
+}));
+
+sqlTest("seed §3: 제출 updated_at = first_submitted_at, 배정 assigned_at = 리프 start_date 00:00 KST (final review M1)", withCase(db, async (q) => {
+  const [sub] = await q("select count(*)::int as n, count(*) filter (where updated_at <> first_submitted_at)::int as bad from public.submissions");
+  assertEquals([(sub.n as number) > 0, sub.bad], [true, 0]);
+  const [asg] = await q(
+    `select count(*)::int as n,
+            count(*) filter (where a.assigned_at <> ((g.start_date::timestamp) at time zone 'Asia/Seoul'))::int as bad
+     from public.task_assignments a join public.goal_nodes g on g.id = a.node_id`);
+  assertEquals([(asg.n as number) > 0, asg.bad], [true, 0]);
 }));

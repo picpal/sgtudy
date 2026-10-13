@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import { applySeed, asAnon, asUser, expectFail, openDb, setToday, sqlTest, withCase } from "./_harness.ts";
-import { mkLeaf, mkRoom, mkRound, nodeByTitle, roomId, submit, uid, TODAY } from "./_curriculum-helpers.ts";
+import { mkRoom, nodeByTitle, roomId, uid, TODAY } from "./_curriculum-helpers.ts";
 
 const db = await openDb();
 await applySeed(db);
@@ -52,6 +52,16 @@ sqlTest("curriculum_get: 비로그인·비멤버는 people=[] (집계는 보임)
   await asUser(q, await uid(q, "서연"));                          // 로그인했지만 aws 비멤버
   c = await get(q, "aws");
   assertEquals(c.nodes[1].task.people, []);
+  // 대기자·탈퇴(INACTIVE) 멤버는 people 이 보인다 (curriculum_json v_people) — sqld 는 배정이 0 이라 aws 로 검증
+  const awsRoom = await roomId(q, "aws");
+  const seoyeon = await uid(q, "서연");
+  await q("insert into public.room_members (room_id, user_id, role, status) values ($1, $2, 'MEMBER', 'PENDING')", [awsRoom, seoyeon]);
+  await asUser(q, seoyeon);
+  assertEquals(peopleOf((await get(q, "aws")).nodes[1]), { 민수: "done", 지은: "late", 철수: "done", 하나: "missed" });
+  await asUser(q, await uid(q, "도윤"));                          // aws INACTIVE
+  c = await get(q, "aws");
+  assertEquals(c.nodes[1].task.people.length, 4);
+  assertEquals(peopleOf(c.nodes[1]), { 민수: "done", 지은: "late", 철수: "done", 하나: "missed" });
   await asUser(q, await uid(q, "철수"));                          // sqld PENDING
   c = await get(q, "sqld");
   assertEquals(c.room.leaderDoesTasks, false);
@@ -179,7 +189,7 @@ sqlTest("node_create(하위): 기본값·부모 기간 상속·resync, 리프→
   const w4 = await nodeByTitle(q, aws, "오토스케일링");
   await call(q, "node_archive", ["aws", w4]);
   await expectFail(q(`select public.node_create($1, $2)`, ["aws", w4]), "PARENT_ARCHIVED");
-  // 다른 방의 노드 id → NODE_NOT_FOUND, 종료 방 → ROOM_NOT_EDITABLE
+  // 종료 방(algo) → ROOM_NOT_EDITABLE (다른 방 노드 id 의 NODE_NOT_FOUND 는 progress-sql 의 node_get 사례가 덮는다)
   await asUser(q, await uid(q, "현우"));
   await expectFail(q(`select public.node_create($1, $2)`, ["algo", w4]), "ROOM_NOT_EDITABLE");
 }));
@@ -397,6 +407,7 @@ sqlTest("node_update: 보관된 노드는 변경 전에 거부된다(리프 TASK
     returns int language sql security definer set search_path = '' as $$ insert into pg_temp.spy values (p_kind) returning 0 $$`);
   await call(q, "node_archive", ["aws", s3]);
   await call(q, "node_archive", ["aws", w1]);
+  await q("truncate spy");                                            // node_archive 가 부른 알림은 제외하고 거부된 호출만 센다
   const snap = () => q("select user_id::text as u, source, released_at is null as live from public.task_assignments where node_id = $1 order by id", [s3]);
   const before = await snap();
   await expectFail(upd(q, "aws", s3, { assigneeIds: [철수] }), "TASK_ARCHIVED");
@@ -480,6 +491,23 @@ sqlTest("node_move: 다른 부모로 — depth·round_id 재기록, 회차↔하
   await expectFail(mv(q, t.room.slug, t.a, "999999", null), "NODE_NOT_FOUND");
 }));
 
+sqlTest("node_outdent: depth 4·5 에서도 조부모 아래 부모 다음으로 가고, 자식을 잃은 부모는 빈 부모(task=null)로 남는다(E13)", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const t = await twoRounds(q);                                                    // R1[A, B], R2
+  let c = await call(q, "node_create", [t.room.slug, t.a, "X"]);                   // A 는 부모로 전환
+  c = await call(q, "node_create", [t.room.slug, byTitle(c, "X").id, "Y"]);        // R1 > A > X > Y (X depth 4, Y depth 5)
+  assertEquals(order(c), ["R1@2#0", "A@3#0", "X@4#0", "Y@5#0", "B@3#1", "R2@2#1"]);
+  c = await call(q, "node_outdent", [t.room.slug, byTitle(c, "Y").id]);            // depth 5 → 4, X 다음
+  assertEquals(order(c), ["R1@2#0", "A@3#0", "X@4#0", "Y@4#1", "B@3#1", "R2@2#1"]);
+  assertEquals(byTitle(c, "X").task, null);                                        // 자식 없는 X 는 리프로 되돌아가지 않는다
+  c = await call(q, "node_outdent", [t.room.slug, byTitle(c, "X").id]);            // depth 4 → 3, A 다음
+  assertEquals(order(c), ["R1@2#0", "A@3#0", "Y@4#0", "X@3#1", "B@3#2", "R2@2#1"]);   // Y 는 A 아래에 그대로
+  c = await call(q, "node_outdent", [t.room.slug, byTitle(c, "Y").id]);            // Y(depth 4) → R1 아래 depth 3, A 다음
+  assertEquals(order(c), ["R1@2#0", "A@3#0", "Y@3#1", "X@3#2", "B@3#3", "R2@2#1"]);
+  assertEquals([byTitle(c, "A").task, byTitle(c, "X").task], [null, null]);        // A·X 모두 자식 없는 빈 부모
+  assertEquals(byTitle(c, "Y").roundId, t.r1);
+}));
+
 sqlTest("node_move: 서브트리 깊이 초과·보관 부모·제출물 있는 리프 아래 거부", withCase(db, async (q) => {
   await setToday(q, TODAY);
   const t = await twoRounds(q);
@@ -498,6 +526,29 @@ sqlTest("node_move: 서브트리 깊이 초과·보관 부모·제출물 있는 
   await expectFail(mv(q, "aws", await nodeByTitle(q, aws, "VPC 실습"), await nodeByTitle(q, aws, "IAM 정책 이해"), null), "NODE_HAS_SUBMISSIONS");
   await asUser(q, await uid(q, "철수"));
   await expectFail(mv(q, "aws", await nodeByTitle(q, aws, "VPC 실습"), null, 0), "NOT_LEADER");
+}));
+
+sqlTest("node_move/indent/outdent: 보관된 노드는 이동 전에 거부된다(리프 TASK_ARCHIVED · 비리프 PARENT_ARCHIVED), 살아 있는 대상 리프는 그대로", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const t = await twoRounds(q);                                                    // R1[A, B], R2 — A·B 는 공통 리프(서연 배정)
+  const snap = () => q(
+    `select n.task_type, (select count(*)::int from public.task_assignments a where a.node_id = n.id and a.released_at is null) as live
+     from public.goal_nodes n where n.id = $1`, [t.a]);
+  const before = await snap();
+  assertEquals(before[0].live, 1);
+  await call(q, "node_archive", [t.room.slug, t.b]);                               // 보관된 리프 B, 직전 형제는 살아 있는 리프 A
+  await expectFail(call(q, "node_indent", [t.room.slug, t.b]), "TASK_ARCHIVED");
+  await expectFail(mv(q, t.room.slug, t.b, t.a, null), "TASK_ARCHIVED");
+  assertEquals(await snap(), before);                                              // A 는 부모로 전환되지 않았다
+  // outdent: 살아 있는 부모 아래의 보관된 리프
+  let c = await call(q, "node_create", [t.room.slug, t.r2, "X"]);
+  const x = byTitle(c, "X").id;
+  await call(q, "node_archive", [t.room.slug, x]);
+  await expectFail(call(q, "node_outdent", [t.room.slug, x]), "TASK_ARCHIVED");
+  // 비리프(보관된 회차 서브트리)
+  await call(q, "node_archive", [t.room.slug, t.r1]);
+  await expectFail(mv(q, t.room.slug, t.r1, null, 0), "PARENT_ARCHIVED");
+  await expectFail(mv(q, t.room.slug, t.a, t.r2, null), "TASK_ARCHIVED");               // 서브트리 보관으로 같이 보관된 리프 A
 }));
 
 sqlTest("privileges: node_move runs under real roles (authenticated 그룹장), node_indent/outdent 는 닿지 않음, anon 은 permission denied", withCase(db, async (q) => {
