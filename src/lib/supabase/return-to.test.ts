@@ -19,7 +19,8 @@ describe("safeReturnTo", () => {
   });
   it("falls back to / for anything else (Review Focus 2)", () => {
     for (const bad of [null, undefined, "", "/", "/me", "//evil.com", "/\\evil.com", "https://evil.com", "/rooms/../me",
-                       "javascript:alert(1)", "/roomsx", " /rooms/aws", "/rooms/aws\n"]) {
+                       "javascript:alert(1)", "/roomsx", " /rooms/aws", "/rooms/aws\n",
+                       "/rooms/%2e%2e/me", "/rooms%2Faws"]) {
       expect(safeReturnTo(bad)).toBe("/");
     }
   });
