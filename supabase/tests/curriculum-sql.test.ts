@@ -266,3 +266,127 @@ sqlTest("privileges: node_create/archive/unarchive/delete run under real roles; 
   await q("reset role");
 }));
 
+
+const upd = (q: Parameters<typeof uid>[0], slug: string, node: string, patch: Record<string, unknown>) =>
+  q(`select public.node_update($1, $2, $3::jsonb) as c`, [slug, node, JSON.stringify(patch)]).then((r) => r[0].c as Record<string, any>);
+
+sqlTest("node_update: 제목·설명·기간·라벨, 경고 PERIOD_OUTSIDE_PARENT/ROOM, 검증 오류", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const aws = await roomId(q, "aws");
+  await asUser(q, await uid(q, "민수"));
+  const w1 = await nodeByTitle(q, aws, "IAM·VPC");
+  const ec2 = await nodeByTitle(q, aws, "EC2 인스턴스 유형 정리");
+  let c = await upd(q, "aws", w1, { label: "OT", title: "오리엔테이션", descriptionMd: "# 첫 주" });
+  assertEquals([byTitle(c, "오리엔테이션").label, byTitle(c, "오리엔테이션").descriptionMd, c.warnings], ["OT", "# 첫 주", []]);
+  c = await upd(q, "aws", ec2, { startDate: "2026-10-09", endDate: "2026-10-13" });
+  assertEquals([byTitle(c, "EC2 인스턴스 유형 정리").startDate, byTitle(c, "EC2 인스턴스 유형 정리").endDate, c.warnings], ["2026-10-09", "2026-10-13", []]);
+  c = await upd(q, "aws", ec2, { endDate: "2026-10-16" });                               // 부모 2주차는 10-14 까지
+  assertEquals(c.warnings, [{ code: "PERIOD_OUTSIDE_PARENT", nodeId: ec2 }]);
+  c = await upd(q, "aws", w1, { startDate: "2026-09-30" });                              // 방은 10-01 부터
+  assertEquals(c.warnings, [{ code: "PERIOD_OUTSIDE_ROOM", nodeId: w1 }]);
+  await expectFail(upd(q, "aws", ec2, { label: "x" }), "VALIDATION_FAILED");             // 리프에 label
+  await expectFail(upd(q, "aws", w1, { label: null }), "VALIDATION_FAILED");             // 회차 label 지우기 금지(A7)
+  await expectFail(upd(q, "aws", w1, { label: "  " }), "VALIDATION_FAILED");
+  await expectFail(upd(q, "aws", ec2, { startDate: "2026-02-30" }), "VALIDATION_FAILED"); // D11: 22008 원문 대신
+  await expectFail(upd(q, "aws", ec2, { endDate: 20261014 }), "VALIDATION_FAILED");
+  await expectFail(upd(q, "aws", ec2, { nope: 1 }), "VALIDATION_FAILED");
+  await expectFail(upd(q, "aws", ec2, { title: "  " }), "INVALID_TITLE");
+  await expectFail(upd(q, "aws", ec2, { startDate: "2026-10-20" }), "INVALID_PERIOD");  // start > end(10-16)
+  await expectFail(upd(q, "aws", ec2, { descriptionMd: "x".repeat(20001) }), "VALIDATION_FAILED");
+  await expectFail(q(`select public.node_update($1, $2, 'null'::jsonb)`, ["aws", ec2]), "VALIDATION_FAILED");
+  await asUser(q, await uid(q, "철수"));
+  await expectFail(upd(q, "aws", ec2, { title: "x" }), "NOT_LEADER");
+}));
+
+sqlTest("node_update(taskType): 제출물 있으면 양방향 NODE_HAS_SUBMISSIONS, 회차는 NODE_NOT_LEAF, 공통→지정은 담당자 승계·source DESIGNATED", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const aws = await roomId(q, "aws");
+  await asUser(q, await uid(q, "민수"));
+  const iam = await nodeByTitle(q, aws, "IAM 정책 이해");
+  const ec2 = await nodeByTitle(q, aws, "EC2 인스턴스 유형 정리");
+  const w1 = await nodeByTitle(q, aws, "IAM·VPC");
+  const alb = await nodeByTitle(q, aws, "ALB vs NLB 실습");
+  await expectFail(upd(q, "aws", iam, { taskType: "designated" }), "NODE_HAS_SUBMISSIONS");
+  await expectFail(upd(q, "aws", ec2, { taskType: "common" }), "NODE_HAS_SUBMISSIONS");
+  await expectFail(upd(q, "aws", w1, { taskType: "common" }), "NODE_NOT_LEAF");
+  await expectFail(upd(q, "aws", w1, { assigneeIds: [] }), "NODE_NOT_LEAF");              // E3: 회차의 assigneeIds 는 조용히 무시되지 않는다
+  await expectFail(upd(q, "aws", alb, { taskType: "weird" }), "VALIDATION_FAILED");
+  let c = await upd(q, "aws", alb, { taskType: "designated" });
+  assertEquals([byTitle(c, "ALB vs NLB 실습").task.type, Object.keys(peopleOf(byTitle(c, "ALB vs NLB 실습"))).sort(), c.warnings], ["designated", ["민수", "지은", "철수", "하나"], []]);
+  const src = await q("select source, count(*)::int as n from public.task_assignments where node_id = $1 and released_at is null group by source", [alb]);
+  assertEquals(src, [{ source: "DESIGNATED", n: 4 }]);
+  c = await upd(q, "aws", alb, { taskType: "common" });
+  assertEquals((await q("select source, count(*)::int as n from public.task_assignments where node_id = $1 and released_at is null group by source", [alb])), [{ source: "COMMON", n: 4 }]);
+  // 공통 리프의 assigneeIds 는 무시된다
+  c = await upd(q, "aws", alb, { assigneeIds: [await uid(q, "철수")] });
+  assertEquals(byTitle(c, "ALB vs NLB 실습").task.assigned, 4);
+  // E4: 지정→공통 전환 뒤 공통 대상이 아닌 사람(leader_does_tasks=false 그룹장)의 DESIGNATED 행이 남지 않는다
+  await upd(q, "aws", alb, { taskType: "designated" });
+  await q("update public.rooms set leader_does_tasks = false where id = $1", [aws]);
+  c = await upd(q, "aws", alb, { taskType: "common" });
+  assertEquals(byTitle(c, "ALB vs NLB 실습").task.assigned, 3);
+  assertEquals((await q("select count(*)::int as n from public.task_assignments where node_id = $1 and user_id = $2 and released_at is null", [alb, await uid(q, "민수")]))[0].n, 0);
+}));
+
+sqlTest("node_update(assigneeIds): 교체·해제·0명 경고, ASSIGNEE_NOT_MEMBER(이탈자·비멤버·leader_does_tasks=false 그룹장), ASSIGNEE_HAS_SUBMISSION", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const aws = await roomId(q, "aws");
+  await asUser(q, await uid(q, "민수"));
+  const s3 = await nodeByTitle(q, aws, "S3 스토리지 클래스 발표자료");    // 지정, 하나 O, 제출 없음
+  const ec2 = await nodeByTitle(q, aws, "EC2 인스턴스 유형 정리");         // 지정, 지은 D, 철수 O
+  const [지은, 철수, 하나, 도윤, 서연, 민수] = await Promise.all(["지은", "철수", "하나", "도윤", "서연", "민수"].map((n) => uid(q, n)));
+  let c = await upd(q, "aws", s3, { assigneeIds: [지은, 철수] });
+  assertEquals([peopleOf(byTitle(c, "S3 스토리지 클래스 발표자료")), c.warnings], [{ 지은: "open", 철수: "open" }, []]);
+  const rows = await q("select user_id::text as u, source, released_at is null as live from public.task_assignments where node_id = $1 order by id", [s3]);
+  assertEquals(rows.map((r) => [r.u, r.source, r.live]).sort(), [[지은, "DESIGNATED", true], [철수, "DESIGNATED", true], [하나, "DESIGNATED", false]].sort());
+  c = await upd(q, "aws", s3, { assigneeIds: [] });
+  assertEquals([byTitle(c, "S3 스토리지 클래스 발표자료").task.state, c.warnings, c.stats.unassignedCount], ["unassigned", [{ code: "UNASSIGNED_TASK", nodeId: s3 }], 1]);
+  c = await upd(q, "aws", s3, { assigneeIds: [하나] });                   // 같은 행 복구
+  assertEquals((await q("select count(*)::int as n from public.task_assignments where node_id = $1", [s3]))[0].n, 3);
+  await expectFail(upd(q, "aws", s3, { assigneeIds: [도윤] }), "ASSIGNEE_NOT_MEMBER");   // INACTIVE
+  await expectFail(upd(q, "aws", s3, { assigneeIds: [서연] }), "ASSIGNEE_NOT_MEMBER");   // 비멤버
+  await expectFail(upd(q, "aws", s3, { assigneeIds: ["not-a-uuid"] }), "VALIDATION_FAILED");
+  await expectFail(upd(q, "aws", ec2, { assigneeIds: [철수] }), "ASSIGNEE_HAS_SUBMISSION");   // 지은(제출) 제거
+  c = await upd(q, "aws", ec2, { assigneeIds: [지은] });                   // 철수(미제출) 제거는 가능
+  assertEquals(peopleOf(byTitle(c, "EC2 인스턴스 유형 정리")), { 지은: "done" });
+  assertEquals(c.stats.overallPct, 25);                                    // 6/24
+  await q("update public.rooms set leader_does_tasks = false where id = $1", [aws]);
+  await expectFail(upd(q, "aws", s3, { assigneeIds: [민수] }), "ASSIGNEE_NOT_MEMBER");
+}));
+
+sqlTest("node_update: ACTIVE 방 기간 변경·담당자 교체가 notify_publish 를 kind·수신자·prefix 대로 부르고 한 번에 적용된다(E2 spy)", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const aws = await roomId(q, "aws");
+  await asUser(q, await uid(q, "민수"));
+  const s3 = await nodeByTitle(q, aws, "S3 스토리지 클래스 발표자료");
+  const [지은, 하나] = [await uid(q, "지은"), await uid(q, "하나")];
+  // 0008 전의 자리표를 이 사례 안에서만 스파이로 바꾼다(롤백됨)
+  await q("create temp table spy(kind text, rcpt uuid[], prefix text)");
+  await q(`create or replace function public.notify_publish(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p_recipients uuid[], p_dedupe_prefix text, p_model jsonb)
+    returns int language sql security definer set search_path = '' as $$ insert into pg_temp.spy values (p_kind, p_recipients, p_dedupe_prefix) returning 0 $$`);
+  const c = await upd(q, "aws", s3, { endDate: "2026-10-15", assigneeIds: [지은] });
+  assertEquals([byTitle(c, "S3 스토리지 클래스 발표자료").endDate, c.warnings], ["2026-10-15", [{ code: "PERIOD_OUTSIDE_PARENT", nodeId: s3 }]]);
+  const rows = await q("select user_id::text as u, source, released_at is null as live from public.task_assignments where node_id = $1", [s3]);
+  assertEquals(rows.map((x) => [x.u, x.source, x.live]).sort(), [[지은, "DESIGNATED", true], [하나, "DESIGNATED", false]].sort());
+  const spy = await q("select kind, cardinality(rcpt)::int as n, rcpt[1]::text as first, prefix from spy order by kind");
+  assertEquals(spy.map((x) => [x.kind, x.n, x.first]), [["SCHEDULE_CHANGED", 1, 지은], ["TASK_ASSIGNED", 1, 지은], ["TASK_UNASSIGNED", 1, 하나]]);
+  for (const x of spy) assertEquals(new RegExp(`^${x.kind}:${aws}:${s3}:\\d+$`).test(x.prefix as string), true, String(x.prefix));
+}));
+
+sqlTest("privileges: node_update runs under real roles (authenticated 그룹장), anon 은 permission denied", withCase(db, async (q) => {
+  const can = async (role: string) =>
+    (await q(`select has_function_privilege($1, 'public.node_update(text,bigint,jsonb)', 'execute') as ok`, [role]))[0].ok as boolean;
+  assertEquals([await can("authenticated"), await can("anon")], [true, false]);
+  await setToday(q, TODAY);
+  const aws = await roomId(q, "aws");
+  const ec2 = await nodeByTitle(q, aws, "EC2 인스턴스 유형 정리");
+  await asUser(q, await uid(q, "민수"));
+  await q("set local role authenticated");
+  const c = await upd(q, "aws", ec2, { title: "EC2 정리" });
+  assertEquals(byTitle(c, "EC2 정리").title, "EC2 정리");
+  await q("reset role");
+  await asAnon(q);
+  await q("set local role anon");
+  await expectFail(upd(q, "aws", ec2, { title: "x" }), "permission denied");
+  await q("reset role");
+}));

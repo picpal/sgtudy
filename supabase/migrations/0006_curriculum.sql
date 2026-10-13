@@ -359,3 +359,176 @@ grant execute on function public.node_create(text, bigint, text, text, text, dat
 grant execute on function public.node_delete(text, bigint)    to authenticated;
 grant execute on function public.node_archive(text, bigint)   to authenticated;
 grant execute on function public.node_unarchive(text, bigint) to authenticated;
+
+-- ───────── node_update (E3~E7, I2·I6, D9) ─────────
+create or replace function public.node_update(p_slug text, p_node_id bigint, p_patch jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  r         public.rooms;
+  n         public.goal_nodes;
+  p         public.goal_nodes;
+  v_uid     uuid;
+  k         text;
+  v_title   text;
+  v_desc    text;
+  v_s       date;
+  v_e       date;
+  v_label   text;
+  v_type    text;
+  v_ids     uuid[];          -- null = 담당자 변경 없음
+  v_cur     uuid[];
+  v_added   uuid[] := '{}';
+  v_removed uuid[] := '{}';
+  v_bad     uuid;
+  v_asg     int;
+  v_rcpt    uuid[];
+  v_warn    jsonb := '[]'::jsonb;
+begin
+  r := public.node_assert_editable(p_slug);
+  v_uid := public.current_user_id();
+  n := public.node_get(r.id, p_node_id);
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
+    perform public.fail('VALIDATION_FAILED', '수정 내용이 올바르지 않아요');
+  end if;
+  for k in select jsonb_object_keys(p_patch) loop
+    if k not in ('title', 'descriptionMd', 'startDate', 'endDate', 'label', 'taskType', 'assigneeIds') then
+      perform public.fail('VALIDATION_FAILED', '알 수 없는 항목이에요', jsonb_build_object('field', k));
+    end if;
+  end loop;
+
+  -- 제목·설명·기간·라벨
+  v_title := case when p_patch ? 'title' then trim(coalesce(p_patch->>'title', '')) else n.title end;
+  if v_title is null or length(v_title) < 1 or length(v_title) > 80 then
+    perform public.fail('INVALID_TITLE', '제목은 1~80자예요', '{"field":"title"}'::jsonb);
+  end if;
+  v_desc := coalesce(p_patch->>'descriptionMd', n.description_md);
+  if length(v_desc) > 20000 then
+    perform public.fail('VALIDATION_FAILED', '설명은 20,000자까지예요', '{"field":"descriptionMd"}'::jsonb);
+  end if;
+  v_s := coalesce(public.patch_date(p_patch, 'startDate'), n.start_date);   -- 형식 오류 → VALIDATION_FAILED (D11)
+  v_e := coalesce(public.patch_date(p_patch, 'endDate'), n.end_date);
+  if v_s > v_e then perform public.fail('INVALID_PERIOD', '종료일은 시작일 이후여야 해요', '{"field":"endDate"}'::jsonb); end if;
+  v_label := n.label;
+  if p_patch ? 'label' then
+    if n.depth <> 2 then perform public.fail('VALIDATION_FAILED', '회차 라벨은 회차에만 줄 수 있어요', '{"field":"label"}'::jsonb); end if;
+    v_label := nullif(trim(coalesce(p_patch->>'label', '')), '');
+    if v_label is null then perform public.fail('VALIDATION_FAILED', '회차 라벨은 비울 수 없어요', '{"field":"label"}'::jsonb); end if;   -- A7
+    if length(v_label) > 20 then perform public.fail('VALIDATION_FAILED', '회차 라벨은 20자까지예요', '{"field":"label"}'::jsonb); end if;
+  end if;
+
+  -- 담당자는 리프에만 (E3: 결과 타입과 무관하게 비리프면 조용히 무시하지 않는다)
+  if p_patch ? 'assigneeIds' and n.task_type is null then
+    perform public.fail('NODE_NOT_LEAF', '하위 항목이 있는 노드에는 담당자를 줄 수 없어요', jsonb_build_object('nodeId', n.id::text));
+  end if;
+
+  -- 과제 유형 (리프만, 제출물 있으면 양방향 불가)
+  v_type := n.task_type;
+  if p_patch ? 'taskType' then
+    if n.task_type is null then perform public.fail('NODE_NOT_LEAF', '하위 항목이 있는 노드에는 과제 유형을 줄 수 없어요', jsonb_build_object('nodeId', n.id::text)); end if;
+    v_type := upper(coalesce(p_patch->>'taskType', ''));
+    if v_type not in ('COMMON', 'DESIGNATED') then
+      perform public.fail('VALIDATION_FAILED', '과제 유형은 common 또는 designated 예요', '{"field":"taskType"}'::jsonb);
+    end if;
+    if v_type <> n.task_type and public.node_has_submissions(n.id) then
+      perform public.fail('NODE_HAS_SUBMISSIONS', '제출물이 있는 과제는 유형을 바꿀 수 없어요', jsonb_build_object('nodeId', n.id::text));
+    end if;
+  end if;
+
+  -- 담당자 (결과 타입이 DESIGNATED 일 때만)
+  if v_type = 'DESIGNATED' and p_patch ? 'assigneeIds' then
+    if jsonb_typeof(p_patch->'assigneeIds') <> 'array' then
+      perform public.fail('VALIDATION_FAILED', '담당자 목록이 올바르지 않아요', '{"field":"assigneeIds"}'::jsonb);
+    end if;
+    begin
+      select coalesce(array_agg(distinct x::uuid), '{}') into v_ids from jsonb_array_elements_text(p_patch->'assigneeIds') x;
+    exception when invalid_text_representation then
+      perform public.fail('VALIDATION_FAILED', '담당자 id 가 올바르지 않아요', '{"field":"assigneeIds"}'::jsonb);
+    end;
+    select u into v_bad from unnest(v_ids) u
+    where not exists (select 1 from public.room_members m
+                      where m.room_id = r.id and m.user_id = u and m.status = 'ACTIVE' and (m.role = 'MEMBER' or r.leader_does_tasks))
+    limit 1;
+    if v_bad is not null then
+      perform public.fail('ASSIGNEE_NOT_MEMBER', '활성 참가자만 담당자로 지정할 수 있어요', jsonb_build_object('field', 'assigneeIds', 'userId', v_bad::text));
+    end if;
+  elsif v_type = 'DESIGNATED' and n.task_type = 'COMMON' then
+    -- 공통 → 지정 전환, 담당자 미지정: 전환 직전 담당자 승계 (E6)
+    select coalesce(array_agg(user_id), '{}') into v_ids from public.task_assignments where node_id = n.id and released_at is null;
+  end if;
+
+  if v_ids is not null then
+    select coalesce(array_agg(user_id), '{}') into v_cur from public.task_assignments where node_id = n.id and released_at is null;
+    select coalesce(array_agg(u), '{}') into v_removed from unnest(v_cur) u where u <> all(v_ids);
+    select coalesce(array_agg(u), '{}') into v_added   from unnest(v_ids) u where u <> all(v_cur);
+    select s.user_id into v_bad from public.submissions s where s.node_id = n.id and s.user_id = any(v_removed) limit 1;
+    if v_bad is not null then
+      perform public.fail('ASSIGNEE_HAS_SUBMISSION', '이미 제출한 담당자는 뺄 수 없어요. 과제를 보관해 주세요', jsonb_build_object('field', 'assigneeIds', 'userId', v_bad::text));
+    end if;
+    update public.task_assignments set released_at = now()
+    where node_id = n.id and released_at is null and user_id = any(v_removed);
+    insert into public.task_assignments (node_id, user_id, source)
+    select n.id, u, 'DESIGNATED' from unnest(v_ids) u
+    on conflict (node_id, user_id) do update set released_at = null, source = 'DESIGNATED';
+  end if;
+
+  -- 지정 → 공통: 공통 대상이 아닌 사람의 DESIGNATED 행을 풀어 둔다. resync 가 대상자만 COMMON 으로 되살린다 (E4)
+  if n.task_type = 'DESIGNATED' and v_type = 'COMMON' then
+    update public.task_assignments set released_at = now()
+    where node_id = n.id and source = 'DESIGNATED' and released_at is null;
+  end if;
+
+  update public.goal_nodes set
+    title = v_title, description_md = v_desc, start_date = v_s, end_date = v_e, label = v_label,
+    task_type = v_type, updated_at = now()
+  where id = n.id;
+  perform public.assignment_resync(r.id);
+
+  -- 경고 (D9: 부모·방 기간 밖 허용 + 경고, 담당자 0명 경고)
+  if n.parent_id is not null then
+    select * into p from public.goal_nodes where id = n.parent_id;
+    if v_s < p.start_date or v_e > p.end_date then
+      v_warn := v_warn || jsonb_build_object('code', 'PERIOD_OUTSIDE_PARENT', 'nodeId', n.id::text);
+    end if;
+  end if;
+  if v_s < r.start_date or v_e > r.end_date then
+    v_warn := v_warn || jsonb_build_object('code', 'PERIOD_OUTSIDE_ROOM', 'nodeId', n.id::text);
+  end if;
+  if v_type = 'DESIGNATED' then
+    select asg into v_asg from public.room_progress(r.id) where node_id = n.id;
+    if coalesce(v_asg, 0) = 0 then v_warn := v_warn || jsonb_build_object('code', 'UNASSIGNED_TASK', 'nodeId', n.id::text); end if;
+  end if;
+
+  -- 알림 (진행중 방만. 0008 전에는 자리표가 0 을 돌려준다)
+  -- 행위자(v_uid) 제외는 notify_publish 계약이 맡는다 — 여기서는 담당자 전원을 넘긴다(A5).
+  -- 세 알림 모두 행위 이벤트 → prefix 'KIND:room:node:' || txid_current() (D8: 같은 사람 해제 후 재배정도 새 알림, 한 저장 안에서는 1건)
+  if r.status = 'ACTIVE' and v_type is not null then
+    if (v_s, v_e) is distinct from (n.start_date, n.end_date) then
+      select coalesce(array_agg(user_id), '{}') into v_rcpt
+      from public.task_assignments where node_id = n.id and released_at is null;
+      if cardinality(v_rcpt) > 0 then
+        perform public.notify_publish('SCHEDULE_CHANGED', r.id, n.id, v_uid, v_rcpt,
+          'SCHEDULE_CHANGED:' || r.id || ':' || n.id || ':' || txid_current(),
+          jsonb_build_object('title', v_title, 'startDate', to_char(v_s, 'YYYY-MM-DD'), 'endDate', to_char(v_e, 'YYYY-MM-DD')));
+      end if;
+    end if;
+    if cardinality(v_added) > 0 then
+      perform public.notify_publish('TASK_ASSIGNED', r.id, n.id, v_uid, v_added,
+        'TASK_ASSIGNED:' || r.id || ':' || n.id || ':' || txid_current(),
+        jsonb_build_object('title', v_title, 'endDate', to_char(v_e, 'YYYY-MM-DD')));
+    end if;
+    if cardinality(v_removed) > 0 then
+      perform public.notify_publish('TASK_UNASSIGNED', r.id, n.id, v_uid, v_removed,
+        'TASK_UNASSIGNED:' || r.id || ':' || n.id || ':' || txid_current(),
+        jsonb_build_object('title', v_title));
+    end if;
+  end if;
+
+  -- 태그 자동 선택 (0009 가 있을 때만 — 플랜 04)
+  if (p_patch ? 'title' or p_patch ? 'descriptionMd') and to_regproc('public.tag_autoselect') is not null then
+    execute 'select public.tag_autoselect($1)' using r.id;
+  end if;
+
+  return public.curriculum_json(r.id, v_uid, true) || jsonb_build_object('warnings', v_warn);
+end $$;
+
+grant execute on function public.node_update(text, bigint, jsonb) to authenticated;
