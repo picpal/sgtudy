@@ -124,7 +124,7 @@ cases("notifications", db, [
     for (let i = 0; i < 25; i++) await publish(q, "ROOM_STARTED", aws, null, null, [cheolsu], `page:${i}`);
     await asUser(q, cheolsu);
     // 시드 §4(Task 10) 전에는 0, 후에는 시드분 — 어느 시점에 돌려도 같은 단언이 되도록 사례 tx 이전 행을 센다(E4)
-    const seeded = Number((await one(q, "select count(*)::int as n from public.notifications where user_id = $1::uuid and created_at < now()", [cheolsu])).n);
+    const seeded = Number((await one(q, "select count(*)::int as n from public.notifications where user_id = $1::uuid and created_at < now() and read_at is null", [cheolsu])).n);
     const total = 25 + seeded;
     assertEquals((await one(q, "select public.notifications_unread_count() as c")).c, { count: total });
     const p1 = (await one(q, "select public.notifications_list(null, 20) as l")).l;
@@ -148,9 +148,24 @@ cases("notifications", db, [
     await publish(q, "ROOM_STARTED", aws, null, null, [minsu], `mine:${minsu}`);
     const other = await one(q, "select id::text as id from public.notifications where user_id = $1::uuid order by id desc limit 1", [minsu]);
     await expectFail(q("select public.notifications_read($1::bigint)", [other.id]), "NOT_FOUND");
+    await asUser(q, cheolsu);
+    await expectFail(q("select public.notifications_list('abc', 20)"), "VALIDATION_FAILED");               // 숫자가 아닌 커서는 raw 22P02 가 아니다
+    await expectFail(q("select public.notifications_list('99999999999999999999', 20)"), "VALIDATION_FAILED");   // bigint 범위 밖
     await asAnon(q);   // 수퍼유저 + 빈 uid 경로. 실제 anon 은 GRANT 층에서 42501(notifications-grants 사례, D10)
+    await expectFail(q("select public.notifications_list('abc', 20)"), "AUTH_REQUIRED");                   // 인증이 커서 검사보다 먼저
     await expectFail(q("select public.notifications_list(null, 20)"), "AUTH_REQUIRED");
     await expectFail(q("select public.notifications_unread_count()"), "AUTH_REQUIRED");
+  } },
+
+  { name: "notification_json hides room once the recipient can no longer read it (final review Minor 1)", run: async (q) => {
+    const cheolsu = await uidOf(q, "철수");
+    await asUser(q, cheolsu);
+    const before = (await one(q, "select public.notifications_list(null, 50) as l")).l.items.find((i: { kind: string }) => i.kind === "ROUND_STARTED");
+    assertEquals(before.room.slug, "spring");                                  // ACTIVE 멤버: 읽을 수 있다
+    await q("update public.room_members set status = 'REJECTED' where user_id = $1::uuid and room_id = $2::bigint", [cheolsu, await roomId(q, "spring")]);
+    const after = (await one(q, "select public.notifications_list(null, 50) as l")).l.items.find((i: { kind: string }) => i.kind === "ROUND_STARTED");
+    assertEquals(after.room, null);                                            // spring 은 비공개 — 멤버가 아니면 제목·slug 도 못 본다
+    assertEquals(after.title.includes("2주차"), true);                          // 생성 시점 스냅샷 title 은 그대로
   } },
 
   { name: "settings_get/put: defaults, full replace, NOT_LEADER, VALIDATION_FAILED", run: async (q) => {
@@ -201,7 +216,10 @@ cases("notifications", db, [
     assertEquals(jr[0].title, "서연님이 SQLD 4주 벼락치기 참가를 신청했어요");
     await asUser(q, gaeun);
     await q("select public.room_approve('sqld', $1::uuid)", [seoyeon]);
-    assertEquals((await rowsOf(q, seoyeon, "JOIN_APPROVED")).length, 1);   // link 는 room_approve 가 상태 갱신 뒤에 부르면 /my-study, 전이면 /rooms
+    const ja = await rowsOf(q, seoyeon, "JOIN_APPROVED");
+    assertEquals(ja.length, 1);
+    assertEquals(ja[0].link, "/my-study/sqld");                              // 승인 뒤에는 참가자 화면으로 간다
+    // link 는 room_approve 가 상태 갱신 뒤에 부르면 /my-study, 전이면 /rooms
 
     await setToday(q, "2026-10-26");                                          // sqld start_date
     await q("select public.room_tick()");
@@ -243,7 +261,7 @@ cases("notifications-grants", db, [
     // 실제 실행(D7): authenticated 는 통과, anon 은 GRANT 층에서 거절
     await asUser(q, await uidOf(q, "철수"));
     await q("set local role authenticated");
-    assertEquals(typeof (await one(q, "select public.notifications_unread_count() as c")).c.count, "number");
+    assertEquals((await one(q, "select public.notifications_unread_count() as c")).c, { count: 3 });   // 시드 §4 미읽음 3건
     await q("reset role");
     await asUser(q, await uidOf(q, "민수"));
     await q("set local role authenticated");

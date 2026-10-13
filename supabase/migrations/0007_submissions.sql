@@ -43,6 +43,8 @@ $$;
 -- 방 잠금(room_lock — node_delete·member_deactivate·settings_put 과 직렬화, 그사이 삭제되면 NODE_NOT_FOUND)
 -- → 존재 은닉 → 방 ACTIVE·미보관 → 보관(비리프 PARENT_ARCHIVED / 리프 TASK_ARCHIVED) → 리프 → 담당자(released 아님).
 -- 내부 전용(GRANT 없음). 시작일 검사는 호출자 몫(제출만 TASK_NOT_STARTED)
+-- 트레이드오프: 존재 은닉(room_hide_unless_known)보다 잠금이 먼저다. 잠근 뒤에 노드가 사라졌는지 다시 봐야 해서(lock-before-hide)
+--   node id 만 아는 인증된 외부인이 비공개 방의 rooms 행을 트랜잭션 길이만큼 잠글 수 있다. 영향이 매우 작아 그대로 둔다(node-id 존재 오라클과 같은 뿌리).
 create or replace function public.submission_target(p_node bigint, p_uid uuid) returns public.goal_nodes
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -116,7 +118,7 @@ begin
   end if;
   for i in 1 .. cardinality(v_links) loop
     v_link := trim(v_links[i]);
-    if v_link !~* '^https?://[^[:space:]]+$' or length(v_link) > 2000 then
+    if v_link is null or v_link !~* '^https?://[^[:space:]]+$' or length(v_link) > 2000 then
       perform public.fail('INVALID_LINK', 'http(s):// 로 시작하는 링크만 넣을 수 있어요', jsonb_build_object('field', 'links', 'index', i - 1));
     end if;
     v_links[i] := v_link;
@@ -180,6 +182,7 @@ declare
   v_cnt  int;
   v_meta jsonb;
   v_size bigint;
+  v_mime text;
   f      public.files;
 begin
   -- 잠금·은닉·방 ACTIVE·보관·리프·담당자 검사는 submission_upsert 와 공통(A2)
@@ -207,6 +210,11 @@ begin
   end if;
   select o.metadata into v_meta from storage.objects o where o.bucket_id = 'attachments' and o.name = p_path;
   v_size := coalesce((v_meta ->> 'size')::bigint, p_size);
+  -- 저장하는 MIME 은 Storage 가 기록한 값을 우선한다(둘 다 화이트리스트 통과)
+  v_mime := coalesce(v_meta ->> 'mimetype', p_mime);
+  if not (v_mime = any(public.allowed_mime_types())) then
+    perform public.fail('FILE_TYPE_NOT_ALLOWED', '허용되지 않는 파일 형식이에요', jsonb_build_object('field', 'contentType', 'contentType', v_mime));
+  end if;
   if v_size > 10485760 then
     perform public.fail('FILE_TOO_LARGE', '파일은 10MB까지예요', jsonb_build_object('field', 'size', 'size', v_size));
   end if;
@@ -218,10 +226,11 @@ begin
   if v_cnt >= 5 then perform public.fail('FILE_LIMIT_EXCEEDED', '첨부는 과제당 5개까지예요', '{"field":"fileIds"}'::jsonb); end if;
 
   insert into public.files (id, owner_user_id, room_id, node_id, purpose, bucket_id, object_path, original_name, content_type, size_bytes, status, completed_at)
-  values (v_id, v_uid, r.id, n.id, 'ATTACHMENT', 'attachments', p_path, v_name, p_mime, v_size, 'READY', now())
+  values (v_id, v_uid, r.id, n.id, 'ATTACHMENT', 'attachments', p_path, v_name, v_mime, v_size, 'READY', now())
   on conflict (id) do update
     set status = 'READY', completed_at = now(), size_bytes = excluded.size_bytes, deleted_at = null
     where public.files.owner_user_id = excluded.owner_user_id and public.files.node_id = excluded.node_id
+      and public.files.object_path = excluded.object_path
   returning * into f;
   if f.id is null then perform public.fail('NOT_FOUND', '다른 사용자의 파일 id 예요', jsonb_build_object('fileId', v_id::text)); end if;
   return public.file_json(f);

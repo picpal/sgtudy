@@ -43,6 +43,9 @@ cases("jobs", db, [
     await setToday(q, "2026-10-12");
     const springActive = Number((await one(q, "select count(*)::int as n from public.room_members m join public.rooms r on r.id = m.room_id where r.slug = 'spring' and m.status = 'ACTIVE'")).n);
     assertEquals(springActive, 5);
+    const seededSpring = await one(q, "select count(*)::int as n from public.notifications where user_id = $1::uuid and kind = 'ROUND_STARTED' and room_id = $2::bigint and created_at < now()",
+                                   [await uidOf(q, "철수"), await roomId(q, "spring")]);
+    assertEquals(seededSpring.n, 1);                                           // 시드 §4 가 넣은 철수 spring 행이 있어야 아래 9(= 5+5−1)가 성립한다
     // react 4주차도 10/12 시작(ACTIVE 5명). 시드 §4 가 spring 철수 행을 자연 키로 미리 넣어 dedupe → spring 4 + react 5 = 9 (E4)
     assertEquals(Number(await run(q, "job_round_started")), 9);
     assertEquals(Number(await run(q, "job_round_started")), 0);                // 같은 날 재실행

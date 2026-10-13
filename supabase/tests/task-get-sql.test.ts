@@ -71,6 +71,7 @@ cases("task_get", db, [
     await asUser(q, await uidOf(q, "민수"));
     const leader = await get(q, "aws", iam);
     assertEquals(leader.node.archived, true);
+    assertEquals(leader.node.task.people, []);                                 // 보관 리프는 그룹장에게도 people []
     assertEquals(leader.submissions.length, 4);
     await asUser(q, await uidOf(q, "철수"));
     const me = await get(q, "aws", iam);

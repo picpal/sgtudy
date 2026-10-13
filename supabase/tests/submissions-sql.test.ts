@@ -84,6 +84,7 @@ cases("submission", db, [
     await expectFail(submit(q, ec2, "a".repeat(50001)), "VALIDATION_FAILED");
     await expectFail(submit(q, ec2, "x", ["ftp://nope"]), "INVALID_LINK");
     await expectFail(submit(q, ec2, "x", ["javascript:alert(1)"]), "INVALID_LINK");
+    await expectFail(one(q, "select public.submission_upsert($1::bigint, 'x', array['https://ok.example', null]::text[], '{}'::uuid[])", [ec2]), "INVALID_LINK");   // NULL 원소는 raw 23502 가 아니다
     await expectFail(submit(q, ec2, "x", Array.from({ length: 21 }, (_, i) => `https://l.example/${i}`)), "INVALID_LINK");
     await expectFail(submit(q, ec2, "x", [], Array.from({ length: 6 }, () => crypto.randomUUID())), "FILE_LIMIT_EXCEEDED");
 

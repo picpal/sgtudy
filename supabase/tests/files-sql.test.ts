@@ -39,6 +39,40 @@ cases("files", db, [
     assertEquals([row.status, row.del, row.submission_id], ["DELETED", true, null]);
   } },
 
+  { name: "file_register: stored content_type is the Storage-recorded mimetype, not the client's claim (final review Minor 4)", run: async (q) => {
+    const cheolsu = await uidOf(q, "철수");
+    const room = await roomId(q, "aws");
+    const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    await asUser(q, cheolsu);
+    const fid = crypto.randomUUID();
+    const path = `${room}/${ec2}/${cheolsu}/${fid}.png`;
+    await uploaded(q, path, cheolsu, 100, "image/png");
+    const f = await register(q, ec2, path, "a.png", "text/plain", 100);       // 클라이언트는 text/plain(허용 목록 안)이라 주장
+    assertEquals(f.contentType, "image/png");
+    assertEquals((await one(q, "select content_type from public.files where id = $1::uuid", [fid])).content_type, "image/png");
+    const bad = crypto.randomUUID();
+    const badPath = `${room}/${ec2}/${cheolsu}/${bad}.png`;
+    await uploaded(q, badPath, cheolsu, 100, "text/html");                     // Storage 가 기록한 형식이 허용 밖이면 클라이언트 값과 무관하게 거절
+    await expectFail(register(q, ec2, badPath, "b.png", "image/png", 100), "FILE_TYPE_NOT_ALLOWED");
+  } },
+
+  { name: "file_register: on-conflict only for the same object_path; a different path on an existing id is NOT_FOUND and does not revive a DELETED row", run: async (q) => {
+    const cheolsu = await uidOf(q, "철수");
+    const room = await roomId(q, "aws");
+    const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    await asUser(q, cheolsu);
+    const fid = crypto.randomUUID();
+    const png = `${room}/${ec2}/${cheolsu}/${fid}.png`;
+    await uploaded(q, png, cheolsu, 10);
+    await register(q, ec2, png, "a.png", "image/png", 10);
+    await q("update public.files set status = 'DELETED', deleted_at = now() where id = $1::uuid", [fid]);
+    const jpg = `${room}/${ec2}/${cheolsu}/${fid}.jpg`;                        // 같은 id, 다른 확장자 = 다른 object_path
+    await uploaded(q, jpg, cheolsu, 10, "image/jpeg");
+    await expectFail(register(q, ec2, jpg, "a.jpg", "image/jpeg", 10), "NOT_FOUND");
+    const row = await one(q, "select status, object_path from public.files where id = $1::uuid", [fid]);
+    assertEquals([row.status, row.object_path], ["DELETED", png]);
+  } },
+
   { name: "file_register: FILE_NOT_READY without object, FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE, bad path, TASK_NOT_ASSIGNED", run: async (q) => {
     const cheolsu = await uidOf(q, "철수");
     const room = await roomId(q, "aws");

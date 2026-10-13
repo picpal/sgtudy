@@ -78,9 +78,13 @@ language sql stable security definer set search_path = '' as $$
   select jsonb_build_object('items', coalesce(jsonb_agg(x.j), '[]'::jsonb))
   from (select jsonb_build_object('slug', t.slug, 'label', t.label, 'tone', t.tone, 'auto', false) as j
         from public.tags t
-        where nullif(trim(coalesce(p_q, '')), '') is null
+        where (t.kind = 'CURATED'
+               -- CUSTOM 은 호출자가 읽을 수 있는 방에서 쓰일 때만(비공개·DRAFT 방의 자유 라벨이 공개 사전으로 새지 않게)
+               or exists (select 1 from public.room_tags rt where rt.tag_slug = t.slug
+                                and public.room_readable(rt.room_id, public.current_user_id())))
+          and (nullif(trim(coalesce(p_q, '')), '') is null
            or t.label ilike '%' || public.like_escape(trim(p_q)) || '%'
-           or exists (select 1 from unnest(t.aliases) a where a ilike '%' || public.like_escape(trim(p_q)) || '%')
+           or exists (select 1 from unnest(t.aliases) a where a ilike '%' || public.like_escape(trim(p_q)) || '%'))
         order by t.usage_count desc, t.label
         limit 20) x
 $$;

@@ -130,6 +130,21 @@ cases("tags", db, [
     assertEquals((await one(q, "select public.tags_search('%') as r")).r.items, []);   // C4: % 는 글자 그대로
   } },
 
+  { name: "tags_search: CUSTOM label of a private room is hidden from anon until a publicly readable room uses it (final review Important 1)", run: async (q) => {
+    const leader = (await one(q, "select leader_id::text as id from public.rooms where slug = 'spring'")).id;   // spring = 비공개
+    await asUser(q, leader);
+    await put(q, "spring", [], ["OO사이직준비"]);
+    const search = async () => (await one(q, "select public.tags_search('OO사') as r")).r.items.map((x: { label: string }) => x.label);
+    assertEquals(await search(), ["OO사이직준비"]);                            // 그룹장(멤버)은 자기 방 라벨이 보인다
+    await asAnon(q);
+    assertEquals(await search(), []);                                          // 비공개 방 라벨은 공개 사전에 없다
+    await q("update public.rooms set visibility = 'PUBLIC' where slug = 'spring'");
+    assertEquals(await search(), ["OO사이직준비"]);                            // 공개 방에서 쓰이면 나타난다
+    await q("update public.rooms set status = 'DRAFT' where slug = 'spring'");
+    assertEquals(await search(), []);                                          // DRAFT 는 다시 숨김(room_readable 과 같은 조건)
+    assertEquals((await one(q, "select public.tags_search('클라') as r")).r.items.map((x: { slug: string }) => x.slug), ["cloud"]);   // CURATED 는 항상
+  } },
+
   { name: "new room: 0 AUTO tags right after room_create (no hook); room_tags_suggest fills them (S6)", run: async (q) => {
     const minsu = await uidOf(q, "민수");
     await asUser(q, minsu);

@@ -13,13 +13,13 @@ cases("cron+seed", db, [
       ["completion_digest",  "0 0 * * *",   "select public.job_completion_digest()"],
       ["deadline_reminder",  "0 0 * * *",   "select public.job_deadline_reminder()"],
       ["draft_blocked",      "5 15 * * *",  "select public.job_draft_blocked()"],
-      ["member_count_audit", "30 19 * * *", "select public.member_count_audit()"],
+      ["member_count_audit", "32 19 * * *", "select public.member_count_audit()"],
       ["room_tick",          "*/5 * * * *", "select public.room_tick()"],
       ["round_started",      "1 15 * * *",  "select public.job_round_started()"],
     ]);
   } },
 
-  { name: "seed §4: 철수 has 3 unread notifications; every room has a settings row; 지은's EC2 submission has 2 links", run: async (q) => {
+  { name: "seed: §4 철수 3 unread notifications + 지은's EC2 submission 2 links; §2 gave every room a notification-settings row", run: async (q) => {
     const cheolsu = await uidOf(q, "철수");
     await asUser(q, cheolsu);
     assertEquals((await one(q, "select public.notifications_unread_count() as c")).c, { count: 3 });

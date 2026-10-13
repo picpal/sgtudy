@@ -116,7 +116,9 @@ create or replace function public.notification_json(p_n public.notifications) re
 language sql stable security definer set search_path = '' as $$
   select jsonb_build_object(
     'id', p_n.id::text, 'kind', p_n.kind, 'title', p_n.title, 'body', p_n.body,
-    'room', (select jsonb_build_object('slug', r.slug, 'title', r.title) from public.rooms r where r.id = p_n.room_id),
+    -- 방을 더 읽을 수 없는 수신자(거절·만료·이탈 등)에게는 실시간 방 제목·slug 를 내주지 않는다(title·body 는 생성 시점 스냅샷)
+    'room', (select jsonb_build_object('slug', r.slug, 'title', r.title) from public.rooms r
+             where r.id = p_n.room_id and public.room_readable(r.id, p_n.user_id)),
     'link', p_n.link,
     'actor', case when p_n.actor_user_id is null then null else public.person_json(p_n.actor_user_id) end,
     'createdAt', public.iso(p_n.created_at), 'readAt', public.iso(p_n.read_at))
@@ -128,12 +130,17 @@ language plpgsql security definer set search_path = '' as $$
 declare
   v_uid  uuid := public.current_user_id();
   v_lim  int := least(greatest(coalesce(p_limit, 20), 1), 50);
-  v_cur  bigint := nullif(p_cursor, '')::bigint;
+  v_cur  bigint;
   v_rows jsonb;
   v_cnt  int;
   v_next text := null;
 begin
   if v_uid is null then perform public.fail('AUTH_REQUIRED', '로그인이 필요해요'); end if;
+  begin
+    v_cur := nullif(p_cursor, '')::bigint;
+  exception when invalid_text_representation or numeric_value_out_of_range then
+    perform public.fail('VALIDATION_FAILED', '커서가 올바르지 않아요', '{"field":"cursor"}'::jsonb);
+  end;
   select coalesce(jsonb_agg(public.notification_json(n) order by n.id desc), '[]'::jsonb), count(*)
   into v_rows, v_cnt
   from (select * from public.notifications
@@ -294,7 +301,7 @@ begin
                'nodeId', p.node_id::text, 'title', p.title, 'roundLabel', p.round_label,
                'currentAssignees', (select coalesce(jsonb_agg(public.person_json(u)), '[]'::jsonb) from unnest(p.others) u))
              order by p.ord)
-      from (select dp.*, row_number() over () as ord from public.deactivate_pending(r.id, p_user) dp) p), '[]'::jsonb));
+      from public.deactivate_pending(r.id, p_user) with ordinality as p(node_id, title, round_label, others, ord)), '[]'::jsonb));
 end $$;
 
 -- 1) 결정을 전부 검증(아무것도 바꾸지 않음) → 2) 대상 배정 전부 released, INACTIVE, 정원 -1 → 3) 재지정 INSERT + TASK_ASSIGNED

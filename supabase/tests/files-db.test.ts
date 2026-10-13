@@ -11,7 +11,8 @@ dbTest("storage: non-assignee upload rejected, assignee upload + file_register r
   const denied = await c.storage.from("attachments").upload(path, blob, { contentType: "image/png" });
   assertEquals(Boolean(denied.error), true);
 
-  await c.rpc("me_update", { p_nickname: "f1" + RUN });
+  const me = await c.rpc("me_update", { p_nickname: "f1" + RUN });
+  assertEquals(me.error, null);
   await admin.from("room_members").upsert({ room_id: ec2.room_id, user_id: u.id, role: "MEMBER", status: "ACTIVE", joined_at: new Date().toISOString() });
   await admin.from("task_assignments").upsert({ node_id: ec2.id, user_id: u.id, source: "DESIGNATED" });
   try {
