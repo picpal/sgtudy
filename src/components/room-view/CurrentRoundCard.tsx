@@ -24,7 +24,7 @@ export function CurrentRoundCard({ cur }: { cur: Room["cur"] }) {
       {cur.tasks.length > 0 && (
         <ul className="flex flex-col gap-2">
           {cur.tasks.map((t) => {
-            const subs = t.people.filter((p) => p.status === "done").length;
+            const subs = t.people.filter((p) => p.status === "done" || p.status === "late").length;
             const allPlanned = t.people.every((p) => p.status === "planned");
             const shown = t.people.slice(0, 4);
             const type = t.type === "공통" ? PAL.mint : PAL.lav;
@@ -47,7 +47,7 @@ export function CurrentRoundCard({ cur }: { cur: Room["cur"] }) {
                       className="relative inline-flex rounded-full border-2 border-surface-2"
                       style={{ marginLeft: i === 0 ? 0 : -6 }}
                     >
-                      <Avatar name={p.name} size={30} />
+                      <Avatar name={p.name} tone={p.tone} size={30} />
                       <span className="absolute -bottom-[3px] -right-[3px] flex rounded-full bg-white">
                         <StatusIcon status={p.status} size={15} />
                       </span>
@@ -60,10 +60,16 @@ export function CurrentRoundCard({ cur }: { cur: Room["cur"] }) {
                   )}
                 </div>
                 <div className="flex w-24 flex-col gap-[5px]">
-                  <span className="text-right text-[12px] font-semibold">
-                    {allPlanned ? `${t.dates.split(" – ")[0]} 시작` : `${subs}/${t.people.length} 제출`}
-                  </span>
-                  <ProgressBar pct={Math.round((subs / t.people.length) * 100)} height={5} />
+                  {t.people.length === 0 ? (
+                    <span className="text-right text-[12px] font-semibold text-muted">담당자 미정</span>
+                  ) : (
+                    <>
+                      <span className="text-right text-[12px] font-semibold">
+                        {allPlanned ? `${t.dates.split(" – ")[0]} 시작` : `${subs}/${t.people.length} 제출`}
+                      </span>
+                      <ProgressBar pct={Math.round((subs / t.people.length) * 100)} height={5} />
+                    </>
+                  )}
                 </div>
               </li>
             );

@@ -83,11 +83,11 @@ export function RoomInfo({ room }: { room: Room }) {
         <dd className="font-medium">{room.approval ? "승인제" : "바로 참가"}</dd>
 
         <Dt icon={dtIcon(<circle cx="12" cy="12" r="9" />, <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />)}>공개 범위</Dt>
-        <dd className="font-medium">공개</dd>
+        <dd className="font-medium">{room.pub === false ? "비공개 · 초대 링크로만 참가" : "공개"}</dd>
 
         <Dt icon={dtIcon(<path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5z" />)}>그룹장</Dt>
         <dd className="flex items-center gap-2 font-medium">
-          <Avatar name={room.leader} size={26} />
+          <Avatar name={room.leader} tone={room.leaderTone} size={26} />
           {room.leader}
         </dd>
 

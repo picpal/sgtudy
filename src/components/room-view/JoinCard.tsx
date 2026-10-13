@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { ME, routes } from "@/lib/routes";
-import { type Action, type Room, type RoomMember } from "@/data/room-view";
+import { routes } from "@/lib/routes";
+import { type Action, type Room } from "@/data/room-view";
 import { StatusBadge } from "./StatusBadge";
 
-type Props = { room: Room; act: Action; onJoin: () => void; onApply: () => void; onCancel: () => void };
+type Props = { room: Room; act: Action; busy?: boolean; onJoin: () => void; onApply: () => void; onCancel: () => void };
 
 const DISABLED: Partial<Record<Action, [label: string, note: string]>> = {
   full: ["정원 마감", "자리가 생기면 다시 참가할 수 있어요"],
@@ -17,7 +17,7 @@ const PRIMARY = "flex h-[50px] items-center justify-center gap-2 rounded-[25px] 
 const SECONDARY = "flex h-11 items-center justify-center gap-[6px] rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink";
 const NOTE = "text-center text-[12px] text-muted";
 
-function Cta({ room, act, onJoin, onApply, onCancel }: Props) {
+function Cta({ room, act, busy, onJoin, onApply, onCancel }: Props) {
   const dis = DISABLED[act];
   if (dis) {
     return (
@@ -30,11 +30,18 @@ function Cta({ room, act, onJoin, onApply, onCancel }: Props) {
     );
   }
   switch (act) {
+    case "login":
+      return (
+        <div className="flex flex-col gap-[6px]">
+          <Link href={routes.login(routes.room(room.id))} className={`${PRIMARY} bg-navy text-[16px]`}>로그인하고 참가</Link>
+          <span className={NOTE}>이메일 인증 코드로 바로 로그인할 수 있어요</span>
+        </div>
+      );
     case "join":
     case "apply":
       return (
         <div className="flex flex-col gap-[6px]">
-          <button type="button" onClick={act === "join" ? onJoin : onApply} className={`${PRIMARY} bg-navy text-[16px]`}>
+          <button type="button" onClick={act === "join" ? onJoin : onApply} disabled={busy} className={`${PRIMARY} bg-navy text-[16px]`}>
             {act === "join" ? "참가하기" : "참가 신청"}
           </button>
           <span className={NOTE}>{act === "join" ? "바로 참가돼요 · 시작 전까지 언제든 취소할 수 있어요" : "그룹장이 승인하면 참가가 확정돼요"}</span>
@@ -61,7 +68,7 @@ function Cta({ room, act, onJoin, onApply, onCancel }: Props) {
             )}
             {leave ? "참가 완료" : "승인 대기중"}
           </div>
-          <button type="button" onClick={onCancel} className={SECONDARY}>
+          <button type="button" onClick={onCancel} disabled={busy} className={SECONDARY}>
             {leave ? "참가 취소" : "신청 취소"}
           </button>
           <span className={NOTE}>{leave ? "모집 기간에만 참가를 취소할 수 있어요" : "시작일까지 승인되지 않으면 신청이 자동 만료돼요"}</span>
@@ -83,30 +90,19 @@ function Cta({ room, act, onJoin, onApply, onCancel }: Props) {
           <Link href={routes.myStudy(room.id)} className={`${PRIMARY} bg-navy text-[15px]`}>
             내가 만든 방 · 관리하기
           </Link>
-          <button type="button" className={SECONDARY}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" />
-              <path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
-            </svg>
-            초대 링크 복사
-          </button>
+          {/* plan 06: 그룹장 패널(승인 대기 ${pendingCount}명 · 초대 링크 복사 · 모집 시작) */}
         </div>
       );
   }
 }
 
 export function JoinCard(props: Props) {
-  const { room, act } = props;
+  const { room } = props;
   const recruit = room.status === "recruit";
-  const rows: (RoomMember & { pending?: boolean })[] = [...room.members];
-  let capCur = room.capCur;
-  if (act === "leave") {
-    rows.push({ name: ME.name, me: true });
-    capCur += 1;
-  }
-  if (act === "pending") rows.push({ name: ME.name, me: true, pending: true });
+  const rows = room.members;            // 어댑터가 내 pending 행까지 넣어 준다
+  const capCur = room.capCur;           // 서버 값 그대로 (roomview §3.5)
   const full = capCur >= room.capMax;
-  const minOk = capCur >= room.minNeed;
+  const minOk = room.minNeed === 0 || capCur >= room.minNeed;
 
   return (
     <div className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
@@ -129,20 +125,22 @@ export function JoinCard(props: Props) {
           track={recruit ? "#D6E2FA" : "#E2EAE7"}
           fill={full ? "#C9583A" : recruit ? "#3B6FE0" : "#12A386"}
         />
-        <span className="inline-flex items-center gap-[5px] text-[12px] font-medium" style={{ color: minOk ? "#0D7A64" : "#8A5A00" }}>
-          {minOk ? (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="m5 12.5 4.5 4.5L19 7.5" />
-            </svg>
-          ) : (
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7.5v5.5" />
-              <circle cx="12" cy="16.5" r=".6" />
-            </svg>
-          )}
-          {minOk ? `최소 ${room.minNeed}명 · 충족${full ? " · 정원 마감" : ""}` : `최소 ${room.minNeed}명 · ${room.minNeed - capCur}명 더 필요해요`}
-        </span>
+        {room.minNeed > 0 && (
+          <span className="inline-flex items-center gap-[5px] text-[12px] font-medium" style={{ color: minOk ? "#0D7A64" : "#8A5A00" }}>
+            {minOk ? (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m5 12.5 4.5 4.5L19 7.5" />
+              </svg>
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7.5v5.5" />
+                <circle cx="12" cy="16.5" r=".6" />
+              </svg>
+            )}
+            {minOk ? `최소 ${room.minNeed}명 · 충족${full ? " · 정원 마감" : ""}` : `최소 ${room.minNeed}명 · ${room.minNeed - capCur}명 더 필요해요`}
+          </span>
+        )}
       </div>
 
       <div>
@@ -153,8 +151,8 @@ export function JoinCard(props: Props) {
         {rows.length > 0 ? (
           <ul className="flex flex-col gap-[2px]">
             {rows.map((mb) => (
-              <li key={mb.name} className={`flex items-center gap-[10px] rounded-[10px] px-2 py-[7px] ${mb.me ? "bg-[#F3F7FF]" : ""}`}>
-                <Avatar name={mb.name} size={30} pending={mb.pending} />
+              <li key={mb.userId ?? mb.name} className={`flex items-center gap-[10px] rounded-[10px] px-2 py-[7px] ${mb.me ? "bg-[#F3F7FF]" : ""}`}>
+                <Avatar name={mb.name} tone={mb.tone} size={30} pending={mb.pending} />
                 <span className="flex min-w-0 flex-1 items-center gap-[6px]">
                   <span className={`whitespace-nowrap text-[14px] ${mb.me ? "font-bold" : "font-medium"} ${mb.pending ? "text-faint" : "text-ink"}`}>{mb.name}</span>
                   {mb.leader && (
