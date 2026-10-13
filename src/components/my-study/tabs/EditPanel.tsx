@@ -109,12 +109,13 @@ export function EditPanel({ n, parent, period, members, S, update, api, go, requ
         제목
         <input type="text" value={n.title} onChange={(e) => update((p) => ({ ...patchOv(p, "titles", { ...p.ov.titles, [id]: e.target.value }), saved: "" }))} className={`${field} px-3 text-[14px] font-medium`} />
       </label>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
+      {/* 날짜 입력은 달력 아이콘까지 ≈150px 가 필요하다 — 패널이 좁으면(트리 옆 1280 등) 한 줄씩 쌓는다 (V2-03) */}
+      <div className="flex flex-wrap gap-2">
+        <label className="flex min-w-0 flex-[1_1_150px] flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
           시작일
           <input type="date" value={n.s} onChange={(e) => setDate("s", e.target.value)} className={`${field} min-w-0 px-[10px] text-[13px]`} />
         </label>
-        <label className="flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
+        <label className="flex min-w-0 flex-[1_1_150px] flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
           마감일
           <input type="date" value={n.e} onChange={(e) => setDate("e", e.target.value)} className={`${field} min-w-0 px-[10px] text-[13px]`} />
         </label>
