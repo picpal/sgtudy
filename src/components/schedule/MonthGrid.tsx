@@ -4,7 +4,7 @@ import { md, WEEKDAY_KO, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
 import { STATUS_LABEL } from "@/lib/types";
 import type { Marker, Study, Task } from "@/data/schedule";
-import { monthWeeks, packWeek, type Seg } from "./calc";
+import { isUrgent, monthWeeks, packWeek, type Seg } from "./calc";
 
 type Props = {
   y: number;
@@ -108,7 +108,8 @@ function TaskBar({ seg: { task: t, col, span, isStart, isEnd, lane }, studies }:
   const planned = t.st === "planned";
   const finished = t.st === "done" || t.st === "late";
   const fill = S.pending ? `repeating-linear-gradient(135deg, ${S.bg} 0 6px, #FFFFFF 6px 10px)` : planned ? "#FFFFFF" : S.bg;
-  const line = S.pending ? `1px solid ${S.dot}` : planned ? `1px dashed ${S.dot}` : t.st === "open" ? `1.5px solid ${S.dot}` : "1px solid transparent";
+  const urgent = isUrgent(t);
+  const line = S.pending ? `1px solid ${S.dot}` : planned ? `1px dashed ${S.dot}` : urgent ? `1.5px solid ${S.dot}` : "1px solid transparent";
   const lr = isStart ? 7 : 0;
   const rr = isEnd ? 7 : 0;
   return (
@@ -121,7 +122,7 @@ function TaskBar({ seg: { task: t, col, span, isStart, isEnd, lane }, studies }:
         gridRow: lane + 1,
         margin: `0 ${isEnd ? 5 : 0}px 0 ${isStart ? 5 : 0}px`,
         borderRadius: `${lr}px ${rr}px ${rr}px ${lr}px`,
-        fontWeight: t.st === "open" ? 700 : 500,
+        fontWeight: urgent ? 700 : 500,
         color: S.fg,
         background: fill,
         border: line,

@@ -1,7 +1,7 @@
 import { addDays, dday, md, weekdayKo } from "@/lib/date";
 import { STATUS_LABEL } from "@/lib/types";
 import { shortName, type Study, type Task } from "@/data/schedule";
-import { monthRange, weekStartOf } from "./calc";
+import { isUrgent, monthRange, weekStartOf } from "./calc";
 
 type Props = { y: number; m: number; today: string; studies: Record<string, Study>; tasks: Task[] };
 
@@ -30,7 +30,7 @@ export function ListView({ y, m, today, studies, tasks }: Props) {
                 <ul className="m-0 flex list-none flex-col gap-[10px] p-0">
                   {groups.get(ws)!.map((t) => {
                     const S = studies[t.study];
-                    const urgent = t.st === "open";
+                    const urgent = isUrgent(t);
                     return (
                       <li
                         key={t.id}

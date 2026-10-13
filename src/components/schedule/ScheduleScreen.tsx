@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
@@ -31,29 +31,43 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   const markers = data.markers.filter((mk) => on(mk.study));
   const upcoming = data.upcoming.filter((t) => on(t.study));
 
-  /** 달이 바뀌면 창을 다시 계산해 재조회. sel 이 창 밖으로 멀면 scheduleWindow 가 리셋한다. */
+  // 요청 순번 — 이전 달 응답이 늦게 와도 최신 요청 것만 반영한다
+  const reqId = useRef(0);
+  // 진행 중인 이동의 목표 달 — 빠르게 여러 번 눌러도 커밋 전 값에서 이어서 센다
+  const target = useRef<{ y: number; m: number; sel: string } | null>(null);
+
+  /** 달이 바뀌면 창을 다시 계산해 재조회. sel 이 창 밖으로 멀면 scheduleWindow 가 리셋한다. y/m/sel 은 조회가 성공한 뒤에만 바꾼다. */
   const load = async (ny: number, nm: number, nsel: string) => {
     const w = scheduleWindow(ny, nm, nsel);
-    setY(ny);
-    setM(nm);
-    setSel(w.sel);
+    const id = ++reqId.current;
+    target.current = { y: ny, m: nm, sel: w.sel };
     setLoading(true);
     try {
-      setData(toScheduleData(await fetchSchedule(w.from, w.to)));
+      const next = toScheduleData(await fetchSchedule(w.from, w.to));
+      if (id !== reqId.current) return;
+      setData(next);
+      setY(ny);
+      setM(nm);
+      setSel(w.sel);
     } catch (e) {
+      if (id !== reqId.current) return;
       setToast({ text: toApiError(e).message, tone: "bad" });
     } finally {
-      setLoading(false);
+      if (id === reqId.current) {
+        target.current = null;
+        setLoading(false);
+      }
     }
   };
   const shift = (dm: number) => {
-    const d = new Date(Date.UTC(y, m + dm, 1));
-    void load(d.getUTCFullYear(), d.getUTCMonth(), sel);
+    const from = target.current ?? { y, m, sel };
+    const d = new Date(Date.UTC(from.y, from.m + dm, 1));
+    void load(d.getUTCFullYear(), d.getUTCMonth(), from.sel);
   };
   const goToday = () => {
     const ty = +today.slice(0, 4);
     const tm = +today.slice(5, 7) - 1;
-    if (ty === y && tm === m) setSel(today);
+    if (!target.current && ty === y && tm === m) setSel(today); // 이동 중이면 오늘 달로 다시 조회해 최신 요청으로 만든다
     else void load(ty, tm, today);
   };
   const toggle = (id: string) => setOff(on(id) ? [...off, id] : off.filter((x) => x !== id));

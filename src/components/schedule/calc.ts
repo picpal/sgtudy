@@ -1,6 +1,9 @@
 import { addDays, diffDays, parseISO, toISO } from "@/lib/date";
 import type { Task } from "@/data/schedule";
 
+/** 진행 중(open)이면서 내 담당인 과제만 급함으로 그린다 — 그룹장 전용(st:null → mine:false) 과제는 빼낸다 */
+export const isUrgent = (t: Pick<Task, "st" | "mine">) => t.st === "open" && t.mine !== false;
+
 /** 달력 격자: 1일이 속한 주(일요일 시작)부터 말일이 속한 주까지, 주별 7개 ISO 날짜 */
 export function monthWeeks(y: number, m: number): string[][] {
   const first = Date.UTC(y, m, 1);

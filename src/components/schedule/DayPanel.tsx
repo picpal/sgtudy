@@ -3,6 +3,7 @@ import { dday, md, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
 import { STATUS_LABEL } from "@/lib/types";
 import { shortName, type Marker, type Study, type Task } from "@/data/schedule";
+import { isUrgent } from "./calc";
 
 type Props = { sel: string; today: string; studies: Record<string, Study>; tasks: Task[]; markers: Marker[] };
 
@@ -26,7 +27,7 @@ export function DayPanel({ sel, today, studies, tasks, markers }: Props) {
       title: t.title,
       sub: `${t.round} · ${md(t.s)}–${md(t.e)} · ${STATUS_LABEL[t.st]}`,
       badge: t.st === "done" || t.st === "late" ? STATUS_LABEL[t.st] : `마감 ${dday(today, t.e)}`,
-      urgent: t.st === "open",
+      urgent: isUrgent(t),
     }));
   const ongoing: Item[] = tasks
     .filter((t) => t.s <= sel && t.e > sel)
