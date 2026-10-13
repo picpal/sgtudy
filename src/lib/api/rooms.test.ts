@@ -37,6 +37,10 @@ describe("toRoomCard (main §3)", () => {
     const r = toRoomCard(dto({ status: "active", membership: { role: "member", status: "active" }, progress: { kind: "mine", submitted: 4, assigned: 4, nextTask: null } }), TODAY);
     expect(r.slot).toEqual({ label: "내 진척률", value: "100%", pct: 100, note: "남은 과제가 없어요", em: "" });
   });
+  it("mine with unfinished tasks but none OPEN now → not '남은 과제가 없어요' (Q3-23)", () => {
+    const r = toRoomCard(dto({ status: "active", membership: { role: "leader", status: "active" }, progress: { kind: "mine", submitted: 2, assigned: 5, nextTask: null } }), TODAY);
+    expect(r.slot).toEqual({ label: "내 진척률", value: "40%", pct: 40, note: "지금 진행 중인 과제가 없어요", em: "" });
+  });
   it("algo final 87% — 'N주 완주' = period weeks 13 even though the seed has 3 rounds (D14, S10)", () => {
     const r = toRoomCard(dto({ slug: "algo", status: "ended", memberCount: 6, maxMembers: 6, startDate: "2026-07-01", endDate: "2026-09-30",
       membership: { role: "member", status: "active" }, progress: { kind: "final", submitted: 68, assigned: 78, totalRounds: 3 } }), TODAY);

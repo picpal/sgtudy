@@ -22,12 +22,14 @@ export function ProfileScreen({ me }: { me: Me }) {
   const [msg, setMsg] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
   const [mailBusy, setMailBusy] = useState(false);
   const [mailError, setMailError] = useState("");
+  const [mailOk, setMailOk] = useState("");
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
     if (hint.tone !== "ok" || nick.trim() === original) return;
     setBusy(true);
     setMsg(null);
+    setMailOk("");
     try {
       await updateMe({ nickname: nick.trim() });
       setMsg({ tone: "ok", text: "닉네임을 바꿨어요" });
@@ -43,9 +45,12 @@ export function ProfileScreen({ me }: { me: Me }) {
     if (mailBusy) return;
     setMailBusy(true);
     setMailError("");
+    setMailOk("");
+    if (msg?.tone === "ok") setMsg(null); // 지난 "닉네임을 바꿨어요" 가 토글 결과처럼 남지 않게(Q1-18)
     setMail(next);
     try {
       await updateMe({ optionalMailEnabled: next });
+      setMailOk(next ? "옵션 알림 메일을 켰어요" : "옵션 알림 메일을 껐어요");
     } catch (err) {
       setMail(!next);
       setMailError(toApiError(err).message);
@@ -56,7 +61,7 @@ export function ProfileScreen({ me }: { me: Me }) {
 
   const onNick = (v: string) => {
     setNick(v);
-    if (msg?.tone === "ok") setMsg(null); // "바꿨어요" 는 다시 고치기 시작하면 지운다
+    if (msg) setMsg(null); // 결과 문구("바꿨어요"·지난 저장 오류)는 다시 고치기 시작하면 지운다(Q1-18)
   };
 
   return (
@@ -95,6 +100,7 @@ export function ProfileScreen({ me }: { me: Me }) {
             <Switch on={mail} onChange={toggleMail} label="옵션 알림 메일 받기" disabled={mailBusy} />
           </div>
           {mailError && <p role="alert" className="m-0 text-[13px]" style={{ color: "#B4462B" }}>{mailError}</p>}
+          {mailOk && <p role="status" className="m-0 text-[13px]" style={{ color: "#0D7A64" }}>{mailOk}</p>}
           <p className="m-0 text-[12px] text-muted">기본 알림(참가 승인·회차 시작·전원 제출)은 항상 발송돼요.</p>
         </section>
       </main>

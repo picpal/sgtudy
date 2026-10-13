@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_DIGITS, applyBackspace, applyDigit, applyPaste, authErrorMessage, isComplete } from "./otp";
+import { EMPTY_DIGITS, applyBackspace, applyDigit, applyPaste, authErrorMessage, isComplete, rateLimitWait } from "./otp";
 
 describe("OTP digit model (§4.1 자동 포커스 이동)", () => {
   it("typing a digit fills the box and moves focus right", () => {
@@ -43,5 +43,20 @@ describe("authErrorMessage", () => {
   it("falls back to a generic message", () => {
     expect(authErrorMessage(new TypeError("Failed to fetch"))).toBe("로그인에 실패했어요 · Failed to fetch");
     expect(authErrorMessage("??")).toBe("로그인에 실패했어요");
+  });
+});
+
+describe("rateLimitWait (Q2-08/Q2-30)", () => {
+  const rl = (message: string) => ({ name: "AuthApiError", code: "over_email_send_rate_limit", message });
+  it("reads the seconds GoTrue puts in the message", () => {
+    expect(rateLimitWait(rl("For security purposes, you can only request this after 47 seconds."), null, 0)).toBe(47);
+  });
+  it("falls back to the time since our own send, then to a full minute", () => {
+    expect(rateLimitWait(rl("email rate limit exceeded"), 10_000, 25_500)).toBe(45);
+    expect(rateLimitWait(rl("email rate limit exceeded"), null, 0)).toBe(60);
+  });
+  it("other errors are not a send rate limit", () => {
+    expect(rateLimitWait({ name: "AuthApiError", code: "otp_expired", message: "after 3 seconds" }, null, 0)).toBeNull();
+    expect(rateLimitWait(new Error("x"), null, 0)).toBeNull();
   });
 });

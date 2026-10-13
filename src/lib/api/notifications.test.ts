@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { badgeText, relativeTime } from "./notifications";
+import { badgeText, panelShift, pollGuard, relativeTime, visibleBody } from "./notifications";
 
 // now = 2026-10-12 12:00 KST
 const NOW = new Date("2026-10-12T03:00:00Z");
@@ -25,5 +25,45 @@ describe("badgeText", () => {
     expect(badgeText(3)).toBe("3");
     expect(badgeText(99)).toBe("99");
     expect(badgeText(100)).toBe("99+");
+  });
+});
+
+describe("panelShift (Q1-02 · 390 폭에서 패널을 화면 안으로)", () => {
+  it("no shift when the panel already fits", () => {
+    expect(panelShift(1200, 1280)).toBe(0);
+  });
+  it("390: bell right edge at 318 (avatar to its right) → shift so the left edge sits at 16", () => {
+    // w = min(360, 390-32) = 358, left = 318-358 = -40 → shift 56
+    expect(panelShift(318, 390)).toBe(56);
+    expect(318 + 56 - 358).toBe(16);
+  });
+});
+
+describe("visibleBody (Q1-14)", () => {
+  const n = (body: string | null, room: string | null) => ({ body, room: room === null ? null : { slug: "s", title: room } });
+  it("hides a body that just repeats the room title (it is already in the meta line)", () => {
+    expect(visibleBody(n("Spring 김영한 로드맵 완강", "Spring 김영한 로드맵 완강"))).toBe("");
+    expect(visibleBody(n(" Spring ", "Spring"))).toBe("");
+  });
+  it("keeps other bodies", () => {
+    expect(visibleBody(n("3주차가 시작됐어요", "Spring"))).toBe("3주차가 시작됐어요");
+    expect(visibleBody(n("본문", null))).toBe("본문");
+    expect(visibleBody(n(null, "Spring"))).toBe("");
+  });
+});
+
+describe("pollGuard (Q1-13 · 폴링이 낙관적 감소를 덮어쓰지 않게)", () => {
+  it("a poll started before a local change is dropped", async () => {
+    const g = pollGuard();
+    let resolve!: (n: number) => void;
+    const p = g.run(new Promise<number>((r) => (resolve = r)));
+    g.bump();
+    resolve(2);
+    expect(await p).toEqual({ fresh: false, value: 2 });
+  });
+  it("a poll started after the last change is applied", async () => {
+    const g = pollGuard();
+    g.bump();
+    expect(await g.run(Promise.resolve(1))).toEqual({ fresh: true, value: 1 });
   });
 });

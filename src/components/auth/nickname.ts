@@ -2,7 +2,7 @@ import { NICK_PROBLEM_TEXT, nicknameProblem } from "@/lib/api/me";
 import type { NicknameCheck } from "@/lib/api/types";
 
 export type NickHint = { tone: "idle" | "checking" | "ok" | "bad"; text: string };
-export const NICK_RULE = "2~16자 · 한글·영문·숫자·_·.";
+export const NICK_RULE = "2~16자 · 한글·영문·숫자·_·. · 단어 사이 공백 한 칸";
 
 export function nicknameHint(value: string, result: NicknameCheck | null, checking: boolean, original?: string): NickHint {
   const v = value.trim();

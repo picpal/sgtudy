@@ -34,7 +34,8 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line">
-        <div role="tablist" aria-label="방 범위" className="flex gap-1">
+        {/* 390 폭에서 탭 3개가 358px 를 넘는다 — 페이지가 아니라 탭 줄만 가로로 스크롤(Q1-03). pb-px: -mb-px 밑줄이 세로 스크롤을 만들지 않게 */}
+        <div role="tablist" aria-label="방 범위" className="thin-scroll flex min-w-0 max-w-full gap-1 max-sm:overflow-x-auto max-sm:pb-px">
           {TABS.filter((t) => !anonymous || t.key === "public").map((t) => {
             const on = t.key === tab;
             return (
@@ -44,7 +45,7 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
                 role="tab"
                 aria-selected={on}
                 onClick={() => onTab(t.key)}
-                className={`-mb-px flex h-12 items-center gap-[6px] whitespace-nowrap border-b-2 bg-transparent px-[14px] text-[15px] ${
+                className={`-mb-px flex h-12 shrink-0 items-center gap-[6px] whitespace-nowrap border-b-2 bg-transparent px-[14px] text-[15px] max-sm:px-[10px] max-sm:text-[14px] ${
                   on ? "border-ink font-bold text-ink" : "border-transparent font-medium text-muted"
                 }`}
               >
