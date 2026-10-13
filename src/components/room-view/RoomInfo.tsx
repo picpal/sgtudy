@@ -36,7 +36,8 @@ function H3({ icon, className, children }: { icon: ReactNode; className: string;
   );
 }
 
-export function RoomInfo({ room }: { room: Room }) {
+/** onShare: 방 주소(초대 토큰 없이) 복사 — 토스트는 화면이 띄운다 */
+export function RoomInfo({ room, onShare }: { room: Room; onShare: () => void }) {
   const recruit = room.status === "recruit";
   return (
     <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
@@ -46,7 +47,7 @@ export function RoomInfo({ room }: { room: Room }) {
           <p className="mt-2 text-[15px] leading-[1.6] text-ink-3">{room.intro}</p>
         </div>
         <div className="flex shrink-0 gap-[6px]">
-          <button type="button" aria-label="공유" className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface">
+          <button type="button" aria-label="공유" title="링크 복사" onClick={onShare} className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#1B2230" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 3v12M7 8l5-5 5 5" />
               <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
@@ -111,17 +112,17 @@ export function RoomInfo({ room }: { room: Room }) {
         </dd>
       </dl>
 
-      <div role="tablist" aria-label="방 상세 탭" className="mt-[26px] flex flex-wrap gap-1 border-y border-line-2 py-2">
+      {/* 스펙상 개요만 있는 탭 모양 — 전환되지 않으므로 탭으로 알리지 않고 나머지는 비활성으로 둔다 */}
+      <div role="group" aria-label="방 상세 보기" className="mt-[26px] flex flex-wrap gap-1 border-y border-line-2 py-2">
         {TABS.map((t, i) => (
-          <button
+          <span
             key={t}
-            type="button"
-            role="tab"
-            aria-selected={i === 0}
-            className={`h-[38px] rounded-[10px] px-[14px] text-[14px] ${i === 0 ? "bg-bg font-semibold text-ink" : "bg-transparent text-ink-3"}`}
+            aria-current={i === 0 ? "page" : undefined}
+            aria-disabled={i === 0 ? undefined : true}
+            className={`inline-flex h-[38px] cursor-default select-none items-center rounded-[10px] px-[14px] text-[14px] ${i === 0 ? "bg-bg font-semibold text-ink" : "bg-transparent text-ink-3"}`}
           >
             {t}
-          </button>
+          </span>
         ))}
       </div>
 
