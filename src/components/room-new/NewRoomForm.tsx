@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { Switch } from "@/components/ui/Switch";
 import { NotificationBell } from "@/components/ui/NotificationBell";
@@ -9,7 +9,7 @@ import { rpc, toApiError } from "@/lib/api/errors";
 import type { RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
-import { EMPTY_VALUES, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
+import { EMPTY_VALUES, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
 const field = "h-12 w-full rounded-[12px] border border-line-3 px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE]";
 const area = "min-h-[96px] w-full resize-y rounded-[12px] border border-line-3 px-4 py-3 text-[14px] text-ink outline-none focus:border-mint";
@@ -32,13 +32,15 @@ export function NewRoomForm() {
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [serverError, setServerError] = useState("");
+  const inFlight = useRef(false); // 같은 프레임 두 번 제출(disabled 반영 전) 막기 — DRAFT 방 중복 생성 방지
   const set = <K extends keyof NewRoomValues>(k: K, val: NewRoomValues[K]) => setV((p) => ({ ...p, [k]: val }));
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const errs = validateNewRoom(v, today);
     setErrors(errs);
-    if (Object.keys(errs).length) return;
+    if (Object.keys(errs).length || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setServerError("");
     try {
@@ -51,8 +53,13 @@ export function NewRoomForm() {
       router.refresh();
     } catch (err) {
       const a = toApiError(err);
+      inFlight.current = false;
       if (a.code === "ONBOARDING_REQUIRED") return router.push(routes.onboarding(routes.createRoom()));
-      setServerError(a.message);
+      const fe = serverFieldError(a.details, a.message);
+      if (fe) {
+        setErrors(fe);
+        if (fe.minMembers) setMore(true);
+      } else setServerError(a.message);
       setBusy(false);
     }
   };
@@ -64,8 +71,9 @@ export function NewRoomForm() {
         <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 만들기</h1>
         <p className="mb-6 mt-[6px] text-[14px] text-muted">채팅방 만들듯 30초면 충분해요. 커리큘럼은 만든 뒤 천천히 채워요.</p>
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          <Field label="제목 (= 최상위 목표)" error={errors.title}><input className={field} value={v.title} maxLength={60} onChange={(e) => set("title", e.target.value)} placeholder="예) AWS SAA 자격증 3개월 완주" autoFocus /></Field>
-          <Field label="한 줄 소개" error={errors.intro}><input className={field} value={v.intro} maxLength={100} onChange={(e) => set("intro", e.target.value)} /></Field>
+          {/* maxLength 는 UTF-16 단위라 이모지가 2칸 → 코드 포인트 한도(60/100)의 2배로 두고 실제 한도는 validate 가 본다 */}
+          <Field label="제목 (= 최상위 목표)" error={errors.title}><input className={field} value={v.title} maxLength={120} onChange={(e) => set("title", e.target.value)} placeholder="예) AWS SAA 자격증 3개월 완주" autoFocus /></Field>
+          <Field label="한 줄 소개" error={errors.intro}><input className={field} value={v.intro} maxLength={200} onChange={(e) => set("intro", e.target.value)} /></Field>
           <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
             <Field label="시작일" error={errors.startDate}><input type="date" className={field} min={today} value={v.startDate} onChange={(e) => set("startDate", e.target.value)} /></Field>
             <Field label="종료일" error={errors.endDate}><input type="date" className={field} min={v.startDate || today} value={v.endDate} onChange={(e) => set("endDate", e.target.value)} /></Field>

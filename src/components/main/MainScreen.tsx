@@ -21,10 +21,12 @@ export function MainScreen({ initial }: { initial: RoomListResponse }) {
   const [q, setQ] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const dq = useDebounced(q.trim(), 250);
-  const key = JSON.stringify([tab, status, dq, tags]);
+  // attempt: "다시 시도" 를 누르면 올라가 같은 조건으로 재조회한다
+  const [attempt, setAttempt] = useState(0);
+  const key = JSON.stringify([tab, status, dq, tags, attempt]);
   // 마지막으로 끝난 조회. 첫 화면은 서버가 준 initial(DEFAULT_PARAMS) — 같은 key 면 재조회하지 않는다.
   const [done, setDone] = useState<{ key: string; res: RoomListResponse; error: string }>(() => ({
-    key: JSON.stringify([DEFAULT_PARAMS.scope, DEFAULT_PARAMS.status, DEFAULT_PARAMS.q, DEFAULT_PARAMS.tags]),
+    key: JSON.stringify([DEFAULT_PARAMS.scope, DEFAULT_PARAMS.status, DEFAULT_PARAMS.q, DEFAULT_PARAMS.tags, 0]),
     res: initial,
     error: "",
   }));
@@ -80,8 +82,15 @@ export function MainScreen({ initial }: { initial: RoomListResponse }) {
 
         <FilterBar tab={tab} tabCounts={res.tabCounts} onTab={setTab} status={status} onStatus={setStatus} tagCounts={tagCounts} tags={tags} onToggleTag={toggleTag} onResetTags={() => setTags([])} anonymous={!me} />
 
-        {error && <p role="alert" className="mb-6 rounded-[12px] bg-[#FFF6F5] px-4 py-3 text-[13px] text-warn">{error}</p>}
-        {!loading && !error && rooms.length === 0 && <EmptyState q={q} tab={tab} />}
+        {error && (
+          <div role="alert" className="mb-6 flex items-center justify-between gap-3 rounded-[12px] bg-[#FFF6F5] px-4 py-3 text-[13px] text-warn">
+            <span>{error}</span>
+            <button type="button" onClick={() => setAttempt((n) => n + 1)} className="h-9 shrink-0 rounded-[18px] border border-line-3 bg-surface px-3 text-[13px] font-semibold text-ink">
+              다시 시도
+            </button>
+          </div>
+        )}
+        {!loading && !error && rooms.length === 0 && <EmptyState q={dq} tab={tab} />}
 
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]" aria-busy={loading} style={{ opacity: loading ? 0.6 : 1 }}>
           {rooms.map((r) => (
