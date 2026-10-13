@@ -885,6 +885,8 @@ export type Database = {
       }
     }
     Functions: {
+      allowed_mime_types: { Args: never; Returns: string[] }
+      app_now: { Args: never; Returns: string }
       assignment_resync: { Args: { p_room: number }; Returns: undefined }
       can_read_room: { Args: { p_room: number }; Returns: boolean }
       can_read_submission: {
@@ -901,9 +903,65 @@ export type Database = {
         Args: { p_include_archived: boolean; p_room: number; p_uid: string }
         Returns: Json
       }
+      deactivate_check: {
+        Args: { p_lock: boolean; p_slug: string; p_user: string }
+        Returns: {
+          archived_at: string | null
+          cover_file_id: string | null
+          created_at: string
+          description_md: string
+          end_date: string
+          ended_at: string | null
+          id: number
+          intro: string
+          join_mode: string
+          leader_does_tasks: boolean
+          leader_id: string
+          max_members: number
+          member_count: number
+          min_members: number | null
+          rules_md: string
+          slug: string
+          start_date: string
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+          visibility: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rooms"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      deactivate_pending: {
+        Args: { p_room: number; p_user: string }
+        Returns: {
+          node_id: number
+          others: string[]
+          round_label: string
+          title: string
+        }[]
+      }
       fail: {
         Args: { p_code: string; p_detail: string; p_hint?: Json }
         Returns: undefined
+      }
+      file_json: {
+        Args: { p_file: Database["public"]["Tables"]["files"]["Row"] }
+        Returns: Json
+      }
+      file_register: {
+        Args: {
+          p_mime: string
+          p_name: string
+          p_node: number
+          p_path: string
+          p_size: number
+        }
+        Returns: Json
       }
       invite_check: {
         Args: { p_room: number; p_token: string }
@@ -955,8 +1013,46 @@ export type Database = {
         Returns: boolean
       }
       iso: { Args: { p_ts: string }; Returns: string }
+      job_cleanup: { Args: never; Returns: Json }
+      job_completion_digest: { Args: never; Returns: number }
+      job_deadline_reminder: { Args: never; Returns: number }
+      job_draft_blocked: { Args: never; Returns: number }
+      job_round_started: { Args: never; Returns: number }
       kst_deadline: { Args: { p_end: string }; Returns: string }
       kst_today: { Args: never; Returns: string }
+      leader_room: {
+        Args: { p_lock?: boolean; p_slug: string }
+        Returns: {
+          archived_at: string | null
+          cover_file_id: string | null
+          created_at: string
+          description_md: string
+          end_date: string
+          ended_at: string | null
+          id: number
+          intro: string
+          join_mode: string
+          leader_does_tasks: boolean
+          leader_id: string
+          max_members: number
+          member_count: number
+          min_members: number | null
+          rules_md: string
+          slug: string
+          start_date: string
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+          visibility: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rooms"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       leaf_state: {
         Args: {
           p_asg: number
@@ -986,6 +1082,15 @@ export type Database = {
       me_studies: { Args: never; Returns: Json }
       me_update: {
         Args: { p_nickname?: string; p_optional_mail_enabled?: boolean }
+        Returns: Json
+      }
+      member_count_audit: { Args: never; Returns: number }
+      member_deactivate: {
+        Args: { p_decisions?: Json; p_slug: string; p_user: string }
+        Returns: Json
+      }
+      member_deactivate_preview: {
+        Args: { p_slug: string; p_user: string }
         Returns: Json
       }
       membership_result: {
@@ -1114,6 +1219,26 @@ export type Database = {
         Args: { p_node_id: number; p_patch: Json; p_slug: string }
         Returns: Json
       }
+      notification_json: {
+        Args: { p_n: Database["public"]["Tables"]["notifications"]["Row"] }
+        Returns: Json
+      }
+      notification_kinds: { Args: never; Returns: string[] }
+      notifications_list: {
+        Args: { p_cursor?: string; p_limit?: number }
+        Returns: Json
+      }
+      notifications_read: { Args: { p_id: number }; Returns: undefined }
+      notifications_read_all: { Args: never; Returns: Json }
+      notifications_unread_count: { Args: never; Returns: Json }
+      notify_enabled: {
+        Args: { p_kind: string; p_model: Json; p_room: number }
+        Returns: boolean
+      }
+      notify_link: {
+        Args: { p_kind: string; p_node: number; p_room: number; p_user: string }
+        Returns: string
+      }
       notify_publish: {
         Args: {
           p_actor: string
@@ -1125,6 +1250,16 @@ export type Database = {
           p_room: number
         }
         Returns: number
+      }
+      notify_render: {
+        Args: {
+          p_actor: string
+          p_kind: string
+          p_model: Json
+          p_node: number
+          p_room: number
+        }
+        Returns: Json
       }
       patch_bool: { Args: { p_key: string; p_patch: Json }; Returns: boolean }
       patch_date: { Args: { p_key: string; p_patch: Json }; Returns: string }
@@ -1345,7 +1480,13 @@ export type Database = {
         }[]
       }
       room_start: { Args: { p_slug: string }; Returns: Json }
+      room_tags_get: { Args: { p_slug: string }; Returns: Json }
       room_tags_json: { Args: { p_room: number }; Returns: Json }
+      room_tags_put: {
+        Args: { p_free_labels?: string[]; p_slug: string; p_slugs?: string[] }
+        Returns: Json
+      }
+      room_tags_suggest: { Args: { p_slug: string }; Returns: Json }
       room_take_seat: { Args: { p_room: number }; Returns: undefined }
       room_tick: { Args: never; Returns: Json }
       room_transition_active: {
@@ -1367,9 +1508,66 @@ export type Database = {
         }
         Returns: Json
       }
+      settings_get: { Args: { p_slug: string }; Returns: Json }
+      settings_json: { Args: { p_room: number }; Returns: Json }
+      settings_put: {
+        Args: { p_settings: Json; p_slug: string }
+        Returns: Json
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       slugify: { Args: { p_id: number; p_title: string }; Returns: string }
+      storage_exists: {
+        Args: { p_bucket: string; p_path: string }
+        Returns: boolean
+      }
+      submission_json: { Args: { p_sub: number }; Returns: Json }
+      submission_target: {
+        Args: { p_node: number; p_uid: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          depth: number
+          description_md: string
+          end_date: string
+          id: number
+          label: string | null
+          parent_id: number | null
+          room_id: number
+          round_id: number | null
+          sort_order: number
+          start_date: string
+          task_type: string | null
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "goal_nodes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      submission_upsert: {
+        Args: {
+          p_body: string
+          p_file_ids: string[]
+          p_links: string[]
+          p_node: number
+        }
+        Returns: Json
+      }
+      tag_apply_auto: {
+        Args: { p_room: number; p_slugs: string[] }
+        Returns: Json
+      }
+      tag_autoselect: { Args: { p_room: number }; Returns: number }
+      tag_slug_for: { Args: { p_label: string }; Returns: string }
+      tag_term_hit: {
+        Args: { p_term: string; p_text: string }
+        Returns: boolean
+      }
+      tags_search: { Args: { p_q?: string }; Returns: Json }
       task_code: {
         Args: {
           p_e: string
@@ -1380,6 +1578,8 @@ export type Database = {
         }
         Returns: string
       }
+      task_get: { Args: { p_node: number; p_slug: string }; Returns: Json }
+      task_node_json: { Args: { p_node: number; p_uid: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never
