@@ -73,7 +73,7 @@ public.notify_publish(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p
    -- Phase 2 자리표: 항상 0. 0008 이 CREATE OR REPLACE 로 교체(시그니처 동일). 0008 은 p_actor 를 수신자에서 빼고(호출자는 빼지 않는다),
    -- prefix || ':' || recipient 를 dedupe_key 로 쓴다. prefix(D8): 상태성 = 자연키 'KIND:room[:node][:date]', 행위성 = 'KIND:room:<extra>:' || txid_current()
 public.room_lock(p_slug text) returns public.rooms            -- FOR UPDATE, 없으면 ROOM_NOT_FOUND
-public.require_leader(r public.rooms, p_uid uuid) returns void   -- (최종 리뷰 I-2) 그룹장 아님: 방을 못 읽으면 ROOM_NOT_FOUND(존재 은닉), 읽으면 NOT_LEADER. 모든 그룹장 RPC 는 bare NOT_LEADER 대신 이것
+public.require_leader(r public.rooms, p_uid uuid, p_msg text default '그룹장만 할 수 있어요') returns void   -- (최종 리뷰 I-2, p_msg 로 NOT_LEADER 문구 지정) 그룹장 아님: 방을 못 읽으면 ROOM_NOT_FOUND(존재 은닉), 읽으면 NOT_LEADER. 모든 그룹장 RPC 는 bare NOT_LEADER 대신 이것
 public.room_readable(p_room bigint, p_uid uuid, p_token text default null) returns boolean
 public.room_leaf_stats(p_room bigint) returns table(node_id bigint, round_id bigint, parent_id bigint, title text, task_type text, start_date date, end_date date, sort_order int, asg int, sub int)
    -- 보관 아닌 리프 × (유효 배정 수, 그중 제출 수). 플랜 03 curriculum_get·me_studies 가 재사용
@@ -96,6 +96,7 @@ public.room_get(p_slug text, p_invite_token text default null) returns jsonb
 public.room_create(...), room_update(p_slug, p_patch jsonb), room_open_recruit, room_start, room_archive, room_unarchive, room_delete
 -- 0005_membership.sql
 public.assignment_resync(p_room bigint) returns void
+public.room_hide_unless_known(r public.rooms, p_uid uuid, p_token text default null) returns void   -- (최종 리뷰 I-1) 못 읽는 방 ∧ 멤버 행 없음 → ROOM_NOT_FOUND. 멤버 측 RPC 의 상태 검사 앞에서 호출. GRANT 없음
 public.room_transition_active(p_room bigint, p_actor uuid) returns void   -- 개요 공통 계약대로 0005 (Task 2 가 추가)
 public.room_transition_ended(p_room bigint) returns void
 public.membership_result(p_room bigint, p_user uuid) returns jsonb

@@ -418,7 +418,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms;
 begin
   r := public.room_lock(p_slug);
-  perform public.require_leader(r, v_uid);   -- 외부인(못 읽음) ROOM_NOT_FOUND, 그 외 NOT_LEADER (plan 02 I-2)
+  perform public.require_leader(r, v_uid, '그룹장만 커리큘럼을 편집할 수 있어요');   -- 외부인(못 읽음) ROOM_NOT_FOUND, 그 외 NOT_LEADER (plan 02 I-2)
   if r.archived_at is not null or r.status not in ('DRAFT', 'RECRUIT', 'ACTIVE') then
     perform public.fail('ROOM_NOT_EDITABLE', '종료되었거나 보관된 방은 편집할 수 없어요', jsonb_build_object('status', lower(r.status)));
   end if;
