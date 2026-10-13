@@ -15,10 +15,29 @@ dbTest("anon cannot read profiles (emails hidden), but sees public_profiles with
   assertEquals("email" in pub![0], false);
 });
 
-dbTest("anon rpc me_get fails with AUTH_REQUIRED carried in error.message", async () => {
+dbTest("public_profiles cannot be written through by anon or authenticated (C1)", async () => {
+  const a = anon();
+  const { error: e1 } = await a.from("public_profiles").update({ nickname: "pwned" }).eq("id", "00000000-0000-4000-8000-000000000001");
+  assert(e1 !== null && e1.code === "42501", `anon update: ${e1?.code}`);
+  const { error: e2 } = await a.from("public_profiles").delete().eq("id", "00000000-0000-4000-8000-000000000001");
+  assert(e2 !== null && e2.code === "42501", `anon delete: ${e2?.code}`);
+  const { c } = await userClient(1);
+  const { error: e3 } = await c.from("public_profiles").update({ nickname: "pwned" }).eq("id", "00000000-0000-4000-8000-000000000001");
+  assert(e3 !== null && e3.code === "42501", `authenticated update: ${e3?.code}`);
+  const { data } = await a.from("public_profiles").select("nickname").eq("id", "00000000-0000-4000-8000-000000000001").single();
+  assertEquals(data?.nickname, "철수");
+});
+
+dbTest("anon rpc me_get is denied at the GRANT layer (42501); AUTH_REQUIRED is the adapter's mapping (D7 ruling)", async () => {
   const { error } = await anon().rpc("me_get");
-  assertEquals(error?.message, "AUTH_REQUIRED");
-  assertEquals(error?.details, "로그인이 필요해요");
+  assertEquals(error?.code, "42501");
+});
+
+dbTest("rpc error contract: me_update without a nickname change but invalid flag type is a PostgREST error, fail() codes travel in message/details/hint", async () => {
+  const { c } = await userClient(1);
+  const { error } = await c.rpc("me_update", { p_nickname: "a" });
+  assertEquals(error?.message, "NICKNAME_INVALID");
+  assertEquals(JSON.parse(error!.hint!), { field: "nickname" });
 });
 
 dbTest("authenticated user reads only own profile row with email", async () => {
