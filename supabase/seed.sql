@@ -227,6 +227,225 @@ perform public.assignment_resync(r.id) from public.rooms r;
 end
 $seed2$;
 
+-- ═══════════ §3 커리큘럼 (plan 03) ═══════════
+-- src/data/my-study.ts PLANS 원본(aws·spring·sqld·algo)과 src/data/room-view.ts 회차(toeic·cs·docker·jcg·react).
+-- 코드 문자열은 PLANS.members 순서: D 기한내(end_date 18:00 KST, 기준일 10/12 10:00 KST 를 넘으면 그 시각으로 clamp) / L 지각(end_date+1 09:00 KST) / M·O·P 미제출 / - 미배정.
+-- 공통 리프의 배정은 섹션 끝 assignment_resync 가 만든다. 지정 리프는 '-' 아닌 자리만 DESIGNATED 행.
+-- 멱등: goal_nodes 가 하나라도 있으면 건너뛴다(플랜 01 seed 테스트가 seed.sql 을 두 번 적용한다).
+
+do $seed3$
+declare
+  aws    text[] := array['민수', '지은', '철수', '하나'];
+  spring text[] := array['지훈', '철수', '소율', '민재', '아린'];
+  sqld   text[] := array['가은'];
+  algo   text[] := array['현우', '철수', '보람', '지성', '다은', '유진'];
+  react  text[] := array['태호', '은지', '시우', '다인', '현준'];
+  r bigint; r1 bigint; r2 bigint; r3 bigint; m bigint; w int; s date; v_codes text;
+  algo_codes text[] := array['DDDDDD', 'DDDMDD', 'DDDDDD', 'DDDDDD', 'DDDDDM', 'DDDMDD', 'DDMDDD', 'DDDDDD',
+                             'DMDDDD', 'DDDMDD', 'DMDDDD', 'DDDDMM', 'DDDDDM'];   -- algoMiss: 2 지성, 5 유진, 6 지성, 7 보람, 9 철수, 10 지성, 11 철수, 12 다은·유진, 13 유진
+  toeic_t text[] := array['LC Part 1·2', 'RC Part 5·6', 'LC Part 3·4', 'RC Part 7', 'LC 종합', 'RC 종합', '실전 모의고사 ①', '실전 모의고사 ②'];
+  cs_t    text[] := array['운영체제 ① 프로세스·스레드', '운영체제 ② 메모리', '네트워크 ① TCP/IP', '네트워크 ② HTTP·HTTPS',
+                          '데이터베이스 ① 인덱스', '데이터베이스 ② 트랜잭션', '운영체제 ③ 동기화', '네트워크 ③ DNS·CDN',
+                          '데이터베이스 ③ 정규화', '자료구조 총정리', '종합 질문', '모의 면접'];
+  docker_t text[] := array['컨테이너와 이미지', 'Dockerfile·Compose', '쿠버네티스 기본 오브젝트', '서비스·인그레스', '설정·스토리지', '배포 파이프라인'];
+  docker_n int[]  := array[2, 1, 2, 1, 1, 1];
+  react_t text[] := array['UI 표현하기 ①', 'UI 표현하기 ②', '상호작용 더하기', '상태 관리하기', '탈출구(Escape Hatches)', '탈출구 ②', '종합 프로젝트 ①', '종합 프로젝트 ②'];
+  react_a text[] := array['JSX·컴포넌트 정리 노트', '조건부 렌더링 노트', '이벤트·state 노트', '리듀서로 상태 로직 옮기기', 'ref·effect 노트', '커스텀 훅 노트', '미니 앱 설계 노트', '미니 앱 완성'];
+  react_b text[] := array['props 예제', '리스트 렌더링 예제', '렌더링 과정 예제', 'Context로 props 전달 줄이기', 'effect 의존성 예제', '커스텀 훅 예제', '미니 앱 1차 구현', '회고 노트'];
+begin
+  if exists (select 1 from public.goal_nodes) then
+    raise notice 'seed §3: goal_nodes already present — skipped';
+    return;
+  end if;
+
+  -- 임시 헬퍼(D1: do 블록 안에서 만들고 끝에서 지운다). 본문은 $f$ 로 인용.
+  execute $fn$
+create or replace function pg_temp.kst_at(p_d date, p_h int) returns timestamptz
+language sql as $f$ select (p_d::timestamp + make_interval(hours => p_h)) at time zone 'Asia/Seoul' $f$;
+  $fn$;
+  execute $fn$
+create or replace function pg_temp.seed_round(p_slug text, p_label text, p_title text, p_s date, p_e date) returns bigint
+language plpgsql as $f$
+declare v_room bigint; v_id bigint; v_n int;
+begin
+  select id into v_room from public.rooms where slug = p_slug;
+  if v_room is null then raise exception 'seed §3: room % missing (plan 02 §2 first)', p_slug; end if;
+  select count(*) into v_n from public.goal_nodes where room_id = v_room and parent_id is null;
+  insert into public.goal_nodes (room_id, parent_id, depth, sort_order, label, title, start_date, end_date)
+  values (v_room, null, 2, v_n, p_label, p_title, p_s, p_e) returning id into v_id;
+  update public.goal_nodes set round_id = v_id where id = v_id;
+  return v_id;
+end $f$;
+  $fn$;
+  -- 중간 노드(자식을 가질 노드). task_type null
+  execute $fn$
+create or replace function pg_temp.seed_node(p_parent bigint, p_title text, p_s date, p_e date) returns bigint
+language plpgsql as $f$
+declare p public.goal_nodes; v_id bigint; v_n int;
+begin
+  select * into p from public.goal_nodes where id = p_parent;
+  select count(*) into v_n from public.goal_nodes where parent_id = p_parent;
+  insert into public.goal_nodes (room_id, parent_id, round_id, depth, sort_order, title, start_date, end_date)
+  values (p.room_id, p.id, p.round_id, p.depth + 1, v_n, p_title, p_s, p_e) returning id into v_id;
+  return v_id;
+end $f$;
+  $fn$;
+  -- 리프 + 코드. p_names 는 p_codes 와 같은 순서의 닉네임. D 제출 시각은 기준일 10/12 10:00 KST 로 clamp(미래 시각 금지 — C5)
+  execute $fn$
+create or replace function pg_temp.seed_leaf(p_parent bigint, p_title text, p_type text, p_s date, p_e date,
+                                             p_codes text default null, p_names text[] default null) returns bigint
+language plpgsql as $f$
+declare p public.goal_nodes; v_id bigint; v_n int; i int; v_c text; v_user uuid;
+begin
+  select * into p from public.goal_nodes where id = p_parent;
+  select count(*) into v_n from public.goal_nodes where parent_id = p_parent;
+  insert into public.goal_nodes (room_id, parent_id, round_id, depth, sort_order, title, start_date, end_date, task_type)
+  values (p.room_id, p.id, p.round_id, p.depth + 1, v_n, p_title, p_s, p_e, p_type) returning id into v_id;
+  if p_codes is null then return v_id; end if;
+  if length(p_codes) <> coalesce(array_length(p_names, 1), 0) then
+    raise exception 'seed §3: codes "%" vs names % length mismatch (%)', p_codes, p_names, p_title;
+  end if;
+  for i in 1 .. length(p_codes) loop
+    v_c := substr(p_codes, i, 1);
+    select id into v_user from public.profiles where nickname = p_names[i];
+    if v_user is null then raise exception 'seed §3: user % missing', p_names[i]; end if;
+    if p_type = 'DESIGNATED' and v_c <> '-' then
+      insert into public.task_assignments (node_id, user_id, source) values (v_id, v_user, 'DESIGNATED');
+    end if;
+    if v_c = 'D' then
+      insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late, updated_at)
+      values (v_id, v_user, '## ' || p_title || E'\n\n' || p_names[i] || ' 제출', least(pg_temp.kst_at(p_e, 18), timestamptz '2026-10-12 10:00+09'), false,
+              least(pg_temp.kst_at(p_e, 18), timestamptz '2026-10-12 10:00+09'));
+    elsif v_c = 'L' then
+      insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late, updated_at)
+      values (v_id, v_user, '## ' || p_title || E'\n\n' || p_names[i] || ' 지각 제출', pg_temp.kst_at(p_e + 1, 9), true, pg_temp.kst_at(p_e + 1, 9));
+    end if;
+  end loop;
+  return v_id;
+end $f$;
+  $fn$;
+
+  -- ── aws (PLANS.aws) ──
+  r := pg_temp.seed_round('aws', '1주차', 'IAM·VPC', '2026-10-01', '2026-10-07');
+  perform pg_temp.seed_leaf(r, 'IAM 정책 이해', 'COMMON', '2026-10-01', '2026-10-03', 'DLDM', aws);
+  perform pg_temp.seed_leaf(r, 'VPC 실습',      'COMMON', '2026-10-04', '2026-10-07', 'DMDM', aws);
+  r := pg_temp.seed_round('aws', '2주차', 'EC2·S3', '2026-10-08', '2026-10-14');
+  perform pg_temp.seed_leaf(r, 'EC2 인스턴스 유형 정리',       'DESIGNATED', '2026-10-08', '2026-10-14', '-DO-', aws);
+  perform pg_temp.seed_leaf(r, 'S3 스토리지 클래스 발표자료', 'DESIGNATED', '2026-10-10', '2026-10-14', '---O', aws);
+  r := pg_temp.seed_round('aws', '3주차', '고가용성 아키텍처', '2026-10-15', '2026-10-21');
+  m := pg_temp.seed_node(r, '로드밸런서 비교', '2026-10-15', '2026-10-21');
+  perform pg_temp.seed_leaf(m, 'ALB vs NLB 실습', 'COMMON', '2026-10-15', '2026-10-21', 'PPPP', aws);
+  r := pg_temp.seed_round('aws', '4주차', '오토스케일링', '2026-10-22', '2026-10-28');
+  perform pg_temp.seed_leaf(r, 'Auto Scaling 정책 정리', 'COMMON', '2026-10-22', '2026-10-28', 'PPPP', aws);
+  r := pg_temp.seed_round('aws', '5주차', '데이터베이스', '2026-10-29', '2026-11-04');
+  perform pg_temp.seed_leaf(r, 'RDS·Aurora 비교',    'COMMON',     '2026-10-29', '2026-11-04', 'PPPP', aws);
+  perform pg_temp.seed_leaf(r, 'DynamoDB 설계 퀴즈', 'DESIGNATED', '2026-11-01', '2026-11-04', '-P-P', aws);
+
+  -- ── spring (PLANS.spring) ──
+  r := pg_temp.seed_round('spring', '1주차', '핵심 원리 기본편 (전반)', '2026-10-05', '2026-10-11');
+  perform pg_temp.seed_leaf(r, '섹션 1~5 정리 노트',  'COMMON', '2026-10-05', '2026-10-11', 'DDDDD', spring);
+  perform pg_temp.seed_leaf(r, '스프링 컨테이너 실습', 'COMMON', '2026-10-08', '2026-10-11', 'DLDDM', spring);
+  r := pg_temp.seed_round('spring', '2주차', '핵심 원리 기본편 (후반)', '2026-10-12', '2026-10-18');
+  perform pg_temp.seed_leaf(r, '섹션 6~7 정리 노트',         'COMMON', '2026-10-12', '2026-10-18', 'DODDO', spring);
+  perform pg_temp.seed_leaf(r, '싱글톤 컨테이너 실습 코드', 'COMMON', '2026-10-15', '2026-10-18', 'PPPPP', spring);
+  r := pg_temp.seed_round('spring', '3주차', '스프링 MVC 1편', '2026-10-19', '2026-10-25');
+  perform pg_temp.seed_leaf(r, 'MVC 구조 이해 노트',   'COMMON', '2026-10-19', '2026-10-25', 'PPPPP', spring);
+  perform pg_temp.seed_leaf(r, '서블릿→MVC 리팩토링', 'COMMON', '2026-10-22', '2026-10-25', 'PPPPP', spring);
+  r := pg_temp.seed_round('spring', '4주차', 'MVC 1편 (후반)', '2026-10-26', '2026-11-01');
+  perform pg_temp.seed_leaf(r, 'MVC 1편 섹션 5~7 노트', 'COMMON', '2026-10-26', '2026-11-01', 'PPPPP', spring);
+
+  -- ── sqld (PLANS.sqld) — 가은은 leader_does_tasks=false 라 공통 리프 asg=0 (D5: sqld null) ──
+  -- (§2 가 이미 sqld.leader_does_tasks=false 로 넣는다 — C2: 별도 update 불필요)
+  r := pg_temp.seed_round('sqld', '1주차', '데이터 모델링의 이해', '2026-10-26', '2026-11-01');
+  perform pg_temp.seed_leaf(r, '데이터 모델링 요약 노트', 'COMMON', '2026-10-26', '2026-11-01', 'P', sqld);
+  perform pg_temp.seed_leaf(r, '1과목 기출 풀이',         'COMMON', '2026-10-29', '2026-11-01', 'P', sqld);
+  r := pg_temp.seed_round('sqld', '2주차', 'SQL 기본', '2026-11-02', '2026-11-08');
+  perform pg_temp.seed_leaf(r, 'SELECT·JOIN 정리',        'COMMON',     '2026-11-02', '2026-11-05', 'P', sqld);
+  perform pg_temp.seed_leaf(r, '내장 함수 실습',          'COMMON',     '2026-11-04', '2026-11-08', 'P', sqld);
+  perform pg_temp.seed_leaf(r, '2과목 기출 풀이 (전반)', 'DESIGNATED', '2026-11-06', '2026-11-08', '-', sqld);
+  r := pg_temp.seed_round('sqld', '3주차', 'SQL 활용', '2026-11-09', '2026-11-15');
+  perform pg_temp.seed_leaf(r, '서브쿼리·윈도우 함수',    'COMMON', '2026-11-09', '2026-11-15', 'P', sqld);
+  perform pg_temp.seed_leaf(r, '2과목 기출 풀이 (후반)', 'COMMON', '2026-11-12', '2026-11-15', 'P', sqld);
+  r := pg_temp.seed_round('sqld', '4주차', '모의고사', '2026-11-16', '2026-11-22');
+  perform pg_temp.seed_leaf(r, '모의고사 1회', 'COMMON', '2026-11-16', '2026-11-19', 'P', sqld);
+  perform pg_temp.seed_leaf(r, '모의고사 2회', 'COMMON', '2026-11-20', '2026-11-22', 'P', sqld);
+
+  -- ── algo (PLANS.algo: algoGroup/algoWeek — 그룹 e 는 마지막 주 e 인 09-29) ──
+  r1 := pg_temp.seed_round('algo', '1–4주차',  '구현 · 그리디',          '2026-07-01', '2026-07-28');
+  r2 := pg_temp.seed_round('algo', '5–8주차',  'BFS · DFS · 백트래킹',   '2026-07-29', '2026-08-25');
+  r3 := pg_temp.seed_round('algo', '9–13주차', 'DP · 최단경로',          '2026-08-26', '2026-09-29');
+  for w in 1 .. 13 loop
+    s := date '2026-07-01' + (w - 1) * 7;
+    perform pg_temp.seed_leaf(case when w <= 4 then r1 when w <= 8 then r2 else r3 end,
+                              w || '주차 문제 풀이', 'COMMON', s, s + 6, algo_codes[w], algo);
+  end loop;
+
+  -- ── react (room-view: 8회차 매주 월요일, 공통 2개씩, 3주차 9/10, 4주차 3/10) ──
+  for w in 1 .. 8 loop
+    s := date '2026-09-21' + (w - 1) * 7;
+    r := pg_temp.seed_round('react', w || '주차', react_t[w], s, s + 6);
+    v_codes := case when w <= 2 then 'DDDDD' when w = 3 then 'DDDDD' when w = 4 then 'DDODO' else 'PPPPP' end;
+    perform pg_temp.seed_leaf(r, react_a[w], 'COMMON', s, s + 6, v_codes, react);
+    v_codes := case when w <= 2 then 'DDDDD' when w = 3 then 'DDDDM' when w = 4 then 'PPPPP' else 'PPPPP' end;
+    perform pg_temp.seed_leaf(r, react_b[w], 'COMMON', case when w = 4 then s + 3 else s end, s + 6, v_codes, react);
+  end loop;
+
+  -- ── toeic (8회차 매주 월요일 11-02~, 공통 2개씩) ──
+  for w in 1 .. 8 loop
+    s := date '2026-11-02' + (w - 1) * 7;
+    r := pg_temp.seed_round('toeic', w || '주차', toeic_t[w], s, s + 6);
+    perform pg_temp.seed_leaf(r, toeic_t[w] || ' 오답 노트', 'COMMON', s, s + 4);
+    perform pg_temp.seed_leaf(r, '주말 모의고사 ' || w || '회', 'COMMON', s + 5, s + 6);
+  end loop;
+
+  -- ── cs (12회차, 월 3일·목 4일 교대, 10-19~11-29, 공통 2개씩) ──
+  for w in 1 .. 12 loop
+    s := date '2026-10-19' + ((w - 1) / 2) * 7 + case when w % 2 = 1 then 0 else 3 end;
+    r := pg_temp.seed_round('cs', w || '회차', cs_t[w], s, s + case when w % 2 = 1 then 2 else 3 end);
+    perform pg_temp.seed_leaf(r, '질문 1 답변', 'COMMON', s, s + case when w % 2 = 1 then 2 else 3 end);
+    perform pg_temp.seed_leaf(r, '질문 2 답변', 'COMMON', s, s + case when w % 2 = 1 then 2 else 3 end);
+  end loop;
+
+  -- ── docker (6회차 매주 월요일 11-09~, 공통 2·1·2·1·1·1 = 8) ──
+  for w in 1 .. 6 loop
+    s := date '2026-11-09' + (w - 1) * 7;
+    r := pg_temp.seed_round('docker', w || '주차', docker_t[w], s, s + 6);
+    perform pg_temp.seed_leaf(r, docker_t[w] || ' 실습 ①', 'COMMON', s, s + 6);
+    if docker_n[w] = 2 then perform pg_temp.seed_leaf(r, docker_t[w] || ' 실습 ②', 'COMMON', s + 3, s + 6); end if;
+  end loop;
+
+  -- ── jcg (2회차, 공통 3개씩) ──
+  r := pg_temp.seed_round('jcg', '1주차', '필기 복습 · 기출 1회독', '2026-10-19', '2026-10-25');
+  perform pg_temp.seed_leaf(r, '필기 핵심 요약',   'COMMON', '2026-10-19', '2026-10-21');
+  perform pg_temp.seed_leaf(r, '기출 1회독',       'COMMON', '2026-10-21', '2026-10-25');
+  perform pg_temp.seed_leaf(r, '오답 단원 정리',   'COMMON', '2026-10-24', '2026-10-25');
+  r := pg_temp.seed_round('jcg', '2주차', '약점 단원 · 기출 2~3회독', '2026-10-26', '2026-11-01');
+  perform pg_temp.seed_leaf(r, '약점 단원 집중',   'COMMON', '2026-10-26', '2026-10-28');
+  perform pg_temp.seed_leaf(r, '기출 2회독',       'COMMON', '2026-10-28', '2026-10-30');
+  perform pg_temp.seed_leaf(r, '기출 3회독·총정리', 'COMMON', '2026-10-30', '2026-11-01');
+
+  -- ── 이탈자 도윤(aws INACTIVE): IAM 에 released 배정 + 제출물 (집계 제외, 제출물 보존 — D4·D14) ──
+  insert into public.task_assignments (node_id, user_id, source, assigned_at, released_at)
+  select n.id, p.id, 'COMMON', pg_temp.kst_at('2026-10-01', 0), pg_temp.kst_at('2026-10-06', 10)
+  from public.goal_nodes n join public.rooms r on r.id = n.room_id, public.profiles p
+  where r.slug = 'aws' and n.title = 'IAM 정책 이해' and p.nickname = '도윤';
+  insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late, updated_at)
+  select n.id, p.id, '## IAM 정책 이해' || E'\n\n' || '도윤 제출(이탈 전)', pg_temp.kst_at('2026-10-03', 18), false, pg_temp.kst_at('2026-10-03', 18)
+  from public.goal_nodes n join public.rooms r on r.id = n.room_id, public.profiles p
+  where r.slug = 'aws' and n.title = 'IAM 정책 이해' and p.nickname = '도윤';
+
+  -- ── 공통 리프 배정 실체화 (D4) ──
+  perform public.assignment_resync(id) from public.rooms;
+  -- 배정 시각은 db reset 시각이 아니라 리프 시작일 00:00 KST 로 고정한다(제출 시각보다 항상 앞선다 — 플랜 04 불변식·리마인더가 이 값을 본다).
+  -- (submissions.updated_at = first_submitted_at 은 BEFORE UPDATE 트리거가 덮어쓰므로 위 insert 에서 직접 지정했다.)
+  update public.task_assignments a set assigned_at = pg_temp.kst_at(g.start_date, 0)
+  from public.goal_nodes g where g.id = a.node_id;
+  execute 'drop function pg_temp.seed_leaf(bigint,text,text,date,date,text,text[])';
+  execute 'drop function pg_temp.seed_node(bigint,text,date,date)';
+  execute 'drop function pg_temp.seed_round(text,text,text,date,date)';
+  execute 'drop function pg_temp.kst_at(date,int)';
+end $seed3$;
+
 -- ═══════════ 고정 기준일 (항상 이 파일의 마지막 문장) ═══════════
 -- kst_today() 가 로컬·E2E 에서 항상 2026-10-12 를 돌려주게 한다(02 §8). 호스팅에는 seed 가 가지 않는다.
 -- (alter database … set app.today 는 Supabase 비 superuser postgres 역할에서 거부되어 internal.settings 에 둔다.)

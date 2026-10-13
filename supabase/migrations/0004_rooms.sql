@@ -195,7 +195,7 @@ begin
     'totalAssignments', coalesce(sum(l.asg), 0),
     'totalSubmissions', coalesce(sum(l.sub), 0),
     'overallPct', public.pct(coalesce(sum(l.asg), 0)::int, coalesce(sum(l.sub), 0)::int),
-    'unassignedCount', count(*) filter (where l.asg = 0),
+    'unassignedCount', count(*) filter (where l.task_type = 'DESIGNATED' and l.asg = 0),
     'startWeekdays', (select coalesce(jsonb_agg(d order by d), '[]'::jsonb) from (
         select distinct extract(isodow from n.start_date)::int as d
         from public.goal_nodes n where n.room_id = p_room and n.depth = 2 and n.archived_at is null) w))

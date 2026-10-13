@@ -12,6 +12,13 @@
 
 ## Global Constraints
 
+
+> **plan 02·03 실행에서 넘어온 인계(2026-10-13)** — 이 플랜 실행 전 반영:
+> - `submission_upsert` 는 `room_lock`(또는 리프 `FOR UPDATE`)을 먼저 잡는다 — `node_delete` 의 NODE_HAS_SUBMISSIONS 검사와 경합하면 raw 23503 이 난다.
+> - 그룹장 RPC 는 `require_leader(r, uid[, msg])`, 멤버 RPC 는 `room_hide_unless_known(r, uid[, token])` — 못 읽는 방 외부인은 ROOM_NOT_FOUND. bare NOT_LEADER 금지.
+> - 같은 저장에서 담당 추가 + 기간 변경이면 TASK_ASSIGNED 와 SCHEDULE_CHANGED 가 함께 나간다 → 0008 dedupe 설계에서 처리. SCHEDULE_CHANGED 수신자는 현재 리프 담당자뿐(mystudy E4 "활성 참가자" 와 다름 — 결정 필요).
+> - 시드: 섹션마다 `do $seedN$` 블록, 마지막 문장은 `internal.settings 'today'`. 새 GRANT 는 `_cases-rooms.ts` catalog sweep 허용 목록에 같은 커밋으로 추가. 권한 사례는 `set local role` 로 실제 실행.
+> - 보관 노드: node_update/node_move 는 TASK_ARCHIVED/PARENT_ARCHIVED 로 거부 — 제출 쪽 TASK_ARCHIVED 와 같은 규칙.
 - 00 개요 "Global Constraints" 전부 적용. 특히: 마이그레이션 파일은 `0007_submissions.sql`, `0008_notifications.sql`, `0009_tags.sql`, `0010_cron.sql` 만 새로 만들고 0001~0006 은 수정하지 않는다.
 - 에러 코드는 `03-api.md` §0 목록만: `VALIDATION_FAILED`, `INVALID_LINK`, `LEAVE_DECISION_MISSING`, `REASSIGN_REQUIRED`, `AUTH_REQUIRED`, `ONBOARDING_REQUIRED`, `NOT_LEADER`, `TASK_NOT_ASSIGNED`, `ROOM_NOT_FOUND`, `NODE_NOT_FOUND`, `NOT_FOUND`, `ROOM_NOT_ACTIVE`, `ROOM_NOT_EDITABLE`, `NODE_NOT_LEAF`, `ASSIGNEE_NOT_MEMBER`, `MEMBER_NOT_ACTIVE`, `CANNOT_DEACTIVATE_LEADER`, `TASK_NOT_STARTED`, `TASK_ARCHIVED`, `FILE_LIMIT_EXCEEDED`, `FILE_NOT_READY`, `TAG_LIMIT_EXCEEDED`, `FILE_TOO_LARGE`, `FILE_TYPE_NOT_ALLOWED`. (`TAG_LABEL_INVALID`·`FILE_COUNT_EXCEEDED` 는 분석 문서에만 있고 §0 에 없으므로 쓰지 않는다 → `VALIDATION_FAILED`·`FILE_LIMIT_EXCEEDED`.)
 - 제한값(D10): 본문 ≤ 50,000자 · 링크 ≤ 20개(`http(s)://`) · 파일 ≤ 5개 × 10,485,760 bytes · MIME `image/png, image/jpeg, image/gif, image/webp, application/pdf, application/zip, application/x-zip-compressed, text/plain, text/markdown`.
