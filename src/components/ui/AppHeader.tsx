@@ -1,15 +1,22 @@
+"use client";
+
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Logo } from "./Logo";
-import { ME, routes } from "@/lib/routes";
+import { signOut } from "@/lib/api/me";
+import { useMe } from "@/lib/me";
+import { AVATAR_PAL } from "@/lib/palette";
+import { routes } from "@/lib/routes";
 
 export type NavKey = "home" | "myStudy" | "schedule";
 
-const NAV: { key: NavKey; label: string; href: string; icon: ReactNode }[] = [
+const NAV: { key: NavKey; label: string; href: string; authOnly: boolean; icon: ReactNode }[] = [
   {
     key: "home",
     label: "방 둘러보기",
     href: routes.home(),
+    authOnly: false,
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="2" y="2" width="5" height="5" rx="1.2" />
@@ -23,6 +30,7 @@ const NAV: { key: NavKey; label: string; href: string; icon: ReactNode }[] = [
     key: "myStudy",
     label: "내 스터디",
     href: routes.myStudy(),
+    authOnly: true,
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M3 3.5h10v9H3z" />
@@ -34,6 +42,7 @@ const NAV: { key: NavKey; label: string; href: string; icon: ReactNode }[] = [
     key: "schedule",
     label: "내 일정",
     href: routes.schedule(),
+    authOnly: true,
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <rect x="2" y="3" width="12" height="11" rx="2" />
@@ -44,21 +53,49 @@ const NAV: { key: NavKey; label: string; href: string; icon: ReactNode }[] = [
 ];
 
 type Props = {
-  /** 현재 화면 — aria-current 와 활성 스타일 */
   active: NavKey;
   /** flat: Main 처럼 전폭 흰 바. card: 나머지 화면처럼 둥근 카드 */
   variant?: "flat" | "card";
   /** nav 와 알림 사이에 끼울 요소 (Main 의 검색창 등) */
   children?: ReactNode;
-  unread?: number;
+  /** 알림 벨 (Task 4 의 <NotificationBell/>). 없으면 벨을 그리지 않는다 */
+  bell?: ReactNode;
 };
 
-export function AppHeader({ active, variant = "card", children, unread = 3 }: Props) {
+export function AppHeader({ active, variant = "card", children, bell }: Props) {
+  const me = useMe();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const logout = async () => {
+    setOpen(false);
+    await signOut();
+    router.push(routes.home());
+    router.refresh();
+  };
+
+  const round = variant === "flat" ? "rounded-[12px]" : "rounded-full";
   const inner = (
     <>
       <Logo />
       <nav aria-label="주 메뉴" className="flex gap-1 max-sm:order-last max-sm:w-full max-sm:overflow-x-auto">
-        {NAV.map((n) => {
+        {NAV.filter((n) => me || !n.authOnly).map((n) => {
           const on = n.key === active;
           return (
             <Link
@@ -77,30 +114,39 @@ export function AppHeader({ active, variant = "card", children, unread = 3 }: Pr
       </nav>
       <div className="flex-[1_1_24px] max-sm:flex-1" />
       {children && <div className="flex min-w-0 max-sm:order-9 max-sm:w-full [&>*]:max-sm:w-full">{children}</div>}
-      <button
-        type="button"
-        aria-label={`알림 ${unread}개`}
-        className={`relative flex h-11 w-11 items-center justify-center border border-line bg-surface ${
-          variant === "flat" ? "rounded-[12px]" : "rounded-full"
-        }`}
-      >
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#1B2230" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M4 12.5V8a5 5 0 0 1 10 0v4.5l1 1.5H3z" />
-          <path d="M7.5 16a1.5 1.5 0 0 0 3 0" />
-        </svg>
-        {unread > 0 && (
-          <span className="absolute right-[5px] top-[5px] flex h-4 min-w-4 items-center justify-center rounded-lg bg-danger px-1 text-[10px] font-bold text-white">
-            {unread}
-          </span>
-        )}
-      </button>
-      <button
-        type="button"
-        aria-label={`내 프로필: ${ME.name}`}
-        className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-avatar text-[15px] font-bold text-blue-text"
-      >
-        {ME.initial}
-      </button>
+      {me ? (
+        <>
+          {bell}
+          <div ref={menuRef} className="relative">
+            <button
+              type="button"
+              aria-label={`내 프로필: ${me.nickname ?? me.email}`}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              onClick={() => setOpen((v) => !v)}
+              className="flex h-11 w-11 items-center justify-center rounded-full text-[15px] font-bold"
+              style={{ background: AVATAR_PAL[me.tone].bg, color: AVATAR_PAL[me.tone].fg }}
+            >
+              {me.initial}
+            </button>
+            {open && (
+              <div role="menu" className="absolute right-0 top-[52px] z-20 flex w-[180px] flex-col rounded-[14px] border border-line bg-surface p-[6px] shadow-[0_12px_32px_rgba(27,34,48,.14)]">
+                <div className="truncate px-3 py-2 text-[12px] text-muted">{me.email}</div>
+                <Link role="menuitem" href={routes.me()} onClick={() => setOpen(false)} className="flex h-11 items-center rounded-[10px] px-3 text-[14px] font-medium text-ink hover:bg-bg">
+                  내 프로필
+                </Link>
+                <button role="menuitem" type="button" onClick={logout} className="flex h-11 items-center rounded-[10px] px-3 text-left text-[14px] font-medium text-ink hover:bg-bg">
+                  로그아웃
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <Link href={routes.login(pathname)} className={`flex h-11 items-center ${round} bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white`}>
+          로그인
+        </Link>
+      )}
     </>
   );
 
