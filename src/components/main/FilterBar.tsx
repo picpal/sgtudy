@@ -20,18 +20,22 @@ type Props = {
   onTab: (t: Tab) => void;
   status: StatusFilter;
   onStatus: (s: StatusFilter) => void;
-  tagCounts: { tag: string; count: number }[];
+  /** 서버 tagFacets — label 표시, slug 로 선택 */
+  tagCounts: { slug: string; tag: string; count: number }[];
+  /** 선택된 slug */
   tags: string[];
-  onToggleTag: (t: string) => void;
+  onToggleTag: (slug: string) => void;
   onResetTags: () => void;
+  /** 비로그인: 전체 공개 방 탭만 */
+  anonymous?: boolean;
 };
 
-export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, tags, onToggleTag, onResetTags }: Props) {
+export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, tags, onToggleTag, onResetTags, anonymous }: Props) {
   return (
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line">
         <div role="tablist" aria-label="방 범위" className="flex gap-1">
-          {TABS.map((t) => {
+          {TABS.filter((t) => !anonymous || t.key === "public").map((t) => {
             const on = t.key === tab;
             return (
               <button
@@ -84,14 +88,14 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
           </svg>
           태그
         </span>
-        {tagCounts.map(({ tag, count }) => {
-          const on = tags.includes(tag);
+        {tagCounts.map(({ slug, tag, count }) => {
+          const on = tags.includes(slug);
           return (
             <button
-              key={tag}
+              key={slug}
               type="button"
               aria-pressed={on}
-              onClick={() => onToggleTag(tag)}
+              onClick={() => onToggleTag(slug)}
               className={`flex h-8 items-center gap-[6px] whitespace-nowrap rounded-2xl border px-3 text-[13px] ${
                 on ? "border-mint bg-mint-soft font-semibold text-mint-deep" : "border-line-3 bg-surface font-medium text-ink-2"
               }`}

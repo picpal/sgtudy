@@ -1,7 +1,8 @@
+import type { Tone } from "@/lib/palette";
 import type { RoomStatus } from "@/lib/types";
 
-/** 카드 배지 상태 — RoomStatus 에 '정원 마감'이 추가됨. 상태 필터에선 full → recruit 로 묶인다. */
-export type CardStatus = RoomStatus | "full";
+/** 카드 배지 상태 — RoomStatus 에 '정원 마감'·'준비중'(D2) 이 추가됨. 상태 필터는 서버(rooms_list p_status) 가 적용한다. */
+export type CardStatus = RoomStatus | "full" | "draft";
 
 export type Slot = {
   label: string;
@@ -22,6 +23,8 @@ export type Room = {
   cur: number;
   max: number;
   leader: string;
+  /** 리더 아바타 색 — DTO leader.tone (목업은 toneOf(name)) */
+  leaderTone?: Tone;
   tags: string[];
   mine: boolean;
   created: boolean;
