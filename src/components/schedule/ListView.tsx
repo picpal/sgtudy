@@ -1,7 +1,8 @@
+import Link from "next/link";
 import { addDays, dday, md, weekdayKo } from "@/lib/date";
 import { STATUS_LABEL } from "@/lib/types";
 import { shortName, type Study, type Task } from "@/data/schedule";
-import { isUrgent, monthRange, weekStartOf } from "./calc";
+import { isUrgent, monthRange, taskHref, weekStartOf } from "./calc";
 
 type Props = { y: number; m: number; today: string; studies: Record<string, Study>; tasks: Task[] };
 
@@ -32,28 +33,31 @@ export function ListView({ y, m, today, studies, tasks }: Props) {
                     const S = studies[t.study];
                     const urgent = isUrgent(t);
                     return (
-                      <li
-                        key={t.id}
-                        className="flex flex-wrap items-center gap-4 rounded-[14px] border border-line bg-surface px-[18px] py-4 transition-[border-color,box-shadow] duration-150 hover:border-line-dash hover:shadow-[0_4px_12px_rgba(27,34,48,.06)]"
-                      >
-                        <span className="w-[92px] shrink-0 text-[13px] font-semibold">
-                          {md(t.e)}({weekdayKo(t.e)})
-                        </span>
-                        <span className="shrink-0 rounded-[7px] px-2 py-[3px] text-[11px] font-bold" style={{ background: S.bg, color: S.fg }}>
-                          {shortName(S)}
-                        </span>
-                        <span className="min-w-0 flex-[1_1_200px]">
-                          <span className="block text-[14px] font-semibold">{t.title}</span>
-                          <span className="mt-[2px] block text-[12px] text-muted">
-                            {t.round} · {md(t.s)}–{md(t.e)}
-                          </span>
-                        </span>
-                        <span
-                          className="shrink-0 rounded-[8px] px-[10px] py-1 text-[12px] font-semibold"
-                          style={{ color: urgent ? "#FFFFFF" : "#3A4452", background: urgent ? "#B4462B" : "#EEF2F1" }}
+                      <li key={t.id}>
+                        {/* 월 막대·일 패널·다가오는 마감처럼 과제로 바로 간다 (V2-04) */}
+                        <Link
+                          href={taskHref(t, S)}
+                          className="flex flex-wrap items-center gap-4 rounded-[14px] border border-line bg-surface px-[18px] py-4 text-ink transition-[border-color,box-shadow] duration-150 hover:border-line-dash hover:text-ink hover:shadow-[0_4px_12px_rgba(27,34,48,.06)]"
                         >
-                          {urgent ? `${STATUS_LABEL[t.st]} · ${dday(today, t.e)}` : STATUS_LABEL[t.st]}
-                        </span>
+                          <span className="w-[92px] shrink-0 text-[13px] font-semibold">
+                            {md(t.e)}({weekdayKo(t.e)})
+                          </span>
+                          <span className="shrink-0 rounded-[7px] px-2 py-[3px] text-[11px] font-bold" style={{ background: S.bg, color: S.fg }}>
+                            {shortName(S)}
+                          </span>
+                          <span className="min-w-0 flex-[1_1_200px]">
+                            <span className="block text-[14px] font-semibold">{t.title}</span>
+                            <span className="mt-[2px] block text-[12px] text-muted">
+                              {t.round} · {md(t.s)}–{md(t.e)}
+                            </span>
+                          </span>
+                          <span
+                            className="shrink-0 rounded-[8px] px-[10px] py-1 text-[12px] font-semibold"
+                            style={{ color: urgent ? "#FFFFFF" : "#3A4452", background: urgent ? "#B4462B" : "#EEF2F1" }}
+                          >
+                            {urgent ? `${STATUS_LABEL[t.st]} · ${dday(today, t.e)}` : STATUS_LABEL[t.st]}
+                          </span>
+                        </Link>
                       </li>
                     );
                   })}
