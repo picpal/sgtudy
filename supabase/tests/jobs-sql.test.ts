@@ -43,11 +43,8 @@ cases("jobs", db, [
     await setToday(q, "2026-10-12");
     const springActive = Number((await one(q, "select count(*)::int as n from public.room_members m join public.rooms r on r.id = m.room_id where r.slug = 'spring' and m.status = 'ACTIVE'")).n);
     assertEquals(springActive, 5);
-    // react 4주차도 10/12 시작(ACTIVE 5명) → spring 5 + react 5 = 10. 시드(Task 10)가 spring 한 행을 자연 키로 미리 넣으면 그만큼 dedupe 된다 (E4: 9)
-    const pre = Number((await one(q, `select count(*)::int as n from public.notifications n join public.goal_nodes g on g.id = n.node_id
-      where n.kind = 'ROUND_STARTED' and g.depth = 2 and g.start_date = '2026-10-12'::date
-        and n.dedupe_key like 'ROUND_STARTED:' || n.room_id || ':' || g.id || ':%'`)).n);
-    assertEquals(Number(await run(q, "job_round_started")), 10 - pre);
+    // react 4주차도 10/12 시작(ACTIVE 5명). 시드 §4 가 spring 철수 행을 자연 키로 미리 넣어 dedupe → spring 4 + react 5 = 9 (E4)
+    assertEquals(Number(await run(q, "job_round_started")), 9);
     assertEquals(Number(await run(q, "job_round_started")), 0);                // 같은 날 재실행
   } },
 

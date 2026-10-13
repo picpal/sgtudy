@@ -446,6 +446,47 @@ end $f$;
   execute 'drop function pg_temp.kst_at(date,int)';
 end $seed3$;
 
+-- ═══════════ §4 알림 · 제출 링크 (plan 04) ═══════════
+-- (room_notification_settings 행은 §2 가 이미 모든 시드 방에 넣는다.)
+do $seed4$
+begin
+  -- 철수 미읽음 3건 (헤더 배지·드롭다운). 멱등: dedupe_key.
+  -- created_at 이 오래된 것부터 INSERT 한다 → id 순서 = 시간 순서(목록은 id DESC 라 드롭다운이 최신순으로 보인다).
+  -- 모두 기준일 10/12(KST) 이전 시각: D-3 리마인더 10/11 09:00 KST → spring 2주차 시작 10/12 00:00 KST → aws 일정 변경 10/12 10:30 KST
+  insert into public.notifications (user_id, kind, title, body, room_id, node_id, actor_user_id, link, dedupe_key, created_at)
+  select p.id, 'DEADLINE_REMINDER', '"EC2 인스턴스 유형 정리" 마감 3일 전이에요', r.title, r.id, n.id, null,
+         '/my-study/aws?task=' || n.id, 'seed:DEADLINE_REMINDER:cheolsu', '2026-10-11 00:00:00+00'
+  from public.profiles p, public.rooms r
+  join public.goal_nodes n on n.room_id = r.id and n.title = 'EC2 인스턴스 유형 정리'
+  where p.nickname = '철수' and r.slug = 'aws'
+  on conflict (dedupe_key) do nothing;
+
+  -- job_round_started 의 자연 키(ROUND_STARTED:<room>:<node>:<user>)로 넣어, 로컬 pg_cron 이 00:01 KST 에 돌아도 중복 행이 생기지 않는다.
+  insert into public.notifications (user_id, kind, title, body, room_id, node_id, actor_user_id, link, dedupe_key, created_at)
+  select p.id, 'ROUND_STARTED', r.title || '의 2주차가 시작됐어요', r.title, r.id, n.id, null,
+         '/my-study/spring', 'ROUND_STARTED:' || r.id || ':' || n.id || ':' || p.id, '2026-10-11 15:00:00+00'
+  from public.profiles p, public.rooms r
+  join public.goal_nodes n on n.room_id = r.id and n.depth = 2 and n.label = '2주차'
+  where p.nickname = '철수' and r.slug = 'spring'
+  on conflict (dedupe_key) do nothing;
+
+  insert into public.notifications (user_id, kind, title, body, room_id, node_id, actor_user_id, link, dedupe_key, created_at)
+  select p.id, 'SCHEDULE_CHANGED', r.title || ' 일정이 변경됐어요', null, r.id, null, a.id,
+         '/my-study/aws', 'seed:SCHEDULE_CHANGED:cheolsu', '2026-10-12 01:30:00+00'
+  from public.profiles p, public.rooms r, public.profiles a
+  where p.nickname = '철수' and r.slug = 'aws' and a.nickname = '민수'
+  on conflict (dedupe_key) do nothing;
+
+  -- 지은의 EC2 제출(plan 03 시드 D) 에 링크 2개
+  insert into public.submission_links (submission_id, url, sort_order)
+  select s.id, x.url, x.ord
+  from public.submissions s
+  join public.goal_nodes n on n.id = s.node_id and n.title = 'EC2 인스턴스 유형 정리'
+  join public.profiles p on p.id = s.user_id and p.nickname = '지은'
+  cross join (values ('https://docs.aws.amazon.com/ec2/latest/instancetypes/', 0), ('https://github.com/jieun/aws-notes/blob/main/ec2.md', 1)) as x(url, ord)
+  where not exists (select 1 from public.submission_links l where l.submission_id = s.id and l.url = x.url);
+end $seed4$;
+
 -- ═══════════ 고정 기준일 (항상 이 파일의 마지막 문장) ═══════════
 -- kst_today() 가 로컬·E2E 에서 항상 2026-10-12 를 돌려주게 한다(02 §8). 호스팅에는 seed 가 가지 않는다.
 -- (alter database … set app.today 는 Supabase 비 superuser postgres 역할에서 거부되어 internal.settings 에 둔다.)
