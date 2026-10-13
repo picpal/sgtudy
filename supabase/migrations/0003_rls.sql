@@ -36,6 +36,12 @@ returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.task_assignments a where a.node_id = p_node and a.user_id = p_user and a.released_at is null)
 $$;
 
+-- 정책용 1인자 래퍼: 호출자 자신의 배정만 묻는다(2인자 형은 RPC 로 열지 않는다 — 비공개 방 배정 정보 누출 방지)
+create or replace function public.is_my_task(p_node bigint)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select public.is_task_assignee(p_node, public.current_user_id())
+$$;
+
 -- 제출물 한 건: 같은 방 ACTIVE·INACTIVE·그룹장이 읽되, 보관 노드는 그룹장·작성자만 (D10)
 create or replace function public.can_read_submission(p_node bigint, p_author uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
@@ -53,7 +59,7 @@ grant execute on function public.is_room_leader(bigint)               to anon, a
 grant execute on function public.can_read_room(bigint)                to anon, authenticated;
 grant execute on function public.can_read_submissions(bigint)         to anon, authenticated;
 grant execute on function public.can_read_submission(bigint, uuid)    to anon, authenticated;
-grant execute on function public.is_task_assignee(bigint, uuid)       to authenticated;
+grant execute on function public.is_my_task(bigint)                   to authenticated;
 
 -- ───────── RLS 켜기 ─────────
 alter table public.profiles                   enable row level security;
@@ -142,14 +148,17 @@ create policy attachments_insert_assignee on storage.objects for insert to authe
     bucket_id = 'attachments'
     and name ~ '^[0-9]+/[0-9]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^/]+$'
     and (storage.foldername(name))[3] = (select auth.uid())::text
-    and public.is_task_assignee(((storage.foldername(name))[2])::bigint, (select auth.uid()))
+    and public.is_my_task(((storage.foldername(name))[2])::bigint)
     and (storage.foldername(name))[1] = (select n.room_id::text from public.goal_nodes n where n.id = ((storage.foldername(name))[2])::bigint));
 
 -- SELECT: 제출물 읽기 규칙과 동일 — 보관 노드 첨부는 그룹장·작성자(user 세그먼트)만 (D10)
 create policy attachments_select_member on storage.objects for select to authenticated
   using (
     bucket_id = 'attachments'
+    and name ~ '^[0-9]+/[0-9]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^/]+$'
     and public.can_read_submission(((storage.foldername(name))[2])::bigint, ((storage.foldername(name))[3])::uuid));
 
 create policy attachments_delete_own on storage.objects for delete to authenticated
-  using (bucket_id = 'attachments' and (storage.foldername(name))[3] = (select auth.uid())::text);
+  using (bucket_id = 'attachments'
+         and name ~ '^[0-9]+/[0-9]+/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^/]+$'
+         and (storage.foldername(name))[3] = (select auth.uid())::text);

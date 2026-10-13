@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { migrationFiles, newUser, openDb, sqlTest, withCase } from "./_harness.ts";
+import { expectFail, migrationFiles, newUser, openDb, sqlTest, withCase } from "./_harness.ts";
 
 const db = await openDb();
 
@@ -30,16 +30,8 @@ sqlTest("0001: auth.users insert creates a profile with email and a palette tone
 
 sqlTest("0001: rooms checks reject bad period and capacity", withCase(db, async (q) => {
   const uid = await newUser(q);
-  let failed = false;
-  try {
-    await q(`insert into public.rooms (slug, title, intro, start_date, end_date, max_members, visibility, join_mode, leader_id)
-             values ('x', 't', 'i', '2026-10-10', '2026-10-01', 6, 'PUBLIC', 'DIRECT', $1::uuid)`, [uid]);
-  } catch { failed = true; }
-  assert(failed, "ck_rooms_period should reject");
-  failed = false;
-  try {
-    await q(`insert into public.rooms (slug, title, intro, start_date, end_date, max_members, visibility, join_mode, leader_id)
-             values ('y', 't', 'i', '2026-10-01', '2026-10-10', 1, 'PUBLIC', 'DIRECT', $1::uuid)`, [uid]);
-  } catch { failed = true; }
-  assert(failed, "ck_rooms_members should reject max_members=1");
+  await expectFail(q(`insert into public.rooms (slug, title, intro, start_date, end_date, max_members, visibility, join_mode, leader_id)
+                      values ('x', 't', 'i', '2026-10-10', '2026-10-01', 6, 'PUBLIC', 'DIRECT', $1::uuid)`, [uid]), "ck_rooms_period");
+  await expectFail(q(`insert into public.rooms (slug, title, intro, start_date, end_date, max_members, visibility, join_mode, leader_id)
+                      values ('y', 't', 'i', '2026-10-01', '2026-10-10', 1, 'PUBLIC', 'DIRECT', $1::uuid)`, [uid]), "ck_rooms_members");
 }));

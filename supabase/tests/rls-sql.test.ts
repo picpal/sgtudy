@@ -28,15 +28,18 @@ sqlTest("rls: no insert/update/delete policies on public tables (writes go throu
   assertEquals(w.map((r) => r.polname), []);
 }));
 
-sqlTest("rls: policy helpers executable by the querying roles; is_task_assignee by authenticated only", withCase(db, async (q) => {
+sqlTest("rls: policy helpers executable by the querying roles; is_my_task by authenticated only, is_task_assignee by nobody", withCase(db, async (q) => {
   const can = async (role: string, fn: string) =>
     (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
   for (const fn of ["public.current_user_id()", "public.can_read_room(bigint)", "public.can_read_submission(bigint,uuid)"]) {
     assertEquals(await can("anon", fn), true, fn);
     assertEquals(await can("authenticated", fn), true, fn);
   }
+  // 2인자 형은 RPC 로 열지 않는다(임의 p_user 로 비공개 방 배정 정보 누출, M2) — 정책은 1인자 래퍼 is_my_task 를 쓴다
   assertEquals(await can("anon", "public.is_task_assignee(bigint,uuid)"), false);
-  assertEquals(await can("authenticated", "public.is_task_assignee(bigint,uuid)"), true);
+  assertEquals(await can("authenticated", "public.is_task_assignee(bigint,uuid)"), false);
+  assertEquals(await can("anon", "public.is_my_task(bigint)"), false);
+  assertEquals(await can("authenticated", "public.is_my_task(bigint)"), true);
 }));
 
 sqlTest("rls: can_read_room — anon sees public non-draft only", withCase(db, async (q) => {
@@ -92,6 +95,10 @@ sqlTest("rls: is_task_assignee ignores released rows; archived node submissions 
   await q("insert into public.task_assignments (node_id, user_id, source) values ($1, $2::uuid, 'COMMON')", [node, a]);
   assertEquals(await b(q, "select public.is_task_assignee($1, $2::uuid) as v", [node, a]), true);
   assertEquals(await b(q, "select public.is_task_assignee($1, $2::uuid) as v", [node, other]), false);
+  await asUser(q, a);
+  assertEquals(await b(q, "select public.is_my_task($1) as v", [node]), true);
+  await asUser(q, other);
+  assertEquals(await b(q, "select public.is_my_task($1) as v", [node]), false);
   await q("update public.task_assignments set released_at = now() where node_id = $1", [node]);
   assertEquals(await b(q, "select public.is_task_assignee($1, $2::uuid) as v", [node, a]), false);
 
