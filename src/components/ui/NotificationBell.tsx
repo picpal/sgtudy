@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toApiError } from "@/lib/api/errors";
 import { badgeText, fetchNotifications, fetchUnreadCount, markAllRead, markRead, relativeTime } from "@/lib/api/notifications";
@@ -26,6 +27,7 @@ export function NotificationBell() {
 
   useEffect(() => {
     if (!me) return;
+    poll(); // 화면마다 벨이 새로 마운트되므로 me.unreadCount(루트 레이아웃 시점 값) 대신 현재 값으로 한 번 맞춘다
     const id = setInterval(poll, POLL_MS);
     document.addEventListener("visibilitychange", poll);
     return () => {
@@ -40,6 +42,7 @@ export function NotificationBell() {
     fetchNotifications()
       .then((r) => setItems(r.items))
       .catch((e) => setError(toApiError(e).message));
+    fetchUnreadCount().then(setUnread).catch(() => undefined);
     const onDown = (e: MouseEvent) => {
       if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -61,12 +64,20 @@ export function NotificationBell() {
     }
     setOpen((v) => !v);
   };
-  const onItem = async (n: NotificationDto) => {
-    setOpen(false);
-    if (!n.readAt) {
-      setUnread((u) => Math.max(0, u - 1));
-      markRead(n.id).catch(() => undefined);
+  const markItemRead = (n: NotificationDto) => {
+    if (n.readAt) return;
+    setUnread((u) => Math.max(0, u - 1));
+    setItems((list) => list?.map((x) => (x.id === n.id ? { ...x, readAt: new Date().toISOString() } : x)) ?? null);
+    markRead(n.id).catch(() => undefined);
+  };
+  const onItemClick = (e: ReactMouseEvent<HTMLAnchorElement>, n: NotificationDto) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) {
+      markItemRead(n); // 새 탭으로 열리는 경우: 기본 동작 유지, 읽음만 처리
+      return;
     }
+    e.preventDefault();
+    setOpen(false);
+    markItemRead(n);
     router.push(n.link);
   };
   const onReadAll = async () => {
@@ -103,7 +114,7 @@ export function NotificationBell() {
         <div role="dialog" aria-label="알림" className="absolute right-0 top-[52px] z-20 flex w-[360px] max-w-[calc(100vw-32px)] flex-col rounded-[16px] border border-line bg-surface shadow-[0_16px_40px_rgba(27,34,48,.16)]">
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-[15px] font-bold">알림</span>
-            <button type="button" onClick={onReadAll} disabled={unread === 0} className="h-9 rounded-[18px] px-3 text-[13px] font-semibold text-mint disabled:text-faint">
+            <button type="button" onClick={onReadAll} disabled={unread === 0 && !items?.some((n) => !n.readAt)} className="h-9 rounded-[18px] px-3 text-[13px] font-semibold text-mint disabled:text-faint">
               모두 읽음
             </button>
           </div>
@@ -115,14 +126,11 @@ export function NotificationBell() {
               <Link
                 key={n.id}
                 href={n.link}
-                onClick={(e) => {
-                  e.preventDefault();
-                  onItem(n);
-                }}
+                onClick={(e) => onItemClick(e, n)}
                 className={`flex flex-col gap-[3px] border-b border-line-2 px-4 py-3 text-ink hover:bg-bg ${n.readAt ? "" : "bg-[#F5FBF9]"}`}
               >
                 <span className="flex items-center gap-2">
-                  {!n.readAt && <span className="h-2 w-2 shrink-0 rounded-full bg-mint" aria-label="읽지 않음" />}
+                  {!n.readAt && <span className="h-2 w-2 shrink-0 rounded-full bg-mint"><span className="sr-only">읽지 않음</span></span>}
                   <span className="truncate text-[14px] font-semibold">{n.title}</span>
                 </span>
                 {n.body && <span className="clamp-2 text-[13px] text-ink-2">{n.body}</span>}
