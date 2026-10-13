@@ -349,4 +349,45 @@ export const ROOM_CASES: Case[] = [
       await q("reset role");
     },
   },
+  {
+    name: "seed: 9 rooms with fixed ids, mock capacity/status, 19 tags, invites, settings",
+    run: async (q) => {
+      const rows = await q(`select id::text as id, slug, status, visibility, join_mode, member_count, max_members, min_members,
+                                   to_char(start_date,'YYYY-MM-DD') as s, to_char(end_date,'YYYY-MM-DD') as e
+                            from public.rooms where id <= 9 order by id`);
+      assertEquals(rows.map((r) => [r.id, r.slug]), [
+        ["1","toeic"],["2","cs"],["3","sqld"],["4","docker"],["5","jcg"],["6","aws"],["7","react"],["8","algo"],["9","spring"]]);
+      const by = Object.fromEntries(rows.map((r) => [r.slug, r]));
+      assertEquals([by.toeic.status, by.toeic.member_count, by.toeic.max_members, by.toeic.s, by.toeic.e], ["RECRUIT", 2, 8, "2026-11-02", "2026-12-27"]);
+      assertEquals([by.cs.member_count, by.cs.max_members, by.cs.s], [3, 6, "2026-10-19"]);
+      assertEquals([by.sqld.status, by.sqld.join_mode, by.sqld.member_count, by.sqld.max_members], ["RECRUIT", "APPROVAL", 1, 5]);
+      assertEquals([by.docker.member_count, by.docker.max_members, by.docker.s], [1, 6, "2026-11-09"]);
+      assertEquals([by.jcg.join_mode, by.jcg.member_count, by.jcg.max_members], ["APPROVAL", 4, 4]);
+      assertEquals([by.aws.status, by.aws.join_mode, by.aws.member_count, by.aws.max_members, by.aws.s, by.aws.e], ["ACTIVE", "APPROVAL", 4, 6, "2026-10-01", "2026-12-31"]);
+      assertEquals([by.react.status, by.react.member_count, by.react.max_members, by.react.s, by.react.e], ["ACTIVE", 5, 8, "2026-09-21", "2026-11-15"]);
+      assertEquals([by.algo.status, by.algo.member_count, by.algo.max_members, by.algo.s, by.algo.e], ["ENDED", 6, 6, "2026-07-01", "2026-09-30"]);
+      assertEquals([by.spring.status, by.spring.visibility, by.spring.join_mode, by.spring.member_count, by.spring.max_members, by.spring.e], ["ACTIVE", "PRIVATE", "APPROVAL", 5, 5, "2027-01-31"]);
+      // A13: spec 02 §8 — sqld 그룹장은 과제를 하지 않는다
+      const ldt = await q(`select slug, leader_does_tasks from public.rooms where slug in ('sqld','aws') order by slug`);
+      assertEquals(ldt.map((r) => [r.slug, r.leader_does_tasks]), [["aws", true], ["sqld", false]]);
+      // I7: member_count = ACTIVE 행 수
+      const bad = await q(`select r.slug from public.rooms r where r.id <= 9
+                           and r.member_count <> (select count(*) from public.room_members m where m.room_id = r.id and m.status = 'ACTIVE')`);
+      assertEquals(bad, []);
+      const [aws] = await q(`select string_agg(p.nickname || ':' || m.role || ':' || m.status, ',' order by (m.role = 'LEADER') desc, m.joined_at, m.id) as x
+                             from public.room_members m join public.profiles p on p.id = m.user_id where m.room_id = 6`);
+      assertEquals(aws.x, "민수:LEADER:ACTIVE,지은:MEMBER:ACTIVE,철수:MEMBER:ACTIVE,하나:MEMBER:ACTIVE,도윤:MEMBER:INACTIVE");
+      const [sq] = await q(`select status, applied_at is not null as a from public.room_members where room_id = 3 and user_id = $1`, [USERS.철수]);
+      assertEquals([sq.status, sq.a], ["PENDING", true]);
+      assertEquals((await q(`select count(*)::int as n from public.tags`))[0].n, 19);
+      assertEquals((await q(`select count(*)::int as n from public.room_tags where room_id <= 9`))[0].n, 22);
+      assertEquals((await q(`select string_agg(t.label, ',' order by rt.sort_order) as x from public.room_tags rt join public.tags t on t.slug = rt.tag_slug where rt.room_id = 6`))[0].x, "AWS,클라우드,자격증");
+      assertEquals((await q(`select count(*)::int as n from public.room_invites where token like 'seed-%' and revoked_at is null`))[0].n, 9);
+      assertEquals((await q(`select count(*)::int as n from public.room_notification_settings where room_id <= 9`))[0].n, 9);
+      // 시퀀스가 9 뒤로 옮겨져 새 방을 만들 수 있다
+      await setToday(q, TODAY);
+      const d = await createRoom(q, USERS.서연);
+      assertEquals(Number(d.id) > 9, true);
+    },
+  },
 ];
