@@ -33,7 +33,8 @@ Phase 순서대로 실행. 각 Phase 끝에 `npm run test:db`(= `deno test --con
 - **뷰·테이블 쓰기 권한(D7, 구현 리뷰 2026-10-13)**: 모든 뷰는 `revoke all on <view> from anon, authenticated, public; grant select on <view> to anon, authenticated;`(Supabase 기본 GRANT 로 자동 갱신 가능 뷰가 RLS 를 우회한다). 0002 에 `alter default privileges in schema public revoke insert, update, delete, truncate on tables from anon, authenticated;`. RLS 정책용 헬퍼는 호출자 uid 를 인자로 받지 않는 1인자 형(`is_my_task(p_node)`)만 GRANT 한다.
 - 로그인 전용 RPC(`to authenticated`)를 anon 이 부르면 PostgREST 42501 — `*-db.test.ts` 는 `error.code === '42501'` 을 단언하고, `AUTH_REQUIRED` 매핑은 프론트 `toApiError` 몫(plan 05).
 - `current_user_id()` 는 운영에서 `auth.uid()` 만 반환한다. 테스트용 `app.uid` 는 **PGlite 스텁의 `auth.uid()`** 가 읽는다(함수 본문에 GUC 폴백을 넣지 않는다).
-- 고정 기준일: `seed.sql` 마지막 줄 `alter database postgres set app.today = '2026-10-12';`(로컬·테스트 전용, 02 §8). PGlite 사례는 `setToday()`.
+- 고정 기준일: `seed.sql` 마지막 줄 `insert into internal.settings (key, value) values ('today', '2026-10-12') on conflict (key) do update set value = excluded.value;`(로컬·테스트 전용, 02 §8). PGlite 사례는 `setToday()`. Supabase `postgres` 역할은 superuser 가 아니다 → seed·마이그레이션에 `alter database|role|system … set` 금지(42501).
+- seed 는 supabase CLI 가 pgx 배치(전 문장 선 Parse)로 보낸다 → 섹션마다 **하나의 `do $seedN$ … $seedN$;` 블록**으로 감싸고, 임시 테이블은 그 블록 안에서만 만들고 지운다(문장 사이 객체 공유 시 `relation does not exist`). `seed-sql.test.ts` 가 이 규칙을 단언한다.
 - `job_cleanup` 은 Storage **객체**를 SQL 로 지우지 않는다(`storage.objects` 직접 DELETE 금지). `files.status='DELETED'` 로만 표시하고 실제 객체 삭제는 2단계 Edge Function 몫.
 - Storage 객체 키는 `attachments/{room_id}/{node_id}/{user_id}/{uuid}.{ext}` — 원본 파일명은 키에 넣지 않는다(비ASCII 키 거부). 원본명은 `files.original_name`.
 - 에러는 `RAISE EXCEPTION USING ERRCODE='P0001', MESSAGE='<CODE>', DETAIL='<한국어 문구>', HINT='<json details>'`. `<CODE>` 는 `03-api.md` §0 목록에만.
@@ -51,7 +52,7 @@ Phase 순서대로 실행. 각 Phase 끝에 `npm run test:db`(= `deno test --con
 -- 0002_functions_core.sql
 public.current_user_id() returns uuid               -- auth.uid(); PGlite 스텁에서는 set_config('app.uid') 를 읽음
 public.require_user() returns uuid                  -- null 이면 AUTH_REQUIRED, nickname null 이면 ONBOARDING_REQUIRED
-public.kst_today() returns date                     -- app.today 설정 우선, 없으면 (now() at time zone 'Asia/Seoul')::date
+public.kst_today() returns date                     -- SECURITY DEFINER. app.today 설정 → internal.settings 'today'(로컬 seed) → (now() at time zone 'Asia/Seoul')::date
 public.kst_deadline(p_end date) returns timestamptz -- (p_end + 1) 00:00 Asia/Seoul
 public.fail(p_code text, p_detail text, p_hint jsonb default null)  -- RAISE EXCEPTION 래퍼
 public.iso(p_ts timestamptz) returns text           -- UTC ISO 문자열

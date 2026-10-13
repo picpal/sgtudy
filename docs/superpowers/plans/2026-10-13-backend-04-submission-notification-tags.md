@@ -2855,7 +2855,7 @@ select cron.schedule('member_count_audit', '30 19 * * *', 'select public.member_
 
 - [ ] **Step 4: `supabase/seed.sql` 에 §4 추가**
 
-§3(plan 03) 뒤, **마지막 줄 `alter database postgres set app.today = '2026-10-12';`(00 개요 — 로컬 고정 기준일) 바로 앞**에 넣는다. 그 줄은 항상 seed 의 마지막에 남긴다.
+§3(plan 03) 뒤, **마지막 줄 `insert into internal.settings (key, value) values ('today', '2026-10-12') on conflict (key) do update set value = excluded.value;`(00 개요 — 로컬 고정 기준일) 바로 앞**에 넣는다. 그 줄은 항상 seed 의 마지막에 남긴다.
 
 ```sql
 -- ═══════════ §4 알림 · 설정 · 제출 링크 (plan 04) ═══════════

@@ -7,8 +7,26 @@ sqlTest("kst_today: honors app.today, else Seoul date", withCase(db, async (q) =
   await setToday(q, "2026-10-12");
   assertEquals((await q("select public.kst_today()::text as d"))[0].d, "2026-10-12");
   await q("select set_config('app.today', '', true)");
+  await q("delete from internal.settings where key = 'today'");
   const r = await q("select (public.kst_today() = (now() at time zone 'Asia/Seoul')::date) as same");
   assertEquals(r[0].same, true);
+}));
+
+// Supabase 의 postgres 역할은 superuser 가 아니라 `alter database … set app.today` 가 42501 로 거부된다(db 게이트에서 확인).
+// 영속 기준일은 internal.settings('today') 에 두고, 세션 설정(app.today)이 있으면 그것이 우선한다.
+sqlTest("kst_today: falls back to internal.settings 'today' when app.today is unset; app.today still wins", withCase(db, async (q) => {
+  await q("select set_config('app.today', '', true)");
+  await q("insert into internal.settings (key, value) values ('today', '2026-10-12') on conflict (key) do update set value = excluded.value");
+  assertEquals((await q("select public.kst_today()::text as d"))[0].d, "2026-10-12");
+  await setToday(q, "2026-10-20");
+  assertEquals((await q("select public.kst_today()::text as d"))[0].d, "2026-10-20");
+}));
+
+sqlTest("kst_today: internal.settings is not reachable by anon/authenticated, kst_today stays ungranted", withCase(db, async (q) => {
+  for (const role of ["anon", "authenticated"]) {
+    assertEquals((await q("select has_schema_privilege($1, 'internal', 'usage') as ok", [role]))[0].ok, false, `${role} usage`);
+    assertEquals((await q("select has_function_privilege($1, 'public.kst_today()', 'execute') as ok", [role]))[0].ok, false, `${role} kst_today`);
+  }
 }));
 
 sqlTest("kst_deadline: next day 00:00 KST = 15:00Z of end_date (Review Focus 4)", withCase(db, async (q) => {

@@ -380,4 +380,4 @@ Storage 버킷 `attachments`(private, `file_size_limit=10485760`, `allowed_mime_
 
 회귀 테스트 기대값: aws overall 24%, 1주차 5/8, spring 34%, algo 87%, sqld null(`leader_does_tasks=false`), 철수 aws 내 진척률 **2/6=33%**(방 목록 슬롯·참가자 통계 동일, D5), 민수 2/5·지은 2/7·하나 0/7, 철수 aws 다음 마감 EC2 10/14(OPEN 만).
 
-로컬·테스트 전용 고정 기준일: `seed.sql` 끝에 `alter database postgres set app.today = '2026-10-12';` 를 넣어 `kst_today()` 가 항상 2026-10-12 를 돌려주게 한다(E2E 가 실제 날짜에 따라 깨지지 않게). 호스팅 프로젝트에는 적용하지 않는다(`supabase db push` 는 seed 를 보내지 않음).
+로컬·테스트 전용 고정 기준일: `seed.sql` 끝에 `insert into internal.settings (key, value) values ('today', '2026-10-12') on conflict (key) do update set value = excluded.value;` 를 넣어 `kst_today()` 가 항상 2026-10-12 를 돌려주게 한다(E2E 가 실제 날짜에 따라 깨지지 않게). 호스팅 프로젝트에는 적용하지 않는다(`supabase db push` 는 seed 를 보내지 않음).

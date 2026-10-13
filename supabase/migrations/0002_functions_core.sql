@@ -45,9 +45,20 @@ returns jsonb language sql stable security definer set search_path = '' as $$
 $$;
 
 -- ───────── 날짜 ─────────
+-- 로컬·E2E 고정 기준일 저장소(seed 마지막 줄이 'today' 를 넣는다). PostgREST 에 노출되지 않는 스키마, anon/authenticated 접근 없음.
+-- `alter database postgres set app.today` 는 Supabase 의 postgres 역할(비 superuser)에서 42501 로 거부되어 테이블에 둔다.
+create schema if not exists internal;
+revoke all on schema internal from public, anon, authenticated;
+create table if not exists internal.settings (key text primary key, value text not null);
+revoke all on internal.settings from public, anon, authenticated;
+
+-- 우선순위: 세션 설정 app.today(테스트) → internal.settings 'today'(로컬 seed) → 서울 날짜. 호스팅에는 행이 없어 실제 날짜.
 create or replace function public.kst_today()
-returns date language sql stable set search_path = '' as $$
-  select coalesce(nullif(current_setting('app.today', true), '')::date, (now() at time zone 'Asia/Seoul')::date)
+returns date language sql stable security definer set search_path = '' as $$
+  select coalesce(
+    nullif(current_setting('app.today', true), '')::date,
+    (select s.value::date from internal.settings s where s.key = 'today'),
+    (now() at time zone 'Asia/Seoul')::date)
 $$;
 
 -- 마감 = end_date 다음날 00:00 KST (exclusive). 제출 시각 >= 마감 이면 지각.

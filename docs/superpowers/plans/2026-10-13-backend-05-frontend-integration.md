@@ -5409,7 +5409,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - Consumes: 시드(플랜 01~04), 로컬 Supabase, 플랜 01 의 `supabase/seed.sql` §1 이메일(`cheolsu@sgtudy.local`, 민수는 §1 표의 `email_local` + `@sgtudy.local`), 초대 토큰 `seed-<slug>`, Inbucket API.
 - 범위 밖(명시) → **plan 06**: 과제 제출·파일 업로드(§4.10), 그룹장 승인/거절·초대 링크 복사(§4.4), 모집 시작/지금 시작. 제출은 시드 제출(aws 철수 IAM·VPC done)로 보드 "제출 완료" 칸만, 승인은 Step 8 에서 SQL 로 대신한다.
 
-**기준일 고정(B6):** plan 01~04 의 `seed.sql` 마지막 줄 `alter database postgres set app.today = '2026-10-12';`(00 개요) 때문에 로컬 DB 의 `kst_today()` 는 실행일과 무관하게 **2026-10-12** 다. 아래 단언은 전부 이 날짜 기준의 정확값이다(D-day 패턴 매칭 없음). Step 1 에서 이 고정을 먼저 확인하고, 아니면 진행하지 않는다.
+**기준일 고정(B6):** plan 01~04 의 `seed.sql` 마지막 줄 `insert into internal.settings (key, value) values ('today', '2026-10-12') on conflict (key) do update set value = excluded.value;`(00 개요) 때문에 로컬 DB 의 `kst_today()` 는 실행일과 무관하게 **2026-10-12** 다. 아래 단언은 전부 이 날짜 기준의 정확값이다(D-day 패턴 매칭 없음). Step 1 에서 이 고정을 먼저 확인하고, 아니면 진행하지 않는다.
 
 - [ ] **Step 1: 환경 기동** (메모리 — 빌드와 supabase 를 동시에 돌리지 않는다)
 

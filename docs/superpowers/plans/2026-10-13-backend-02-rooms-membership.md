@@ -1299,12 +1299,12 @@ Expected: FAIL — `rows.map` 결과가 `[]`.
 
 - [ ] **Step 3: `supabase/seed.sql` 에 §2 추가**
 
-플랜 01 §1 블록 바로 아래(마지막 `app.today` 줄 위)에 붙인다. 사람은 닉네임으로 찾고, 방은 slug 로 찾는다.
+플랜 01 §1 블록 바로 아래(마지막 기준일(`internal.settings` 'today') 줄 위)에 붙인다. 사람은 닉네임으로 찾고, 방은 slug 로 찾는다.
 
 ```sql
 -- ═══════════ §2 태그 사전 · 방 · 멤버 · room_tags · 초대 · 알림 설정 (plan 02) ═══════════
 -- 태그(tags·room_tags)는 이 섹션이 소유한다. plan 04 의 §4 는 태그를 다시 넣지 않는다(0009 마이그레이션의 사전 INSERT 와는 on conflict 로 공존).
--- 이 섹션은 §1 아래, 파일 마지막 `alter database postgres set app.today …` 줄 **위**에 넣는다.
+-- 이 섹션은 §1 아래, 파일 마지막 `insert into internal.settings … 'today' …` 줄 **위**에 넣는다.
 -- 기준일 2026-10-12. 숫자는 src/data/rooms.ts · src/data/room-view.ts 와 일치(docker 는 D3 에 따라 1/6).
 -- 태그 slug 는 0009_tags.sql(plan 04) 과 같아야 한다. 양쪽 모두 on conflict (slug) do nothing.
 insert into public.tags (slug, label, tone, aliases) values
@@ -3008,7 +3008,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 - [ ] 다음 계획(`…-03-curriculum-progress.md`)에 넘기는 것:
   - 노드 쓰기 함수는 `room_lock(p_slug)` → 편집 가능 상태(DRAFT·RECRUIT·ACTIVE ∧ 보관 아님) 검사 → 끝에 `assignment_resync(room_id)`. `seedLeaves`(테스트 헬퍼)가 직접 INSERT 하던 자리를 `node_create` 로 바꾸되 사례의 기대값은 유지.
   - 계층(B3): 0006 은 트리 롤업 `room_progress(p_room)` 를 새로 만들고 `room_leaf_stats(p_room)` 의 **본문**을 그걸 읽도록 `create or replace`(시그니처 고정). `room_round_stats`·`room_detail_json` 은 교체하지 않는다.
-  - 시드 §3(트리·배정·제출)은 §2 뒤(마지막 `app.today` 줄 위)에 붙이고 마지막에 `select assignment_resync(id) from rooms` 를 다시 호출. aws 제목·날짜는 `seedAwsTree` 와 같다.
+  - 시드 §3(트리·배정·제출)은 §2 뒤(마지막 기준일(`internal.settings` 'today') 줄 위)에 붙이고 마지막에 `select assignment_resync(id) from rooms` 를 다시 호출. aws 제목·날짜는 `seedAwsTree` 와 같다.
   - **사례 갱신 소유(B1)**: 시드 §3 이 들어오면 이 플랜의 사례 3개가 깨진다 — `rooms_list: progress (seedAwsTree 부분 트리)`(aws 회차 중복·react null/0·algo 0/0/0), `room_get: aws with tree`(회차 중복), `room_get: me.state matrix`(toeic `rounds: []`·stats 0). **플랜 03 Task 2 Step 5 가 이 세 사례를 전체 시드 값으로 다시 쓴다**(철수 aws mine 2/6=33% next EC2 10/14 · 민수 2/5 · react team {index 4, totalRounds 8} · algo final 68/78·totalRounds 3 · toeic rounds 8). 이 플랜에서 미리 고치지 않는다.
   - 내부 헬퍼는 GRANT 하지 않는다. 플랜 03 은 `curriculum_json`·`me_schedule_leaves` 에 대해 같은 `has_function_privilege` 단언을 넣는다.
   - 플랜 04: `0009_tags.sql` 의 태그 slug 19개는 Task 3 시드와 같아야 하며 둘 다 `on conflict (slug) do nothing`. `notify_publish` 는 0004 의 자리표와 **같은 시그니처**로 `create or replace`. `member_deactivate` 는 `room_lock` → INACTIVE 전환 → `room_release_seat` → `assignment_resync` → `membership_result` 순서로 Task 5 함수들과 같은 꼴.

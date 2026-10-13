@@ -494,7 +494,7 @@ Claude-Session: https://claude.ai/code/session_01BkL4bbbGPNh1oeJiQMkqMx"
 ### Task 2: `seed.sql` §3 커리큘럼 — PLANS 트리 · 제출 코드 · 회귀값
 
 **Files:**
-- Modify: `supabase/seed.sql` (§2 방·멤버 섹션 아래, 마지막 `app.today` 줄 위에 §3 추가)
+- Modify: `supabase/seed.sql` (§2 방·멤버 섹션 아래, 마지막 기준일(`internal.settings` 'today') 줄 위에 §3 추가)
 - Modify: `supabase/tests/progress-sql.test.ts` (시드 회귀 + RF3 사례 추가)
 - Modify: `supabase/tests/_cases-rooms.ts` (**플랜 02 파일** — 시드 §3 이 깨뜨리는 사례 3개를 전체 시드 값으로 교체, `seedAwsTree` 삭제. 이 갱신의 소유자는 이 Task 다 — 리뷰 B1)
 
@@ -652,7 +652,7 @@ Expected: `seed §3` 3건 FAIL — `rounds` 가 빈 배열(aws 에 goal_nodes �
 
 - [ ] **Step 3: `supabase/seed.sql` 에 §3 추가**
 
-§2(플랜 02) 바로 아래, 파일 마지막 `alter database postgres set app.today …` 줄 **위**에 붙인다(그 줄은 항상 마지막). 제출물 시드는 이 섹션이 소유한다 — 플랜 04 의 §4 는 제출물을 다시 넣지 않는다. 임시 함수는 `pg_temp` 스키마라 세션이 끝나면 사라진다(`supabase db reset` 도 PGlite 도 한 세션).
+§2(플랜 02) 바로 아래, 파일 마지막 `insert into internal.settings … 'today' …` 줄 **위**에 붙인다(그 줄은 항상 마지막). 제출물 시드는 이 섹션이 소유한다 — 플랜 04 의 §4 는 제출물을 다시 넣지 않는다. 임시 함수는 `pg_temp` 스키마라 세션이 끝나면 사라진다(`supabase db reset` 도 PGlite 도 한 세션).
 
 ```sql
 -- ═══════════ §3 커리큘럼 (plan 03) ═══════════
