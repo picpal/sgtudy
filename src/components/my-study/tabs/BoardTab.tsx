@@ -2,7 +2,8 @@
 
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import { diffDays, md, weekdayKo } from "@/lib/date";
-import { TODAY } from "@/lib/routes";
+import { useMe } from "@/lib/me";
+import { useToday } from "@/lib/today";
 import { AvatarStack, Chip, Seg, TypeBadge } from "../bits";
 import { CODE_COLOR, CODE_LABEL, CODE_STATUS, boardColumn, ddayLabel, myCode, type BoardCol, type LeafNode, type Tree } from "../model";
 import type { BoardMode, ScreenState, Update } from "../state";
@@ -10,13 +11,15 @@ import type { BoardMode, ScreenState, Update } from "../state";
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
 
 export function BoardTab({ tree, S, update, goLeaf }: Props) {
+  const today = useToday();
+  const meId = useMe()?.id ?? null;
   const mine = S.bMode === "mine";
-  const inRound = (l: LeafNode) => S.bRound === "all" || l.id.split(".")[0] === S.bRound;
+  const inRound = (l: LeafNode) => S.bRound === "all" || l.roundId === S.bRound;
   const src = tree.leaves
     .filter(inRound)
-    .filter((l) => (mine ? !!myCode(l) : true))
+    .filter((l) => (mine ? !!myCode(l, meId) : true))
     .sort((a, b) => a.e.localeCompare(b.e));
-  const noMine = mine && tree.leaves.every((l) => !myCode(l));
+  const noMine = mine && tree.leaves.every((l) => !myCode(l, meId));
   const cols: [BoardCol, string, string][] = [
     ["todo", "예정", "#8C97A4"],
     ["doing", "진행중", "#12A386"],
@@ -44,7 +47,7 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
 
       <div className="grid items-start gap-[14px]" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
         {cols.map(([id, label, dot]) => {
-          const cards = src.filter((l) => boardColumn(l, mine) === id);
+          const cards = src.filter((l) => boardColumn(l, mine, meId) === id);
           return (
             <section key={id} aria-label={label} className="flex min-h-[180px] flex-col gap-[10px] rounded-[16px] bg-[#F4F7F6] p-3">
               <h3 className="mx-1 my-[2px] flex items-center gap-2 text-[14px] font-bold">
@@ -53,7 +56,7 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
                 <span className="rounded-[10px] bg-[#E3E9E7] px-2 py-px text-[12px] font-semibold text-ink-3">{cards.length}</span>
               </h3>
               {cards.map((l) => (
-                <Card key={l.id} l={l} mine={mine} onOpen={() => goLeaf(l.id)} />
+                <Card key={l.id} l={l} mine={mine} today={today} meId={meId} onOpen={() => goLeaf(l.id)} />
               ))}
               {cards.length === 0 && <p className="mx-1 my-[6px] text-[12px] text-faint">해당하는 과제가 없어요</p>}
             </section>
@@ -64,11 +67,11 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
   );
 }
 
-function Card({ l, mine, onOpen }: { l: LeafNode; mine: boolean; onOpen: () => void }) {
-  const c = myCode(l);
+function Card({ l, mine, today, meId, onOpen }: { l: LeafNode; mine: boolean; today: string; meId: string | null; onOpen: () => void }) {
+  const c = myCode(l, meId);
   const finished = mine ? c === "D" || c === "L" : l.state === "complete";
   const overdue = mine ? c === "M" : l.state === "delayed";
-  const left = diffDays(TODAY, l.e);
+  const left = diffDays(today, l.e);
   const hot = overdue || (left >= 0 && left <= 2);
   return (
     <button
@@ -90,7 +93,7 @@ function Card({ l, mine, onOpen }: { l: LeafNode; mine: boolean; onOpen: () => v
         <span className="flex-1" />
         {!finished && (
           <span className="shrink-0 rounded-[7px] px-2 py-[3px] text-[11px] font-bold" style={{ color: hot ? "#FFFFFF" : "#3A4452", background: hot ? "#B4462B" : "#E9EEF0" }}>
-            {overdue ? "기한 지남" : ddayLabel(l.e)}
+            {overdue ? "기한 지남" : ddayLabel(today, l.e)}
           </span>
         )}
       </span>

@@ -1,7 +1,7 @@
 "use client";
 
 import { addDays, diffDays, md } from "@/lib/date";
-import { TODAY } from "@/lib/routes";
+import { useToday } from "@/lib/today";
 import { CodeIcons, Seg } from "../bits";
 import { ganttRange, visibleNodes, type LeafState, type Tree } from "../model";
 import type { ScreenState, Update, Zoom } from "../state";
@@ -20,7 +20,8 @@ const GBAR: Record<LeafState, [string, string, string]> = {
 export function GanttTab({ tree, S, update, goLeaf }: Props) {
   const dayZoom = S.zoom !== "week";
   const dw = dayZoom ? 28 : 10;
-  const { start, nDays } = ganttRange(tree.roots);
+  const today = useToday();
+  const { start, nDays } = ganttRange(tree.roots, today);
   const W = nDays * dw;
   const rows = visibleNodes(tree.roots, S.closed);
 
@@ -32,7 +33,7 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
   months.forEach((m, idx) => {
     if (idx + 1 < months.length) m.end = months[idx + 1].i;
   });
-  const tIdx = diffDays(start, TODAY);
+  const tIdx = diffDays(start, today);
   const hasToday = tIdx >= 0 && tIdx < nDays;
   const todayX = tIdx * dw + dw / 2;
   const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !p.closed[id] } }));
@@ -66,7 +67,7 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
                 const dow = i % 7;
                 if (dayZoom)
                   return (
-                    <span key={k} className="absolute top-7 text-center text-[11px]" style={{ left: i * dw, width: dw, color: dow === 0 ? "#C0453A" : dow === 6 ? "#2F5BC2" : "#5B6675", fontWeight: k === TODAY ? 700 : 500 }}>
+                    <span key={k} className="absolute top-7 text-center text-[11px]" style={{ left: i * dw, width: dw, color: dow === 0 ? "#C0453A" : dow === 6 ? "#2F5BC2" : "#5B6675", fontWeight: k === today ? 700 : 500 }}>
                       {+k.slice(8, 10)}
                     </span>
                   );

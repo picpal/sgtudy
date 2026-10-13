@@ -2,18 +2,19 @@
 
 import { Avatar } from "@/components/ui/Avatar";
 import type { TaskType } from "@/data/my-study";
-import { Seg, toneOfName } from "../bits";
-import type { TreeNode } from "../model";
+import { Seg } from "../bits";
+import type { TreeMember, TreeNode } from "../model";
 import { patchOv, type ScreenState, type Update } from "../state";
+import type { CurriculumApi } from "../useCurriculumApi";
 
-type Props = { n: TreeNode; members: string[]; S: ScreenState; update: Update };
+type Props = { n: TreeNode; members: TreeMember[]; S: ScreenState; update: Update; api: CurriculumApi };
 
 const field = "h-[42px] rounded-[10px] border border-line-3 text-ink";
 
-/** 그룹장 편집 미리보기 — 우측 "항목 편집" 패널. 모두 메모리 오버라이드. */
-export function EditPanel({ n, members, S, update }: Props) {
+/** 그룹장 편집 — 우측 "항목 편집" 패널. 내용 변경은 오버라이드에 모았다가 "저장" 1회(node_update), 삭제·보관은 즉시 RPC. */
+export function EditPanel({ n, members, S, update, api }: Props) {
   const id = n.id;
-  const names = n.leaf ? n.people.map((p) => p.name) : [];
+  const ids = n.leaf ? n.people.map((p) => p.userId) : [];
   const hasSub = n.sub > 0;
   const isGong = n.leaf && n.type === "공통";
   const removeLabel = hasSub ? (n.archived ? "보관 해제" : "보관") : "삭제";
@@ -25,21 +26,21 @@ export function EditPanel({ n, members, S, update }: Props) {
   };
   const setType = (t: TaskType) =>
     update((p) => ({
-      ov: { ...p.ov, typeOv: { ...p.ov.typeOv, [id]: t }, assignOv: t === "지정" ? { ...p.ov.assignOv, [id]: p.ov.assignOv[id] ?? names } : p.ov.assignOv },
+      ov: { ...p.ov, typeOv: { ...p.ov.typeOv, [id]: t }, assignOv: t === "지정" ? { ...p.ov.assignOv, [id]: p.ov.assignOv[id] ?? ids } : p.ov.assignOv },
       saved: "",
     }));
-  const toggleMember = (m: string) => {
+  const toggleMember = (m: TreeMember) => {
     if (isGong) return;
-    const next = names.includes(m) ? names.filter((x) => x !== m) : [...names, m];
+    const next = ids.includes(m.userId) ? ids.filter((x) => x !== m.userId) : [...ids, m.userId];
     update((p) => ({ ...patchOv(p, "assignOv", { ...p.ov.assignOv, [id]: next }), saved: "" }));
   };
   const askRemove = () => {
-    if (n.archived) update((p) => ({ ...patchOv(p, "archived", { ...p.ov.archived, [id]: false }), saved: "보관을 해제했어요" }));
+    if (n.archived) void api.archive(id, false);
     else update({ confirm: true, saved: "" });
   };
   const confirmYes = () => {
-    if (hasSub) update((p) => ({ ...patchOv(p, "archived", { ...p.ov.archived, [id]: true }), confirm: false, saved: "보관했어요 · 제출물은 그대로 남아요" }));
-    else update((p) => ({ ...patchOv(p, "removed", { ...p.ov.removed, [id]: true }), confirm: false, editSel: null, saved: "" }));
+    if (hasSub) void api.archive(id, true);
+    else void api.remove(id);
   };
 
   return (
@@ -69,7 +70,7 @@ export function EditPanel({ n, members, S, update }: Props) {
       </div>
       <label className="flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
         설명 (마크다운)
-        <textarea rows={3} placeholder="목표, 참고 링크, 제출 형식 등을 적어 주세요" className="resize-y rounded-[10px] border border-line-3 px-3 py-[10px] text-[13px] font-normal text-ink" />
+        <textarea rows={3} value={n.desc} onChange={(e) => update((p) => ({ ...patchOv(p, "descs", { ...p.ov.descs, [id]: e.target.value }), saved: "" }))} placeholder="목표, 참고 링크, 제출 형식 등을 적어 주세요" className="resize-y rounded-[10px] border border-line-3 px-3 py-[10px] text-[13px] font-normal text-ink" />
       </label>
 
       {n.leaf && (
@@ -80,14 +81,14 @@ export function EditPanel({ n, members, S, update }: Props) {
           </div>
           <div className="flex flex-col gap-2">
             <span className="text-[12px] font-semibold text-ink-3">
-              담당자 <span className="font-medium text-muted">· {isGong ? "활성 참가자 전원 자동 배정" : `${names.length}명 선택됨`}</span>
+              담당자 <span className="font-medium text-muted">· {isGong ? "활성 참가자 전원 자동 배정" : `${ids.length}명 선택됨`}</span>
             </span>
             <div className="flex flex-wrap gap-[6px]">
               {members.map((m) => {
-                const on = names.includes(m);
+                const on = ids.includes(m.userId);
                 return (
                   <button
-                    key={m}
+                    key={m.userId}
                     type="button"
                     aria-pressed={on}
                     aria-disabled={isGong}
@@ -95,13 +96,13 @@ export function EditPanel({ n, members, S, update }: Props) {
                     className={`inline-flex h-[34px] items-center gap-[6px] rounded-[17px] border py-0 pl-[6px] pr-3 text-[13px] text-ink ${on ? "border-[#3FB89C] bg-[#E8F7F2] font-semibold" : "border-line-3 bg-surface font-medium"}`}
                     style={{ opacity: isGong ? 0.7 : 1, cursor: isGong ? "default" : "pointer" }}
                   >
-                    <Avatar name={m} size={22} tone={toneOfName(m)} />
-                    {m}
+                    <Avatar name={m.name} size={22} tone={m.tone} />
+                    {m.name}
                   </button>
                 );
               })}
             </div>
-            {!isGong && names.length === 0 && (
+            {!isGong && ids.length === 0 && (
               <span role="status" className="rounded-[9px] bg-[#FDF4E1] px-[10px] py-2 text-[12px] font-semibold text-amber-text">
                 담당자 미정 · 시작 전에 한 명 이상 지정해 주세요
               </span>
@@ -141,11 +142,12 @@ export function EditPanel({ n, members, S, update }: Props) {
       )}
 
       <div className="flex items-center gap-2">
-        <button type="button" onClick={askRemove} className="h-[42px] rounded-[21px] border border-[#EBC3BD] bg-surface px-[14px] text-[13px] font-semibold text-warn">
+        <button type="button" disabled={n.temp} onClick={askRemove} className="h-[42px] rounded-[21px] border border-[#EBC3BD] bg-surface px-[14px] text-[13px] font-semibold text-warn disabled:opacity-50">
           {removeLabel}
         </button>
         <span className="flex-1" />
-        <button type="button" onClick={() => update({ saved: "저장했어요 · 태그를 자동으로 다시 골랐어요" })} className="h-[42px] rounded-[21px] bg-navy px-5 text-[14px] font-semibold text-white">
+        {n.temp && <span className="text-[12px] text-muted">서버에 만드는 중…</span>}
+        <button type="button" disabled={n.temp} onClick={() => void api.save(n, S.ov)} className="h-[42px] rounded-[21px] bg-navy px-5 text-[14px] font-semibold text-white disabled:opacity-50">
           저장
         </button>
       </div>

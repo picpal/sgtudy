@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { routes } from "@/lib/routes";
-import { ROOMS, SIDEBAR_GROUPS, type RoomId } from "@/data/my-study";
+import type { SidebarGroup } from "@/data/my-study";
 
-export function StudySidebar({ selected }: { selected: RoomId }) {
+export function StudySidebar({ selected, groups }: { selected: string; groups: SidebarGroup[] }) {
   return (
     <aside aria-label="내 스터디 목록" className="flex min-h-0 flex-[1_1_300px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[900px]:max-w-none min-[901px]:max-w-[380px]">
       <h2 className="m-0 text-[18px] font-bold">내 스터디</h2>
@@ -25,11 +25,10 @@ export function StudySidebar({ selected }: { selected: RoomId }) {
       </div>
 
       <div className="thin-scroll -mx-[10px] flex min-h-0 flex-1 flex-col gap-[14px] overflow-y-auto px-[10px] py-[6px] max-[900px]:overflow-visible">
-        {SIDEBAR_GROUPS.map((g) => (
+        {groups.map((g) => (
           <div key={g.label} className="flex flex-col gap-[10px]">
             <div className="mt-1 text-[12px] font-medium text-muted">{g.label}</div>
             {g.items.map((it) => {
-              const r = ROOMS[it.id];
               const on = it.id === selected;
               const hasD = typeof it.left === "number";
               return (
@@ -59,10 +58,10 @@ export function StudySidebar({ selected }: { selected: RoomId }) {
                       </span>
                     )}
                   </span>
-                  <span className="clamp-2 mt-3 text-[15px] font-semibold leading-[1.45] text-ink" title={r.title}>
-                    {r.title}
+                  <span className="clamp-2 mt-3 text-[15px] font-semibold leading-[1.45] text-ink" title={it.title}>
+                    {it.title}
                   </span>
-                  <span className="clamp-2 mt-[6px] text-[13px] leading-[1.55] text-muted">{r.intro}</span>
+                  <span className="clamp-2 mt-[6px] text-[13px] leading-[1.55] text-muted">{it.intro}</span>
                 </Link>
               );
             })}

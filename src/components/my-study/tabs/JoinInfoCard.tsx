@@ -7,13 +7,13 @@ import { toneOfName } from "../bits";
 import { memberStats, overallPct, type Tree } from "../model";
 import { StatusBadge } from "../StudyHeaderInfo";
 
-type Props = { room: Room; tree: Tree; onMyTasks: () => void; goLeaf: (id: string) => void };
+type Props = { room: Room; tree: Tree; onMyTasks: () => void; goLeaf: (id: string) => void; onCancelPending: () => void };
 
 /** 우측 aside "참가 정보" + "내 다음 마감" */
-export function JoinInfoCard({ room, tree, onMyTasks, goLeaf }: Props) {
+export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancelPending }: Props) {
   const overall = overallPct(tree.roots);
   const full = room.capCur >= room.capMax;
-  const nextLeaf = room.next ? tree.leaves.find((l) => l.title === room.next!.title) : undefined;
+  const nextLeaf = room.next?.nodeId ? tree.leaves.find((l) => l.id === room.next!.nodeId) : undefined;
 
   return (
     <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px] max-[900px]:max-w-none">
@@ -64,12 +64,12 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf }: Props) {
           <ul className="m-0 flex list-none flex-col gap-[2px] p-0">
             {room.members.map((m) => {
               const dim = !!(m.left || m.pending);
-              const { done, total } = memberStats(tree.leaves, m.name);
+              const { done, total } = memberStats(tree.leaves, m.userId ?? "");
               const hasBar = !dim && !m.noBar;
               const pct = total ? Math.round((done / total) * 100) : 0;
               return (
-                <li key={m.name} className="flex items-center gap-[10px] rounded-[10px] px-2 py-[7px]" style={{ background: m.me ? "#F3F7FF" : "transparent" }}>
-                  <Avatar name={m.name} size={30} tone={toneOfName(m.name)} pending={m.pending} className={m.left ? "bg-slate-soft! text-[#8C97A4]!" : ""} />
+                <li key={m.userId ?? m.name} className="flex items-center gap-[10px] rounded-[10px] px-2 py-[7px]" style={{ background: m.me ? "#F3F7FF" : "transparent" }}>
+                  <Avatar name={m.name} size={30} tone={m.tone ?? toneOfName(m.name)} pending={m.pending} className={m.left ? "bg-slate-soft! text-[#8C97A4]!" : ""} />
                   <span className="flex min-w-0 flex-1 items-center gap-[6px]">
                     <span className="whitespace-nowrap text-[14px]" style={{ fontWeight: m.me ? 700 : 500, color: dim ? "#7A8594" : "#1B2230" }}>
                       {m.name}
@@ -107,7 +107,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf }: Props) {
               </svg>
               승인 대기중
             </div>
-            <button type="button" className="h-11 rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink">
+            <button type="button" onClick={onCancelPending} className="h-11 rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink">
               신청 취소
             </button>
             <span className="text-center text-[12px] text-muted">시작일까지 승인되지 않으면 신청이 자동 만료돼요</span>

@@ -2,14 +2,15 @@
 
 import { PillButton, Seg } from "../bits";
 import { allParentsClosed, findNode, overallPct, unassignedCount, visibleNodes, type Tree } from "../model";
-import { patchOv, type CurMode, type ScreenState, type Update } from "../state";
+import type { CurMode, ScreenState, Update } from "../state";
+import type { CurriculumApi } from "../useCurriculumApi";
 import { EditPanel } from "./EditPanel";
 import { LeafDetail } from "./LeafDetail";
 import { TreeRow } from "./TreeRow";
 
-type Props = { tree: Tree; S: ScreenState; update: Update };
+type Props = { tree: Tree; S: ScreenState; update: Update; api: CurriculumApi; canEdit: boolean };
 
-export function CurriculumTab({ tree, S, update }: Props) {
+export function CurriculumTab({ tree, S, update, api, canEdit }: Props) {
   const isEdit = S.curMode === "edit";
   const rows = visibleNodes(tree.roots, S.closed);
   const overall = overallPct(tree.roots) ?? 0;
@@ -18,21 +19,9 @@ export function CurriculumTab({ tree, S, update }: Props) {
 
   const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !p.closed[id] } }));
   const setMode = (m: CurMode) => update({ curMode: m, editSel: null, openLeaf: null, confirm: false, saved: "" });
-  const addChild = (id: string, childCount: number) =>
-    update((p) => ({
-      ...patchOv(p, "added", { ...p.ov.added, [id]: [...(p.ov.added[id] ?? []), "새 과제"] }),
-      closed: { ...p.closed, [id]: false },
-      editSel: `${id}.${childCount}`,
-      confirm: false,
-      saved: "",
-    }));
-  const addRound = () =>
-    update((p) => ({
-      ...patchOv(p, "added", { ...p.ov.added, root: [...(p.ov.added.root ?? []), "새 회차"] }),
-      editSel: String(tree.rootCount),
-      confirm: false,
-      saved: "",
-    }));
+  // 구조 변경은 즉시 RPC (낙관적 임시 노드 → 응답 Curriculum 으로 교체)
+  const addChild = (id: string) => api.create(id);
+  const addRound = () => api.create(null);
 
   return (
     <div className="mt-[18px] flex flex-col gap-[14px]">
@@ -43,7 +32,7 @@ export function CurriculumTab({ tree, S, update }: Props) {
         <span className="flex-[1_1_20px]" />
         <PillButton onClick={() => update({ closed: {} })}>모두 펼치기</PillButton>
         <PillButton onClick={() => update({ closed: allParentsClosed(tree.nodes) })}>모두 접기</PillButton>
-        <Seg<CurMode> label="보기 모드" value={S.curMode} onChange={setMode} options={[["view", "참가자 보기"], ["edit", "그룹장 편집 미리보기"]]} />
+        {canEdit && <Seg<CurMode> label="보기 모드" value={S.curMode} onChange={setMode} options={[["view", "참가자 보기"], ["edit", "그룹장 편집 미리보기"]]} />}
       </div>
       {isEdit && <p className="m-0 text-[12px] text-muted">그룹장에게만 보이는 편집 모드 미리보기예요. 항목을 누르면 오른쪽에서 수정할 수 있어요.</p>}
       {warn > 0 && (
@@ -74,7 +63,7 @@ export function CurriculumTab({ tree, S, update }: Props) {
                     else if (n.leaf) update((p) => ({ openLeaf: p.openLeaf === n.id ? null : n.id }));
                     else toggle(n.id);
                   }}
-                  onAddChild={!n.leaf ? () => addChild(n.id, n.childCount) : undefined}
+                  onAddChild={!n.leaf ? () => addChild(n.id) : undefined}
                 />
                 {!isEdit && n.leaf && S.openLeaf === n.id && <LeafDetail n={n} />}
               </div>
@@ -97,7 +86,7 @@ export function CurriculumTab({ tree, S, update }: Props) {
             제목·기간·과제 유형·담당자를 바꿀 수 있어요.
           </div>
         )}
-        {selNode && <EditPanel n={selNode} members={tree.members} S={S} update={update} />}
+        {selNode && <EditPanel n={selNode} members={tree.members} S={S} update={update} api={api} />}
       </div>
     </div>
   );

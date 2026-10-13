@@ -21,7 +21,7 @@ export type ScreenState = {
   bRound: string;
   calMode: CalMode;
   calAnchor: string | null;
-  /** 'all' | 'me' | 멤버 이름 */
+  /** "all" | "me" | 멤버 userId */
   calWho: string;
   calPick: string | null;
   zoom: Zoom;

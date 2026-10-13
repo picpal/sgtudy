@@ -2,8 +2,9 @@
 
 import { Avatar } from "@/components/ui/Avatar";
 import { addDays, md, weekdayKo } from "@/lib/date";
-import { ME, TODAY } from "@/lib/routes";
-import { Chip, CodeIcons, Seg, TypeBadge, toneOfName } from "../bits";
+import { useMe } from "@/lib/me";
+import { useToday } from "@/lib/today";
+import { Chip, CodeIcons, Seg, TypeBadge } from "../bits";
 import {
   CODE_COLOR,
   CODE_LABEL,
@@ -18,6 +19,7 @@ import {
   type LeafNode,
   type LeafState,
   type Tree,
+  type TreeMember,
 } from "../model";
 import type { ScreenState, Update } from "../state";
 
@@ -36,15 +38,17 @@ const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const dowColor = (c: number) => (c === 0 ? "#C0453A" : c === 6 ? "#2F5BC2" : "#4A5563");
 
 export function CalendarTab({ tree, S, update, goLeaf }: Props) {
-  const anchor = S.calAnchor ?? calendarAnchor(tree.leaves);
+  const today = useToday();
+  const meId = useMe()?.id ?? null;
+  const anchor = S.calAnchor ?? calendarAnchor(tree.leaves, today);
   const isWeek = S.calMode === "week";
   const { gridStart, rows, label, month } = calendarGrid(anchor, S.calMode);
-  const whoName = S.calWho === "all" ? null : S.calWho === "me" ? ME.name : S.calWho;
-  const whoCode = (l: LeafNode): Code | null => (whoName ? (l.people.find((p) => p.name === whoName)?.c ?? null) : null);
-  const calLeaves = tree.leaves.filter((l) => !whoName || !!whoCode(l));
+  const whoId = S.calWho === "all" ? null : S.calWho === "me" ? meId : S.calWho;
+  const whoCode = (l: LeafNode): Code | null => (whoId ? (l.people.find((p) => p.userId === whoId)?.c ?? null) : null);
+  const calLeaves = tree.leaves.filter((l) => !whoId || !!whoCode(l));
   const pick = tree.leaves.find((l) => l.id === S.calPick) ?? null;
   const shift = (dir: 1 | -1) => update({ calAnchor: shiftAnchor(anchor, S.calMode, dir), calPick: null });
-  const who: [string, string, string | null][] = [["all", "전체", null], ["me", "내 과제만", null], ...tree.members.filter((m) => m !== ME.name).map((m): [string, string, string] => [m, m, m])];
+  const who: [string, string, TreeMember | null][] = [["all", "전체", null], ["me", "내 과제만", null], ...tree.members.filter((m) => m.userId !== meId).map((m): [string, string, TreeMember] => [m.userId, m.name, m])];
 
   return (
     <div className="mt-[18px] flex flex-col gap-3">
@@ -52,7 +56,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
         <h3 className="m-0 min-w-[128px] text-[20px] font-bold">{label}</h3>
         <NavBtn label="이전" onClick={() => shift(-1)} d="m15 6-6 6 6 6" />
         <NavBtn label="다음" onClick={() => shift(1)} d="m9 6 6 6-6 6" />
-        <button type="button" onClick={() => update({ calAnchor: TODAY, calPick: null })} className="h-[38px] rounded-[19px] border border-line bg-surface px-[14px] text-[13px] font-semibold text-ink">
+        <button type="button" onClick={() => update({ calAnchor: today, calPick: null })} className="h-[38px] rounded-[19px] border border-line bg-surface px-[14px] text-[13px] font-semibold text-ink">
           오늘
         </button>
         <span className="flex-[1_1_20px]" />
@@ -61,7 +65,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
       <div role="group" aria-label="참가자 필터" className="flex flex-wrap items-center gap-[6px]">
         {who.map(([id, text, person]) => (
           <Chip key={id} on={S.calWho === id} onClick={() => update({ calWho: id, calPick: null })} withAvatar={!!person}>
-            {person && <Avatar name={person} size={22} tone={toneOfName(person)} />}
+            {person && <Avatar name={person.name} size={22} tone={person.tone} />}
             {text}
           </Chip>
         ))}
@@ -84,7 +88,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                 {Array.from({ length: 7 }, (_, c) => {
                   const k = addDays(ws, c);
                   const inM = isWeek || +k.slice(5, 7) === month;
-                  const isT = k === TODAY;
+                  const isT = k === today;
                   const markers = tree.roots.filter((r) => r.s === k && r.label);
                   return (
                     <div key={k} className="px-2 py-[6px]" style={{ borderRight: c < 6 ? "1px solid #EEF2F1" : 0, background: isT ? "#F4FBF8" : inM ? "#FFFFFF" : "#FAFBFB" }}>
@@ -161,15 +165,15 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
             </div>
             <div className="text-[12px] text-muted">{pick.crumb}</div>
             <div className="text-[13px] text-ink-2">
-              {md(pick.s)}({weekdayKo(pick.s)}) – {md(pick.e)}({weekdayKo(pick.e)}) · <b className="font-bold">{pick.state === "complete" ? "전원 제출" : ddayLabel(pick.e)}</b>
+              {md(pick.s)}({weekdayKo(pick.s)}) – {md(pick.e)}({weekdayKo(pick.e)}) · <b className="font-bold">{pick.state === "complete" ? "전원 제출" : ddayLabel(today, pick.e)}</b>
             </div>
             <ul className="m-0 flex list-none flex-col gap-[6px] p-0">
               {pick.people.map((p) => (
-                <li key={p.name} className="flex items-center gap-[10px] rounded-[10px] bg-surface-2 px-2 py-[6px]">
-                  <Avatar name={p.name} size={28} tone={toneOfName(p.name)} />
+                <li key={p.userId} className="flex items-center gap-[10px] rounded-[10px] bg-surface-2 px-2 py-[6px]">
+                  <Avatar name={p.name} size={28} tone={p.tone} />
                   <span className="flex-1 text-[13px] font-semibold">
                     {p.name}
-                    {p.name === ME.name ? " (나)" : ""}
+                    {p.userId === meId ? " (나)" : ""}
                   </span>
                   <span className="text-[12px] font-semibold" style={{ color: CODE_COLOR[p.c] }}>
                     {CODE_LABEL[p.c]}
