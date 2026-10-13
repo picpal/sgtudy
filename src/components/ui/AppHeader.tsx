@@ -199,6 +199,8 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
           </div>
         </>
       ) : (
+        // returnTo 는 허용 접두사(/rooms/·/my-study·/schedule·/invite/)만 남긴다 — /zzz 같은 없는 최상위 주소의 404 는 일부러 / 로,
+        // /rooms/nope 처럼 접두사 안의 404 는 그 주소 그대로 간다(로그인 뒤 비공개 방이 열릴 수 있다). pathname 문제가 아니다 (V1-03)
         <Link href={routes.login(safeReturnTo(pathname + search))} className={`flex h-11 items-center ${round} bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white`}>
           로그인
         </Link>
