@@ -229,6 +229,29 @@ export const ROOM_CASES: Case[] = [
     },
   },
   {
+    // Task 2 리뷰 ruling: tick 은 보관 방을 두 루프 모두에서 건너뛴다(보관 방은 알림·집계 제외, D-spec). 보관 해제하면 다음 tick 이 끝낸다.
+    name: "room_tick: 보관된 ACTIVE 방은 end_date 가 지나도 ENDED 로 바꾸지 않고, 보관 해제 뒤 tick 이 끝낸다",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const d = await createRoom(q, USERS.서연, { title: "Tick Archived", startDate: "2026-10-13", endDate: "2026-10-17" });
+      await asUser(q, USERS.서연);
+      await seedLeaves(q, d.id, [{ title: "t", type: "COMMON", s: "2026-10-13", e: "2026-10-17" }]);
+      await q(`select public.room_open_recruit($1)`, [d.slug]);
+      await setToday(q, "2026-10-15");
+      await q(`select public.room_tick()`);
+      assertEquals((await q(`select status from public.rooms where id = $1`, [d.id]))[0].status, "ACTIVE");
+      await q(`update public.rooms set archived_at = now() where id = $1`, [d.id]);
+      await setToday(q, "2026-10-18");                              // end_date 다음날, 시드 RECRUIT 시작일(10-19) 이전
+      const [{ r: t1 }] = await q(`select public.room_tick() as r`);
+      assertEquals(t1, { activated: 0, ended: 0 });
+      assertEquals((await q(`select status from public.rooms where id = $1`, [d.id]))[0].status, "ACTIVE");
+      await q(`update public.rooms set archived_at = null where id = $1`, [d.id]);
+      const [{ r: t2 }] = await q(`select public.room_tick() as r`);
+      assertEquals(t2, { activated: 0, ended: 1 });
+      assertEquals((await q(`select status from public.rooms where id = $1`, [d.id]))[0].status, "ENDED");
+    },
+  },
+  {
     name: "room_update: 상태별 필드 잠금 (DRAFT/RECRUIT 전부 가능, ACTIVE 는 startDate 등 FIELD_LOCKED, ENDED 전부 잠금)",
     run: async (q) => {
       await setToday(q, TODAY);

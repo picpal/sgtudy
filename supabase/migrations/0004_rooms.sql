@@ -356,7 +356,7 @@ exception when invalid_datetime_format or datetime_field_overflow then
 end $$;
 
 create or replace function public.patch_bool(p_patch jsonb, p_key text) returns boolean
-language plpgsql immutable set search_path = '' as $$
+language plpgsql stable set search_path = '' as $$
 begin
   if p_patch->p_key is null or jsonb_typeof(p_patch->p_key) = 'null' then return null; end if;
   if jsonb_typeof(p_patch->p_key) <> 'boolean' then
@@ -366,7 +366,7 @@ begin
 end $$;
 
 create or replace function public.patch_int(p_patch jsonb, p_key text) returns int
-language plpgsql immutable set search_path = '' as $$
+language plpgsql stable set search_path = '' as $$
 begin
   if p_patch->p_key is null or jsonb_typeof(p_patch->p_key) = 'null' then return null; end if;
   if jsonb_typeof(p_patch->p_key) <> 'number' or (p_patch->>p_key) !~ '^-?\d{1,9}$' then
@@ -375,7 +375,7 @@ begin
   return (p_patch->>p_key)::int;
 end $$;
 
--- pg_cron 5분마다(0010, 플랜 04). 보관 방·DRAFT 는 건드리지 않는다. 결과 {activated, ended}
+-- pg_cron 5분마다(0010, 플랜 04). 보관 방·DRAFT 는 건드리지 않는다(두 루프 모두 — 보관 방은 알림 제외, 해제 뒤 다음 tick 이 처리). 결과 {activated, ended}
 create or replace function public.room_tick() returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -392,7 +392,7 @@ begin
     v_act := v_act + 1;
   end loop;
   for v_id in
-    select id from public.rooms where status = 'ACTIVE' and end_date < v_today order by id
+    select id from public.rooms where status = 'ACTIVE' and archived_at is null and end_date < v_today order by id
   loop
     perform public.room_transition_ended(v_id);
     v_end := v_end + 1;
