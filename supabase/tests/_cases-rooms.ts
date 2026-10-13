@@ -55,6 +55,52 @@ export async function seedLeaves(q: Q, roomId: string, leaves: { title: string; 
 
 export type Case = { name: string; run: (q: Q) => Promise<void> };
 
+/**
+ * 시드 aws(id 6) 에 최소 트리를 붙인다 — roomview §3.1 의 1·2·3주차 리프 5개.
+ *   1주차 10/01–10/07: IAM 정책 이해(공통), VPC 실습(공통)
+ *   2주차 10/08–10/14: EC2 인스턴스 유형 정리(지정: 지은·철수), S3 스토리지 클래스 발표자료(지정: 하나, 10/10–)
+ *   3주차 10/15–10/21: ALB vs NLB 실습(공통)
+ * 제출: IAM 민수D 지은L 철수D / VPC 민수D 철수D / EC2 지은D  → 1주차 5/8, 2주차 1/3, 3주차 0/4
+ * 이 부분 트리에서: 철수 2/4(IAM·VPC·EC2·ALB) 다음 마감 EC2 10/14, 민수 2/3(IAM·VPC·ALB — EC2 는 지은·철수 지정) 다음 마감 없음(ALB 는 10/15 시작 = planned)
+ * (전체 시드 회귀값 철수 2/6=33% 는 플랜 03 Task 2 가 단언한다)
+ */
+export async function seedAwsTree(q: Q) {
+  const AWS = "6";
+  const r1 = await seedLeaves(q, AWS, [
+    { title: "IAM 정책 이해", type: "COMMON", s: "2026-10-01", e: "2026-10-07" },
+    { title: "VPC 실습", type: "COMMON", s: "2026-10-01", e: "2026-10-07" },
+  ], { label: "1주차", title: "IAM·VPC", s: "2026-10-01", e: "2026-10-07" });
+  const r2 = await seedLeaves(q, AWS, [
+    { title: "EC2 인스턴스 유형 정리", type: "DESIGNATED", s: "2026-10-08", e: "2026-10-14" },
+    { title: "S3 스토리지 클래스 발표자료", type: "DESIGNATED", s: "2026-10-10", e: "2026-10-14" },
+  ], { label: "2주차", title: "EC2·S3", s: "2026-10-08", e: "2026-10-14" });
+  const r3 = await seedLeaves(q, AWS, [
+    { title: "ALB vs NLB 실습", type: "COMMON", s: "2026-10-15", e: "2026-10-21" },
+  ], { label: "3주차", title: "고가용성 아키텍처", s: "2026-10-15", e: "2026-10-21" });
+  const [iam, vpc] = r1.leafIds, [ec2, s3] = r2.leafIds, [alb] = r3.leafIds;
+  await q(`insert into public.task_assignments (node_id, user_id, source) values ($1,$3,'DESIGNATED'), ($1,$4,'DESIGNATED'), ($2,$5,'DESIGNATED')`,
+    [ec2, s3, USERS.지은, USERS.철수, USERS.하나]);
+  // D = end_date 18:00 KST, L = end_date + 1일 09:00 KST (is_late)
+  const sub = (node: string, uid: string, at: string, late = false) =>
+    q(`insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late) values ($1, $2, '제출', $3::timestamptz, $4)`, [node, uid, at, late]);
+  await sub(iam, USERS.민수, "2026-10-07 18:00+09");
+  await sub(iam, USERS.지은, "2026-10-08 09:00+09", true);
+  await sub(iam, USERS.철수, "2026-10-07 18:00+09");
+  await sub(vpc, USERS.민수, "2026-10-07 18:00+09");
+  await sub(vpc, USERS.철수, "2026-10-07 18:00+09");
+  await sub(ec2, USERS.지은, "2026-10-12 10:00+09");
+  return { rounds: [r1.roundId, r2.roundId, r3.roundId], iam, vpc, ec2, s3, alb };
+}
+
+/** rooms_list 호출 → 응답 JSON */
+export async function listRooms(q: Q, a: Partial<{ scope: string; status: string; q: string; tags: string[]; page: number; size: number; sort: string }> = {}) {
+  const [{ r }] = await q(
+    `select public.rooms_list($1, $2, $3, $4::text[], $5, $6, $7) as r`,
+    [a.scope ?? "public", a.status ?? "all", a.q ?? null, a.tags ?? null, a.page ?? 0, a.size ?? 24, a.sort ?? "default"],
+  );
+  return r as Record<string, any>;
+}
+
 export const ROOM_CASES: Case[] = [
   {
     name: "room_create: DRAFT 방 + 그룹장 ACTIVE 행 + member_count 1 + 초대 토큰 + 알림 설정",
@@ -411,6 +457,188 @@ export const ROOM_CASES: Case[] = [
       await setToday(q, TODAY);
       const d = await createRoom(q, USERS.서연);
       assertEquals(Number(d.id) > 9, true);
+    },
+  },
+  {
+    name: "rooms_list: 철수 public — 8장 정렬, tabCounts 8/4/1, jcg isFull, docker 1/6, facets 자격증3·클라우드2",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asUser(q, USERS.철수);
+      const r = await listRooms(q);
+      assertEquals(r.today, TODAY);
+      assertEquals([r.page, r.size, r.totalElements], [0, 24, 8]);
+      assertEquals(r.items.map((x: any) => x.slug), ["react", "aws", "jcg", "cs", "sqld", "toeic", "docker", "algo"]);
+      assertEquals(r.tabCounts, { public: 8, mine: 4, created: 1 });
+      const by = Object.fromEntries(r.items.map((x: any) => [x.slug, x]));
+      assertEquals([by.jcg.status, by.jcg.isFull, by.jcg.memberCount, by.jcg.maxMembers, by.jcg.joinMode], ["recruit", true, 4, 4, "approval"]);
+      assertEquals([by.toeic.isFull, by.toeic.memberCount], [false, 2]);
+      assertEquals([by.docker.memberCount, by.docker.membership, by.docker.progress], [1, { role: "leader", status: "active" }, { kind: "recruit" }]);
+      assertEquals([by.sqld.membership, by.sqld.progress], [{ role: "member", status: "pending" }, { kind: "recruit" }]);
+      assertEquals(by.toeic.membership, null);
+      assertEquals(by.aws.leader, { userId: USERS.민수, nickname: "민수", tone: "mint" });
+      assertEquals(by.aws.tags.map((t: any) => [t.slug, t.auto]), [["aws", true], ["cloud", true], ["certificate", false]]);
+      assertEquals([by.aws.startDate, by.aws.endDate, by.aws.isPublic, by.aws.id], ["2026-10-01", "2026-12-31", true, "6"]);
+      assertEquals(r.tagFacets.length, 16);
+      assertEquals(r.tagFacets[0], { slug: "certificate", label: "자격증", count: 3 });
+      assertEquals(r.tagFacets[1], { slug: "cloud", label: "클라우드", count: 2 });
+      assertEquals(r.tagFacets.slice(2).every((f: any) => f.count === 1), true);
+    },
+  },
+  {
+    name: "rooms_list: mine 4(sqld pending 포함), created 1, facets 는 scope 기준",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asUser(q, USERS.철수);
+      const mine = await listRooms(q, { scope: "mine" });
+      assertEquals(mine.items.map((x: any) => x.slug), ["aws", "spring", "sqld", "algo"]);   // active(start asc) → recruit → ended
+      assertEquals(mine.totalElements, 4);
+      assertEquals(mine.items.find((x: any) => x.slug === "spring").isPublic, false);
+      assertEquals(mine.tagFacets.length, 10);
+      assertEquals(mine.tagFacets[0], { slug: "certificate", label: "자격증", count: 2 });
+      const created = await listRooms(q, { scope: "created" });
+      assertEquals(created.items.map((x: any) => x.slug), ["docker"]);
+      assertEquals(created.tabCounts, { public: 8, mine: 4, created: 1 });
+    },
+  },
+  {
+    name: "rooms_list: anon — public 8, mine/created 0, membership null, mine scope → AUTH_REQUIRED; 비공개·DRAFT 숨김",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asAnon(q);
+      const r = await listRooms(q);
+      assertEquals(r.totalElements, 8);
+      assertEquals(r.tabCounts, { public: 8, mine: 0, created: 0 });
+      assertEquals(r.items.every((x: any) => x.membership === null), true);
+      assertEquals(r.items.some((x: any) => x.slug === "spring"), false);
+      await expectFailSql(q, `select public.rooms_list('mine','all',null,null,0,24,'default')`, [], "AUTH_REQUIRED");
+      await expectFailSql(q, `select public.rooms_list('created','all',null,null,0,24,'default')`, [], "AUTH_REQUIRED");
+      // DRAFT 는 public 에 안 보이고 created 에만 status draft 로
+      const d = await createRoom(q, USERS.보람, { title: "Draft Only" });
+      await asAnon(q);
+      assertEquals((await listRooms(q)).totalElements, 8);
+      await asUser(q, USERS.보람);
+      assertEquals((await listRooms(q)).totalElements, 8);
+      const c = await listRooms(q, { scope: "created" });
+      assertEquals(c.items.map((x: any) => [x.slug, x.status, x.progress.kind]), [[d.slug, "draft", "recruit"]]);
+      assertEquals(c.tabCounts.created, 1);
+    },
+  },
+  {
+    name: "rooms_list: progress (seedAwsTree 부분 트리) — 철수 mine 2/4 next EC2 10/14, 민수 mine 2/3 next null(ALB planned), 서연 team 2/3, react team null/0, algo final 0/0/0",
+    run: async (q) => {
+      // 플랜 03 Task 2 가 이 사례를 전체 시드 값으로 다시 쓴다(헬퍼 호출 제거)
+      await setToday(q, TODAY);
+      const t = await seedAwsTree(q);
+      await asUser(q, USERS.철수);
+      let by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 4, nextTask: { nodeId: t.ec2, title: "EC2 인스턴스 유형 정리", dueDate: "2026-10-14" } });
+      assertEquals(by.aws.membership, { role: "member", status: "active" });
+      assertEquals(by.react.progress, { kind: "team", currentRound: null, totalRounds: 0 });
+      assertEquals(by.algo.progress, { kind: "final", submitted: 0, assigned: 0, totalRounds: 0 });
+      assertEquals(by.algo.membership, { role: "member", status: "active" });
+      // 민수(그룹장, leader_does_tasks) 는 IAM·VPC·ALB 3건(EC2·S3 는 지정 대상 아님). 10/12 에 OPEN 인 미제출이 없다 → nextTask null
+      await asUser(q, USERS.민수);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 3, nextTask: null });
+      // 그룹장이 과제를 안 하면 team
+      await q(`update public.rooms set leader_does_tasks = false where id = 6`);
+      await q(`select public.assignment_resync(6)`);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress, { kind: "team", currentRound: { index: 2, label: "2주차", title: "EC2·S3" }, totalRounds: 3 });
+      await asUser(q, USERS.서연);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress, { kind: "team", currentRound: { index: 2, label: "2주차", title: "EC2·S3" }, totalRounds: 3 });
+      // 철수가 EC2 를 제출하면 10/12 에는 OPEN 미제출이 없어 null, 3주차가 열리는 10/15 에 ALB(10/21)
+      await asUser(q, USERS.철수);
+      await q(`insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late) values ($1, $2, 'x', now(), false)`, [t.ec2, USERS.철수]);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress.nextTask, null);
+      await setToday(q, "2026-10-15");
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress.nextTask, { nodeId: t.alb, title: "ALB vs NLB 실습", dueDate: "2026-10-21" });
+      await setToday(q, TODAY);
+      // 도윤(INACTIVE) 은 mine 이 아니고 team
+      await asUser(q, USERS.도윤);
+      by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
+      assertEquals(by.aws.progress.kind, "team");
+      assertEquals(by.aws.membership, { role: "member", status: "inactive" });
+    },
+  },
+  {
+    name: "rooms_list: 상태 칩·검색·태그 OR·페이지·정렬",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asUser(q, USERS.철수);
+      const slugs = async (a: Parameters<typeof listRooms>[1]) => (await listRooms(q, a)).items.map((x: any) => x.slug);
+      assertEquals(await slugs({ status: "recruit" }), ["jcg", "cs", "sqld", "toeic", "docker"]);
+      assertEquals(await slugs({ status: "active" }), ["react", "aws"]);
+      assertEquals(await slugs({ status: "ended" }), ["algo"]);
+      assertEquals(await slugs({ q: "토익" }), ["toeic"]);
+      assertEquals(await slugs({ q: "AWS" }), ["aws"]);            // 태그 label
+      assertEquals(await slugs({ q: "aws" }), ["aws"]);            // ILIKE
+      assertEquals(await slugs({ q: "k8s" }), ["docker"]);         // 태그 alias
+      assertEquals(await slugs({ q: "  " }), ["react", "aws", "jcg", "cs", "sqld", "toeic", "docker", "algo"]);   // 공백은 무시
+      assertEquals(await slugs({ q: "없는검색어" }), []);
+      assertEquals(await slugs({ q: "%" }), []);                   // D10: 와일드카드가 아니라 글자 그대로
+      assertEquals(await slugs({ q: "_" }), []);
+      assertEquals(await slugs({ tags: ["cloud", "certificate"] }), ["aws", "jcg", "sqld", "docker"]);          // OR
+      assertEquals(await slugs({ tags: ["cloud"], status: "recruit" }), ["docker"]);
+      // 상태·검색·태그 필터는 tabCounts·facets 에 영향 없음
+      const f = await listRooms(q, { tags: ["cloud"], status: "recruit", q: "Docker" });
+      assertEquals([f.totalElements, f.tabCounts.public, f.tagFacets.length], [1, 8, 16]);
+      // 페이지
+      const p1 = await listRooms(q, { size: 3, page: 1 });
+      assertEquals([p1.page, p1.size, p1.totalElements, p1.items.map((x: any) => x.slug)], [1, 3, 8, ["cs", "sqld", "toeic"]]);
+      assertEquals((await listRooms(q, { size: 3, page: 5 })).items, []);
+      // 정렬
+      assertEquals(await slugs({ sort: "latest" }), ["jcg", "docker", "sqld", "cs", "toeic", "aws", "react", "algo"]);   // created_at desc
+      assertEquals(await slugs({ sort: "startDate" }), ["algo", "react", "aws", "jcg", "cs", "sqld", "toeic", "docker"]); // 같은 10/19 면 id desc → jcg(5) 가 cs(2) 앞
+      // 검증
+      await expectFailSql(q, `select public.rooms_list('everyone','all',null,null,0,24,'default')`, [], "VALIDATION_FAILED");
+      await expectFailSql(q, `select public.rooms_list('public','full',null,null,0,24,'default')`, [], "VALIDATION_FAILED");
+      await expectFailSql(q, `select public.rooms_list('public','all',null,null,0,24,'popular')`, [], "VALIDATION_FAILED");
+    },
+  },
+  {
+    name: "rooms_list: 보관된 방은 모든 scope·tabCounts·facets 에서 빠진다 (Review Focus 3)",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asUser(q, USERS.민수);
+      await q(`select public.room_archive('aws')`);
+      await asUser(q, USERS.철수);
+      const pub = await listRooms(q);
+      assertEquals(pub.items.some((x: any) => x.slug === "aws"), false);
+      assertEquals(pub.tabCounts, { public: 7, mine: 3, created: 1 });
+      assertEquals(pub.tagFacets.find((f: any) => f.slug === "certificate").count, 2);
+      assertEquals((await listRooms(q, { scope: "mine" })).items.some((x: any) => x.slug === "aws"), false);
+      await asUser(q, USERS.민수);
+      assertEquals((await listRooms(q, { scope: "created" })).items, []);
+      await q(`select public.room_unarchive('aws')`);
+      assertEquals((await listRooms(q, { scope: "created" })).items.map((x: any) => x.slug), ["aws"]);
+    },
+  },
+  {
+    name: "privileges (T4): rooms_list 만 anon·authenticated, 헬퍼는 EXECUTE 없음",
+    run: async (q) => {
+      const fnCan = async (role: string, fn: string) =>
+        (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
+      for (const role of ["anon", "authenticated"]) {
+        assertEquals(await fnCan(role, "public.rooms_list(text,text,text,text[],int,int,text)"), true, `${role} rooms_list`);
+        for (const f of ["room_in_scope(bigint,text,uuid)", "room_matches(bigint,text,text,text[])", "like_escape(text)"]) {
+          assertEquals(await fnCan(role, `public.${f}`), false, `${role} ${f}`);
+        }
+      }
+      await setToday(q, TODAY);
+      await asAnon(q);
+      await q("set local role anon");
+      const [{ r }] = await q(`select public.rooms_list('public','all',null,null,0,24,'default') as r`);
+      assertEquals(r.totalElements, 8);
+      await q("reset role");
+      await asUser(q, USERS.철수);
+      await q("set local role authenticated");
+      const [{ r: m }] = await q(`select public.rooms_list('mine','all',null,null,0,24,'default') as r`);
+      assertEquals(m.items.length > 0, true);
+      await q("reset role");
     },
   },
 ];

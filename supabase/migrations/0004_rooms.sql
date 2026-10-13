@@ -595,3 +595,190 @@ grant execute on function public.room_archive(text)      to authenticated;
 grant execute on function public.room_unarchive(text)    to authenticated;
 grant execute on function public.room_delete(text)       to authenticated;
 grant execute on function public.room_update(text, jsonb) to authenticated;
+
+-- ILIKE 패턴용 이스케이프(기본 escape 문자 '\'). 검색어의 % _ 는 글자 그대로 (D10)
+-- 순수 헬퍼: INVOKER·GRANT 없음 — DEFINER RPC 안에서만 호출
+create or replace function public.like_escape(p_text text) returns text
+language sql immutable set search_path = '' as $$
+  select replace(replace(replace(p_text, '\', '\\'), '%', '\%'), '_', '\_')
+$$;
+
+-- ───────── 목록 scope · 필터 (main §3-6, §3-8) ─────────
+create or replace function public.room_in_scope(p_room bigint, p_scope text, p_uid uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.rooms r
+    where r.id = p_room and r.archived_at is null and (
+         (p_scope = 'public'  and r.visibility = 'PUBLIC' and r.status <> 'DRAFT')
+      or (p_scope = 'mine'    and p_uid is not null and exists (
+            select 1 from public.room_members m
+            where m.room_id = r.id and m.user_id = p_uid and m.role = 'MEMBER' and m.status in ('ACTIVE', 'PENDING')))
+      or (p_scope = 'created' and p_uid is not null and r.leader_id = p_uid)))
+$$;
+
+create or replace function public.room_matches(p_room bigint, p_status text, p_q text, p_tags text[]) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.rooms r
+    where r.id = p_room
+      and (p_status = 'all' or r.status = upper(p_status))
+      and (p_q is null
+           or r.title ilike '%' || public.like_escape(p_q) || '%'
+           or exists (select 1 from public.room_tags rt join public.tags t on t.slug = rt.tag_slug
+                      where rt.room_id = r.id
+                        and (t.label ilike '%' || public.like_escape(p_q) || '%'
+                             or exists (select 1 from unnest(t.aliases) a where a ilike '%' || public.like_escape(p_q) || '%'))))
+      and (p_tags is null or exists (select 1 from public.room_tags rt where rt.room_id = r.id and rt.tag_slug = any(p_tags))))
+$$;
+
+-- ───────── rooms_list (03-api §2 RoomListResponse) ─────────
+-- 02 §4.3: 페이지 id 집합에 대해 멤버십·태그·회차·팀 집계·내 집계·다음 마감을 각각 1회씩 모아 jsonb_agg
+create or replace function public.rooms_list(
+  p_scope text default 'public', p_status text default 'all', p_q text default null, p_tags text[] default null,
+  p_page int default 0, p_size int default 24, p_sort text default 'default')
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid    uuid := public.current_user_id();
+  v_today  date := public.kst_today();
+  v_scope  text := coalesce(p_scope, 'public');
+  v_status text := coalesce(p_status, 'all');
+  v_q      text := nullif(trim(coalesce(p_q, '')), '');
+  v_tags   text[] := case when p_tags is null or cardinality(p_tags) = 0 then null else p_tags end;
+  v_page   int := greatest(coalesce(p_page, 0), 0);
+  v_size   int := least(greatest(coalesce(p_size, 24), 1), 100);
+  v_sort   text := coalesce(p_sort, 'default');
+  v_total  int;
+  v_items  jsonb;
+  v_counts jsonb;
+  v_facets jsonb;
+begin
+  if v_scope not in ('public', 'mine', 'created') then
+    perform public.fail('VALIDATION_FAILED', 'scope 는 public·mine·created 중 하나예요', '{"field":"scope"}'::jsonb);
+  end if;
+  if v_status not in ('all', 'recruit', 'active', 'ended') then
+    perform public.fail('VALIDATION_FAILED', 'status 는 all·recruit·active·ended 중 하나예요', '{"field":"status"}'::jsonb);
+  end if;
+  if v_sort not in ('default', 'latest', 'startDate') then
+    perform public.fail('VALIDATION_FAILED', 'sort 는 default·latest·startDate 중 하나예요', '{"field":"sort"}'::jsonb);
+  end if;
+  if v_scope <> 'public' and v_uid is null then
+    perform public.fail('AUTH_REQUIRED', '로그인이 필요해요');
+  end if;
+
+  -- 탭 총계: 필터와 무관한 고정값(main §1-3). 비로그인은 mine/created 0
+  select jsonb_build_object(
+    'public',  count(*) filter (where public.room_in_scope(r.id, 'public', v_uid)),
+    'mine',    count(*) filter (where v_uid is not null and public.room_in_scope(r.id, 'mine', v_uid)),
+    'created', count(*) filter (where v_uid is not null and public.room_in_scope(r.id, 'created', v_uid)))
+  into v_counts
+  from public.rooms r where r.archived_at is null;
+
+  -- 태그 facet: 현재 scope 집합(상태·검색·태그 미적용), count desc → label
+  select coalesce(jsonb_agg(jsonb_build_object('slug', f.slug, 'label', f.label, 'count', f.n) order by f.n desc, f.label), '[]'::jsonb)
+  into v_facets
+  from (
+    select t.slug, t.label, count(*)::int as n
+    from public.rooms r
+    join public.room_tags rt on rt.room_id = r.id
+    join public.tags t on t.slug = rt.tag_slug
+    where public.room_in_scope(r.id, v_scope, v_uid)
+    group by t.slug, t.label) f;
+
+  select count(*)::int into v_total
+  from public.rooms r
+  where public.room_in_scope(r.id, v_scope, v_uid) and public.room_matches(r.id, v_status, v_q, v_tags);
+
+  with page as (   -- 순서는 row_number() over (order by …) 로 고정(D5). 창 함수는 limit 전에 계산된다
+    select o.*
+    from (
+      select r.*, row_number() over (order by
+               case when v_sort = 'default' then case r.status when 'ACTIVE' then 0 when 'RECRUIT' then 1 when 'DRAFT' then 2 else 3 end end,
+               case when v_sort in ('default', 'startDate') then r.start_date end,
+               r.created_at desc, r.id desc) as ord
+      from public.rooms r
+      where public.room_in_scope(r.id, v_scope, v_uid) and public.room_matches(r.id, v_status, v_q, v_tags)) o
+    order by o.ord
+    limit v_size offset v_page * v_size
+  ),
+  mem as (
+    select m.room_id, lower(m.role) as role, lower(m.status) as status
+    from public.room_members m
+    where v_uid is not null and m.user_id = v_uid and m.room_id in (select id from page)
+  ),
+  rs as (
+    select p.id as room_id, count(x.round_id)::int as total_rounds,
+           coalesce(sum(x.asg), 0)::int as asg, coalesce(sum(x.sub), 0)::int as sub
+    from page p left join lateral public.room_round_stats(p.id) x on true
+    group by p.id
+  ),
+  cur as (
+    select p.id as room_id, c.idx, c.label, c.title
+    from page p
+    cross join lateral (
+      select x.idx, x.label, x.title
+      from (select rr.round_id, rr.label, rr.title, row_number() over (order by rr.sort_order, rr.round_id)::int as idx
+            from public.room_round_stats(p.id) rr) x
+      where x.round_id = public.room_current_round_id(p.id, v_today)) c
+    where p.status = 'ACTIVE'
+  ),
+  does as (   -- 내가 담당 자격: ACTIVE 멤버, 그룹장은 leader_does_tasks
+    select p.id as room_id from page p
+    where v_uid is not null and exists (
+      select 1 from public.room_members m
+      where m.room_id = p.id and m.user_id = v_uid and m.status = 'ACTIVE' and (m.role = 'MEMBER' or p.leader_does_tasks))
+  ),
+  mine as (
+    select n.room_id, count(*) filter (where s.id is not null)::int as submitted, count(*)::int as assigned
+    from public.goal_nodes n
+    join public.task_assignments a on a.node_id = n.id and a.user_id = v_uid and a.released_at is null
+    left join public.submissions s on s.node_id = n.id and s.user_id = v_uid
+    where n.room_id in (select room_id from does) and n.task_type is not null and n.archived_at is null
+    group by n.room_id
+  ),
+  nxt as (   -- OPEN(start ≤ today ≤ end) ∧ 미제출 중 마감 빠른 것, 같은 날이면 트리 순서 (main §3-2, D14)
+    select distinct on (n.room_id) n.room_id, n.id as node_id, n.title, n.end_date
+    from public.goal_nodes n
+    join public.task_assignments a on a.node_id = n.id and a.user_id = v_uid and a.released_at is null
+    join public.goal_nodes rn on rn.id = n.round_id
+    left join public.submissions s on s.node_id = n.id and s.user_id = v_uid
+    where n.room_id in (select room_id from does) and n.task_type is not null and n.archived_at is null
+      and s.id is null and n.start_date <= v_today and n.end_date >= v_today
+    order by n.room_id, n.end_date, rn.sort_order, n.sort_order, n.id
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', p.id::text, 'slug', p.slug, 'title', p.title, 'intro', p.intro,
+    'status', lower(p.status), 'isFull', p.status = 'RECRUIT' and p.member_count >= p.max_members,
+    'isPublic', p.visibility = 'PUBLIC', 'joinMode', lower(p.join_mode),
+    'memberCount', p.member_count, 'maxMembers', p.max_members,
+    'leader', public.person_json(p.leader_id), 'tags', public.room_tags_json(p.id),
+    'startDate', to_char(p.start_date, 'YYYY-MM-DD'), 'endDate', to_char(p.end_date, 'YYYY-MM-DD'),
+    'membership', case when mem.room_id is null then null else jsonb_build_object('role', mem.role, 'status', mem.status) end,
+    'progress', case
+      when p.status in ('RECRUIT', 'DRAFT') then jsonb_build_object('kind', 'recruit')
+      when p.status = 'ACTIVE' and d.room_id is not null then jsonb_build_object(
+        'kind', 'mine', 'submitted', coalesce(mi.submitted, 0), 'assigned', coalesce(mi.assigned, 0),
+        'nextTask', case when nx.node_id is null then null
+                         else jsonb_build_object('nodeId', nx.node_id::text, 'title', nx.title, 'dueDate', to_char(nx.end_date, 'YYYY-MM-DD')) end)
+      when p.status = 'ACTIVE' then jsonb_build_object(
+        'kind', 'team',
+        'currentRound', case when c.idx is null then null else jsonb_build_object('index', c.idx, 'label', c.label, 'title', c.title) end,
+        'totalRounds', rs.total_rounds)
+      else jsonb_build_object('kind', 'final', 'submitted', rs.sub, 'assigned', rs.asg, 'totalRounds', rs.total_rounds) end
+  ) order by p.ord), '[]'::jsonb)
+  into v_items
+  from page p
+  left join mem  on mem.room_id = p.id
+  left join rs   on rs.room_id = p.id
+  left join cur c on c.room_id = p.id
+  left join does d on d.room_id = p.id
+  left join mine mi on mi.room_id = p.id
+  left join nxt nx on nx.room_id = p.id;
+
+  return jsonb_build_object(
+    'today', to_char(v_today, 'YYYY-MM-DD'),
+    'items', v_items, 'page', v_page, 'size', v_size, 'totalElements', v_total,
+    'tabCounts', v_counts, 'tagFacets', v_facets);
+end $$;
+
+-- ───────── 공개 RPC GRANT (D7) — 비로그인 허용(공개) ─────────
+grant execute on function public.rooms_list(text, text, text, text[], int, int, text) to anon, authenticated;
