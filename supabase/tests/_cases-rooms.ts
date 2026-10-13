@@ -55,43 +55,6 @@ export async function seedLeaves(q: Q, roomId: string, leaves: { title: string; 
 
 export type Case = { name: string; run: (q: Q) => Promise<void> };
 
-/**
- * 시드 aws(id 6) 에 최소 트리를 붙인다 — roomview §3.1 의 1·2·3주차 리프 5개.
- *   1주차 10/01–10/07: IAM 정책 이해(공통), VPC 실습(공통)
- *   2주차 10/08–10/14: EC2 인스턴스 유형 정리(지정: 지은·철수), S3 스토리지 클래스 발표자료(지정: 하나, 10/10–)
- *   3주차 10/15–10/21: ALB vs NLB 실습(공통)
- * 제출: IAM 민수D 지은L 철수D / VPC 민수D 철수D / EC2 지은D  → 1주차 5/8, 2주차 1/3, 3주차 0/4
- * 이 부분 트리에서: 철수 2/4(IAM·VPC·EC2·ALB) 다음 마감 EC2 10/14, 민수 2/3(IAM·VPC·ALB — EC2 는 지은·철수 지정) 다음 마감 없음(ALB 는 10/15 시작 = planned)
- * (전체 시드 회귀값 철수 2/6=33% 는 플랜 03 Task 2 가 단언한다)
- */
-export async function seedAwsTree(q: Q) {
-  const AWS = "6";
-  const r1 = await seedLeaves(q, AWS, [
-    { title: "IAM 정책 이해", type: "COMMON", s: "2026-10-01", e: "2026-10-07" },
-    { title: "VPC 실습", type: "COMMON", s: "2026-10-01", e: "2026-10-07" },
-  ], { label: "1주차", title: "IAM·VPC", s: "2026-10-01", e: "2026-10-07" });
-  const r2 = await seedLeaves(q, AWS, [
-    { title: "EC2 인스턴스 유형 정리", type: "DESIGNATED", s: "2026-10-08", e: "2026-10-14" },
-    { title: "S3 스토리지 클래스 발표자료", type: "DESIGNATED", s: "2026-10-10", e: "2026-10-14" },
-  ], { label: "2주차", title: "EC2·S3", s: "2026-10-08", e: "2026-10-14" });
-  const r3 = await seedLeaves(q, AWS, [
-    { title: "ALB vs NLB 실습", type: "COMMON", s: "2026-10-15", e: "2026-10-21" },
-  ], { label: "3주차", title: "고가용성 아키텍처", s: "2026-10-15", e: "2026-10-21" });
-  const [iam, vpc] = r1.leafIds, [ec2, s3] = r2.leafIds, [alb] = r3.leafIds;
-  await q(`insert into public.task_assignments (node_id, user_id, source) values ($1,$3,'DESIGNATED'), ($1,$4,'DESIGNATED'), ($2,$5,'DESIGNATED')`,
-    [ec2, s3, USERS.지은, USERS.철수, USERS.하나]);
-  // D = end_date 18:00 KST, L = end_date + 1일 09:00 KST (is_late)
-  const sub = (node: string, uid: string, at: string, late = false) =>
-    q(`insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late) values ($1, $2, '제출', $3::timestamptz, $4)`, [node, uid, at, late]);
-  await sub(iam, USERS.민수, "2026-10-07 18:00+09");
-  await sub(iam, USERS.지은, "2026-10-08 09:00+09", true);
-  await sub(iam, USERS.철수, "2026-10-07 18:00+09");
-  await sub(vpc, USERS.민수, "2026-10-07 18:00+09");
-  await sub(vpc, USERS.철수, "2026-10-07 18:00+09");
-  await sub(ec2, USERS.지은, "2026-10-12 10:00+09");
-  return { rounds: [r1.roundId, r2.roundId, r3.roundId], iam, vpc, ec2, s3, alb };
-}
-
 /** rooms_list 호출 → 응답 JSON */
 export async function listRooms(q: Q, a: Partial<{ scope: string; status: string; q: string; tags: string[]; page: number; size: number; sort: string }> = {}) {
   const [{ r }] = await q(
@@ -552,38 +515,39 @@ export const ROOM_CASES: Case[] = [
     },
   },
   {
-    name: "rooms_list: progress (seedAwsTree 부분 트리) — 철수 mine 2/4 next EC2 10/14, 민수 mine 2/3 next null(ALB planned), 서연 team 2/3, react team null/0, algo final 0/0/0",
+    name: "rooms_list: progress (시드 §3) — 철수 aws mine 2/6 next EC2 10/14, 민수 mine 2/5 next null, 서연 team 2/5, react team 4/8, algo final 68/78·3회차",
     run: async (q) => {
-      // 플랜 03 Task 2 가 이 사례를 전체 시드 값으로 다시 쓴다(헬퍼 호출 제거)
       await setToday(q, TODAY);
-      const t = await seedAwsTree(q);
+      const [{ ec2, alb }] = await q(`select (select id::text from public.goal_nodes where room_id = 6 and title = 'EC2 인스턴스 유형 정리') as ec2,
+                                             (select id::text from public.goal_nodes where room_id = 6 and title = 'ALB vs NLB 실습') as alb`);
       await asUser(q, USERS.철수);
       let by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
-      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 4, nextTask: { nodeId: t.ec2, title: "EC2 인스턴스 유형 정리", dueDate: "2026-10-14" } });
+      // 철수 aws: IAM D·VPC D·EC2 O·ALB·AutoScaling·RDS = 2/6 = 33% (목업 50% 폐기, D5)
+      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 6, nextTask: { nodeId: ec2, title: "EC2 인스턴스 유형 정리", dueDate: "2026-10-14" } });
       assertEquals(by.aws.membership, { role: "member", status: "active" });
-      assertEquals(by.react.progress, { kind: "team", currentRound: null, totalRounds: 0 });
-      assertEquals(by.algo.progress, { kind: "final", submitted: 0, assigned: 0, totalRounds: 0 });
+      assertEquals(by.react.progress, { kind: "team", currentRound: { index: 4, label: "4주차", title: "상태 관리하기" }, totalRounds: 8 });
+      assertEquals(by.algo.progress, { kind: "final", submitted: 68, assigned: 78, totalRounds: 3 });
       assertEquals(by.algo.membership, { role: "member", status: "active" });
-      // 민수(그룹장, leader_does_tasks) 는 IAM·VPC·ALB 3건(EC2·S3 는 지정 대상 아님). 10/12 에 OPEN 인 미제출이 없다 → nextTask null
+      // 민수(그룹장·담당): IAM·VPC·ALB·AutoScaling·RDS = 2/5. 10/12 에 OPEN 인 미제출 없음(ALB 10/15 시작) → null
       await asUser(q, USERS.민수);
       by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
-      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 3, nextTask: null });
+      assertEquals(by.aws.progress, { kind: "mine", submitted: 2, assigned: 5, nextTask: null });
       // 그룹장이 과제를 안 하면 team
       await q(`update public.rooms set leader_does_tasks = false where id = 6`);
       await q(`select public.assignment_resync(6)`);
       by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
-      assertEquals(by.aws.progress, { kind: "team", currentRound: { index: 2, label: "2주차", title: "EC2·S3" }, totalRounds: 3 });
+      assertEquals(by.aws.progress, { kind: "team", currentRound: { index: 2, label: "2주차", title: "EC2·S3" }, totalRounds: 5 });
       await asUser(q, USERS.서연);
       by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
-      assertEquals(by.aws.progress, { kind: "team", currentRound: { index: 2, label: "2주차", title: "EC2·S3" }, totalRounds: 3 });
-      // 철수가 EC2 를 제출하면 10/12 에는 OPEN 미제출이 없어 null, 3주차가 열리는 10/15 에 ALB(10/21)
+      assertEquals(by.aws.progress, { kind: "team", currentRound: { index: 2, label: "2주차", title: "EC2·S3" }, totalRounds: 5 });
+      // 철수가 EC2 를 제출하면 10/12 엔 OPEN 미제출이 없어 null, 10/15 에 ALB(10/21)
       await asUser(q, USERS.철수);
-      await q(`insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late) values ($1, $2, 'x', now(), false)`, [t.ec2, USERS.철수]);
+      await q(`insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late) values ($1, $2, 'x', now(), false)`, [ec2, USERS.철수]);
       by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
-      assertEquals(by.aws.progress.nextTask, null);
+      assertEquals([by.aws.progress.submitted, by.aws.progress.assigned, by.aws.progress.nextTask], [3, 6, null]);
       await setToday(q, "2026-10-15");
       by = Object.fromEntries((await listRooms(q)).items.map((x: any) => [x.slug, x]));
-      assertEquals(by.aws.progress.nextTask, { nodeId: t.alb, title: "ALB vs NLB 실습", dueDate: "2026-10-21" });
+      assertEquals(by.aws.progress.nextTask, { nodeId: alb, title: "ALB vs NLB 실습", dueDate: "2026-10-21" });
       await setToday(q, TODAY);
       // 도윤(INACTIVE) 은 mine 이 아니고 team
       await asUser(q, USERS.도윤);
@@ -683,7 +647,6 @@ export const ROOM_CASES: Case[] = [
   {
     name: "room_get: me.state matrix for 철수 (toeic none, sqld pending, docker leader, jcg none, aws active, react none, algo active)",
     run: async (q) => {
-      // toeic 빈 트리(rounds [], stats 0) 단언은 플랜 03 Task 2 가 시드 §3 값(rounds 8)으로 다시 쓴다
       await setToday(q, TODAY);
       await asUser(q, USERS.철수);
       const st = async (slug: string) => (await q(`select public.room_get($1) as r`, [slug]))[0].r.me.state;
@@ -693,13 +656,16 @@ export const ROOM_CASES: Case[] = [
       assertEquals(await st("spring"), "active");                      // 비공개지만 멤버
       await asUser(q, USERS.도윤);
       assertEquals(await st("aws"), "inactive");
+      await asUser(q, USERS.철수);
       const [{ r }] = await q(`select public.room_get($1) as r`, ["toeic"]);
       assertEquals([r.today, r.id, r.slug, r.status, r.archived, r.isPublic, r.joinMode], [TODAY, "1", "toeic", "recruit", false, true, "direct"]);
       assertEquals([r.memberCount, r.maxMembers, r.minMembers, r.leader.nickname, r.leaderDoesTasks], [2, 8, 4, "서연", true]);
       assertEquals(r.members.map((m: any) => [m.nickname, m.role, m.status]), [["서연", "leader", "active"], ["도현", "member", "active"]]);
       assertEquals(r.tags.map((t: any) => t.label), ["영어", "토익"]);
-      assertEquals([r.currentRound, r.rounds, r.myProgress, r.invite, r.pendingCount], [null, [], null, null, 0]);
-      assertEquals(r.stats, { roundCount: 0, leafCount: 0, commonCount: 0, designatedCount: 0, totalAssignments: 0, totalSubmissions: 0, overallPct: null, unassignedCount: 0, startWeekdays: [] });
+      // toeic(RECRUIT, 시드 §3: 8회차 × 공통 2) — 모집중에도 배정 실체화(D4): 서연(그룹장)·도현 × 16 = 32
+      assertEquals([r.currentRound, r.rounds.length, r.myProgress, r.invite, r.pendingCount], [null, 8, null, null, 0]);
+      assertEquals(r.rounds[0], { id: r.rounds[0].id, label: "1주차", title: "LC Part 1·2", startDate: "2026-11-02", endDate: "2026-11-08", leafCount: 2, assigned: 4, submitted: 0, pct: 0 });
+      assertEquals(r.stats, { roundCount: 8, leafCount: 16, commonCount: 16, designatedCount: 0, totalAssignments: 32, totalSubmissions: 0, overallPct: 0, unassignedCount: 0, startWeekdays: [1] });
     },
   },
   {
@@ -738,37 +704,38 @@ export const ROOM_CASES: Case[] = [
     },
   },
   {
-    name: "room_get: aws with tree (seedAwsTree 부분 트리) — currentRound 2주차 tasks/people, rounds 5/8·1/3·0/4, stats, myProgress 2/4 next EC2, 도윤 inactive listed",
+    name: "room_get: aws (시드 §3) — currentRound 2주차 tasks/people, rounds 5/8·1/3·0/4·0/4·0/6, stats 24%, myProgress 2/6 next EC2, 도윤 inactive listed",
     run: async (q) => {
-      // 플랜 03 Task 2 가 이 사례를 전체 시드 값으로 다시 쓴다(헬퍼 호출 제거, 철수 2/6)
       await setToday(q, TODAY);
-      const t = await seedAwsTree(q);
+      const [{ ec2, s3 }] = await q(`select (select id::text from public.goal_nodes where room_id = 6 and title = 'EC2 인스턴스 유형 정리') as ec2,
+                                            (select id::text from public.goal_nodes where room_id = 6 and title = 'S3 스토리지 클래스 발표자료') as s3`);
       await asUser(q, USERS.철수);
       const [{ r }] = await q(`select public.room_get($1) as r`, ["aws"]);
       assertEquals(r.members.map((m: any) => [m.nickname, m.status]),
         [["민수", "active"], ["지은", "active"], ["철수", "active"], ["하나", "active"], ["도윤", "inactive"]]);
       assertEquals(r.rounds.map((x: any) => [x.label, x.leafCount, x.assigned, x.submitted, x.pct]),
-        [["1주차", 2, 8, 5, 63], ["2주차", 2, 3, 1, 33], ["3주차", 1, 4, 0, 0]]);
-      assertEquals([r.currentRound.id, r.currentRound.label, r.currentRound.title, r.currentRound.startDate, r.currentRound.endDate], [t.rounds[1], "2주차", "EC2·S3", "2026-10-08", "2026-10-14"]);
+        [["1주차", 2, 8, 5, 63], ["2주차", 2, 3, 1, 33], ["3주차", 1, 4, 0, 0], ["4주차", 1, 4, 0, 0], ["5주차", 2, 6, 0, 0]]);
+      assertEquals([r.currentRound.label, r.currentRound.title, r.currentRound.startDate, r.currentRound.endDate], ["2주차", "EC2·S3", "2026-10-08", "2026-10-14"]);
       assertEquals(r.currentRound.tasks.map((x: any) => [x.id, x.title, x.type, x.startDate, x.endDate, x.people.map((p: any) => `${p.nickname}:${p.status}`).sort()]), [
-        [t.ec2, "EC2 인스턴스 유형 정리", "designated", "2026-10-08", "2026-10-14", ["지은:done", "철수:open"]],
-        [t.s3, "S3 스토리지 클래스 발표자료", "designated", "2026-10-10", "2026-10-14", ["하나:open"]],
-      ]);   // people 은 assigned_at·id 순 — 같은 resync 로 생긴 행은 순서가 고정되지 않아 정렬해서 비교
-      assertEquals(r.stats, { roundCount: 3, leafCount: 5, commonCount: 3, designatedCount: 2, totalAssignments: 15, totalSubmissions: 6, overallPct: 40, unassignedCount: 0, startWeekdays: [4] });
-      assertEquals(r.myProgress, { submitted: 2, assigned: 4, nextDue: { nodeId: t.ec2, title: "EC2 인스턴스 유형 정리", roundLabel: "2주차", dueDate: "2026-10-14" } });
-      // 1주차 첫 과제(IAM) 사람별 코드(10/05 기준): 민수·철수 done, 지은 late, 하나 open
-      await setToday(q, "2026-10-05");                                           // 1주차 안에서 보면 current 가 1주차
+        [ec2, "EC2 인스턴스 유형 정리", "designated", "2026-10-08", "2026-10-14", ["지은:done", "철수:open"]],
+        [s3, "S3 스토리지 클래스 발표자료", "designated", "2026-10-10", "2026-10-14", ["하나:open"]],
+      ]);
+      assertEquals(r.stats, { roundCount: 5, leafCount: 8, commonCount: 5, designatedCount: 3, totalAssignments: 25, totalSubmissions: 6, overallPct: 24, unassignedCount: 0, startWeekdays: [4] });
+      // 철수 2/6 = 33% (방 목록 슬롯과 같은 값, D5), 다음 마감은 OPEN 인 EC2
+      assertEquals(r.myProgress, { submitted: 2, assigned: 6, nextDue: { nodeId: ec2, title: "EC2 인스턴스 유형 정리", roundLabel: "2주차", dueDate: "2026-10-14" } });
+      // 1주차 안(10/05)에서 보면 current 가 1주차 — IAM(10/01–10/03) 은 이미 마감: 하나 missed
+      await setToday(q, "2026-10-05");
       const [{ r2 }] = await q(`select public.room_get($1) as r2`, ["aws"]);
       assertEquals(r2.currentRound.label, "1주차");
-      assertEquals(r2.currentRound.tasks[0].people.map((p: any) => `${p.nickname}:${p.status}`).sort(), ["민수:done", "지은:late", "철수:done", "하나:open"].sort());
-      // 시작 전이면 currentRound null
+      assertEquals(r2.currentRound.tasks[0].people.map((p: any) => `${p.nickname}:${p.status}`).sort(), ["민수:done", "지은:late", "철수:done", "하나:missed"].sort());
+      // 시작 전이면 null
       await setToday(q, "2026-09-30");
       assertEquals((await q(`select public.room_get($1) as r3`, ["aws"]))[0].r3.currentRound, null);
       // 비로그인은 집계는 보되 myProgress 없음
       await setToday(q, TODAY);
       await asAnon(q);
       const [{ an }] = await q(`select public.room_get($1) as an`, ["aws"]);
-      assertEquals([an.me, an.myProgress, an.rounds.length, an.currentRound.tasks.length], [null, null, 3, 2]);
+      assertEquals([an.me, an.myProgress, an.rounds.length, an.currentRound.tasks.length], [null, null, 5, 2]);
     },
   },
   {
