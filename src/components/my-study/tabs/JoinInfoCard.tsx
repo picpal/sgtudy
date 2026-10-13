@@ -32,20 +32,23 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy }: 
             </span>
           </div>
           <ProgressBar pct={Math.round((room.capCur / room.capMax) * 100)} height={8} fill={full ? "#B4462B" : "#12A386"} />
-          <span className="inline-flex items-center gap-[5px] text-[12px] font-medium" style={{ color: room.minOk ? "#0D7A64" : "#8A5A00" }}>
-            {room.minOk ? (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m5 12.5 4.5 4.5L19 7.5" />
-              </svg>
-            ) : (
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7.5v5.5" />
-                <circle cx="12" cy="16.5" r=".6" />
-              </svg>
-            )}
-            {room.minText}
-          </span>
+          {/* 최소 인원이 없는 방은 문구가 비어 있다 — 아이콘만 남기지 않는다 (V2-05) */}
+          {room.minText && (
+            <span className="inline-flex items-center gap-[5px] text-[12px] font-medium" style={{ color: room.minOk ? "#0D7A64" : "#8A5A00" }}>
+              {room.minOk ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m5 12.5 4.5 4.5L19 7.5" />
+                </svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7.5v5.5" />
+                  <circle cx="12" cy="16.5" r=".6" />
+                </svg>
+              )}
+              {room.minText}
+            </span>
+          )}
         </div>
 
         <div className="flex flex-col gap-[6px] rounded-[14px] bg-surface-2 px-[14px] py-3">
