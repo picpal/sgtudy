@@ -42,3 +42,45 @@ begin
       where m.room_id = p_room and m.user_id = a.user_id and m.status = 'ACTIVE'
         and (a.source = 'DESIGNATED' or m.role = 'MEMBER' or v_ldt));
 end $$;
+
+-- ───────── 상태 전환 (D2) ─────────
+-- RECRUIT → ACTIVE. 조건부 UPDATE 라 두 번 불러도 두 번째는 아무 일도 하지 않는다. tick 과 room_start 가 공유.
+create or replace function public.room_transition_active(p_room bigint, p_actor uuid) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_expired uuid[];
+  v_members uuid[];
+begin
+  update public.rooms set status = 'ACTIVE', started_at = now(), updated_at = now()
+  where id = p_room and status = 'RECRUIT';
+  if not found then return; end if;
+
+  with x as (
+    update public.room_members set status = 'EXPIRED', decided_at = now(), updated_at = now()
+    where room_id = p_room and status = 'PENDING'
+    returning user_id)
+  select coalesce(array_agg(user_id), '{}') into v_expired from x;
+
+  perform public.assignment_resync(p_room);
+
+  select coalesce(array_agg(user_id), '{}') into v_members
+  from public.room_members where room_id = p_room and status = 'ACTIVE';
+
+  if cardinality(v_expired) > 0 then
+    perform public.notify_publish('JOIN_EXPIRED', p_room, null, p_actor, v_expired, 'JOIN_EXPIRED:' || p_room, '{}'::jsonb);
+  end if;
+  perform public.notify_publish('ROOM_STARTED', p_room, null, p_actor, v_members, 'ROOM_STARTED:' || p_room, '{}'::jsonb);
+end $$;
+
+-- ACTIVE → ENDED (end_date 다음날 00:00 KST 이후 tick 이 호출)
+create or replace function public.room_transition_ended(p_room bigint) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_members uuid[];
+begin
+  update public.rooms set status = 'ENDED', ended_at = now(), updated_at = now()
+  where id = p_room and status = 'ACTIVE';
+  if not found then return; end if;
+  select coalesce(array_agg(user_id), '{}') into v_members
+  from public.room_members where room_id = p_room and status = 'ACTIVE';
+  perform public.notify_publish('ROOM_ENDED', p_room, null, null, v_members, 'ROOM_ENDED:' || p_room, '{}'::jsonb);
+end $$;

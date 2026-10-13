@@ -338,3 +338,260 @@ end $$;
 
 -- ───────── 공개 RPC GRANT (D7) — 위 헬퍼는 GRANT 없음 ─────────
 grant execute on function public.room_create(text, text, date, date, int, boolean, text, text, text, int, boolean, uuid, text[]) to authenticated;
+
+-- ───────── jsonb patch 값 캐스트 (D11) ─────────
+-- 순수 헬퍼: INVOKER·GRANT 없음 — DEFINER RPC 안에서만 호출
+-- 키가 없거나 json null → null. 타입·형식이 틀리면 22007/22008/22P02 원문 대신 VALIDATION_FAILED {field}
+create or replace function public.patch_date(p_patch jsonb, p_key text) returns date
+language plpgsql stable set search_path = '' as $$
+begin
+  if p_patch->p_key is null or jsonb_typeof(p_patch->p_key) = 'null' then return null; end if;
+  if jsonb_typeof(p_patch->p_key) <> 'string' or (p_patch->>p_key) !~ '^\d{4}-\d{2}-\d{2}$' then
+    perform public.fail('VALIDATION_FAILED', '날짜는 YYYY-MM-DD 형식이어야 해요', jsonb_build_object('field', p_key));
+  end if;
+  return (p_patch->>p_key)::date;
+exception when invalid_datetime_format or datetime_field_overflow then
+  perform public.fail('VALIDATION_FAILED', '날짜는 YYYY-MM-DD 형식이어야 해요', jsonb_build_object('field', p_key));
+  return null;
+end $$;
+
+create or replace function public.patch_bool(p_patch jsonb, p_key text) returns boolean
+language plpgsql immutable set search_path = '' as $$
+begin
+  if p_patch->p_key is null or jsonb_typeof(p_patch->p_key) = 'null' then return null; end if;
+  if jsonb_typeof(p_patch->p_key) <> 'boolean' then
+    perform public.fail('VALIDATION_FAILED', 'true 또는 false 여야 해요', jsonb_build_object('field', p_key));
+  end if;
+  return (p_patch->p_key)::boolean;
+end $$;
+
+create or replace function public.patch_int(p_patch jsonb, p_key text) returns int
+language plpgsql immutable set search_path = '' as $$
+begin
+  if p_patch->p_key is null or jsonb_typeof(p_patch->p_key) = 'null' then return null; end if;
+  if jsonb_typeof(p_patch->p_key) <> 'number' or (p_patch->>p_key) !~ '^-?\d{1,9}$' then
+    perform public.fail('VALIDATION_FAILED', '정수여야 해요', jsonb_build_object('field', p_key));
+  end if;
+  return (p_patch->>p_key)::int;
+end $$;
+
+-- pg_cron 5분마다(0010, 플랜 04). 보관 방·DRAFT 는 건드리지 않는다. 결과 {activated, ended}
+create or replace function public.room_tick() returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_today date := public.kst_today();
+  v_id    bigint;
+  v_act   int := 0;
+  v_end   int := 0;
+begin
+  perform pg_advisory_xact_lock(hashtext('room_tick'));
+  for v_id in
+    select id from public.rooms where status = 'RECRUIT' and archived_at is null and start_date <= v_today order by id
+  loop
+    perform public.room_transition_active(v_id, null);
+    v_act := v_act + 1;
+  end loop;
+  for v_id in
+    select id from public.rooms where status = 'ACTIVE' and end_date < v_today order by id
+  loop
+    perform public.room_transition_ended(v_id);
+    v_end := v_end + 1;
+  end loop;
+  return jsonb_build_object('activated', v_act, 'ended', v_end);
+end $$;
+
+-- ───────── 그룹장 상태 액션 ─────────
+create or replace function public.room_open_recruit(p_slug text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms;
+begin
+  r := public.room_lock(p_slug);
+  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  if r.status <> 'DRAFT' then perform public.fail('ROOM_STATUS_INVALID', '준비중인 방만 모집을 시작할 수 있어요'); end if;
+  if not exists (select 1 from public.goal_nodes n where n.room_id = r.id and n.task_type is not null and n.archived_at is null) then
+    perform public.fail('ROOM_NO_LEAF_TASK', '말단 과제가 1개 이상 있어야 모집을 시작할 수 있어요');
+  end if;
+  update public.rooms set status = 'RECRUIT', updated_at = now() where id = r.id;
+  perform public.assignment_resync(r.id);
+  return public.room_detail_json(r.id, v_uid);
+end $$;
+
+-- "지금 시작": start_date = today 로 당기고 ACTIVE 전환. 담당자 없는 지정 과제는 warnings(차단 안 함)
+create or replace function public.room_start(p_slug text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid   uuid := public.require_user();
+  v_today date := public.kst_today();
+  r       public.rooms;
+  v_warn  jsonb;
+begin
+  r := public.room_lock(p_slug);
+  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  if r.status <> 'RECRUIT' then perform public.fail('ROOM_STATUS_INVALID', '모집중인 방만 시작할 수 있어요'); end if;
+  if v_today > r.end_date then perform public.fail('INVALID_PERIOD', '종료일이 이미 지났어요', '{"field":"endDate"}'::jsonb); end if;
+  update public.rooms set start_date = v_today, updated_at = now() where id = r.id;
+  perform public.room_transition_active(r.id, v_uid);
+  select coalesce(jsonb_agg(jsonb_build_object('code', 'UNASSIGNED_TASK', 'nodeId', ls.node_id::text) order by ls.node_id), '[]'::jsonb)
+  into v_warn
+  from public.room_leaf_stats(r.id) ls where ls.task_type = 'DESIGNATED' and ls.asg = 0;
+  return public.room_detail_json(r.id, v_uid) || jsonb_build_object('warnings', v_warn);
+end $$;
+
+create or replace function public.room_archive(p_slug text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms;
+begin
+  r := public.room_lock(p_slug);
+  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  if r.status not in ('ACTIVE', 'ENDED') or r.archived_at is not null then
+    perform public.fail('ROOM_STATUS_INVALID', '진행중이거나 종료된 방만 보관할 수 있어요');
+  end if;
+  update public.rooms set archived_at = now(), updated_at = now() where id = r.id;
+  return public.room_detail_json(r.id, v_uid);
+end $$;
+
+create or replace function public.room_unarchive(p_slug text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms;
+begin
+  r := public.room_lock(p_slug);
+  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  if r.archived_at is null then perform public.fail('ROOM_STATUS_INVALID', '보관된 방이 아니에요'); end if;
+  update public.rooms set archived_at = null, updated_at = now() where id = r.id;
+  return public.room_detail_json(r.id, v_uid);
+end $$;
+
+-- DRAFT·RECRUIT 만 하드 삭제(FK cascade). ACTIVE 이후는 room_archive
+create or replace function public.room_delete(p_slug text) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms;
+begin
+  r := public.room_lock(p_slug);
+  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  if r.status not in ('DRAFT', 'RECRUIT') then perform public.fail('ROOM_STATUS_INVALID', '진행중이거나 종료된 방은 삭제할 수 없어요. 보관해 주세요'); end if;
+  delete from public.rooms where id = r.id;
+end $$;
+
+-- ───────── room_update: 상태별 필드 잠금 (mystudy §2.3.1, D11) ─────────
+-- p_patch 는 UpdateRoom 부분 객체(camelCase). 받은 키만 바꾼다. 'slug' 는 항상 FIELD_LOCKED(I11)
+create or replace function public.room_update(p_slug text, p_patch jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid    uuid := public.require_user();
+  v_today  date := public.kst_today();
+  r        public.rooms;
+  v_phase  text;                 -- recruit(DRAFT·RECRUIT) | active | ended
+  v_locked text[];
+  k        text;
+  v_title  text;
+  v_intro  text;
+  v_start  date;
+  v_end    date;
+  v_max    int;
+  v_min    int;
+  v_ldt    boolean;
+  v_pub    boolean;
+  v_node_max_end date;
+  v_warn   jsonb := '[]'::jsonb;
+begin
+  r := public.room_lock(p_slug);
+  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  if r.archived_at is not null then perform public.fail('ROOM_NOT_EDITABLE', '보관된 방은 수정할 수 없어요'); end if;
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
+    perform public.fail('VALIDATION_FAILED', '수정 내용이 올바르지 않아요');
+  end if;
+
+  v_phase := case when r.status in ('DRAFT', 'RECRUIT') then 'recruit' when r.status = 'ACTIVE' then 'active' else 'ended' end;
+  v_locked := case v_phase
+    when 'recruit' then array['slug']
+    when 'active'  then array['slug', 'startDate', 'minMembers', 'isPublic', 'joinMode', 'leaderDoesTasks']
+    else array['slug', 'title', 'intro', 'descriptionMd', 'rulesMd', 'coverFileId', 'startDate', 'endDate',
+               'maxMembers', 'minMembers', 'isPublic', 'joinMode', 'leaderDoesTasks'] end;
+
+  for k in select jsonb_object_keys(p_patch) loop
+    if k = any(v_locked) then
+      perform public.fail('FIELD_LOCKED', '지금 상태에서는 바꿀 수 없는 항목이에요', jsonb_build_object('field', k));
+    end if;
+    if k not in ('title', 'intro', 'descriptionMd', 'rulesMd', 'coverFileId', 'startDate', 'endDate',
+                 'maxMembers', 'minMembers', 'isPublic', 'joinMode', 'leaderDoesTasks') then
+      perform public.fail('VALIDATION_FAILED', '알 수 없는 항목이에요', jsonb_build_object('field', k));
+    end if;
+  end loop;
+
+  v_title := case when p_patch ? 'title' then trim(coalesce(p_patch->>'title', '')) else r.title end;
+  v_intro := case when p_patch ? 'intro' then trim(coalesce(p_patch->>'intro', '')) else r.intro end;
+  v_start := coalesce(public.patch_date(p_patch, 'startDate'), r.start_date);
+  v_end   := coalesce(public.patch_date(p_patch, 'endDate'), r.end_date);
+  v_max   := coalesce(public.patch_int(p_patch, 'maxMembers'), r.max_members);
+  v_min   := case when p_patch ? 'minMembers' then public.patch_int(p_patch, 'minMembers') else r.min_members end;
+  v_ldt   := coalesce(public.patch_bool(p_patch, 'leaderDoesTasks'), r.leader_does_tasks);
+  v_pub   := coalesce(public.patch_bool(p_patch, 'isPublic'), r.visibility = 'PUBLIC');
+
+  if length(v_title) < 1 or length(v_title) > 60 then
+    perform public.fail('INVALID_TITLE', '제목은 1~60자예요', '{"field":"title"}'::jsonb);
+  end if;
+  if length(v_intro) < 1 or length(v_intro) > 100 then
+    perform public.fail('VALIDATION_FAILED', '한 줄 소개는 1~100자예요', '{"field":"intro"}'::jsonb);
+  end if;
+  if p_patch ? 'startDate' and v_start < v_today then
+    perform public.fail('INVALID_PERIOD', '시작일은 오늘 이후여야 해요', '{"field":"startDate"}'::jsonb);
+  end if;
+  if v_start > v_end then
+    perform public.fail('INVALID_PERIOD', '종료일은 시작일 이후여야 해요', '{"field":"endDate"}'::jsonb);
+  end if;
+  if v_phase = 'active' and p_patch ? 'endDate' then
+    select max(n.end_date) into v_node_max_end from public.goal_nodes n where n.room_id = r.id and n.archived_at is null;
+    if v_end < v_today or (v_node_max_end is not null and v_end < v_node_max_end) then
+      perform public.fail('INVALID_PERIOD', '진행중에는 종료일을 오늘과 마지막 과제 마감 이후로만 바꿀 수 있어요', '{"field":"endDate"}'::jsonb);
+    end if;
+  end if;
+  if v_max < 2 or v_max > 100 then
+    perform public.fail('VALIDATION_FAILED', '정원은 2~100명이에요', '{"field":"maxMembers"}'::jsonb);
+  end if;
+  if v_max < r.member_count then
+    perform public.fail('CAPACITY_BELOW_CURRENT', '현재 참가자 수보다 적게 줄일 수 없어요', jsonb_build_object('field', 'maxMembers', 'memberCount', r.member_count));
+  end if;
+  if v_min is not null and (v_min < 1 or v_min > v_max) then
+    perform public.fail('VALIDATION_FAILED', '최소 인원은 1~정원 사이예요', '{"field":"minMembers"}'::jsonb);
+  end if;
+  if p_patch ? 'joinMode' and coalesce(p_patch->>'joinMode', '') not in ('direct', 'approval') then
+    perform public.fail('VALIDATION_FAILED', '참가 방식은 direct 또는 approval 이에요', '{"field":"joinMode"}'::jsonb);
+  end if;
+  -- 커버는 내가 올린 COVER 용 파일만 (A8). 텍스트로 비교해 uuid 캐스트 오류(22P02)를 피한다. null 은 커버 제거
+  if p_patch ? 'coverFileId' and jsonb_typeof(p_patch->'coverFileId') <> 'null' and not exists (
+       select 1 from public.files f
+       where f.id::text = p_patch->>'coverFileId' and f.owner_user_id = v_uid and f.purpose = 'COVER') then
+    perform public.fail('VALIDATION_FAILED', '커버 이미지를 찾을 수 없어요', '{"field":"coverFileId"}'::jsonb);
+  end if;
+
+  update public.rooms set
+    title = v_title, intro = v_intro,
+    description_md = coalesce(p_patch->>'descriptionMd', description_md),
+    rules_md       = coalesce(p_patch->>'rulesMd', rules_md),
+    cover_file_id  = case when p_patch ? 'coverFileId' then (p_patch->>'coverFileId')::uuid else cover_file_id end,
+    start_date = v_start, end_date = v_end, max_members = v_max, min_members = v_min,
+    visibility = case when v_pub then 'PUBLIC' else 'PRIVATE' end,
+    join_mode  = case when p_patch ? 'joinMode' then upper(p_patch->>'joinMode') else join_mode end,
+    leader_does_tasks = v_ldt, updated_at = now()
+  where id = r.id;
+
+  if v_ldt <> r.leader_does_tasks then perform public.assignment_resync(r.id); end if;
+
+  -- 방 기간 밖으로 나간 노드(보관 제외)는 경고 (D9)
+  if p_patch ? 'startDate' or p_patch ? 'endDate' then
+    select coalesce(jsonb_agg(jsonb_build_object('code', 'PERIOD_OUTSIDE_ROOM', 'nodeId', n.id::text) order by n.id), '[]'::jsonb)
+    into v_warn
+    from public.goal_nodes n
+    where n.room_id = r.id and n.archived_at is null and (n.start_date < v_start or n.end_date > v_end);
+  end if;
+
+  return public.room_detail_json(r.id, v_uid) || jsonb_build_object('warnings', v_warn);
+end $$;
+
+-- ───────── 공개 RPC GRANT (D7) — room_tick·patch_*·room_transition_* 는 GRANT 없음 ─────────
+grant execute on function public.room_open_recruit(text) to authenticated;
+grant execute on function public.room_start(text)        to authenticated;
+grant execute on function public.room_archive(text)      to authenticated;
+grant execute on function public.room_unarchive(text)    to authenticated;
+grant execute on function public.room_delete(text)       to authenticated;
+grant execute on function public.room_update(text, jsonb) to authenticated;

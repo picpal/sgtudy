@@ -146,4 +146,207 @@ export const ROOM_CASES: Case[] = [
       }
     },
   },
+  {
+    name: "room_open_recruit: 리프 없으면 ROOM_NO_LEAF_TASK, 있으면 RECRUIT",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const d = await createRoom(q, USERS.서연);
+      await expectFailSql(q, `select public.room_open_recruit($1)`, [d.slug], "ROOM_NO_LEAF_TASK");
+      await seedLeaves(q, d.id, [{ title: "과제 1", type: "COMMON", s: "2026-11-01", e: "2026-11-07" }]);
+      const [{ r }] = await q(`select public.room_open_recruit($1) as r`, [d.slug]);
+      assertEquals(r.status, "recruit");
+      // 그룹장은 leader_does_tasks 기본 true → 공통 리프 1건 배정됨. 10/12 에는 11/01 시작 과제가 planned → nextDue 없음(OPEN 만, D14)
+      assertEquals(r.myProgress, { submitted: 0, assigned: 1, nextDue: null });
+      const [{ id: leafId }] = await q(`select id::text as id from public.goal_nodes where room_id = $1 and task_type is not null`, [d.id]);
+      await setToday(q, "2026-11-02");                                   // 과제 기간 안 → OPEN
+      const [{ j }] = await q(`select public.room_detail_json($1, $2) as j`, [d.id, USERS.서연]);
+      assertEquals(j.myProgress.nextDue, { nodeId: leafId, title: "과제 1", roundLabel: "1주차", dueDate: "2026-11-07" });
+      await setToday(q, TODAY);
+      // 두 번 열면 ROOM_STATUS_INVALID, 다른 사람은 NOT_LEADER
+      await expectFailSql(q, `select public.room_open_recruit($1)`, [d.slug], "ROOM_STATUS_INVALID");
+      await asUser(q, USERS.민수);
+      await expectFailSql(q, `select public.room_open_recruit($1)`, [d.slug], "NOT_LEADER");
+    },
+  },
+  {
+    name: "room_start: RECRUIT → ACTIVE, start_date=today, PENDING→EXPIRED, 담당자 없는 지정 과제는 warnings",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const d = await createRoom(q, USERS.서연, { joinMode: "approval" });
+      await seedLeaves(q, d.id, [
+        { title: "공통", type: "COMMON", s: "2026-11-01", e: "2026-11-07" },
+        { title: "지정", type: "DESIGNATED", s: "2026-11-01", e: "2026-11-07" },
+      ]);
+      await q(`select public.room_open_recruit($1)`, [d.slug]);
+      await asUser(q, USERS.민수);
+      await q(`select public.room_apply($1)`, [d.slug]);
+      await asUser(q, USERS.서연);
+      const [{ r }] = await q(`select public.room_start($1) as r`, [d.slug]);
+      assertEquals(r.status, "active");
+      assertEquals(r.startDate, TODAY);
+      assertEquals(r.warnings.length, 1);
+      assertEquals(r.warnings[0].code, "UNASSIGNED_TASK");
+      const [m] = await q(`select status from public.room_members where room_id = $1 and user_id = $2`, [d.id, USERS.민수]);
+      assertEquals(m.status, "EXPIRED");
+      const [row] = await q(`select started_at is not null as s from public.rooms where id = $1`, [d.id]);
+      assertEquals(row.s, true);
+      await expectFailSql(q, `select public.room_start($1)`, [d.slug], "ROOM_STATUS_INVALID");
+    },
+  },
+  {
+    name: "room_tick: start_date 지난 RECRUIT 전부 ACTIVE(이틀 누락 포함), PENDING→EXPIRED, 재실행은 0건, DRAFT·보관은 무시",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const a = await createRoom(q, USERS.서연, { title: "Tick A", startDate: "2026-10-13", endDate: "2026-10-17", joinMode: "approval" });
+      const b = await createRoom(q, USERS.서연, { title: "Tick B", startDate: "2026-10-14", endDate: "2026-10-17" });
+      const c = await createRoom(q, USERS.서연, { title: "Tick C draft", startDate: "2026-10-13", endDate: "2026-10-17" });
+      for (const d of [a, b]) {
+        await asUser(q, USERS.서연);
+        await seedLeaves(q, d.id, [{ title: "t", type: "COMMON", s: "2026-10-13", e: "2026-10-17" }]);
+        await q(`select public.room_open_recruit($1)`, [d.slug]);
+      }
+      await seedLeaves(q, c.id, [{ title: "t", type: "COMMON", s: "2026-10-13", e: "2026-10-17" }]); // c 는 DRAFT 그대로
+      await asUser(q, USERS.민수);
+      await q(`select public.room_apply($1)`, [a.slug]);
+      // 보관된 RECRUIT(손상 데이터) — tick 이 건드리지 않아야 한다
+      await q(`update public.rooms set archived_at = now() where id = $1`, [b.id]);
+      const [{ r: before }] = await q(`select public.room_tick() as r`);
+      assertEquals(before, { activated: 0, ended: 0 });           // 10/12: 아직 시작일 전
+      await setToday(q, "2026-10-15");                              // 이틀 건너뜀
+      const [{ r: t1 }] = await q(`select public.room_tick() as r`);
+      assertEquals(t1, { activated: 1, ended: 0 });                 // a 만 (b 보관, c DRAFT)
+      const rows = await q(`select slug, status from public.rooms where id = any($1::bigint[]) order by id`, [[a.id, b.id, c.id]]);
+      assertEquals(rows.map((x) => x.status), ["ACTIVE", "RECRUIT", "DRAFT"]);
+      const [m] = await q(`select status from public.room_members where room_id = $1 and user_id = $2`, [a.id, USERS.민수]);
+      assertEquals(m.status, "EXPIRED");
+      const [{ r: t2 }] = await q(`select public.room_tick() as r`);
+      assertEquals(t2, { activated: 0, ended: 0 });                 // 멱등
+      await setToday(q, "2026-10-18");                              // end_date 다음날, 시드 RECRUIT cs·jcg 시작일 10-19 이전
+      const [{ r: t3 }] = await q(`select public.room_tick() as r`);
+      assertEquals(t3, { activated: 0, ended: 1 });
+      const [e] = await q(`select status, ended_at is not null as x from public.rooms where id = $1`, [a.id]);
+      assertEquals([e.status, e.x], ["ENDED", true]);
+    },
+  },
+  {
+    name: "room_update: 상태별 필드 잠금 (DRAFT/RECRUIT 전부 가능, ACTIVE 는 startDate 등 FIELD_LOCKED, ENDED 전부 잠금)",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const d = await createRoom(q, USERS.서연, { startDate: "2026-10-13", endDate: "2026-10-31" });
+      const upd = `select public.room_update($1, $2::jsonb) as r`;
+      // RECRUIT 단계(DRAFT 동일): startDate 변경 가능(≥ today), 과거는 INVALID_PERIOD
+      let [{ r }] = await q(upd, [d.slug, JSON.stringify({ startDate: "2026-10-14", minMembers: 2, isPublic: false, joinMode: "approval", leaderDoesTasks: false })]);
+      assertEquals([r.startDate, r.minMembers, r.isPublic, r.joinMode, r.leaderDoesTasks], ["2026-10-14", 2, false, "approval", false]);
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ startDate: "2026-10-11" })], "INVALID_PERIOD");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-13" })], "INVALID_PERIOD");   // end < start
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: 1 })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ slug: "x" })], "FIELD_LOCKED");               // I11
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ title: "" })], "INVALID_TITLE");
+      // D11: 형식 오류는 22007/22008/22P02 원문이 아니라 VALIDATION_FAILED, joinMode null 은 NOT NULL 위반 대신 VALIDATION_FAILED
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ startDate: "2026-13-01" })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ endDate: 20261101 })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ isPublic: "yes" })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: "many" })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ joinMode: null })], "VALIDATION_FAILED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ coverFileId: "not-a-uuid" })], "VALIDATION_FAILED");   // A8
+      // 정원 축소 < member_count → CAPACITY_BELOW_CURRENT (리프 만들고 모집 열어 민수 참가 후 2명)
+      await seedLeaves(q, d.id, [{ title: "t", type: "COMMON", s: "2026-10-14", e: "2026-10-20" }], { label: "1주차", title: "회차", s: "2026-10-14", e: "2026-10-20" });
+      await q(`select public.room_update($1, $2::jsonb)`, [d.slug, JSON.stringify({ joinMode: "direct", isPublic: true })]);
+      await q(`select public.room_open_recruit($1)`, [d.slug]);
+      await asUser(q, USERS.민수);
+      await q(`select public.room_join($1)`, [d.slug]);
+      await asUser(q, USERS.서연);
+      await q(upd, [d.slug, JSON.stringify({ maxMembers: 2 })]);
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: 1 })], "VALIDATION_FAILED");      // 범위(2~100) 먼저
+      await q(upd, [d.slug, JSON.stringify({ maxMembers: 3 })]);
+      await asUser(q, USERS.현우);
+      await q(`select public.room_join($1)`, [d.slug]);                                                 // 3/3
+      await asUser(q, USERS.서연);
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: 2 })], "CAPACITY_BELOW_CURRENT");
+      // ACTIVE 단계
+      await q(`select public.room_start($1)`, [d.slug]);
+      for (const k of ["startDate", "minMembers", "isPublic", "joinMode", "leaderDoesTasks"]) {
+        await expectFailSql(q, upd, [d.slug, JSON.stringify({ [k]: k === "startDate" ? "2026-10-20" : k === "minMembers" ? 1 : k === "joinMode" ? "direct" : true })], "FIELD_LOCKED");
+      }
+      [{ r }] = await q(upd, [d.slug, JSON.stringify({ title: "바뀐 제목", endDate: "2026-11-15", maxMembers: 5 })]);
+      assertEquals([r.title, r.endDate, r.maxMembers], ["바뀐 제목", "2026-11-15", 5]);
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-19" })], "INVALID_PERIOD");  // 노드 e(10/20) 보다 앞
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-11" })], "INVALID_PERIOD");  // today 보다 앞
+      // ENDED 단계: 전부 잠금
+      await setToday(q, "2026-11-16");
+      await q(`select public.room_tick()`);
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ title: "x" })], "FIELD_LOCKED");
+      // 보관: ROOM_NOT_EDITABLE
+      await q(`select public.room_archive($1)`, [d.slug]);
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ title: "x" })], "ROOM_NOT_EDITABLE");
+      await expectFailSql(q, `select public.room_update($1, $2::jsonb)`, ["no-such-room", "{}"], "ROOM_NOT_FOUND");
+    },
+  },
+  {
+    name: "room_update: leaderDoesTasks 변경은 배정을 재동기화하고 기간 밖 노드는 warnings",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const d = await createRoom(q, USERS.서연, { startDate: "2026-11-01", endDate: "2026-11-30" });
+      const { leafIds } = await seedLeaves(q, d.id, [{ title: "t", type: "COMMON", s: "2026-11-01", e: "2026-11-07" }]);
+      const cnt = async () => (await q(`select count(*)::int as n from public.task_assignments where node_id = $1 and released_at is null`, [leafIds[0]]))[0].n;
+      assertEquals(await cnt(), 1);
+      await q(`select public.room_update($1, $2::jsonb)`, [d.slug, JSON.stringify({ leaderDoesTasks: false })]);
+      assertEquals(await cnt(), 0);
+      await q(`select public.room_update($1, $2::jsonb)`, [d.slug, JSON.stringify({ leaderDoesTasks: true })]);
+      assertEquals(await cnt(), 1);
+      const [{ r }] = await q(`select public.room_update($1, $2::jsonb) as r`, [d.slug, JSON.stringify({ startDate: "2026-11-03" })]);
+      assertEquals(r.warnings, [{ code: "PERIOD_OUTSIDE_ROOM", nodeId: leafIds[0] }, { code: "PERIOD_OUTSIDE_ROOM", nodeId: r.rounds[0].id }].sort((x, y) => Number(x.nodeId) - Number(y.nodeId)));
+    },
+  },
+  {
+    name: "room_archive/unarchive/delete: 상태 제약",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const d = await createRoom(q, USERS.서연);
+      await expectFailSql(q, `select public.room_archive($1)`, [d.slug], "ROOM_STATUS_INVALID");   // DRAFT 는 보관 불가
+      await expectFailSql(q, `select public.room_unarchive($1)`, [d.slug], "ROOM_STATUS_INVALID"); // 보관 아님
+      await asUser(q, USERS.민수);
+      await expectFailSql(q, `select public.room_delete($1)`, [d.slug], "NOT_LEADER");
+      await asUser(q, USERS.서연);
+      await q(`select public.room_delete($1)`, [d.slug]);
+      const [{ n }] = await q(`select count(*)::int as n from public.rooms where id = $1`, [d.id]);
+      assertEquals(n, 0);
+      // ACTIVE 방은 삭제 불가, 보관 가능, 해제 시 상태 복귀
+      await expectFailSql(q, `select public.room_delete($1)`, ["aws"], "NOT_LEADER");
+      await asUser(q, USERS.민수);
+      await expectFailSql(q, `select public.room_delete($1)`, ["aws"], "ROOM_STATUS_INVALID");
+      const [{ r }] = await q(`select public.room_archive($1) as r`, ["aws"]);
+      assertEquals([r.archived, r.status], [true, "active"]);
+      const [{ r: r2 }] = await q(`select public.room_unarchive($1) as r`, ["aws"]);
+      assertEquals([r2.archived, r2.status], [false, "active"]);
+    },
+  },
+  {
+    name: "privileges (T2): 그룹장 RPC 6개만 authenticated, tick·전환·patch 헬퍼는 EXECUTE 없음",
+    run: async (q) => {
+      const fnCan = async (role: string, fn: string) =>
+        (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
+      for (const f of ["room_open_recruit(text)", "room_start(text)", "room_archive(text)", "room_unarchive(text)", "room_delete(text)", "room_update(text,jsonb)"]) {
+        assertEquals(await fnCan("authenticated", `public.${f}`), true, `authenticated ${f}`);
+        assertEquals(await fnCan("anon", `public.${f}`), false, `anon ${f}`);
+      }
+      for (const f of ["room_tick()", "room_transition_active(bigint,uuid)", "room_transition_ended(bigint)",
+        "patch_date(jsonb,text)", "patch_bool(jsonb,text)", "patch_int(jsonb,text)"]) {
+        for (const role of ["anon", "authenticated"]) assertEquals(await fnCan(role, `public.${f}`), false, `${role} ${f}`);
+      }
+      // 실제 실행: 슈퍼유저로 DRAFT 방 + 리프를 만든 뒤 역할을 바꿔 호출
+      await setToday(q, TODAY);
+      const d = await createRoom(q, USERS.철수);
+      await seedLeaves(q, d.id, [{ title: "t", type: "COMMON", s: "2026-11-01", e: "2026-11-07" }]);
+      await asUser(q, USERS.철수);
+      await q("set local role authenticated");
+      const [{ r }] = await q(`select public.room_update($1, $2::jsonb) as r`, [d.slug, JSON.stringify({ title: "권한 확인" })]);
+      assertEquals(r.title, "권한 확인");
+      const [{ r: o }] = await q(`select public.room_open_recruit($1) as r`, [d.slug]);
+      assertEquals(o.status, "recruit");
+      await q("set local role anon");
+      await expectFailSql(q, `select public.room_update($1, $2::jsonb)`, [d.slug, JSON.stringify({ title: "x" })], "permission denied");
+      await q("reset role");
+    },
+  },
 ];
