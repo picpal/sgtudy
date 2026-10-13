@@ -18,8 +18,6 @@ dbTest("storage: non-assignee upload rejected, assignee upload + file_register r
     const ok = await c.storage.from("attachments").upload(path, blob, { contentType: "image/png" });
     assertEquals(ok.error, null);
     const { data, error } = await c.rpc("file_register", { p_node: ec2.id, p_path: path, p_name: "x.png", p_mime: "image/png", p_size: 4 });
-    // TODO(T4): file_register 의 GRANT 는 Task 4 가 건다. 그 전까지는 GRANT 계층 42501 이 정상 — T4 에서 이 분기를 지우고 error null 로 고정
-    if (error?.code === "42501") return;
     assertEquals(error, null);
     assertEquals(data.status, "ready");
   } finally {

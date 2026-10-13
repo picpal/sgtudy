@@ -226,3 +226,93 @@ begin
   if f.id is null then perform public.fail('NOT_FOUND', '다른 사용자의 파일 id 예요', jsonb_build_object('fileId', v_id::text)); end if;
   return public.file_json(f);
 end $$;
+
+-- ───────── 과제 상세 (03-api §5 TaskDetail) ─────────
+-- 리프 NodeDto. 집계(assigned/submitted/pct)는 공개, 사람별 상태(people)는 그룹장·ACTIVE/INACTIVE/PENDING 멤버에게만(curriculum_json 과 같은 규칙, 보관 리프는 []).
+-- 보관 노드도 직접 집계한다(room_leaf_stats 는 보관을 제외하므로 쓰지 않는다).
+create or replace function public.task_node_json(p_node bigint, p_uid uuid) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'id', n.id::text, 'parentId', n.parent_id::text, 'roundId', n.round_id::text, 'depth', n.depth, 'sortOrder', n.sort_order,
+    'label', n.label, 'title', n.title, 'descriptionMd', n.description_md,
+    'startDate', to_char(n.start_date, 'YYYY-MM-DD'), 'endDate', to_char(n.end_date, 'YYYY-MM-DD'),
+    'archived', n.archived_at is not null,
+    'task', jsonb_build_object(
+      'type', lower(n.task_type),
+      'people', case when p_uid is null or n.archived_at is not null or not (
+          exists (select 1 from public.rooms rr where rr.id = n.room_id and rr.leader_id = p_uid)
+          or exists (select 1 from public.room_members m where m.room_id = n.room_id and m.user_id = p_uid
+                       and m.status in ('ACTIVE', 'INACTIVE', 'PENDING')))
+        then '[]'::jsonb else coalesce((
+        select jsonb_agg(public.person_json(a.user_id)
+                         || jsonb_build_object('status', public.task_code(n.start_date, n.end_date, s.first_submitted_at, s.is_late, public.kst_today()))
+                         order by a.assigned_at, a.id)
+        from public.task_assignments a
+        left join public.submissions s on s.node_id = a.node_id and s.user_id = a.user_id
+        where a.node_id = n.id and a.released_at is null), '[]'::jsonb) end,
+      'assigned', st.asg, 'submitted', st.sub,
+      'state', public.leaf_state(st.asg, st.sub, n.start_date, n.end_date, public.kst_today())),
+    'assigned', st.asg, 'submitted', st.sub, 'pct', public.pct(st.asg, st.sub))
+  from public.goal_nodes n
+  cross join lateral (
+    select count(a.id)::int as asg, count(s.id)::int as sub
+    from public.task_assignments a
+    left join public.submissions s on s.node_id = a.node_id and s.user_id = a.user_id
+    where a.node_id = n.id and a.released_at is null) st
+  where n.id = p_node and n.task_type is not null
+$$;
+
+-- 권한: 방을 읽을 수 있으면 메타, can_read_submissions 면 제출물(보관 노드는 그룹장·작성자 것만 — can_read_submission)
+create or replace function public.task_get(p_slug text, p_node bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid  uuid := public.current_user_id();
+  r      public.rooms;
+  n      public.goal_nodes;
+  v_path jsonb;
+  v_mine jsonb := null;
+  v_subs jsonb := '[]'::jsonb;
+  v_node jsonb;
+begin
+  select * into r from public.rooms where slug = p_slug;
+  if not found or not public.room_readable(r.id, v_uid) then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
+  select * into n from public.goal_nodes where id = p_node and room_id = r.id;
+  if not found then perform public.fail('NODE_NOT_FOUND', '과제를 찾을 수 없어요'); end if;
+  if n.task_type is null then perform public.fail('NODE_NOT_LEAF', '말단 과제만 상세를 볼 수 있어요'); end if;
+
+  with recursive up as (
+    select g.id, g.parent_id, g.title, g.label, 0 as lvl from public.goal_nodes g where g.id = n.id
+    union all
+    select g.id, g.parent_id, g.title, g.label, up.lvl + 1 from public.goal_nodes g join up on g.id = up.parent_id)
+  select coalesce(jsonb_agg(jsonb_build_object('id', up.id::text, 'title', up.title, 'label', up.label) order by up.lvl desc), '[]'::jsonb)
+  into v_path from up;
+
+  v_node := public.task_node_json(n.id, v_uid);
+
+  if v_uid is not null then
+    select public.submission_json(s.id) into v_mine from public.submissions s where s.node_id = n.id and s.user_id = v_uid;
+  end if;
+
+  if public.can_read_submissions(r.id) then
+    select coalesce(jsonb_agg(public.submission_json(s.id) || jsonb_build_object('author', public.person_json(s.user_id))
+                              order by s.first_submitted_at, s.id), '[]'::jsonb)
+    into v_subs
+    from public.submissions s
+    where s.node_id = n.id and public.can_read_submission(n.id, s.user_id);
+  end if;
+
+  return jsonb_build_object(
+    'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
+    'node', v_node,
+    'path', v_path,
+    'mySubmission', v_mine,
+    'isAssignee', v_uid is not null and public.is_task_assignee(n.id, v_uid),
+    'allSubmitted', (v_node ->> 'assigned')::int > 0 and (v_node ->> 'assigned') = (v_node ->> 'submitted'),
+    'submissions', v_subs);
+end $$;
+
+-- ───────── 공개 RPC (D7 GRANT 전용 모델 — 0002 의 default privileges 로 나머지는 전부 비공개) ─────────
+-- 내부 헬퍼(app_now, allowed_mime_types, storage_exists, file_json, submission_json, task_node_json)는 GRANT 하지 않는다.
+grant execute on function public.task_get(text, bigint) to anon, authenticated;                          -- 공개 방 메타는 비로그인 허용
+grant execute on function public.submission_upsert(bigint, text, text[], uuid[]) to authenticated;
+grant execute on function public.file_register(bigint, text, text, text, bigint) to authenticated;
