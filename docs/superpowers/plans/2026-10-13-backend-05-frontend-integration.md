@@ -19,6 +19,12 @@
 >
 > 따라서 이 플랜의 종료 = **Phase 7a 종료**(백엔드 전체 종료 아님).
 
+> **plan 04 실행에서 넘어온 인계(2026-10-13)** — 이 플랜 실행 전 반영:
+> - 로컬 `db:reset` 뒤 **실제 pg_cron 이 돈다**(kst_today 는 10/12 고정). 시드 ROUND_STARTED 행은 잡의 자연 키라 중복되지 않지만, 09:00 KST 일일 요약 등은 실행 시각에 따라 알림이 늘 수 있다 — E2E 의 미읽음 개수 단언은 시드 직후 값(철수 3)에 의존하지 말고 API 로 읽은 값 기준으로.
+> - `room_tags_suggest` 는 동기 `{ today, items }`(03-api §7 메모). `Notification.room` 은 null 가능. 첨부 키 확장자는 소문자.
+> - 백로그: deactivate 로 전원 제출이 되는 경우의 TASK_ALL_SUBMITTED, 당일 수동 시작 방의 1회차 ROUND_STARTED, 방 기간 변경 알림, ASCII 태그 부분일치 오탐(java ⊂ JavaScript).
+> - plan 04 의 Task 9(LLM `suggest-tags` Edge Function)는 실행하지 않았다(선택·기본 OFF).
+
 ## 선행 조건 (Phase 0–6 완료 가정)
 
 이 계획은 아래가 **이미 존재**한다고 가정한다. 없으면 01~04 계획을 먼저 실행한다.
