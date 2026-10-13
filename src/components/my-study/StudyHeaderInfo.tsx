@@ -4,7 +4,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { PAL } from "@/lib/palette";
 import { ROOM_STATUS_LABEL, type RoomStatus } from "@/lib/types";
-import type { Room } from "@/data/my-study";
+import type { StudyRoom } from "@/lib/api/my-study";
 import { RoundIconButton, toneOfName } from "./bits";
 
 export type TabId = "overview" | "curriculum" | "board" | "calendar" | "gantt";
@@ -18,7 +18,14 @@ export const TABS: [TabId, string][] = [
 
 const STATUS_BG: Record<RoomStatus, string> = { recruit: "#2F5BC2", active: "#0D7A64", ended: "#5B6675" };
 
-export function StatusBadge({ status }: { status: RoomStatus }) {
+/** draft(모집 시작 전)는 방 목록 카드와 같은 "준비중" 회색 배지 (Q2-03) */
+export function StatusBadge({ status, draft }: { status: RoomStatus; draft?: boolean }) {
+  if (draft)
+    return (
+      <Badge bg="#E9EEF0" fg="#4A5563" height={26} px={10} radius={8} fontSize={12} weight={600}>
+        준비중
+      </Badge>
+    );
   return (
     <Badge bg={STATUS_BG[status]} fg="#FFFFFF" height={26} px={10} radius={8} fontSize={12} weight={600}>
       {ROOM_STATUS_LABEL[status]}
@@ -38,7 +45,7 @@ const ic = (d: React.ReactNode, extra?: object) => (
   </svg>
 );
 
-export function StudyHeaderInfo({ room, tab, onTab }: { room: Room; tab: TabId; onTab: (t: TabId) => void }) {
+export function StudyHeaderInfo({ room, tab, onTab }: { room: StudyRoom; tab: TabId; onTab: (t: TabId) => void }) {
   return (
     <>
       <div className="flex items-start gap-3">
@@ -68,11 +75,11 @@ export function StudyHeaderInfo({ room, tab, onTab }: { room: Room; tab: TabId; 
           <Dt icon={ic(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>)}>기간</Dt>
           <dd className="m-0 flex flex-wrap items-center gap-2 font-medium">
             {room.period}
-            <span className="rounded-[7px] bg-mint-soft px-2 py-[2px] text-[12px] font-semibold text-mint">{room.dday}</span>
+            <span className="rounded-[7px] bg-mint-soft px-2 py-[2px] text-[12px] font-semibold text-mint">{room.draft ? `모집 전 · ${room.dday}` : room.dday}</span>
           </dd>
           <Dt icon={ic(<path d="M4 21V4M4 4h12l-2 4 2 4H4" />)}>상태</Dt>
           <dd className="m-0">
-            <StatusBadge status={room.status} />
+            <StatusBadge status={room.status} draft={room.draft} />
           </dd>
           <Dt icon={ic(<><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" /><path d="m9 12 2 2 4-4" /></>)}>참가 방식</Dt>
           <dd className="m-0 font-medium">{room.joinMode}</dd>
@@ -106,7 +113,7 @@ export function StudyHeaderInfo({ room, tab, onTab }: { room: Room; tab: TabId; 
         </dl>
       )}
 
-      <div role="tablist" aria-label="방 상세 탭" className="mt-[26px] flex gap-1 overflow-x-auto border-y border-line-2 py-2">
+      <div id="my-study-tabs" role="tablist" aria-label="방 상세 탭" className="mt-[26px] scroll-mt-4 flex gap-1 overflow-x-auto border-y border-line-2 py-2">
         {TABS.map(([id, label]) => {
           const on = tab === id;
           return (

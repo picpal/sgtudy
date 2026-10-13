@@ -26,8 +26,21 @@ function nextOf(d: RoomDetail, tree: Tree, today: string): NextDue | null {
   return { nodeId: nd.nodeId, title: nd.title, path: leaf ? `${leaf.crumb} · ${leaf.type} 과제` : nd.roundLabel, due: `${mmdd(nd.dueDate)}(${weekdayKo(nd.dueDate)}) 23:59 마감`, dday: dday(today, nd.dueDate) };
 }
 
+/** 참가 카드 동작: owner 그룹장 · leave 모집 기간 참가자(취소 가능) · joined 진행·종료 참가자 · pending 승인 대기 · closed 그 외 */
+export type StudyAction = "owner" | "leave" | "joined" | "pending" | "closed";
+/** draft = 모집 시작 전(준비중). status 는 recruit 로 접히므로 화면은 draft 로 구분한다 (Q2-03) */
+export type StudyRoom = Omit<Room, "action"> & { action: StudyAction; draft: boolean };
+
+function studyActionOf(d: RoomDetail): StudyAction {
+  const st = d.me?.state;
+  if (st === "leader") return "owner";
+  if (st === "pending") return "pending";
+  if (st === "active") return d.status === "recruit" || d.status === "draft" ? "leave" : d.status === "active" ? "joined" : "closed";
+  return "closed";
+}
+
 /** room_get → 내 스터디 Room (mystudy §1.2–1.4). 숫자 집계(members done/total, rounds sub/total)는 화면이 tree 로 덮어쓴다. */
-export function toStudyRoom(d: RoomDetail, tree: Tree, today: string, meId: string): Room {
+export function toStudyRoom(d: RoomDetail, tree: Tree, today: string, meId: string): StudyRoom {
   const dd = ddayOf(d.status, today, d.startDate, d.endDate);
   const cur = curOf(d, today);
   const win = roundsWindow(d.rounds, d.status, today);
@@ -45,10 +58,10 @@ export function toStudyRoom(d: RoomDetail, tree: Tree, today: string, meId: stri
     if (recruit) row.alt = rr.state;
     return row;
   });
-  const action: Room["action"] = d.status === "ended" ? "closed" : d.me?.state === "active" || d.me?.state === "leader" ? "joined" : d.me?.state === "pending" ? "pending" : "closed";
+  const draft = d.status === "draft";
   return {
-    id: d.slug, title: d.title, intro: d.intro, status: uiStatus(d.status),
-    period: periodLong(d.startDate, d.endDate), dday: dd.short, ddayLong: dd.long,
+    id: d.slug, title: d.title, intro: d.intro, status: uiStatus(d.status), draft,
+    period: periodLong(d.startDate, d.endDate), dday: dd.short, ddayLong: draft ? `모집 전 · ${dd.long}` : dd.long,
     joinMode: d.joinMode === "approval" ? "그룹장 승인 후 참가" : "바로 참가",
     visibility: d.isPublic ? "공개" : "비공개 · 초대 링크로만 참가",
     leader: d.leader.nickname, leaderTone: d.leader.tone, tags: d.tags.map((t) => ({ label: t.label, tone: t.tone, auto: t.auto })),
@@ -56,17 +69,24 @@ export function toStudyRoom(d: RoomDetail, tree: Tree, today: string, meId: stri
     cur: { pill: cur.pill, title: cur.title, meta: cur.meta, tasks: cur.tasks.map((t) => ({ title: t.title, type: t.type, dates: t.dates, people: t.people.map((p) => [p.name, p.status] as [string, typeof p.status]), tones: Object.fromEntries(t.people.map((p) => [p.name, p.tone])) })) },
     about: d.descriptionMd, rules: rulesOf(d.rulesMd), rounds,
     moreRounds: win.more ? `${win.more} · 커리큘럼 탭에서 전체 보기` : "",
-    action, next: nextOf(d, tree, today),
+    action: studyActionOf(d), next: nextOf(d, tree, today),
   };
 }
 
 const GROUP_LABEL = { active: "진행중", recruit: "모집중 · 신청한 방", ended: "종료" } as const;
+/** 시작 전 그룹에서 내가 그룹장인 방(준비중·모집중)은 "신청한 방" 이 아니다 (Q2-27) */
+const OWN_LABEL = "내가 만든 방 · 시작 전";
 
 export function toSidebarGroups(ms: MeStudies, today: string): SidebarGroup[] {
-  return ms.groups
+  const split = ms.groups.flatMap((g): { kind: MeStudies["groups"][number]["kind"]; label: string; items: MeStudies["groups"][number]["items"] }[] =>
+    g.kind === "recruit"
+      ? [{ kind: g.kind, label: OWN_LABEL, items: g.items.filter((it) => it.membership === "leader") }, { kind: g.kind, label: GROUP_LABEL.recruit, items: g.items.filter((it) => it.membership !== "leader") }]
+      : [{ kind: g.kind, label: GROUP_LABEL[g.kind], items: g.items }],
+  );
+  return split
     .filter((g) => g.items.length > 0)
     .map((g) => ({
-      label: GROUP_LABEL[g.kind],
+      label: g.label,
       items: g.items.map((it) => {
         const w = it.when;
         // 진행중 방에 열린 과제가 없으면 서버는 kind "end"(방 종료일)를 준다 → "MM.DD 까지" (preflight C5)
@@ -74,6 +94,15 @@ export function toSidebarGroups(ms: MeStudies, today: string): SidebarGroup[] {
         return w.kind === "deadline" ? { id: it.slug, title: it.title, intro: it.intro, when, left: diffDays(today, w.date) } : { id: it.slug, title: it.title, intro: it.intro, when };
       }),
     }));
+}
+
+/** 사이드바 검색 — 제목·소개에 포함 (대소문자 무시). 빈 그룹은 뺀다 (Q3-06) */
+export function filterSidebarGroups(groups: SidebarGroup[], q: string): SidebarGroup[] {
+  const k = q.trim().toLowerCase();
+  if (!k) return groups;
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((it) => `${it.title ?? ""} ${it.intro ?? ""}`.toLowerCase().includes(k)) }))
+    .filter((g) => g.items.length > 0);
 }
 
 /** 편집 패널 "저장" — 오버라이드가 있는 필드만 NodePatch 로 */

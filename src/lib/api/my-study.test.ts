@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AWS } from "@/components/my-study/fixtures";
 import { EMPTY_OVERRIDES, buildTree } from "@/components/my-study/model";
 import type { MeStudies, RoomDetail } from "./types";
-import { patchOf, toSidebarGroups, toStudyRoom } from "./my-study";
+import { filterSidebarGroups, patchOf, toSidebarGroups, toStudyRoom } from "./my-study";
 
 const TODAY = "2026-10-12";
 const P = (userId: string, nickname: string, tone: RoomDetail["leader"]["tone"]) => ({ userId, nickname, tone });
@@ -61,6 +61,18 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
     expect(s.members).toEqual([{ name: "가은", done: 0, total: 0, leader: true, me: false, left: false, pending: false, noBar: true, userId: "u9", tone: "amber" }, { name: "철수", done: 0, total: 0, leader: false, me: true, left: false, pending: true, noBar: false, userId: "u1", tone: "blue" }]);
     expect(s.rounds[0]).toMatchObject({ state: "예정", alt: "과제 2개", sub: 0, total: 0 });
   });
+  it("action by room status and role (Q1-12/Q2-13)", () => {
+    expect(toStudyRoom({ ...aws, status: "recruit" }, tree, TODAY, "u1").action).toBe("leave");
+    expect(toStudyRoom({ ...aws, status: "draft" }, tree, TODAY, "u1").action).toBe("leave");
+    expect(toStudyRoom(aws, tree, TODAY, "u1").action).toBe("joined");
+    expect(toStudyRoom({ ...aws, me: { state: "leader" } }, tree, TODAY, "u2").action).toBe("owner");
+    expect(toStudyRoom({ ...aws, status: "recruit", me: { state: "leader" } }, tree, TODAY, "u2").action).toBe("owner");
+  });
+  it("draft room → 준비중 · 모집 전, not 모집중 (Q2-03)", () => {
+    const d = toStudyRoom({ ...aws, status: "draft", startDate: "2026-11-01", endDate: "2026-11-30", me: { state: "leader" } }, tree, TODAY, "u2");
+    expect(d).toMatchObject({ status: "recruit", draft: true, dday: "D-20", ddayLong: "모집 전 · 시작까지 D-20" });
+    expect(toStudyRoom({ ...aws, status: "recruit" }, tree, TODAY, "u1").draft).toBe(false);
+  });
   it("ended + member → closed; no minMembers → empty minText", () => {
     expect(toStudyRoom({ ...aws, status: "ended", minMembers: null }, tree, TODAY, "u1")).toMatchObject({ action: "closed", minText: "", minOk: true });
   });
@@ -96,6 +108,18 @@ describe("toSidebarGroups (mystudy §1.1)", () => {
     ]);
     expect(toSidebarGroups({ today: TODAY, groups: [{ kind: "ended", items: [] }] }, TODAY)).toEqual([]);
   });
+  it("rooms I lead are grouped as 내가 만든 방, not 신청한 방 (Q2-27)", () => {
+    const ms: MeStudies = { today: TODAY, groups: [
+      { kind: "recruit", items: [
+        { slug: "mine", title: "내 방", intro: "m", membership: "leader", when: { kind: "start", date: "2026-11-01" } },
+        { slug: "sqld", title: "SQLD", intro: "q", membership: "pending", when: { kind: "start", date: "2026-10-26" } },
+      ] },
+    ] };
+    expect(toSidebarGroups(ms, TODAY)).toEqual([
+      { label: "내가 만든 방 · 시작 전", items: [{ id: "mine", title: "내 방", intro: "m", when: "11.01 시작" }] },
+      { label: "모집중 · 신청한 방", items: [{ id: "sqld", title: "SQLD", intro: "q", when: "10.26 시작" }] },
+    ]);
+  });
   it("active room without an open task (when.kind end) → \"MM.DD 까지\" (preflight C5)", () => {
     const ms: MeStudies = { today: TODAY, groups: [{ kind: "active", items: [{ slug: "aws", title: "AWS", intro: "a", membership: "joined", when: { kind: "end", date: "2026-12-31" } }] }] };
     expect(toSidebarGroups(ms, TODAY)).toEqual([{ label: "진행중", items: [{ id: "aws", title: "AWS", intro: "a", when: "12.31 까지" }] }]);
@@ -108,5 +132,18 @@ describe("patchOf", () => {
     expect(patchOf(n, { ...EMPTY_OVERRIDES, titles: { "21": "EC2 정리" }, dates: { "21": { e: "2026-10-15" } }, typeOv: { "21": "공통" } })).toEqual({ title: "EC2 정리", endDate: "2026-10-15", taskType: "common" });
     expect(patchOf(n, { ...EMPTY_OVERRIDES, assignOv: { "21": ["u1"] }, descs: { "21": "설명" } })).toEqual({ assigneeIds: ["u1"], descriptionMd: "설명" });
     expect(patchOf(n, EMPTY_OVERRIDES)).toEqual({});
+  });
+});
+
+describe("filterSidebarGroups (Q3-06)", () => {
+  const groups = [
+    { label: "진행중", items: [{ id: "aws", title: "AWS SAA", intro: "IAM부터", when: "10.14 마감" }, { id: "spring", title: "Spring", intro: "JPA", when: "10.18 마감" }] },
+    { label: "종료", items: [{ id: "algo", title: "알고리즘", intro: "백준", when: "09.30 종료" }] },
+  ];
+  it("empty query → unchanged", () => expect(filterSidebarGroups(groups, "  ")).toBe(groups));
+  it("matches title or intro, case-insensitive; drops empty groups", () => {
+    expect(filterSidebarGroups(groups, "aws")).toEqual([{ label: "진행중", items: [groups[0].items[0]] }]);
+    expect(filterSidebarGroups(groups, "백준")).toEqual([groups[1]]);
+    expect(filterSidebarGroups(groups, "zzzz")).toEqual([]);
   });
 });

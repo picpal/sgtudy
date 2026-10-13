@@ -1,17 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
 import { toSidebarGroups, toStudyRoom } from "@/lib/api/my-study";
-import { cancelApplication } from "@/lib/api/room-view";
+import { cancelApplication, leaveRoom } from "@/lib/api/room-view";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
+import { routes } from "@/lib/routes";
 import { TodayProvider } from "@/lib/today";
-import { buildTree } from "./model";
+import { buildTree, stripFieldOv } from "./model";
 import { INITIAL_STATE, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
@@ -41,22 +43,44 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const [toast, setToast] = useState<ToastMsg>(null);
   const update = useCallback((patch: Patch) => setS((prev) => ({ ...prev, ...(typeof patch === "function" ? patch(prev) : patch) })), []);
   const today = cur.today;
+  // 편집 패널의 미저장 수정은 커리큘럼 탭에서만 보인다 — 다른 탭·개요는 저장된 값만 (Q2-05)
   const tree = useMemo(() => buildTree(cur, S.ov, today), [cur, S.ov, today]);
-  const room = useMemo(() => toStudyRoom(detail, tree, today, me?.id ?? ""), [detail, tree, today, me]);
+  const savedOv = useMemo(() => stripFieldOv(S.ov), [S.ov]);
+  const savedTree = useMemo(() => buildTree(cur, savedOv, today), [cur, savedOv, today]);
+  const room = useMemo(() => toStudyRoom(detail, savedTree, today, me?.id ?? ""), [detail, savedTree, today, me]);
   const groups = useMemo(() => toSidebarGroups(studies, today), [studies, today]);
   const goLeaf = useCallback((id: string) => update(goLeafPatch(id)), [update]);
   const api = useCurriculumApi(detail.slug, setCur, update, setToast);
   const closeToast = useCallback(() => setToast(null), []);
 
-  const cancelPending = async () => {
+  // 참가 취소(모집 기간) · 신청 취소(승인 대기) — 확인 대화상자 + 처리 중 가드 (Q1-01, Q1-12)
+  const [confirm, setConfirm] = useState<"leave" | "cancel" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const closeConfirm = useCallback(() => setConfirm(null), []);
+  const runCancel = async (kind: "leave" | "cancel") => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
-      await cancelApplication(detail.slug);
-      setToast({ text: "신청을 취소했어요", tone: "ok" });
-      router.refresh();
+      await (kind === "leave" ? leaveRoom(detail.slug) : cancelApplication(detail.slug));
+      setConfirm(null);
+      setToast({ text: kind === "leave" ? "참가를 취소했어요 · 방 화면으로 이동해요" : "신청을 취소했어요 · 방 화면으로 이동해요", tone: "ok" });
+      // 더 이상 내 스터디 대상이 아니다 — 토스트를 읽을 틈을 두고 공개 방 화면으로
+      setTimeout(() => router.replace(routes.room(detail.slug)), 1500);
     } catch (e) {
+      busyRef.current = false;
+      setBusy(false);
+      setConfirm(null);
       setToast({ text: toApiError(e).message, tone: "bad" });
     }
   };
+
+  // "내 과제 보기" → 보드 탭으로 바꾼 뒤 탭 목록이 보이게 (Q3-18)
+  const [tabJump, setTabJump] = useState(0);
+  useEffect(() => {
+    if (tabJump) document.getElementById("my-study-tabs")?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [tabJump]);
 
   return (
     <TodayProvider today={today}>
@@ -68,17 +92,39 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
             <div className="flex flex-wrap items-start gap-7">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                 <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} />
-                {S.tab === "overview" && <OverviewTab room={room} tree={tree} onGoCurriculum={() => update({ tab: "curriculum" })} />}
-                {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={isLeader} />}
-                {S.tab === "board" && <BoardTab tree={tree} S={S} update={update} goLeaf={goLeaf} />}
-                {S.tab === "calendar" && <CalendarTab tree={tree} S={S} update={update} goLeaf={goLeaf} />}
-                {S.tab === "gantt" && <GanttTab tree={tree} S={S} update={update} goLeaf={goLeaf} />}
+                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} onGoCurriculum={() => update({ tab: "curriculum" })} />}
+                {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={isLeader} period={{ start: detail.startDate, end: detail.endDate }} />}
+                {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
+                {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
+                {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
               </section>
-              {S.tab === "overview" && <JoinInfoCard room={room} tree={tree} onMyTasks={() => update({ tab: "board", bMode: "mine", calPick: null })} goLeaf={goLeaf} onCancelPending={cancelPending} />}
+              {S.tab === "overview" && (
+                <JoinInfoCard
+                  room={room}
+                  tree={savedTree}
+                  onMyTasks={() => {
+                    update({ tab: "board", bMode: "mine", calPick: null });
+                    setTabJump((n) => n + 1);
+                  }}
+                  goLeaf={goLeaf}
+                  onCancel={setConfirm}
+                  busy={busy}
+                />
+              )}
             </div>
           </main>
         </div>
         <Toast msg={toast} onClose={closeToast} />
+        <ConfirmDialog
+          open={confirm !== null}
+          title={confirm === "leave" ? "참가를 취소할까요?" : "신청을 취소할까요?"}
+          body={confirm === "leave" ? "모집 기간에는 다시 참가할 수 있어요. 지정 과제 담당에서도 빠져요." : "취소해도 모집 중이면 다시 신청할 수 있어요."}
+          confirmLabel={confirm === "leave" ? "참가 취소" : "신청 취소"}
+          danger
+          busy={busy}
+          onConfirm={() => confirm && void runCancel(confirm)}
+          onCancel={closeConfirm}
+        />
       </div>
     </TodayProvider>
   );

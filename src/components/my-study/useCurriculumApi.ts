@@ -6,14 +6,15 @@ import { toApiError } from "@/lib/api/errors";
 import { nodeArchive, nodeCreate, nodeDelete, nodeUpdate, patchOf } from "@/lib/api/my-study";
 import type { Curriculum, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
-import type { Overrides, TreeNode } from "./model";
+import { dropFieldOv, type Overrides, type TreeNode } from "./model";
 import type { Update } from "./state";
 
 export type CurriculumApi = {
   create: (parentId: string | null) => Promise<void>;
   remove: (id: string) => Promise<void>;
   archive: (id: string, on: boolean) => Promise<void>;
-  save: (n: TreeNode, ov: Overrides) => Promise<void>;
+  /** 성공(또는 바뀐 것 없음)이면 true */
+  save: (n: TreeNode, ov: Overrides) => Promise<boolean>;
 };
 
 const dropKey = <T,>(rec: Record<string, T>, key: string) => {
@@ -48,13 +49,14 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         const created = cur.nodes.filter((n) => n.parentId === parentId).sort((a, b) => b.sortOrder - a.sortOrder)[0];
         setCur(cur);
         update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) }, editSel: created?.id ?? null }));
+        toast({ text: parentId ? "새 과제를 추가했어요" : "새 회차를 추가했어요", tone: "ok" }); // Q3-14
         router.refresh(); // 개요의 회차 창·현재 회차는 room_get(detail) 에서 온다
       } catch (e) {
         update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) } }));
         fail(e);
       }
     },
-    [slug, setCur, update, fail, router],
+    [slug, setCur, update, fail, router, toast],
   );
 
   const remove = useCallback(
@@ -63,13 +65,14 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       try {
         setCur(await nodeDelete(slug, id));
         update((p) => ({ ov: { ...p.ov, removed: dropKey(p.ov.removed, id) } }));
+        toast({ text: "삭제했어요", tone: "ok" }); // Q3-14
         router.refresh();
       } catch (e) {
         update((p) => ({ ov: { ...p.ov, removed: dropKey(p.ov.removed, id) }, editSel: id }));
         fail(e);
       }
     },
-    [slug, setCur, update, fail, router],
+    [slug, setCur, update, fail, router, toast],
   );
 
   const archive = useCallback(
@@ -91,20 +94,26 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   const save = useCallback(
     async (n: TreeNode, ov: Overrides) => {
       const patch: NodePatch = patchOf(n, ov);
-      if (Object.keys(patch).length === 0) return update({ saved: "바뀐 내용이 없어요" });
+      if (Object.keys(patch).length === 0) {
+        update({ saved: "바뀐 내용이 없어요" });
+        return true;
+      }
       try {
         const cur = await nodeUpdate(slug, n.id, patch);
         setCur(cur);
-        update((p) => ({
-          ov: { ...p.ov, titles: dropKey(p.ov.titles, n.id), descs: dropKey(p.ov.descs, n.id), dates: dropKey(p.ov.dates, n.id), typeOv: dropKey(p.ov.typeOv, n.id), assignOv: dropKey(p.ov.assignOv, n.id) },
-          saved: "저장했어요 · 태그를 자동으로 다시 골랐어요",
-        }));
+        // 태그가 실제로 바뀌었는지 여기서는 알 수 없다 → "다시 골랐어요" 문구는 쓰지 않는다 (Q1-17). 이전 오류 토스트는 닫는다 (Q2-09)
+        toast(null);
+        update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: "저장했어요" }));
         router.refresh(); // 자동 태그가 바뀌었을 수 있다(D9)
+        return true;
       } catch (e) {
+        // 실패한 수정은 되돌린다 — 트리에 저장되지 않은 값이 남지 않게 (Q2-09)
+        update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: "" }));
         fail(e);
+        return false;
       }
     },
-    [slug, setCur, update, fail, router],
+    [slug, setCur, update, fail, router, toast],
   );
 
   return { create, remove, archive, save };
