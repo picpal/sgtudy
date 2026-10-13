@@ -15,9 +15,10 @@ const field = "h-[42px] rounded-[10px] border border-line-3 text-ink";
 export function EditPanel({ n, members, S, update, api }: Props) {
   const id = n.id;
   const ids = n.leaf ? n.people.map((p) => p.userId) : [];
-  const hasSub = n.sub > 0;
+  // 보관된 하위의 제출도 센다 — 서버는 하위 어디에든 제출이 있으면 삭제를 막는다
+  const hasSub = n.subAll > 0;
   const isGong = n.leaf && n.type === "공통";
-  const removeLabel = hasSub ? (n.archived ? "보관 해제" : "보관") : "삭제";
+  const removeLabel = n.archived ? "보관 해제" : hasSub ? "보관" : "삭제";
   const path = `${n.crumb ? n.crumb + " › " : ""}${!n.leaf && n.d === 0 ? n.label : n.title} · ${n.d + 2}단계`;
 
   const setDate = (k: "s" | "e", v: string) => {
@@ -142,9 +143,12 @@ export function EditPanel({ n, members, S, update, api }: Props) {
       )}
 
       <div className="flex items-center gap-2">
-        <button type="button" disabled={n.temp} onClick={askRemove} className="h-[42px] rounded-[21px] border border-[#EBC3BD] bg-surface px-[14px] text-[13px] font-semibold text-warn disabled:opacity-50">
-          {removeLabel}
-        </button>
+        {/* 상위 보관으로 함께 숨겨진 항목은 자기 보관이 아니라 해제할 대상이 없다 → 버튼을 숨긴다 */}
+        {!n.archivedByParent && (
+          <button type="button" disabled={n.temp} onClick={askRemove} className="h-[42px] rounded-[21px] border border-[#EBC3BD] bg-surface px-[14px] text-[13px] font-semibold text-warn disabled:opacity-50">
+            {removeLabel}
+          </button>
+        )}
         <span className="flex-1" />
         {n.temp && <span className="text-[12px] text-muted">서버에 만드는 중…</span>}
         <button type="button" disabled={n.temp} onClick={() => void api.save(n, S.ov)} className="h-[42px] rounded-[21px] bg-navy px-5 text-[14px] font-semibold text-white disabled:opacity-50">

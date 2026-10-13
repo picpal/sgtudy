@@ -21,6 +21,12 @@ const dropKey = <T,>(rec: Record<string, T>, key: string) => {
   return rest;
 };
 
+/** 임시 행 하나만 뺀다 — 빠르게 두 번 추가하면 먼저 끝난 응답이 다른 요청의 임시 행까지 지우지 않게 */
+const popOne = (rec: Record<string, string[]>, key: string) => {
+  const list = rec[key] ?? [];
+  return list.length > 1 ? { ...rec, [key]: list.slice(0, -1) } : dropKey(rec, key);
+};
+
 export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<Curriculum>>, update: Update, toast: (m: ToastMsg) => void): CurriculumApi {
   const router = useRouter();
 
@@ -41,13 +47,14 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         const cur = await nodeCreate(slug, parentId);
         const created = cur.nodes.filter((n) => n.parentId === parentId).sort((a, b) => b.sortOrder - a.sortOrder)[0];
         setCur(cur);
-        update((p) => ({ ov: { ...p.ov, added: dropKey(p.ov.added, key) }, editSel: created?.id ?? null }));
+        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) }, editSel: created?.id ?? null }));
+        router.refresh(); // 개요의 회차 창·현재 회차는 room_get(detail) 에서 온다
       } catch (e) {
-        update((p) => ({ ov: { ...p.ov, added: dropKey(p.ov.added, key) } }));
+        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) } }));
         fail(e);
       }
     },
-    [slug, setCur, update, fail],
+    [slug, setCur, update, fail, router],
   );
 
   const remove = useCallback(
@@ -56,26 +63,29 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       try {
         setCur(await nodeDelete(slug, id));
         update((p) => ({ ov: { ...p.ov, removed: dropKey(p.ov.removed, id) } }));
+        router.refresh();
       } catch (e) {
         update((p) => ({ ov: { ...p.ov, removed: dropKey(p.ov.removed, id) }, editSel: id }));
         fail(e);
       }
     },
-    [slug, setCur, update, fail],
+    [slug, setCur, update, fail, router],
   );
 
   const archive = useCallback(
     async (id: string, on: boolean) => {
-      update((p) => ({ ov: { ...p.ov, archived: { ...p.ov.archived, [id]: on } }, confirm: false, saved: on ? "보관했어요 · 제출물은 그대로 남아요" : "보관을 해제했어요" }));
+      update((p) => ({ ov: { ...p.ov, archived: { ...p.ov.archived, [id]: on } }, confirm: false, saved: "" }));
       try {
         setCur(await nodeArchive(slug, id, on));
+        update({ saved: on ? "보관했어요 · 제출물은 그대로 남아요" : "보관을 해제했어요" }); // 성공한 뒤에만
+        router.refresh();
       } catch (e) {
         fail(e);
       } finally {
         update((p) => ({ ov: { ...p.ov, archived: dropKey(p.ov.archived, id) } }));
       }
     },
-    [slug, setCur, update, fail],
+    [slug, setCur, update, fail, router],
   );
 
   const save = useCallback(

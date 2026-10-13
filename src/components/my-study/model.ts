@@ -56,6 +56,10 @@ type NodeBase = {
   s: string;
   e: string;
   archived: boolean;
+  /** 자기는 보관이 아니고 상위가 보관돼 함께 숨겨진 상태 — 이 노드에서는 "보관 해제" 를 할 수 없다 */
+  archivedByParent: boolean;
+  /** 보관된 하위까지 포함한 제출 수 — 0 보다 크면 서버가 삭제를 막으므로 "보관" 을 권한다 */
+  subAll: number;
   /** "1주차 IAM·VPC › 로드밸런서 비교" */
   crumb: string;
   roundLabel: string | null;
@@ -117,10 +121,11 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
     const s = dOv.s || n.startDate;
     const e = dOv.e || n.endDate;
     const archived = ov.archived[n.id] ?? (n.archived || parentArchived);
+    const archivedByParent = parentArchived && !(ov.archived[n.id] ?? n.archived);
     const d = n.depth - 2;
     const roundId = d === 0 ? n.id : n.roundId;
     const kidsRaw = [...(byParent.get(n.id) ?? []), ...(ov.added[n.id] ?? []).map((t, i) => tempChild(n, t, i))];
-    const base = { id: n.id, roundId, d, title, desc, s, e, archived, crumb: crumbs.join(" › "), temp };
+    const base = { id: n.id, roundId, d, title, desc, s, e, archived, archivedByParent, crumb: crumbs.join(" › "), temp };
 
     if (n.task && kidsRaw.length === 0) {
       const type: TaskType = ov.typeOv[n.id] ?? TASK_TYPE_KO[n.task.type];
@@ -134,13 +139,13 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
       }
       const asg = people.length;
       const sub = people.filter((p) => p.c === "D" || p.c === "L").length;
-      const leaf: LeafNode = { ...base, leaf: true, type, people, asg, sub, state: leafState(asg, sub, s, e, today), roundLabel: rl };
+      const leaf: LeafNode = { ...base, subAll: sub, leaf: true, type, people, asg, sub, state: leafState(asg, sub, s, e, today), roundLabel: rl };
       nodes.push(leaf);
       return leaf;
     }
 
     const roundLabel = d === 0 ? n.label : rl;
-    const node: ParentNode = { ...base, leaf: false, label: n.label, roundLabel, kids: [], childCount: kidsRaw.length, asg: 0, sub: 0, pct: 0 };
+    const node: ParentNode = { ...base, subAll: 0, leaf: false, label: n.label, roundLabel, kids: [], childCount: kidsRaw.length, asg: 0, sub: 0, pct: 0 };
     nodes.push(node);
     const here = d === 0 ? `${n.label} ${title}` : title;
     kidsRaw.forEach((c) => {
@@ -151,6 +156,7 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
     node.asg = live.reduce((a, k) => a + k.asg, 0);
     node.sub = live.reduce((a, k) => a + k.sub, 0);
     node.pct = node.asg ? Math.round((node.sub / node.asg) * 100) : 0;
+    node.subAll = node.kids.reduce((a, k) => a + k.subAll, 0);
     return node;
   };
 

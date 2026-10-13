@@ -2,6 +2,23 @@ import { describe, expect, it } from "vitest";
 import { AWS, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, memberStats, overallPct, unassignedCount } from "./model";
 
+describe("buildTree archive bookkeeping (final batch)", () => {
+  it("subAll counts submissions under archived children; sub does not", () => {
+    const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "11" ? { ...n, archived: true } : n)) };
+    const r1 = buildTree(cur, EMPTY_OVERRIDES, REF_DAY).roots[0];
+    expect(r1.sub).toBe(2);        // 12 만 (11 보관)
+    expect(r1.subAll).toBe(5);     // 11 의 3건 포함 → 삭제가 아니라 보관
+  });
+  it("archivedByParent only for nodes hidden by an archived ancestor", () => {
+    const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "31" ? { ...n, archived: true } : n)) };
+    const t = buildTree(cur, EMPTY_OVERRIDES, REF_DAY);
+    const own = t.nodes.find((n) => n.id === "31")!;
+    const child = t.nodes.find((n) => n.id === "311")!;
+    expect([own.archived, own.archivedByParent]).toEqual([true, false]);
+    expect([child.archived, child.archivedByParent]).toEqual([true, true]);
+  });
+});
+
 describe("buildTree from Curriculum (mystudy §3.3 목업 회귀값)", () => {
   const t = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
   it("aggregates: roots 63/33/0/0/0, overall 24, 8 leaves, members exclude 이탈자", () => {
