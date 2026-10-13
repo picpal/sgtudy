@@ -58,7 +58,7 @@ npm test                                # Vitest(프론트 순수 함수·어댑
 - 목업 데이터는 `src/data/*.ts` 에 화면별로 분리돼 있어, Phase 7 에서 `src/lib/api/*.ts` 어댑터가 같은 export 시그니처로 교체한다.
 - "오늘" 기준일은 DB 의 `kst_today()` 가 공급한다(시드·테스트는 2026-10-12 고정).
 
-- 프론트 어댑터: `src/lib/api/{errors,format,me,notifications,invite,rooms,room-view,my-study,schedule}.ts`. 순수 변환 함수는 `npm test`(Vitest)로 목업 숫자(toeic 8주, aws 24%·D-2, algo 87%)를 회귀 검증한다.
+- 프론트 어댑터: `src/lib/api/{errors,format,me,notifications,invite,rooms,room-view,my-study,schedule}.ts`. 순수 변환 함수는 `npm test`(Vitest)로 목업 숫자(toeic 8주, aws 현재 회차 33%·D-2 — 전체 달성률은 24%, algo 87%)를 회귀 검증한다.
 - 로컬 E2E: `docs/superpowers/plans/2026-10-13-backend-05-frontend-integration.md` Task 15 체크리스트(ego-browser, http://localhost:3100, OTP 는 Mailpit).
 - Vercel: `vercel env add NEXT_PUBLIC_SUPABASE_URL production` / `vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production` (preview 도 동일). `service_role` 은 넣지 않는다. `.vercelignore` 로 `supabase/`·`docs/` 제외.
 
@@ -82,6 +82,6 @@ Supabase 대시보드(호스팅 프로젝트):
 
 ### 배포 게이트
 
-1. Vercel 에 `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY` 등록 전에는 `vercel --prod` 금지. 없으면 proxy 가 모든 요청을 비로그인으로 통과시키고(500 은 안 남), 등록하면 비로그인 사용자의 보호 라우트(`/my-study`·`/schedule`·`/me`·`/rooms/new`)를 `/login` 으로 보내는데 `/login` 은 plan 05 전까지 404 — plan 05 전에는 프로덕션 배포 자체를 하지 않는다.
+1. Vercel 에 `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY` 등록 전에는 `vercel --prod` 금지. 없으면 proxy 가 모든 요청을 비로그인으로 통과시키고(500 은 안 남), 등록하면 비로그인 사용자의 보호 라우트(`/my-study`·`/schedule`·`/me`·`/rooms/new`)를 `/login` 으로 보내는데 `/login` 은 plan 05 머지 전에는 404 — plan 05 머지 전에는 프로덕션 배포 자체를 하지 않는다.
 2. Vercel 프로젝트 Node 버전은 22 이상.
 3. `supabase db push --include-seed`·`supabase db reset --linked` 절대 금지 — seed 는 로컬 전용(`app.today` 고정, 비밀번호 없는 29명).
