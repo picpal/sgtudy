@@ -245,3 +245,156 @@ grant execute on function public.notifications_read(bigint)     to authenticated
 grant execute on function public.notifications_read_all()       to authenticated;
 grant execute on function public.settings_get(text)             to authenticated;
 grant execute on function public.settings_put(text, jsonb)      to authenticated;
+
+-- ───────── 이탈 처리 (D11, 03-api §3, mystudy §2.3.3) ─────────
+-- 대상의 미제출 지정 과제(보관 제외) + 그 과제의 나머지 유효 담당자. 미리보기와 본처리가 같은 목록을 본다
+create or replace function public.deactivate_pending(p_room bigint, p_user uuid)
+returns table (node_id bigint, title text, round_label text, others uuid[])
+language sql stable security definer set search_path = '' as $$
+  select n.id, n.title::text, rd.label::text,
+         coalesce((select array_agg(b.user_id order by b.assigned_at, b.id) from public.task_assignments b
+                   where b.node_id = n.id and b.released_at is null and b.user_id <> p_user), '{}'::uuid[])
+  from public.task_assignments a
+  join public.goal_nodes n on n.id = a.node_id
+  left join public.goal_nodes rd on rd.id = n.round_id
+  where n.room_id = p_room and n.task_type = 'DESIGNATED' and n.archived_at is null
+    and a.user_id = p_user and a.released_at is null
+    and not exists (select 1 from public.submissions s where s.node_id = n.id and s.user_id = p_user)
+  order by rd.sort_order, n.sort_order, n.id      -- B10: 회차 → 형제 순
+$$;
+
+-- 공통 검사: 그룹장 · 방 ACTIVE·미보관 · 대상 ≠ 그룹장 · 대상 ACTIVE. p_lock 이면 방·멤버 행을 잠근다
+create or replace function public.deactivate_check(p_slug text, p_user uuid, p_lock boolean) returns public.rooms
+language plpgsql security definer set search_path = '' as $$
+declare r public.rooms; v_status text;
+begin
+  r := public.leader_room(p_slug, p_lock);
+  if r.status <> 'ACTIVE' or r.archived_at is not null then
+    perform public.fail('ROOM_NOT_ACTIVE', '진행중인 스터디에서만 이탈 처리할 수 있어요');
+  end if;
+  if p_user = r.leader_id then perform public.fail('CANNOT_DEACTIVATE_LEADER', '그룹장은 이탈 처리할 수 없어요'); end if;
+  if p_lock then
+    select status into v_status from public.room_members where room_id = r.id and user_id = p_user for update;
+  else
+    select status into v_status from public.room_members where room_id = r.id and user_id = p_user;
+  end if;
+  if not found or v_status <> 'ACTIVE' then perform public.fail('MEMBER_NOT_ACTIVE', '활성 참가자가 아니에요'); end if;
+  return r;
+end $$;
+
+create or replace function public.member_deactivate_preview(p_slug text, p_user uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare r public.rooms;
+begin
+  r := public.deactivate_check(p_slug, p_user, false);
+  return jsonb_build_object(
+    'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
+    'tasks', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'nodeId', p.node_id::text, 'title', p.title, 'roundLabel', p.round_label,
+               'currentAssignees', (select coalesce(jsonb_agg(public.person_json(u)), '[]'::jsonb) from unnest(p.others) u))
+             order by p.ord)
+      from (select dp.*, row_number() over () as ord from public.deactivate_pending(r.id, p_user) dp) p), '[]'::jsonb));
+end $$;
+
+-- 1) 결정을 전부 검증(아무것도 바꾸지 않음) → 2) 대상 배정 전부 released, INACTIVE, 정원 -1 → 3) 재지정 INSERT + TASK_ASSIGNED
+--    → 4) assignment_resync → 5) MEMBER_DEACTIVATED. 제출된 지정 과제의 행도 released 되고 제출물은 남는다(집계 제외, D4-3)
+create or replace function public.member_deactivate(p_slug text, p_user uuid, p_decisions jsonb default '[]'::jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid    uuid := public.require_user();
+  r        public.rooms;
+  p        record;
+  d        jsonb;
+  v_action text;
+  v_new    uuid[];
+  v_adds   uuid[];
+  v_id     uuid;
+  v_bad    boolean;
+  v_plan   jsonb := '[]'::jsonb;    -- [{nodeId, adds: uuid[]}]
+  v_item   jsonb;
+begin
+  r := public.deactivate_check(p_slug, p_user, true);
+  if jsonb_typeof(coalesce(p_decisions, '[]'::jsonb)) <> 'array' then
+    perform public.fail('VALIDATION_FAILED', 'decisions 는 배열이어야 해요', '{"field":"decisions"}'::jsonb);
+  end if;
+
+  -- 1. 검증
+  for p in select * from public.deactivate_pending(r.id, p_user) loop
+    d := null;
+    select e into d from jsonb_array_elements(coalesce(p_decisions, '[]'::jsonb)) e where e ->> 'nodeId' = p.node_id::text limit 1;
+    if d is null then
+      perform public.fail('LEAVE_DECISION_MISSING', '미제출 지정 과제마다 처리 방법을 정해 주세요', jsonb_build_object('nodeId', p.node_id::text));
+    end if;
+    v_action := d ->> 'action';
+    if v_action is null then          -- null 이면 `not in` 이 null 이 되어 통과해 버린다 → 결정 없음으로 본다
+      perform public.fail('LEAVE_DECISION_MISSING', '미제출 지정 과제마다 처리 방법을 정해 주세요', jsonb_build_object('nodeId', p.node_id::text));
+    end if;
+    if v_action not in ('exclude', 'reassign') then
+      perform public.fail('VALIDATION_FAILED', 'action 은 exclude 또는 reassign 이에요', jsonb_build_object('field', 'action', 'nodeId', p.node_id::text));
+    end if;
+    v_new := '{}'::uuid[];
+    if v_action = 'reassign' then
+      -- B9: assigneeIds 는 문자열 uuid 배열이어야 한다. 비문자열·잘못된 uuid 가 raw 22P02 로 새지 않게 한다
+      v_bad := jsonb_typeof(coalesce(d -> 'assigneeIds', '[]'::jsonb)) <> 'array';
+      if not v_bad then
+        v_bad := exists (select 1 from jsonb_array_elements(coalesce(d -> 'assigneeIds', '[]'::jsonb)) x where jsonb_typeof(x) <> 'string');
+      end if;
+      if not v_bad then
+        begin
+          select coalesce(array_agg(distinct x::uuid), '{}'::uuid[]) into v_new
+          from jsonb_array_elements_text(coalesce(d -> 'assigneeIds', '[]'::jsonb)) x;
+        exception when invalid_text_representation then
+          v_bad := true;
+        end;
+      end if;
+      if v_bad then
+        perform public.fail('VALIDATION_FAILED', 'assigneeIds 는 uuid 문자열 배열이어야 해요', jsonb_build_object('field', 'assigneeIds', 'nodeId', p.node_id::text));
+      end if;
+      foreach v_id in array v_new loop
+        if v_id = p_user or not exists (
+             select 1 from public.room_members m
+             where m.room_id = r.id and m.user_id = v_id and m.status = 'ACTIVE' and (m.role = 'MEMBER' or r.leader_does_tasks)) then
+          perform public.fail('ASSIGNEE_NOT_MEMBER', '활성 참가자에게만 재지정할 수 있어요', jsonb_build_object('nodeId', p.node_id::text, 'userId', v_id::text));
+        end if;
+      end loop;
+    end if;
+    v_adds := array(select unnest(v_new) except select unnest(p.others));
+    if cardinality(p.others) + cardinality(v_adds) = 0 then
+      perform public.fail('REASSIGN_REQUIRED', '담당자가 0명이 되는 과제는 다른 참가자에게 재지정해야 해요', jsonb_build_object('nodeId', p.node_id::text));
+    end if;
+    v_plan := v_plan || jsonb_build_object('nodeId', p.node_id::text, 'adds', to_jsonb(v_adds));
+  end loop;
+
+  -- 2. 대상 해제 + 상태 전환 + 정원
+  update public.task_assignments a set released_at = now()
+  from public.goal_nodes n
+  where n.id = a.node_id and n.room_id = r.id and a.user_id = p_user and a.released_at is null;
+  update public.room_members
+     set status = 'INACTIVE', left_at = now(), decided_at = now(), decided_by = v_uid, updated_at = now()
+   where room_id = r.id and user_id = p_user;
+  perform public.room_release_seat(r.id);
+
+  -- 3. 재지정
+  for v_item in select e from jsonb_array_elements(v_plan) e loop
+    select coalesce(array_agg(x::uuid), '{}'::uuid[]) into v_adds from jsonb_array_elements_text(v_item -> 'adds') x;
+    if cardinality(v_adds) > 0 then
+      insert into public.task_assignments (node_id, user_id, source)
+      select (v_item ->> 'nodeId')::bigint, u, 'DESIGNATED' from unnest(v_adds) u
+      on conflict (node_id, user_id) do update set released_at = null, source = 'DESIGNATED', assigned_at = now();
+      -- A6: 호출부가 txid 를 붙인다(E1) — 없으면 키가 영구라 같은 사람의 이후 재지정이 dedupe 로 사라진다
+      perform public.notify_publish('TASK_ASSIGNED', r.id, (v_item ->> 'nodeId')::bigint, v_uid, v_adds,
+                                    'TASK_ASSIGNED:' || r.id || ':' || (v_item ->> 'nodeId') || ':' || txid_current(), '{}'::jsonb);
+    end if;
+  end loop;
+
+  -- 4·5
+  perform public.assignment_resync(r.id);
+  perform public.notify_publish('MEMBER_DEACTIVATED', r.id, null, v_uid, array[p_user],
+                                'MEMBER_DEACTIVATED:' || r.id || ':' || p_user, '{}'::jsonb);
+  return public.membership_result(r.id, v_uid);
+end $$;
+
+-- 공개 RPC 만 GRANT(D7). deactivate_pending·deactivate_check 는 내부 헬퍼라 GRANT 하지 않는다
+grant execute on function public.member_deactivate_preview(text, uuid)     to authenticated;
+grant execute on function public.member_deactivate(text, uuid, jsonb)      to authenticated;
