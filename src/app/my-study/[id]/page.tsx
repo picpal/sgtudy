@@ -1,14 +1,20 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { MyStudyScreen } from "@/components/my-study/MyStudyScreen";
 import type { TabId } from "@/components/my-study/StudyHeaderInfo";
 import { toApiError } from "@/lib/api/errors";
 import { getServerClient, requireMe } from "@/lib/api/me.server";
 import { fetchCurriculum, fetchMyStudies } from "@/lib/api/my-study";
+import { roomMetadata } from "@/lib/api/room-meta.server";
 import { fetchRoomDetail } from "@/lib/api/room-view";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 
 const TABS: TabId[] = ["overview", "curriculum", "board", "calendar", "gantt"];
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  return roomMetadata((await params).id);
+}
 
 export default async function MyStudyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; mode?: string; task?: string }> }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);

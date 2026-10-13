@@ -1,7 +1,9 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { RoomViewScreen } from "@/components/room-view/RoomViewScreen";
 import { toApiError } from "@/lib/api/errors";
 import { getServerClient } from "@/lib/api/me.server";
+import { roomMetadata } from "@/lib/api/room-meta.server";
 import { fetchRoomDetail, firstParam } from "@/lib/api/room-view";
 import { DEFAULT_PARAMS, fetchRooms } from "@/lib/api/rooms";
 import type { RoomDetail } from "@/lib/api/types";
@@ -14,6 +16,11 @@ async function loadDetail(slug: string, client: Awaited<ReturnType<typeof getSer
     if (toApiError(e).code === "ROOM_NOT_FOUND") return null;
     throw e;
   }
+}
+
+export async function generateMetadata({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ invite?: string | string[] }> }): Promise<Metadata> {
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  return roomMetadata(id, firstParam(sp.invite));
 }
 
 export default async function RoomPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ invite?: string | string[] }> }) {
