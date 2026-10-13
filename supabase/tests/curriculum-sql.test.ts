@@ -390,3 +390,100 @@ sqlTest("privileges: node_update runs under real roles (authenticated 그룹장)
   await expectFail(upd(q, "aws", ec2, { title: "x" }), "permission denied");
   await q("reset role");
 }));
+
+const mv = (q: Parameters<typeof uid>[0], slug: string, node: string, parent: string | null, index: number | null) =>
+  q(`select public.node_move($1, $2, $3, $4) as c`, [slug, node, parent, index]).then((r) => r[0].c as Record<string, any>);
+const order = (c: Record<string, any>) => c.nodes.map((n: Node) => `${n.title}@${n.depth}#${n.sortOrder}`);
+
+/** 서연의 새 방에 R1[A, B], R2 를 node_create 로 만든다 */
+async function twoRounds(q: Parameters<typeof uid>[0]) {
+  const room = await mkRoom(q, "서연");
+  let c = await call(q, "node_create", [room.slug, null, "R1"]);
+  const r1 = byTitle(c, "R1").id;
+  c = await call(q, "node_create", [room.slug, r1, "A"]);
+  c = await call(q, "node_create", [room.slug, r1, "B"]);
+  c = await call(q, "node_create", [room.slug, null, "R2"]);
+  return { room, r1, r2: byTitle(c, "R2").id, a: byTitle(c, "A").id, b: byTitle(c, "B").id, c };
+}
+
+sqlTest("node_move: 같은 부모 안 순서 변경, index 클램프, 회차 순서 변경", withCase(db, async (q) => {
+  const t = await twoRounds(q);
+  assertEquals(order(t.c), ["R1@2#0", "A@3#0", "B@3#1", "R2@2#1"]);
+  let c = await mv(q, t.room.slug, t.b, t.r1, 0);
+  assertEquals(order(c), ["R1@2#0", "B@3#0", "A@3#1", "R2@2#1"]);
+  c = await mv(q, t.room.slug, t.b, t.r1, 99);                                   // 끝으로 클램프
+  assertEquals(order(c), ["R1@2#0", "A@3#0", "B@3#1", "R2@2#1"]);
+  c = await mv(q, t.room.slug, t.r2, null, 0);
+  assertEquals(order(c), ["R2@2#0", "R1@2#1", "A@3#0", "B@3#1"]);
+  assertEquals([byTitle(c, "R2").roundId, byTitle(c, "R2").label], [t.r2, "2주차"]);  // 라벨 유지
+}));
+
+sqlTest("node_move: 다른 부모로 — depth·round_id 재기록, 회차↔하위 전환 시 label, outdent/indent 래퍼", withCase(db, async (q) => {
+  const t = await twoRounds(q);
+  let c = await mv(q, t.room.slug, t.a, t.r2, null);
+  assertEquals(order(c), ["R1@2#0", "B@3#0", "R2@2#1", "A@3#0"]);
+  assertEquals(byTitle(c, "A").roundId, t.r2);
+  assertEquals(byTitle(c, "A").task.assigned, 1);                               // 공통 배정 유지(resync)
+  c = await mv(q, t.room.slug, t.r2, t.r1, 0);                                  // 회차 R2(자식 A) 를 R1 아래로
+  assertEquals(order(c), ["R1@2#0", "R2@3#0", "A@4#0", "B@3#1"]);
+  assertEquals([byTitle(c, "R2").label, byTitle(c, "R2").roundId, byTitle(c, "A").roundId], [null, t.r1, t.r1]);
+  c = await call(q, "node_outdent", [t.room.slug, t.r2]);                        // 조부모(없음=루트) 아래, R1 다음
+  assertEquals(order(c), ["R1@2#0", "B@3#0", "R2@2#1", "A@3#0"]);
+  assertEquals([byTitle(c, "R2").label, byTitle(c, "A").roundId], ["2주차", t.r2]);
+  await expectFail(call(q, "node_outdent", [t.room.slug, t.r1]), "ROOT_CANNOT_OUTDENT");
+  await expectFail(call(q, "node_indent", [t.room.slug, t.r1]), "VALIDATION_FAILED");   // 직전 형제 없음
+  c = await call(q, "node_indent", [t.room.slug, t.r2]);                         // R2 → R1 의 마지막 자식
+  assertEquals(order(c), ["R1@2#0", "B@3#0", "R2@3#1", "A@4#0"]);
+  c = await call(q, "node_indent", [t.room.slug, t.r2]);                         // R2 → 직전 형제 B(리프, 제출 없음) 아래 → B 는 부모로 전환
+  assertEquals(order(c), ["R1@2#0", "B@3#0", "R2@4#0", "A@5#0"]);
+  assertEquals(byTitle(c, "B").task, null);
+  // 리프를 회차로 올리면 task_type 유지 + label {n}주차 (A7)
+  c = await call(q, "node_create", [t.room.slug, t.r1, "L"]);
+  c = await mv(q, t.room.slug, byTitle(c, "L").id, null, null);
+  const L = byTitle(c, "L");
+  assertEquals([L.depth, L.label, L.roundId === L.id, L.task.type, L.task.assigned], [2, "2주차", true, "common", 1]);   // 이 시점 회차는 R1 하나 → 2주차
+  await expectFail(mv(q, t.room.slug, t.r1, t.a, null), "VALIDATION_FAILED");  // 자기 후손 아래
+  await expectFail(mv(q, t.room.slug, t.r1, t.r1, null), "VALIDATION_FAILED");
+  await expectFail(mv(q, t.room.slug, t.a, "999999", null), "NODE_NOT_FOUND");
+}));
+
+sqlTest("node_move: 서브트리 깊이 초과·보관 부모·제출물 있는 리프 아래 거부", withCase(db, async (q) => {
+  await setToday(q, TODAY);
+  const t = await twoRounds(q);
+  // R1 > A > X > Y (A 는 부모로 전환됨). 서브트리 A 는 3단(3,4,5)
+  let c = await call(q, "node_create", [t.room.slug, t.a, "X"]);
+  c = await call(q, "node_create", [t.room.slug, byTitle(c, "X").id, "Y"]);
+  assertEquals(byTitle(c, "Y").depth, 5);
+  await expectFail(mv(q, t.room.slug, t.a, t.b, null), "NODE_DEPTH_EXCEEDED");    // A(3단 서브트리) 를 depth 3 아래로 → 6
+  c = await mv(q, t.room.slug, t.a, t.r2, null);                                     // depth 2 아래는 가능
+  assertEquals([byTitle(c, "A").depth, byTitle(c, "Y").depth, byTitle(c, "Y").roundId], [3, 5, t.r2]);
+  await call(q, "node_archive", [t.room.slug, t.r2]);
+  await expectFail(mv(q, t.room.slug, t.b, t.r2, null), "PARENT_ARCHIVED");
+  // 제출물 있는 리프 아래 (aws: VPC → IAM)
+  const aws = await roomId(q, "aws");
+  await asUser(q, await uid(q, "민수"));
+  await expectFail(mv(q, "aws", await nodeByTitle(q, aws, "VPC 실습"), await nodeByTitle(q, aws, "IAM 정책 이해"), null), "NODE_HAS_SUBMISSIONS");
+  await asUser(q, await uid(q, "철수"));
+  await expectFail(mv(q, "aws", await nodeByTitle(q, aws, "VPC 실습"), null, 0), "NOT_LEADER");
+}));
+
+sqlTest("privileges: node_move runs under real roles (authenticated 그룹장), node_indent/outdent 는 닿지 않음, anon 은 permission denied", withCase(db, async (q) => {
+  const can = async (role: string, fn: string) =>
+    (await q(`select has_function_privilege($1, $2, 'execute') as ok`, [role, `public.${fn}`]))[0].ok as boolean;
+  assertEquals([
+    await can("authenticated", "node_move(text,bigint,bigint,integer)"), await can("anon", "node_move(text,bigint,bigint,integer)"),
+    await can("authenticated", "node_indent(text,bigint)"), await can("authenticated", "node_outdent(text,bigint)"),
+  ], [true, false, false, false]);
+  const t = await twoRounds(q);                                                   // 서연이 그룹장(superuser 로 준비)
+  await asUser(q, await uid(q, "서연"));
+  await q("set local role authenticated");
+  const c = await mv(q, t.room.slug, t.b, t.r1, 0);
+  assertEquals(order(c), ["R1@2#0", "B@3#0", "A@3#1", "R2@2#1"]);
+  await expectFail(call(q, "node_indent", [t.room.slug, t.b]), "permission denied");
+  await expectFail(call(q, "node_outdent", [t.room.slug, t.b]), "permission denied");
+  await q("reset role");
+  await asAnon(q);
+  await q("set local role anon");
+  await expectFail(mv(q, t.room.slug, t.b, t.r1, 0), "permission denied");
+  await q("reset role");
+}));

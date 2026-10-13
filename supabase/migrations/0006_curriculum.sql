@@ -532,3 +532,102 @@ begin
 end $$;
 
 grant execute on function public.node_update(text, bigint, jsonb) to authenticated;
+
+-- ───────── node_move (E11~E13, I1·I3·I4) ─────────
+create or replace function public.node_move(p_slug text, p_node_id bigint, p_parent_id bigint, p_index int) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  r          public.rooms;
+  n          public.goal_nodes;
+  p          public.goal_nodes;
+  v_uid      uuid;
+  v_depth    int;
+  v_round    bigint;
+  v_max      int;
+  v_delta    int;
+  v_n        int;
+  v_idx      int;
+  v_label    text;
+begin
+  r := public.node_assert_editable(p_slug);
+  v_uid := public.current_user_id();
+  n := public.node_get(r.id, p_node_id);
+
+  if p_parent_id is not null then
+    p := public.node_get(r.id, p_parent_id);
+    if p.id in (select public.node_subtree(n.id)) then
+      perform public.fail('VALIDATION_FAILED', '자기 자신이나 하위 항목 아래로는 옮길 수 없어요', jsonb_build_object('field', 'parentId'));
+    end if;
+    if p.archived_at is not null then
+      perform public.fail('PARENT_ARCHIVED', '보관된 항목 아래로는 옮길 수 없어요', jsonb_build_object('nodeId', p.id::text));
+    end if;
+    v_depth := p.depth + 1;
+    v_round := p.round_id;
+  else
+    v_depth := 2;
+    v_round := n.id;
+  end if;
+
+  select max(depth) into v_max from public.goal_nodes where id in (select public.node_subtree(n.id));
+  v_delta := v_depth - n.depth;
+  if v_max + v_delta > 5 then
+    perform public.fail('NODE_DEPTH_EXCEEDED', '최대 5단계까지만 만들 수 있어요', jsonb_build_object('nodeId', n.id::text));
+  end if;
+
+  if p_parent_id is not null and p.task_type is not null then
+    perform public.node_make_parent(p, '제출물이 있는 과제 아래로는 옮길 수 없어요. 보관해 주세요');
+  end if;
+
+  -- 옛 형제 재정렬 (자기 제외)
+  perform public.node_renumber(r.id, n.parent_id, n.id);
+
+  -- 새 형제 사이에 끼우기 (자기 제외한 수로 클램프)
+  select count(*)::int into v_n from public.goal_nodes
+  where room_id = r.id and parent_id is not distinct from p_parent_id and id <> n.id;
+  v_idx := least(greatest(coalesce(p_index, v_n), 0), v_n);
+  update public.goal_nodes set sort_order = sort_order + 1
+  where room_id = r.id and parent_id is not distinct from p_parent_id and id <> n.id and sort_order >= v_idx;
+
+  -- 회차가 되면 label 기본 {n}주차(있으면 유지). task_type 은 건드리지 않는다 → 리프는 depth-2 리프가 된다(A7, 트리거가 허용)
+  v_label := case when p_parent_id is null then coalesce(n.label, (v_n + 1) || '주차') else null end;
+  update public.goal_nodes
+  set parent_id = p_parent_id, sort_order = v_idx, depth = v_depth, round_id = v_round, label = v_label, updated_at = now()
+  where id = n.id;
+  update public.goal_nodes set depth = depth + v_delta, round_id = v_round, updated_at = now()
+  where id in (select public.node_subtree(n.id)) and id <> n.id;
+
+  perform public.assignment_resync(r.id);
+  return public.curriculum_json(r.id, v_uid, true);
+end $$;
+
+-- 내어쓰기: 조부모 아래, 부모 바로 다음. 회차는 불가 (GRANT 없음 — 프론트는 node_move)
+create or replace function public.node_outdent(p_slug text, p_node_id bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare r public.rooms; n public.goal_nodes; p public.goal_nodes;
+begin
+  r := public.node_assert_editable(p_slug);
+  n := public.node_get(r.id, p_node_id);
+  if n.parent_id is null then
+    perform public.fail('ROOT_CANNOT_OUTDENT', '회차는 더 내어쓸 수 없어요', jsonb_build_object('nodeId', n.id::text));
+  end if;
+  select * into p from public.goal_nodes where id = n.parent_id;
+  return public.node_move(p_slug, n.id, p.parent_id, p.sort_order + 1);
+end $$;
+
+-- 들여쓰기: 직전 형제 아래 맨 뒤 (GRANT 없음)
+create or replace function public.node_indent(p_slug text, p_node_id bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare r public.rooms; n public.goal_nodes; v_prev bigint;
+begin
+  r := public.node_assert_editable(p_slug);
+  n := public.node_get(r.id, p_node_id);
+  select id into v_prev from public.goal_nodes
+  where room_id = r.id and parent_id is not distinct from n.parent_id and id <> n.id and sort_order < n.sort_order
+  order by sort_order desc, id desc limit 1;
+  if v_prev is null then
+    perform public.fail('VALIDATION_FAILED', '바로 위 항목이 없어 들여쓸 수 없어요', jsonb_build_object('nodeId', n.id::text));
+  end if;
+  return public.node_move(p_slug, n.id, v_prev, null);
+end $$;
+
+grant execute on function public.node_move(text, bigint, bigint, int) to authenticated;
