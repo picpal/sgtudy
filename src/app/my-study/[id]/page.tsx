@@ -22,9 +22,9 @@ export default async function MyStudyPage({ params, searchParams }: { params: Pr
     throw e;
   }
   const [detail, curriculum, studies] = data;
-  // 내 스터디는 그룹장·참가자(이탈 포함)만 — 그 외(비참가·승인 대기)는 공개 방 화면으로 (T12 ruling)
+  // 내 스터디는 그룹장·참가자(이탈 포함)·승인 대기만 — 비참가자는 공개 방 화면으로 (T12 ruling, 승인 대기는 대기 카드가 있다)
   const st = detail.me?.state;
-  if (st !== "leader" && st !== "active" && st !== "inactive") redirect(routes.room(id));
+  if (st !== "leader" && st !== "active" && st !== "inactive" && st !== "pending") redirect(routes.room(id));
   const tab = TABS.includes(sp.tab as TabId) ? (sp.tab as TabId) : "overview";
   // ?task= 는 알림(D8) 진입 — 리프 포커스. 숫자 id 가 아니면 무시
   const task = sp.task && /^\d+$/.test(sp.task) ? sp.task : undefined;
