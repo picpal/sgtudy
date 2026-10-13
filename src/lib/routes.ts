@@ -29,3 +29,6 @@ export const routes = {
   /** 초대 링크 진입 (§4.12) */
   invite: (token: string) => `/invite/${token}`,
 } as const;
+
+/** 404 화면의 <title> — 루트 not-found 와 방 메타데이터(ROOM_NOT_FOUND)가 같이 쓴다 (V1-02) */
+export const NOT_FOUND_TITLE = "페이지를 찾을 수 없어요 · 슥터디";

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { NotificationBell } from "@/components/ui/NotificationBell";
-import { routes } from "@/lib/routes";
+import { NOT_FOUND_TITLE, routes } from "@/lib/routes";
 
-export const metadata: Metadata = { title: "페이지를 찾을 수 없어요 · 슥터디" };
+export const metadata: Metadata = { title: NOT_FOUND_TITLE };
 
 /** 없는 주소·없는 방·초대 없이 연 비공개 방(notFound()) 공통 404 — 앱 헤더와 돌아갈 길을 둔다(Q3-10, Q2-24) */
 export default function NotFound() {
