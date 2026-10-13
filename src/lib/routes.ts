@@ -14,6 +14,8 @@ export const routes = {
   room: (slug: string) => `/rooms/${slug}`,
   /** RoomDetail.dc.html — 참가자 시점 내 스터디. slug 생략 시 첫 스터디로 */
   myStudy: (slug?: string) => (slug ? `/my-study/${slug}` : "/my-study"),
+  /** 방 생성 직후 — 커리큘럼 탭 편집 모드 (§4.3) */
+  myStudyEdit: (slug: string) => `/my-study/${slug}?tab=curriculum&mode=edit`,
   /** MySchedule.dc.html — 통합 캘린더 */
   schedule: () => "/schedule",
   /** 방 만들기 (디자인 §4.3) */

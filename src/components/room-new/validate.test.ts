@@ -1,0 +1,36 @@
+import { describe, expect, it } from "vitest";
+import { toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
+
+const TODAY = "2026-10-12";
+const ok: NewRoomValues = { title: "Docker·K8s 입문 6주", intro: "컨테이너 기초부터", startDate: "2026-11-09", endDate: "2026-12-20", maxMembers: "6", isPublic: true, joinMode: "direct", descriptionMd: "", rulesMd: "", minMembers: "", leaderDoesTasks: true };
+
+describe("validateNewRoom (main §2-2 검증 규칙)", () => {
+  it("valid → {}", () => expect(validateNewRoom(ok, TODAY)).toEqual({}));
+  it("title/intro required and bounded", () => {
+    expect(validateNewRoom({ ...ok, title: "   " }, TODAY).title).toBe("제목을 입력해 주세요");
+    expect(validateNewRoom({ ...ok, title: "a".repeat(61) }, TODAY).title).toBe("제목은 60자까지예요");
+    expect(validateNewRoom({ ...ok, intro: "" }, TODAY).intro).toBe("한 줄 소개를 입력해 주세요");
+    expect(validateNewRoom({ ...ok, intro: "a".repeat(101) }, TODAY).intro).toBe("한 줄 소개는 100자까지예요");
+  });
+  it("period: start ≥ today, end ≥ start", () => {
+    expect(validateNewRoom({ ...ok, startDate: "2026-10-11" }, TODAY).startDate).toBe("시작일은 오늘 이후여야 해요");
+    expect(validateNewRoom({ ...ok, startDate: TODAY }, TODAY).startDate).toBeUndefined();
+    expect(validateNewRoom({ ...ok, endDate: "2026-11-08" }, TODAY).endDate).toBe("종료일은 시작일 이후여야 해요");
+    expect(validateNewRoom({ ...ok, startDate: "" }, TODAY).startDate).toBe("시작일을 선택해 주세요");
+  });
+  it("members: max 2~100 integer, min ≤ max", () => {
+    expect(validateNewRoom({ ...ok, maxMembers: "1" }, TODAY).maxMembers).toBe("최대 인원은 2~100명이에요");
+    expect(validateNewRoom({ ...ok, maxMembers: "2.5" }, TODAY).maxMembers).toBe("최대 인원은 2~100명이에요");
+    expect(validateNewRoom({ ...ok, minMembers: "7" }, TODAY).minMembers).toBe("최소 인원은 최대 인원 이하여야 해요");
+    expect(validateNewRoom({ ...ok, minMembers: "0" }, TODAY).minMembers).toBe("최소 인원은 1명 이상이에요");
+  });
+});
+
+describe("toCreateRoom", () => {
+  it("trims and converts numbers, omits empty optionals", () => {
+    expect(toCreateRoom({ ...ok, title: " Docker ", minMembers: "", descriptionMd: " " })).toEqual({
+      title: "Docker", intro: "컨테이너 기초부터", startDate: "2026-11-09", endDate: "2026-12-20", maxMembers: 6, isPublic: true, joinMode: "direct", leaderDoesTasks: true,
+    });
+    expect(toCreateRoom({ ...ok, minMembers: "2", descriptionMd: "소개", rulesMd: "- 규칙" })).toMatchObject({ minMembers: 2, descriptionMd: "소개", rulesMd: "- 규칙" });
+  });
+});
