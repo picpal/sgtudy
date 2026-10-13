@@ -775,11 +775,11 @@ export const ROOM_CASES: Case[] = [
             and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
             and p.proname <> 'handle_new_auth_user' order by 1`, [role])).map((x) => x.f as string);
       // 출처: 0002(me_get·me_update·nickname_check·meta_get·current_user_id 의 GRANT), 0003(can_read_*·is_room_*·is_my_task),
-      // 0004(room_create·room_open_recruit…room_update·rooms_list·room_get), 0005(room_join…room_members_get·invite_preview/get/rotate/join), 0006(curriculum_get·node_create/delete/archive/unarchive/update/move·me_studies·me_schedule), 0007(task_get·submission_upsert·file_register), 0008(notifications_list/unread_count/read/read_all·settings_get/put·member_deactivate_preview/member_deactivate)
+      // 0004(room_create·room_open_recruit…room_update·rooms_list·room_get), 0005(room_join…room_members_get·invite_preview/get/rotate/join), 0006(curriculum_get·node_create/delete/archive/unarchive/update/move·me_studies·me_schedule), 0007(task_get·submission_upsert·file_register), 0008(notifications_list/unread_count/read/read_all·settings_get/put·member_deactivate_preview/member_deactivate), 0009(tags_search·room_tags_get·room_tags_put·room_tags_suggest)
       const ANON = [
         "can_read_room(bigint)", "can_read_submission(bigint,uuid)", "can_read_submissions(bigint)", "current_user_id()",
         "invite_preview(text)", "curriculum_get(text,boolean)", "is_room_leader(bigint)", "is_room_member(bigint)", "meta_get()",
-        "room_get(text,text)", "rooms_list(text,text,text,text[],integer,integer,text)", "task_get(text,bigint)",
+        "room_get(text,text)", "room_tags_get(text)", "rooms_list(text,text,text,text[],integer,integer,text)", "task_get(text,bigint)", "tags_search(text)",
       ];
       const AUTH = [
         ...ANON,
@@ -794,6 +794,7 @@ export const ROOM_CASES: Case[] = [
         "notifications_list(text,integer)", "notifications_unread_count()", "notifications_read(bigint)", "notifications_read_all()",
         "settings_get(text)", "settings_put(text,jsonb)",
         "member_deactivate_preview(text,uuid)", "member_deactivate(text,uuid,jsonb)",
+        "room_tags_put(text,text[],text[])", "room_tags_suggest(text)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);
