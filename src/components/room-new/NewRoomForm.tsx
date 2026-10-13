@@ -59,7 +59,7 @@ export function NewRoomForm() {
 
   return (
     <div className="flex min-h-screen flex-col p-4">
-      <AppHeader active="home" variant="card" bell={<NotificationBell />} />
+      <AppHeader variant="card" bell={<NotificationBell />} />
       <main className="mx-auto w-full max-w-[640px] rounded-[20px] bg-surface p-7 max-sm:p-5">
         <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 만들기</h1>
         <p className="mb-6 mt-[6px] text-[14px] text-muted">채팅방 만들듯 30초면 충분해요. 커리큘럼은 만든 뒤 천천히 채워요.</p>

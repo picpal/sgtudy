@@ -53,7 +53,8 @@ const NAV: { key: NavKey; label: string; href: string; authOnly: boolean; icon: 
 ];
 
 type Props = {
-  active: NavKey;
+  /** 생략하면 어느 메뉴도 강조하지 않는다 (/me, /rooms/new 처럼 nav 키가 없는 화면) */
+  active?: NavKey;
   /** flat: Main 처럼 전폭 흰 바. card: 나머지 화면처럼 둥근 카드 */
   variant?: "flat" | "card";
   /** nav 와 알림 사이에 끼울 요소 (Main 의 검색창 등) */
@@ -85,7 +86,11 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
 
   const logout = async () => {
     setOpen(false);
-    await signOut();
+    try {
+      await signOut();
+    } catch (e) {
+      console.error("[header] signOut failed", e); // 로컬 세션은 지워지므로 그래도 새로고침해 익명 상태를 반영한다
+    }
     router.push(routes.home());
     router.refresh();
   };

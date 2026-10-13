@@ -11,7 +11,8 @@ import { useMe } from "@/lib/me";
 
 const POLL_MS = 60_000;
 
-export function NotificationBell() {
+/** round: 버튼 모서리. Main(flat 헤더)은 rounded-[12px], 나머지 화면은 기본 rounded-full */
+export function NotificationBell({ round = "rounded-full" }: { round?: string }) {
   const me = useMe();
   const router = useRouter();
   const [unread, setUnread] = useState(me?.unreadCount ?? 0);
@@ -39,10 +40,13 @@ export function NotificationBell() {
   // 열 때의 초기화(setError/setItems)는 opener 에서 한다 — effect 본문에서 동기 setState 금지(react-hooks)
   useEffect(() => {
     if (!open) return;
+    let live = true; // 열기→닫기→열기를 빠르게 하면 이전 열기의 응답이 새 초기화 뒤에 덮어쓰지 않도록
     fetchNotifications()
-      .then((r) => setItems(r.items))
-      .catch((e) => setError(toApiError(e).message));
-    fetchUnreadCount().then(setUnread).catch(() => undefined);
+      .then((r) => live && setItems(r.items))
+      .catch((e) => live && setError(toApiError(e).message));
+    fetchUnreadCount()
+      .then((n) => live && setUnread(n))
+      .catch(() => undefined);
     const onDown = (e: MouseEvent) => {
       if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -50,6 +54,7 @@ export function NotificationBell() {
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
+      live = false;
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
@@ -98,7 +103,7 @@ export function NotificationBell() {
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={onToggle}
-        className="relative flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface"
+        className={`relative flex h-11 w-11 items-center justify-center ${round} border border-line bg-surface`}
       >
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#1B2230" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M4 12.5V8a5 5 0 0 1 10 0v4.5l1 1.5H3z" />

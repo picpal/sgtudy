@@ -53,7 +53,7 @@ export function MainScreen({ initial }: { initial: RoomListResponse }) {
 
   return (
     <div className="min-h-screen bg-bg-main text-ink">
-      <AppHeader active="home" variant="flat" bell={<NotificationBell />}>
+      <AppHeader active="home" variant="flat" bell={<NotificationBell round="rounded-[12px]" />}>
         <label className="flex h-10 min-w-40 flex-[0_1_280px] items-center gap-2 rounded-[12px] border border-line bg-surface-3 px-[14px]">
           <span className="sr-only">스터디 검색</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6675" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="shrink-0">

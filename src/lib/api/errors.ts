@@ -32,7 +32,8 @@ export function toApiError(e: unknown): ApiError {
       try {
         const parsed = JSON.parse(e.hint);
         // 서버 fail() 은 hint 가 없으면 '{}' 를 보낸다 — 빈 객체는 details 없음으로 취급
-        details = parsed && Object.keys(parsed).length > 0 ? parsed : undefined;
+        const isObj = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
+        details = isObj && Object.keys(parsed).length > 0 ? parsed : undefined;
       } catch {
         details = undefined;
       }

@@ -49,7 +49,7 @@ export function ProfileScreen({ me }: { me: Me }) {
 
   return (
     <div className="flex min-h-screen flex-col p-4">
-      <AppHeader active="home" variant="card" bell={<NotificationBell />} />
+      <AppHeader variant="card" bell={<NotificationBell />} />
       <main className="mx-auto flex w-full max-w-[560px] flex-col gap-5 rounded-[20px] bg-surface p-7 max-sm:p-5">
         <div className="flex items-center gap-4">
           <span className="flex h-16 w-16 items-center justify-center rounded-full text-[24px] font-bold" style={{ background: AVATAR_PAL[me.tone].bg, color: AVATAR_PAL[me.tone].fg }}>
