@@ -35,7 +35,9 @@ function slotOf(d: RoomCardDto, today: string): Slot {
     }
     case "mine": {
       const v = pct(p.submitted, p.assigned);
-      return { label: "내 진척률", value: `${v}%`, pct: v, note: p.nextTask?.title ?? "남은 과제가 없어요", em: p.nextTask ? dday(today, p.nextTask.dueDate) : "" };
+      // nextTask 는 지금 OPEN 인 과제만 — 없어도 미제출 과제가 남았으면 "다 끝냄" 처럼 읽히지 않게 (Q3-23)
+      const none = p.submitted < p.assigned ? "지금 진행 중인 과제가 없어요" : "남은 과제가 없어요";
+      return { label: "내 진척률", value: `${v}%`, pct: v, note: p.nextTask?.title ?? none, em: p.nextTask ? dday(today, p.nextTask.dueDate) : "" };
     }
     case "team": {
       const idx = p.currentRound?.index ?? 0;

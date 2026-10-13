@@ -49,7 +49,8 @@ export function MainScreen({ initial }: { initial: RoomListResponse }) {
 
   const rooms = useMemo(() => res.items.map((d) => toRoomCard(d, res.today)), [res]);
   const tagCounts = useMemo(() => res.tagFacets.map((f) => ({ slug: f.slug, tag: f.label, count: f.count })), [res.tagFacets]);
-  const selectedLabels = useMemo(() => res.tagFacets.filter((f) => tags.includes(f.slug)).map((f) => f.label), [res.tagFacets, tags]);
+  // 결과가 0건이면 facet 에 선택 태그가 빠질 수 있다 — 그땐 slug 를 그대로 보여 준다(빈 상태 문구용)
+  const selectedLabels = useMemo(() => tags.map((t) => res.tagFacets.find((f) => f.slug === t)?.label ?? t), [res.tagFacets, tags]);
   const toggleTag = (slug: string) => setTags((prev) => (prev.includes(slug) ? prev.filter((x) => x !== slug) : [...prev, slug]));
   const createHref = me ? routes.createRoom() : routes.login(routes.createRoom());
 
@@ -90,7 +91,19 @@ export function MainScreen({ initial }: { initial: RoomListResponse }) {
             </button>
           </div>
         )}
-        {!loading && !error && rooms.length === 0 && <EmptyState q={dq} tab={tab} />}
+        {!loading && !error && rooms.length === 0 && (
+          <EmptyState
+            q={dq}
+            tab={tab}
+            status={status}
+            tagLabels={selectedLabels}
+            onReset={() => {
+              setStatus("all");
+              setTags([]);
+            }}
+            onBrowse={() => setTab("public")}
+          />
+        )}
 
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]" aria-busy={loading} style={{ opacity: loading ? 0.6 : 1 }}>
           {rooms.map((r) => (
