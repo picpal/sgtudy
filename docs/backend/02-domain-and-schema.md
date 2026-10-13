@@ -24,7 +24,7 @@ mail_outbox
 ```sql
 CREATE EXTENSION IF NOT EXISTS citext;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
--- pg_cron 은 Supabase 대시보드(Database → Extensions)에서 켜거나 0004_cron.sql 에서 CREATE EXTENSION
+-- pg_cron 은 Supabase 대시보드(Database → Extensions)에서 켜거나 0010_cron.sql 에서 `create extension if not exists pg_cron;` (이 한 형태만 — PGlite 하네스가 이 문장을 걷어낸다)
 
 -- ───────── profiles (auth.users 1:1) ─────────
 -- 이메일·OTP·세션은 auth 스키마(Supabase Auth)가 소유한다. 앱이 쓰는 사용자 정보만 여기.
@@ -349,7 +349,7 @@ Storage 버킷 `attachments`(private, `file_size_limit=10485760`, `allowed_mime_
 | 읽기 | `rooms_list(scope, status, q, tags, page, size, sort)`, `room_get(slug, invite_token)`, `me_get`, `me_update`, `nickname_check`, `me_studies`, `me_schedule(from, to)`, `notifications_list(cursor, limit)`, `notifications_unread_count`, `notifications_read(id)`, `notifications_read_all`, `settings_get`, `settings_put`, `tags_search(q)`, `room_tags_get`, `room_tags_put`, `tag_autoselect(room_id)`, `tag_apply_auto(room_id, slugs[])` | JSON |
 | 잡 | `room_tick()`, `job_draft_blocked()`, `job_round_started()`, `job_deadline_reminder()`, `job_completion_digest()`, `job_cleanup()`, `member_count_audit()` | pg_cron 호출 |
 
-트리거: `profiles` 생성(§2), `submissions` 불변 컬럼 보호(I9), `goal_nodes` BEFORE INSERT/UPDATE 에서 depth·root·period CHECK 보강, `rooms.updated_at`/`goal_nodes.updated_at` 갱신.
+트리거: `profiles` 생성(§2), `submissions` 불변 컬럼 보호(I9), `goal_nodes` BEFORE INSERT/UPDATE 에서 `depth = 부모 depth + 1`·`round_id` 일치·`label` 은 depth 2 만 검사(0006, 직접 INSERT 경로 방어), `rooms.updated_at`/`goal_nodes.updated_at` 갱신.
 
 ## 7. pg_cron (`0010_cron.sql`) — UTC 로 환산
 
@@ -369,7 +369,7 @@ Storage 버킷 `attachments`(private, `file_size_limit=10485760`, `allowed_mime_
 
 | 대상 | 내용 |
 |---|---|
-| auth.users + profiles | 고정 UUID 로 `auth.users` 에 직접 INSERT(로컬 전용) → 트리거가 profiles 생성 후 nickname UPDATE. 철수(blue)·민수(mint)·지은·하나·도윤·가은·현우·태민·소연·준호 … 목업 등장 인물 전부, `avatar_tone` 은 `src/lib/palette.ts` NAME_TONE 과 동일 |
+| auth.users + profiles | 고정 UUID 로 `auth.users` 에 직접 INSERT(로컬 전용) → 트리거가 profiles 생성 후 nickname UPDATE. `src/lib/palette.ts` NAME_TONE 의 29명 전부, `avatar_tone` 동일 |
 | rooms | slug = toeic, cs, sqld, docker, jcg, aws, react, algo, spring (9개). 상태·기간·정원·공개·참가방식은 `src/data/rooms.ts` 값. docker 는 `member_count=1` |
 | room_members | aws: 민수(LEADER)·지은·철수·하나 ACTIVE, 도윤 INACTIVE. sqld: 가은 LEADER, 철수 PENDING. docker: 철수 LEADER. algo/spring: 목업 멤버 |
 | goal_nodes | `src/data/my-study.ts` PLANS 트리 그대로(aws 5회차, spring 4, sqld 4, algo 13). `round_id` 채움 |
@@ -378,4 +378,6 @@ Storage 버킷 `attachments`(private, `file_size_limit=10485760`, `allowed_mime_
 | tags | 목업 태그 19개 + tone |
 | notifications | 철수에게 3건(unread) |
 
-회귀 테스트 기대값: aws overall 24%, 1주차 5/8, spring 34%, algo 87%, sqld null, 철수 aws 내 진척률 2/4=50%(방 목록), 철수 aws 다음 마감 EC2 10/14.
+회귀 테스트 기대값: aws overall 24%, 1주차 5/8, spring 34%, algo 87%, sqld null(`leader_does_tasks=false`), 철수 aws 내 진척률 **2/6=33%**(방 목록 슬롯·참가자 통계 동일, D5), 민수 2/5·지은 2/7·하나 0/7, 철수 aws 다음 마감 EC2 10/14(OPEN 만).
+
+로컬·테스트 전용 고정 기준일: `seed.sql` 끝에 `alter database postgres set app.today = '2026-10-12';` 를 넣어 `kst_today()` 가 항상 2026-10-12 를 돌려주게 한다(E2E 가 실제 날짜에 따라 깨지지 않게). 호스팅 프로젝트에는 적용하지 않는다(`supabase db push` 는 seed 를 보내지 않음).

@@ -62,7 +62,7 @@ DRAFT ──(모집 시작, 말단 과제 ≥1)──▶ RECRUIT ──(start_da
   2. COMMON 행인데 멤버가 ACTIVE 아님 또는 리프가 COMMON 아님 → `released_at = now()`.
   3. DESIGNATED 행은 `node_update()`(assigneeIds)·`member_deactivate()`(decisions) 로만 생성·해제. 멤버 INACTIVE 시 제출된 행은 released(집계 제외·제출물 보존), 미제출 행은 exclude/reassign 결정.
   4. 제출물 있는 행은 삭제하지 않고 released 만.
-- 모집중에도 실체화 → 모집중 방 `asg`(sqld 0/2)도 같은 쿼리.
+- 모집중에도 실체화 → 모집중 방의 `asg` 도 같은 쿼리(시드 sqld 는 `leader_does_tasks=false`·멤버 0명이라 asg 0 → overall null).
 
 ## D5. 사람별 상태·진척률 (단일 규칙, DB 함수)
 
@@ -81,6 +81,7 @@ leaf_state            = asg=0 ? unassigned : sub=asg ? complete : today<s ? plan
 
 - `today` 는 항상 **DB 의 KST 날짜**. 모든 JSON 응답에 `today` 포함, 프론트 `TODAY` 상수를 대체.
 - 목업 회귀값: aws 6/25=24%(루트 5/8·1/3·0/4·0/4·0/6), spring 12/35=34%, algo 68/78=87%, sqld null. 스펙 표의 aws 40% 폐기.
+- **참가자별 숫자는 전체 트리 기준으로 재정의**: 목업의 민수 2/3·지은 2/4·철수 2/4·하나 0/4 는 개요에 보이는 1~3주차만 센 값이라 실데이터로 재현 불가. 확정값 = 민수 2/5·지은 2/7·**철수 2/6(33%)**·하나 0/7. 방 목록 "내 진척률" 슬롯도 같은 2/6 → **aws 카드 33%**(목업 50% 폐기). 회차 범위를 자르는 규칙은 두지 않는다.
 - 그룹장이 `leader_does_tasks=false` 면 담당자 아님(프론트 `noBar`).
 
 ## D6. 세션·접근 경로
@@ -104,7 +105,8 @@ leaf_state            = asg=0 ? unassigned : sub=asg ? complete : today<s ? plan
 | 온보딩 미완료(`profiles.nickname IS NULL`) | 쓰기 RPC 전부 `ONBOARDING_REQUIRED` | |
 
 - 쓰기 RPC 는 전부 `SECURITY DEFINER` + 내부에서 `auth.uid()`·역할 검사. 테이블 직접 INSERT/UPDATE 는 RLS 로 막는다(프론트는 RPC 만 호출).
-- 읽기는 RLS SELECT 정책 + 집계 함수(`SECURITY INVOKER`, RLS 통과한 행만 집계).
+- 읽기 집계 함수도 **`SECURITY DEFINER`** 로 두고 함수 안에서 `can_read_room()` 등으로 직접 거른다(RLS 를 거치면 PENDING·INACTIVE 분기와 비로그인 `people=[]` 같은 부분 노출을 표현하기 어렵다). RLS SELECT 정책은 테이블을 직접 읽는 경로(PostgREST `from()`)의 **2차 방어선**이다.
+- **함수 노출 통제**: PostgREST 는 `public` 의 모든 함수를 RPC 로 연다. 내부 헬퍼(uid·room_id 를 인자로 받는 JSON 빌더, 전환·동기화·잡 함수)는 만들 때마다 `REVOKE EXECUTE ON FUNCTION … FROM PUBLIC, anon, authenticated;` 를 건다 — `anon, authenticated` 만 회수하면 PUBLIC 기본 권한이 남는다. 0002 첫머리에 `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;` 를 선언하고, 공개 RPC 만 명시적으로 `GRANT EXECUTE … TO anon, authenticated`.
 
 ## D8. 알림
 
@@ -112,7 +114,8 @@ leaf_state            = asg=0 ? unassigned : sub=asg ? complete : today<s ? plan
 - 옵션 설정은 **방 단위**(`room_notification_settings`). 기본 3종은 컬럼 없음. 메일은 2단계(방 설정 AND `profiles.optional_mail_enabled`).
 - 시각: 상태 전환·대기 만료·회차 시작 = 00:00 KST, 리마인더·일일 요약 = 09:00 KST (pg_cron 은 UTC → 15:00 / 00:00 UTC).
 - `link`: 방 이벤트 → 참가자면 `/my-study/{slug}`, 아니면 `/rooms/{slug}`; 과제 이벤트 → `/my-study/{slug}?task={nodeId}`.
-- 본인이 일으킨 이벤트는 본인 제외. 한 저장의 같은 수신자·kind 는 1건.
+- 본인이 일으킨 이벤트는 본인 제외 — **`notify_publish` 가 `p_actor` 를 수신자에서 빼는 책임을 진다**(호출자는 신경 쓰지 않는다). 한 저장의 같은 수신자·kind 는 1건.
+- dedupe 접두사 규칙: 상태성 이벤트(회차 시작·리마인더·요약·방 시작/종료)는 `KIND:room:node:date` 같은 **자연키**, 행위 이벤트(배정·해제·일정 변경·참가 신청)는 `KIND:room:node:` + `txid_current()` — 같은 사람에게 다시 배정해도 새 알림이 간다.
 - 헤더 배지는 60초 폴링(`notifications_unread_count()`); Realtime 구독은 2단계.
 
 ## D9. 커리큘럼 편집 단위·불변식
@@ -163,10 +166,11 @@ leaf_state            = asg=0 ? unassigned : sub=asg ? complete : today<s ? plan
 | 알림 설정 단위 | 방 | 개인(메일) | 인앱=방, 메일=방 AND 개인 |
 | 세션 | 쿠키/프록시/Bearer | — | **Supabase Auth + @supabase/ssr** (D6) |
 | 방 생성 직후 | DRAFT | 전환 보류 | **DRAFT + `room_open_recruit`** |
-| `nextDue` | OPEN 만 | — | OPEN 만 |
+| `nextDue` / 카드 `nextTask` | OPEN 만(mystudy) | `end_date ≥ today`(시작 전 포함) | **OPEN 만**(`start ≤ today ≤ end` & 미제출). 방 목록·방 상세·내 스터디·사이드바 전부 동일. MISSED 는 보드에서 |
+| 철수 aws 진척 | 2/4·50%(목업) | 2/6·33%(전체 트리) | **2/6** (D5) |
 | 종료 방 + 멤버 CTA | ended(목업) | joined | joined — 프론트 어댑터 |
 | 회차 label | 자유 문자열 | — | `label` 컬럼, 기본 `"{n}주차"` |
-| 기간 문구 | "3개월" vs "13주" | — | `round(days/7)주` 통일 |
+| 기간 문구 | "3개월" vs "13주" | — | `round(days/7)주` 통일. "N주 완주" 도 기간 주 수(algo 13), "N회차" 는 depth-2 노드 수(algo 시드 3) |
 
 ## D15. 규모가 커지면 — 이관 경로
 
