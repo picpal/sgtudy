@@ -95,7 +95,7 @@ cases("files", db, [
 
     await asUser(q, await uidOf(q, "가은"));
     await expectFail(register(q, ec2, path, "a.pdf", "application/pdf", 10), "TASK_NOT_ASSIGNED");
-    await asAnon(q);
+    await asAnon(q);   // 수퍼유저 + 빈 uid 경로. 실제 anon 은 GRANT 층에서 42501(D10)
     await expectFail(register(q, ec2, path, "a.pdf", "application/pdf", 10), "AUTH_REQUIRED");
   } },
 

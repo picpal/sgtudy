@@ -219,7 +219,6 @@ cases("notifications", db, [
     const ja = await rowsOf(q, seoyeon, "JOIN_APPROVED");
     assertEquals(ja.length, 1);
     assertEquals(ja[0].link, "/my-study/sqld");                              // 승인 뒤에는 참가자 화면으로 간다
-    // link 는 room_approve 가 상태 갱신 뒤에 부르면 /my-study, 전이면 /rooms
 
     await setToday(q, "2026-10-26");                                          // sqld start_date
     await q("select public.room_tick()");
