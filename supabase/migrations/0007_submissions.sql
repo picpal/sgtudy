@@ -161,3 +161,68 @@ begin
 
   return public.submission_json(v_sid);
 end $$;
+
+-- ───────── file_register (03-api §5 complete, D10) ─────────
+-- 클라이언트가 Storage 에 직접 올린 뒤 호출. 경로 {room_id}/{node_id}/{user_id}/{file_uuid}.{ext} 를 검증하고 files 행을 READY 로 만든다.
+-- 키에 원본 파일명을 넣지 않는다(비ASCII·공백 키는 Storage 가 거부). 원본명은 p_name → files.original_name.
+-- 버킷·Storage 정책은 0003(플랜 01 Task 6) 소유: attachments(private, 10MB, MIME 화이트리스트),
+--   insert = 본인 폴더 ∧ is_task_assignee, select = can_read_submissions, delete = 본인. 여기서는 만들지 않는다.
+-- 크기는 Storage 가 기록한 metadata.size 를 우선한다(클라이언트 값은 참고용).
+create or replace function public.file_register(p_node bigint, p_path text, p_name text, p_mime text, p_size bigint)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid  uuid := public.require_user();
+  n      public.goal_nodes;
+  r      public.rooms;
+  v_seg  text[];
+  v_id   uuid;
+  v_name text := trim(coalesce(p_name, ''));
+  v_cnt  int;
+  v_meta jsonb;
+  v_size bigint;
+  f      public.files;
+begin
+  -- 잠금·은닉·방 ACTIVE·보관·리프·담당자 검사는 submission_upsert 와 공통(A2)
+  n := public.submission_target(p_node, v_uid);
+  select * into r from public.rooms where id = n.room_id;
+
+  v_seg := string_to_array(coalesce(p_path, ''), '/');
+  if cardinality(v_seg) <> 4 or v_seg[1] <> r.id::text or v_seg[2] <> n.id::text or v_seg[3] <> v_uid::text
+     or v_seg[4] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9]{1,10})?$' then
+    perform public.fail('VALIDATION_FAILED', '첨부 경로가 올바르지 않아요', '{"field":"path"}'::jsonb);
+  end if;
+  v_id := left(v_seg[4], 36)::uuid;
+  if length(v_name) < 1 or length(v_name) > 255 then
+    perform public.fail('VALIDATION_FAILED', '파일 이름은 1~255자예요', '{"field":"name"}'::jsonb);
+  end if;
+  if p_mime is null or not (p_mime = any(public.allowed_mime_types())) then
+    perform public.fail('FILE_TYPE_NOT_ALLOWED', '허용되지 않는 파일 형식이에요', jsonb_build_object('field', 'contentType', 'contentType', p_mime));
+  end if;
+  if p_size is null or p_size < 1 then
+    perform public.fail('VALIDATION_FAILED', '파일 크기가 올바르지 않아요', '{"field":"size"}'::jsonb);
+  end if;
+
+  if not public.storage_exists('attachments', p_path) then
+    perform public.fail('FILE_NOT_READY', '업로드가 아직 끝나지 않았어요', jsonb_build_object('fileId', v_id::text));
+  end if;
+  select o.metadata into v_meta from storage.objects o where o.bucket_id = 'attachments' and o.name = p_path;
+  v_size := coalesce((v_meta ->> 'size')::bigint, p_size);
+  if v_size > 10485760 then
+    perform public.fail('FILE_TOO_LARGE', '파일은 10MB까지예요', jsonb_build_object('field', 'size', 'size', v_size));
+  end if;
+
+  -- 업로드 중 묶음(제출 미연결, 24시간 이내)만 센다. 연결된 파일 수는 submission_upsert 가, 오래된 고아는 job_cleanup 이 맡는다(S3)
+  select count(*) into v_cnt from public.files
+  where owner_user_id = v_uid and node_id = n.id and purpose = 'ATTACHMENT' and status in ('PENDING', 'READY')
+    and submission_id is null and created_at > now() - interval '24 hours' and id <> v_id;
+  if v_cnt >= 5 then perform public.fail('FILE_LIMIT_EXCEEDED', '첨부는 과제당 5개까지예요', '{"field":"fileIds"}'::jsonb); end if;
+
+  insert into public.files (id, owner_user_id, room_id, node_id, purpose, bucket_id, object_path, original_name, content_type, size_bytes, status, completed_at)
+  values (v_id, v_uid, r.id, n.id, 'ATTACHMENT', 'attachments', p_path, v_name, p_mime, v_size, 'READY', now())
+  on conflict (id) do update
+    set status = 'READY', completed_at = now(), size_bytes = excluded.size_bytes, deleted_at = null
+    where public.files.owner_user_id = excluded.owner_user_id and public.files.node_id = excluded.node_id
+  returning * into f;
+  if f.id is null then perform public.fail('NOT_FOUND', '다른 사용자의 파일 id 예요', jsonb_build_object('fileId', v_id::text)); end if;
+  return public.file_json(f);
+end $$;
