@@ -30,6 +30,8 @@ Phase 순서대로 실행. 각 Phase 끝에 `npm run test:db`(= `deno test --con
 - 마이그레이션 `supabase/migrations/0001_schema.sql`, `0002_functions_core.sql`, `0003_rls.sql`, `0004_rooms.sql`, `0005_membership.sql`, `0006_curriculum.sql`, `0007_submissions.sql`, `0008_notifications.sql`, `0009_tags.sql`, `0010_cron.sql`. 배포된 파일은 수정하지 않는다.
 - 모든 쓰기 함수와 **anon/authenticated 에 GRANT 하는 모든 공개 RPC(읽기 포함)**: `LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''`(INVOKER 함수는 GRANT 되지 않은 내부 헬퍼를 부를 수 없다 — 구현 중 확인 2026-10-13: `meta_get` 이 INVOKER 라 anon 에서 `permission denied for function kst_today`). 각 Phase 의 권한 테스트는 `has_function_privilege` 단언에 더해 `set local role anon|authenticated` 로 공개 RPC 를 **실제 실행**한다, 테이블은 `public.` 한정, 사용자는 `public.current_user_id()`. 비로그인 호출은 `AUTH_REQUIRED`, 온보딩 전은 `ONBOARDING_REQUIRED`.
 - **함수 권한(D7)**: `0002` 첫머리에 `ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;`(전역 — `IN SCHEMA public` 한정으로는 PUBLIC 기본 EXECUTE 를 못 걷어낸다, 구현 중 확인 2026-10-13) + `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM anon, authenticated;`. 그 뒤 모든 함수는 기본 비공개이며, `03-api.md` 의 RPC 열에 있는 **공개 함수만** `GRANT EXECUTE ON FUNCTION … TO anon, authenticated`(비로그인 허용 함수) 또는 `TO authenticated`. 내부 헬퍼(uid/room_id 를 받는 `*_json`, `room_transition_*`, `assignment_resync`, `notify_publish`, `job_*`, `room_tick`, `room_lock/take_seat/release_seat`, `me_schedule_leaves` 등)는 GRANT 하지 않는다. 각 Phase 테스트에 `has_function_privilege('anon', 'public.<fn>(<args>)', 'execute') = false` 단언을 넣는다.
+- **뷰·테이블 쓰기 권한(D7, 구현 리뷰 2026-10-13)**: 모든 뷰는 `revoke all on <view> from anon, authenticated, public; grant select on <view> to anon, authenticated;`(Supabase 기본 GRANT 로 자동 갱신 가능 뷰가 RLS 를 우회한다). 0002 에 `alter default privileges in schema public revoke insert, update, delete, truncate on tables from anon, authenticated;`. RLS 정책용 헬퍼는 호출자 uid 를 인자로 받지 않는 1인자 형(`is_my_task(p_node)`)만 GRANT 한다.
+- 로그인 전용 RPC(`to authenticated`)를 anon 이 부르면 PostgREST 42501 — `*-db.test.ts` 는 `error.code === '42501'` 을 단언하고, `AUTH_REQUIRED` 매핑은 프론트 `toApiError` 몫(plan 05).
 - `current_user_id()` 는 운영에서 `auth.uid()` 만 반환한다. 테스트용 `app.uid` 는 **PGlite 스텁의 `auth.uid()`** 가 읽는다(함수 본문에 GUC 폴백을 넣지 않는다).
 - 고정 기준일: `seed.sql` 마지막 줄 `alter database postgres set app.today = '2026-10-12';`(로컬·테스트 전용, 02 §8). PGlite 사례는 `setToday()`.
 - `job_cleanup` 은 Storage **객체**를 SQL 로 지우지 않는다(`storage.objects` 직접 DELETE 금지). `files.status='DELETED'` 로만 표시하고 실제 객체 삭제는 2단계 Edge Function 몫.
@@ -79,7 +81,7 @@ public.notify_publish(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p
 // src/lib/supabase/middleware.ts — updateSession(request): 세션 갱신 + 보호 라우트 → /login?returnTo=
 // src/lib/api/errors.ts
 export type ApiError = { code: string; message: string; details?: Record<string, string> };
-export function toApiError(e: unknown): ApiError;             // PostgrestError → {code: message, message: details, details: JSON.parse(hint)}
+export function toApiError(e: unknown): ApiError;             // PostgrestError → {code: message, message: details, details: JSON.parse(hint)}; PostgREST code 42501(로그인 전용 RPC 를 anon 이 호출) → {code:'AUTH_REQUIRED'} (D7 ruling 2026-10-13)
 export async function rpc<T>(name: string, args?: Record<string, unknown>): Promise<T>;  // supabase.rpc 래퍼, 실패 시 ApiError throw
 ```
 
