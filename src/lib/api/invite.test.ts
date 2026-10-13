@@ -12,6 +12,12 @@ const w = (p: Partial<InvitePreview["room"]>, me: InvitePreview["me"] = { state:
 
 describe("inviteActionOf (03-api §3 순서)", () => {
   it("anonymous → login", () => expect(inviteActionOf(w({}, null))).toBe("login"));
+  it("anonymous on full / active / ended → disabled state, not login (Q2-11)", () => {
+    expect(inviteActionOf(w({ memberCount: 6 }, null))).toBe("full");
+    expect(inviteActionOf(w({ status: "active", memberCount: 6 }, null))).toBe("activeClosed");
+    expect(inviteActionOf(w({ status: "ended" }, null))).toBe("ended");
+    expect(inviteActionOf(w({ joinMode: "approval" }, null))).toBe("login");
+  });
   it("leader → owner", () => expect(inviteActionOf(w({}, { state: "leader" }))).toBe("owner"));
   it("active member on recruit room → joined (초대 화면엔 취소 없음)", () => expect(inviteActionOf(w({}, { state: "active" }))).toBe("joined"));
   it("pending → pending", () => expect(inviteActionOf(w({ joinMode: "approval" }, { state: "pending" }))).toBe("pending"));
