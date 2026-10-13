@@ -295,3 +295,73 @@ grant execute on function public.room_approve(text, uuid)         to authenticat
 grant execute on function public.room_reject(text, uuid)          to authenticated;
 grant execute on function public.room_applications(text)          to authenticated;
 grant execute on function public.room_members_get(text)           to authenticated;
+
+-- ───────── 초대 (03-api §3, I10) ─────────
+create or replace function public.invite_get(p_slug text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; v_token text;
+begin
+  r := public.room_lock(p_slug);
+  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 초대 링크를 볼 수 있어요'); end if;
+  v_token := public.invite_ensure(r.id, v_uid);
+  return jsonb_build_object('today', to_char(public.kst_today(), 'YYYY-MM-DD'), 'token', v_token, 'url', '/invite/' || v_token);
+end $$;
+
+create or replace function public.invite_rotate(p_slug text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; v_token text;
+begin
+  r := public.room_lock(p_slug);
+  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 초대 링크를 바꿀 수 있어요'); end if;
+  update public.room_invites set revoked_at = now() where room_id = r.id and revoked_at is null;
+  v_token := public.invite_ensure(r.id, v_uid);
+  return jsonb_build_object('today', to_char(public.kst_today(), 'YYYY-MM-DD'), 'token', v_token, 'url', '/invite/' || v_token);
+end $$;
+
+-- 토큰 → 방. 없음 INVITE_NOT_FOUND, 회전됨 INVITE_REVOKED, DRAFT·보관 방은 INVITE_NOT_FOUND(숨김)
+create or replace function public.invite_resolve(p_token text) returns public.rooms
+language plpgsql stable security definer set search_path = '' as $$
+declare i public.room_invites; r public.rooms;
+begin
+  select * into i from public.room_invites where token = p_token;
+  if not found then perform public.fail('INVITE_NOT_FOUND', '초대 링크를 찾을 수 없어요'); end if;
+  if i.revoked_at is not null then perform public.fail('INVITE_REVOKED', '만료된 초대 링크예요'); end if;
+  select * into r from public.rooms where id = i.room_id;
+  if r.status = 'DRAFT' or r.archived_at is not null then perform public.fail('INVITE_NOT_FOUND', '초대 링크를 찾을 수 없어요'); end if;
+  return r;
+end $$;
+
+create or replace function public.invite_preview(p_token text) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := public.current_user_id(); r public.rooms;
+begin
+  r := public.invite_resolve(p_token);
+  return jsonb_build_object(
+    'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
+    'room', jsonb_build_object(
+      'slug', r.slug, 'title', r.title, 'intro', r.intro,
+      'startDate', to_char(r.start_date, 'YYYY-MM-DD'), 'endDate', to_char(r.end_date, 'YYYY-MM-DD'),
+      'memberCount', r.member_count, 'maxMembers', r.max_members,
+      'status', lower(r.status), 'isPublic', r.visibility = 'PUBLIC', 'joinMode', lower(r.join_mode), 'tags', public.room_tags_json(r.id)),
+    'leader', public.person_json(r.leader_id),
+    'me', public.room_me_json(r.id, v_uid));
+end $$;
+
+-- join_mode 에 따라 참가/신청. 비공개 우회는 토큰을 그대로 넘겨 room_join/room_apply 가 판단
+create or replace function public.invite_join(p_token text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms;
+begin
+  r := public.invite_resolve(p_token);
+  if r.join_mode = 'DIRECT' then return public.room_join(r.slug, p_token); end if;
+  return public.room_apply(r.slug, p_token);
+end $$;
+
+-- ───────── 공개 RPC GRANT (D7) ─────────
+-- 내부 함수(room_lock·*_json·invite_ensure·room_take/release_seat·room_transition_*·room_tick·assignment_resync·
+-- membership_result·invite_check·invite_resolve·*_precheck)는 0002 의 default privileges 로 이미 비공개 — 아무것도 하지 않는다.
+-- (`revoke … from anon, authenticated` 만으로는 PUBLIC 기본 EXECUTE 가 남아 anon 이 임의 uid 로 room_detail_json 을 부를 수 있었다 — 리뷰 D1)
+grant execute on function public.invite_preview(text) to anon, authenticated;
+grant execute on function public.invite_get(text)     to authenticated;
+grant execute on function public.invite_rotate(text)  to authenticated;
+grant execute on function public.invite_join(text)    to authenticated;

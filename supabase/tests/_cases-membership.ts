@@ -247,4 +247,130 @@ export const MEMBERSHIP_CASES: Case[] = [
       await q("reset role");
     },
   },
+  {
+    name: "invite_get/rotate: leader only, seed token, rotation revokes old (Review Focus 5)",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asUser(q, USERS.민수);
+      await expectFailSql(q, `select public.invite_get($1)`, ["docker"], "NOT_LEADER");
+      await expectFailSql(q, `select public.invite_rotate($1)`, ["docker"], "NOT_LEADER");
+      await asUser(q, USERS.철수);
+      const [{ g }] = await q(`select public.invite_get($1) as g`, ["docker"]);
+      assertEquals(g, { today: TODAY, token: "seed-docker", url: "/invite/seed-docker" });
+      const [{ n }] = await q(`select public.invite_rotate($1) as n`, ["docker"]);
+      assertNotEquals(n.token, "seed-docker");
+      assertEquals([n.url, n.token.length], [`/invite/${n.token}`, 32]);
+      const [{ cnt }] = await q(`select count(*)::int as cnt from public.room_invites where room_id = 4 and revoked_at is null`);
+      assertEquals(cnt, 1);
+      await asAnon(q);
+      await expectFailSql(q, `select public.invite_preview($1)`, ["seed-docker"], "INVITE_REVOKED");
+      await expectFailSql(q, `select public.invite_preview($1)`, ["no-such-token"], "INVITE_NOT_FOUND");
+      const [{ p }] = await q(`select public.invite_preview($1) as p`, [n.token]);
+      assertEquals(p.room.slug, "docker");
+      // 토큰이 없던 방(초대 행 삭제)도 invite_get 이 만들어 준다
+      await asUser(q, USERS.철수);
+      await q(`delete from public.room_invites where room_id = 4`);
+      const [{ g2 }] = await q(`select public.invite_get($1) as g2`, ["docker"]);
+      assertEquals(g2.token.length, 32);
+      await expectFailSql(q, `select public.invite_get($1)`, ["no-such-room"], "ROOM_NOT_FOUND");
+    },
+  },
+  {
+    name: "invite_preview: anon OK with me null, member state, DRAFT hidden, private room visible via token",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asAnon(q);
+      const [{ p }] = await q(`select public.invite_preview($1) as p`, ["seed-toeic"]);
+      assertEquals(p.today, TODAY);
+      assertEquals(p.me, null);
+      assertEquals(p.room, {
+        slug: "toeic", title: "토익 900 8주 챌린지", intro: "매일 LC·RC 한 세트씩 풀고 오답 노트를 공유해요. 주말엔 모의고사 1회.",
+        startDate: "2026-11-02", endDate: "2026-12-27", memberCount: 2, maxMembers: 8, status: "recruit", isPublic: true, joinMode: "direct",
+        tags: [{ slug: "english", label: "영어", tone: "blue", auto: true }, { slug: "toeic", label: "토익", tone: "peach", auto: true }],
+      });
+      assertEquals(p.leader, { userId: USERS.서연, nickname: "서연", tone: "blue" });
+      await asUser(q, USERS.철수);
+      assertEquals((await q(`select public.invite_preview($1) as p`, ["seed-toeic"]))[0].p.me, { state: "none" });
+      assertEquals((await q(`select public.invite_preview($1) as p`, ["seed-sqld"]))[0].p.me, { state: "pending" });
+      assertEquals((await q(`select public.invite_preview($1) as p`, ["seed-docker"]))[0].p.me, { state: "leader" });
+      // 비공개 spring 도 토큰으로 미리보기 가능(비멤버·비로그인)
+      await asAnon(q);
+      assertEquals((await q(`select public.invite_preview($1) as p`, ["seed-spring"]))[0].p.room.isPublic, false);
+      // DRAFT 방은 토큰이 있어도 숨김
+      const d = await createRoom(q, USERS.서연);
+      const [{ token }] = await q(`select token from public.room_invites where room_id = $1`, [d.id]);
+      await asAnon(q);
+      await expectFailSql(q, `select public.invite_preview($1)`, [token], "INVITE_NOT_FOUND");
+      // 보관된 방도 숨김
+      await asUser(q, USERS.민수);
+      await q(`select public.room_archive('aws')`);
+      await asAnon(q);
+      await expectFailSql(q, `select public.invite_preview($1)`, ["seed-aws"], "INVITE_NOT_FOUND");
+    },
+  },
+  {
+    name: "invite_join: join_mode-aware, private bypass, owner/anon/revoked errors",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      const direct = await openRoom(q, USERS.서연, { isPublic: false, title: "Private Direct" });
+      const appr = await openRoom(q, USERS.서연, { isPublic: false, joinMode: "approval", title: "Private Approval" });
+      const tok = async (id: string) => (await q(`select token from public.room_invites where room_id = $1 and revoked_at is null`, [id]))[0].token as string;
+      const td = await tok(direct.id), ta = await tok(appr.id);
+      await asAnon(q);
+      await expectFailSql(q, `select public.invite_join($1)`, [td], "AUTH_REQUIRED");
+      await asUser(q, USERS.서연);
+      await expectFailSql(q, `select public.invite_join($1)`, [td], "OWNER_CANNOT_JOIN");
+      await asUser(q, USERS.민수);
+      const [{ a }] = await q(`select public.invite_join($1) as a`, [td]);
+      assertEquals([a.me, a.memberCount], [{ state: "active" }, 2]);
+      const [{ b }] = await q(`select public.invite_join($1) as b`, [ta]);
+      assertEquals([b.me, b.memberCount], [{ state: "pending" }, 1]);
+      await expectFailSql(q, `select public.invite_join($1)`, [ta], "ALREADY_PENDING");
+      await expectFailSql(q, `select public.invite_join($1)`, [td], "ALREADY_MEMBER");
+      // 회전 뒤 옛 토큰
+      await asUser(q, USERS.서연);
+      await q(`select public.invite_rotate($1)`, [direct.slug]);
+      await asUser(q, USERS.현우);
+      await expectFailSql(q, `select public.invite_join($1)`, [td], "INVITE_REVOKED");
+      await expectFailSql(q, `select public.invite_join($1)`, ["no-such-token"], "INVITE_NOT_FOUND");
+      const [{ c }] = await q(`select public.invite_join($1) as c`, [await tok(direct.id)]);
+      assertEquals(c.me, { state: "active" });
+      // 공개 승인제(jcg, 4/4) 는 토큰으로 와도 ROOM_FULL
+      await expectFailSql(q, `select public.invite_join($1)`, ["seed-jcg"], "ROOM_FULL");
+    },
+  },
+  {
+    name: "privileges (T6): invite_preview public, get/rotate/join authenticated-only, helpers private (D7)",
+    run: async (q) => {
+      const can = async (role: string, fn: string) =>
+        (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
+      assertEquals(await can("anon", "public.invite_preview(text)"), true);
+      assertEquals(await can("authenticated", "public.invite_preview(text)"), true);
+      for (const fn of ["public.invite_get(text)", "public.invite_rotate(text)", "public.invite_join(text)"]) {
+        assertEquals(await can("authenticated", fn), true, fn);
+        assertEquals(await can("anon", fn), false, fn);
+      }
+      for (const fn of ["public.invite_resolve(text)", "public.invite_check(bigint,text)", "public.invite_ensure(bigint,uuid)"]) {
+        assertEquals(await can("authenticated", fn), false, fn);
+        assertEquals(await can("anon", fn), false, fn);
+      }
+      await setToday(q, TODAY);
+      await asAnon(q);
+      await q("set local role anon");
+      const [{ p }] = await q(`select public.invite_preview($1) as p`, ["seed-toeic"]);
+      assertEquals(p.room.slug, "toeic");
+      await expectFailSql(q, `select public.invite_join($1)`, ["seed-toeic"], "permission denied");
+      await q("reset role");
+      await asUser(q, USERS.철수);
+      await q("set local role authenticated");
+      const [{ g }] = await q(`select public.invite_get($1) as g`, ["docker"]);
+      assertEquals(g.token, "seed-docker");
+      await q("reset role");
+      await asUser(q, USERS.현우);                                           // toeic 비멤버
+      await q("set local role authenticated");
+      const [{ j }] = await q(`select public.invite_join($1) as j`, ["seed-toeic"]);
+      assertEquals(j.me, { state: "active" });
+      await q("reset role");
+    },
+  },
 ];
