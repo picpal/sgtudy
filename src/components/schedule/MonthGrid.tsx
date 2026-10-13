@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import { md, WEEKDAY_KO, weekdayKo } from "@/lib/date";
-import { routes } from "@/lib/routes";
 import { STATUS_LABEL } from "@/lib/types";
 import type { Marker, Study, Task } from "@/data/schedule";
-import { isUrgent, monthWeeks, packWeek, type Seg } from "./calc";
+import { isUrgent, monthWeeks, packWeek, taskHref, type Seg } from "./calc";
 
 type Props = {
   y: number;
@@ -30,7 +29,8 @@ export function MonthGrid({ y, m, sel, today, studies, tasks, markers, onPick }:
           </div>
         ))}
       </div>
-      <div className="thin-scroll grid min-h-0 flex-1 overflow-auto" style={{ gridTemplateRows: `repeat(${weeks.length}, minmax(96px, 1fr))` }}>
+      {/* 주 행은 남는 높이를 나눠 갖되(flex-grow) 레인이 많으면 막대 높이만큼 늘어난다 — 다음 주 행 밑으로 숨지 않게 (schedule §1-5) */}
+      <div className="thin-scroll flex min-h-0 flex-1 flex-col overflow-auto">
         {weeks.map((days) => (
           <WeekRow key={days[0]} days={days} m={m} sel={sel} today={today} studies={studies} tasks={tasks} markers={markers} onPick={onPick} />
         ))}
@@ -44,7 +44,7 @@ type WeekProps = Omit<Props, "y"> & { days: string[] };
 function WeekRow({ days, m, sel, today, studies, tasks, markers, onPick }: WeekProps) {
   const segs = packWeek(tasks, days[0]);
   return (
-    <div className="relative min-h-[96px] border-b border-line-2">
+    <div className="relative min-h-[96px] flex-[1_0_auto] border-b border-line-2">
       {/* 레이어 A: 날짜 셀 */}
       <div className="absolute inset-0 grid grid-cols-7">
         {days.map((k, c) => {
@@ -69,19 +69,20 @@ function WeekRow({ days, m, sel, today, studies, tasks, markers, onPick }: WeekP
               }`}
               style={{ background: isSel ? "#F0F9F6" : inMonth ? "#FFFFFF" : "#FAFBFB", boxShadow: isSel ? "inset 0 0 0 2px #5FC8B0" : "none" }}
             >
-              <span className="flex w-full items-center justify-between gap-1">
+              <span className="flex w-full items-center justify-between gap-1 max-sm:gap-[2px]">
                 <span
-                  className="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[13px]"
+                  className="inline-flex h-[26px] w-[26px] shrink-0 max-sm:h-6 max-sm:w-6 items-center justify-center rounded-full text-[13px]"
                   style={{ fontWeight: isToday ? 700 : 500, background: isToday ? "#1B2230" : "transparent", color }}
                 >
                   {num}
                 </span>
-                <span className="flex min-w-0 items-center gap-[3px]">
+                {/* 좁은 칸(max-sm)에서는 글자 배지 대신 점 — 날짜 숫자·칸 경계와 부딪히지 않게 (회차는 aria-label·일 패널에 있다) */}
+                <span className="flex min-w-0 items-center gap-[3px] max-sm:gap-[2px]">
                   {mks.map((mk) => (
                     <span
                       key={mk.study}
                       title={`${studies[mk.study].name} ${mk.round} 시작`}
-                      className="whitespace-nowrap rounded-[5px] px-[5px] py-px text-[10px] font-bold text-white"
+                      className="whitespace-nowrap rounded-[5px] px-[5px] py-px text-[10px] font-bold text-white max-sm:h-[7px] max-sm:w-[7px] max-sm:shrink-0 max-sm:rounded-full max-sm:p-0 max-sm:text-[0px] max-sm:leading-none"
                       style={{ background: studies[mk.study].dot }}
                     >
                       {mk.round.replace("주차", "주")}
@@ -114,9 +115,9 @@ function TaskBar({ seg: { task: t, col, span, isStart, isEnd, lane }, studies }:
   const rr = isEnd ? 7 : 0;
   return (
     <Link
-      href={S.pending ? routes.room(t.study) : routes.myStudy(t.study)}
+      href={taskHref(t, S)}
       title={`${S.name} · ${t.round} · ${t.title} (${md(t.s)}–${md(t.e)}) · ${STATUS_LABEL[t.st]}`}
-      className="pointer-events-auto relative box-border flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-[12px] transition-[box-shadow,transform] duration-[120ms] hover:z-[2] hover:-translate-y-px hover:shadow-[0_3px_8px_rgba(27,34,48,.18)] focus-visible:z-[2] focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-1"
+      className="pointer-events-auto relative box-border max-sm:pointer-events-none flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-[12px] transition-[box-shadow,transform] duration-[120ms] hover:z-[2] hover:-translate-y-px hover:shadow-[0_3px_8px_rgba(27,34,48,.18)] focus-visible:z-[2] focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-1"
       style={{
         gridColumn: `${col + 1} / span ${span}`,
         gridRow: lane + 1,
