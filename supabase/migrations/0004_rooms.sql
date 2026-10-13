@@ -782,3 +782,17 @@ end $$;
 
 -- ───────── 공개 RPC GRANT (D7) — 비로그인 허용(공개) ─────────
 grant execute on function public.rooms_list(text, text, text, text[], int, int, text) to anon, authenticated;
+
+-- ───────── room_get (03-api §2 RoomDetail) — 공개 범위는 room_readable 이 판정, 아니면 ROOM_NOT_FOUND (D7) ─────────
+create or replace function public.room_get(p_slug text, p_invite_token text default null) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.current_user_id(); v_id bigint;
+begin
+  select id into v_id from public.rooms where slug = p_slug;
+  if v_id is null or not public.room_readable(v_id, v_uid, p_invite_token) then
+    perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요');
+  end if;
+  return public.room_detail_json(v_id, v_uid);
+end $$;
+
+grant execute on function public.room_get(text, text) to anon, authenticated;

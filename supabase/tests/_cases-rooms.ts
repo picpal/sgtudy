@@ -641,4 +641,166 @@ export const ROOM_CASES: Case[] = [
       await q("reset role");
     },
   },
+  {
+    name: "room_get: me.state matrix for 철수 (toeic none, sqld pending, docker leader, jcg none, aws active, react none, algo active)",
+    run: async (q) => {
+      // toeic 빈 트리(rounds [], stats 0) 단언은 플랜 03 Task 2 가 시드 §3 값(rounds 8)으로 다시 쓴다
+      await setToday(q, TODAY);
+      await asUser(q, USERS.철수);
+      const st = async (slug: string) => (await q(`select public.room_get($1) as r`, [slug]))[0].r.me.state;
+      const states: string[] = [];
+      for (const s of ["toeic", "sqld", "docker", "jcg", "aws", "react", "algo"]) states.push(await st(s));   // 한 연결에서 순차 실행 (savepoint 겹침 방지)
+      assertEquals(states, ["none", "pending", "leader", "none", "active", "none", "active"]);
+      assertEquals(await st("spring"), "active");                      // 비공개지만 멤버
+      await asUser(q, USERS.도윤);
+      assertEquals(await st("aws"), "inactive");
+      const [{ r }] = await q(`select public.room_get($1) as r`, ["toeic"]);
+      assertEquals([r.today, r.id, r.slug, r.status, r.archived, r.isPublic, r.joinMode], [TODAY, "1", "toeic", "recruit", false, true, "direct"]);
+      assertEquals([r.memberCount, r.maxMembers, r.minMembers, r.leader.nickname, r.leaderDoesTasks], [2, 8, 4, "서연", true]);
+      assertEquals(r.members.map((m: any) => [m.nickname, m.role, m.status]), [["서연", "leader", "active"], ["도현", "member", "active"]]);
+      assertEquals(r.tags.map((t: any) => t.label), ["영어", "토익"]);
+      assertEquals([r.currentRound, r.rounds, r.myProgress, r.invite, r.pendingCount], [null, [], null, null, 0]);
+      assertEquals(r.stats, { roundCount: 0, leafCount: 0, commonCount: 0, designatedCount: 0, totalAssignments: 0, totalSubmissions: 0, overallPct: null, unassignedCount: 0, startWeekdays: [] });
+    },
+  },
+  {
+    name: "room_get: anon sees public rooms with me null; private/DRAFT/missing → ROOM_NOT_FOUND",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asAnon(q);
+      const [{ r }] = await q(`select public.room_get($1) as r`, ["toeic"]);
+      assertEquals([r.me, r.myProgress, r.invite, r.pendingCount], [null, null, null, 0]);
+      await expectFailSql(q, `select public.room_get($1)`, ["spring"], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_get($1)`, ["nope"], "ROOM_NOT_FOUND");
+      const d = await createRoom(q, USERS.서연, { title: "Draft Hidden" });
+      await asAnon(q);
+      await expectFailSql(q, `select public.room_get($1)`, [d.slug], "ROOM_NOT_FOUND");
+      await asUser(q, USERS.민수);
+      await expectFailSql(q, `select public.room_get($1)`, [d.slug], "ROOM_NOT_FOUND");   // 비멤버 로그인도 DRAFT 는 못 본다
+      await expectFailSql(q, `select public.room_get($1)`, ["spring"], "ROOM_NOT_FOUND"); // 비공개 비멤버
+      await asUser(q, USERS.서연);
+      assertEquals((await q(`select public.room_get($1) as r`, [d.slug]))[0].r.status, "draft");
+    },
+  },
+  {
+    name: "room_get: invite/pendingCount only for leader; my PENDING row visible only to me",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asUser(q, USERS.가은);
+      const [{ a }] = await q(`select public.room_get($1) as a`, ["sqld"]);
+      assertEquals([a.me, a.pendingCount, a.invite], [{ state: "leader" }, 1, { url: "/invite/seed-sqld" }]);
+      assertEquals(a.members.map((m: any) => m.nickname), ["가은"]);                 // 타인의 PENDING 은 members 에 없음
+      await asUser(q, USERS.철수);
+      const [{ b }] = await q(`select public.room_get($1) as b`, ["sqld"]);
+      assertEquals([b.me, b.pendingCount, b.invite], [{ state: "pending" }, 0, null]);
+      assertEquals(b.members.map((m: any) => [m.nickname, m.status]), [["가은", "active"], ["철수", "pending"]]);
+      await asUser(q, USERS.서연);
+      assertEquals((await q(`select public.room_get($1) as c`, ["sqld"]))[0].c.members.map((m: any) => m.nickname), ["가은"]);
+    },
+  },
+  {
+    name: "room_get: aws with tree (seedAwsTree 부분 트리) — currentRound 2주차 tasks/people, rounds 5/8·1/3·0/4, stats, myProgress 2/4 next EC2, 도윤 inactive listed",
+    run: async (q) => {
+      // 플랜 03 Task 2 가 이 사례를 전체 시드 값으로 다시 쓴다(헬퍼 호출 제거, 철수 2/6)
+      await setToday(q, TODAY);
+      const t = await seedAwsTree(q);
+      await asUser(q, USERS.철수);
+      const [{ r }] = await q(`select public.room_get($1) as r`, ["aws"]);
+      assertEquals(r.members.map((m: any) => [m.nickname, m.status]),
+        [["민수", "active"], ["지은", "active"], ["철수", "active"], ["하나", "active"], ["도윤", "inactive"]]);
+      assertEquals(r.rounds.map((x: any) => [x.label, x.leafCount, x.assigned, x.submitted, x.pct]),
+        [["1주차", 2, 8, 5, 63], ["2주차", 2, 3, 1, 33], ["3주차", 1, 4, 0, 0]]);
+      assertEquals([r.currentRound.id, r.currentRound.label, r.currentRound.title, r.currentRound.startDate, r.currentRound.endDate], [t.rounds[1], "2주차", "EC2·S3", "2026-10-08", "2026-10-14"]);
+      assertEquals(r.currentRound.tasks.map((x: any) => [x.id, x.title, x.type, x.startDate, x.endDate, x.people.map((p: any) => `${p.nickname}:${p.status}`).sort()]), [
+        [t.ec2, "EC2 인스턴스 유형 정리", "designated", "2026-10-08", "2026-10-14", ["지은:done", "철수:open"]],
+        [t.s3, "S3 스토리지 클래스 발표자료", "designated", "2026-10-10", "2026-10-14", ["하나:open"]],
+      ]);   // people 은 assigned_at·id 순 — 같은 resync 로 생긴 행은 순서가 고정되지 않아 정렬해서 비교
+      assertEquals(r.stats, { roundCount: 3, leafCount: 5, commonCount: 3, designatedCount: 2, totalAssignments: 15, totalSubmissions: 6, overallPct: 40, unassignedCount: 0, startWeekdays: [4] });
+      assertEquals(r.myProgress, { submitted: 2, assigned: 4, nextDue: { nodeId: t.ec2, title: "EC2 인스턴스 유형 정리", roundLabel: "2주차", dueDate: "2026-10-14" } });
+      // 1주차 첫 과제(IAM) 사람별 코드(10/05 기준): 민수·철수 done, 지은 late, 하나 open
+      await setToday(q, "2026-10-05");                                           // 1주차 안에서 보면 current 가 1주차
+      const [{ r2 }] = await q(`select public.room_get($1) as r2`, ["aws"]);
+      assertEquals(r2.currentRound.label, "1주차");
+      assertEquals(r2.currentRound.tasks[0].people.map((p: any) => `${p.nickname}:${p.status}`).sort(), ["민수:done", "지은:late", "철수:done", "하나:open"].sort());
+      // 시작 전이면 currentRound null
+      await setToday(q, "2026-09-30");
+      assertEquals((await q(`select public.room_get($1) as r3`, ["aws"]))[0].r3.currentRound, null);
+      // 비로그인은 집계는 보되 myProgress 없음
+      await setToday(q, TODAY);
+      await asAnon(q);
+      const [{ an }] = await q(`select public.room_get($1) as an`, ["aws"]);
+      assertEquals([an.me, an.myProgress, an.rounds.length, an.currentRound.tasks.length], [null, null, 3, 2]);
+    },
+  },
+  {
+    name: "room_get: archived room readable by leader/members only; invite token opens private room; rotated token → ROOM_NOT_FOUND",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asUser(q, USERS.민수);
+      await q(`select public.room_archive('aws')`);
+      assertEquals((await q(`select public.room_get('aws') as r`))[0].r.archived, true);
+      await asUser(q, USERS.철수);
+      assertEquals((await q(`select public.room_get('aws') as r`))[0].r.archived, true);
+      await asUser(q, USERS.서연);
+      await expectFailSql(q, `select public.room_get('aws')`, [], "ROOM_NOT_FOUND");
+      await asAnon(q);
+      await expectFailSql(q, `select public.room_get('aws')`, [], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_get('aws', 'seed-aws')`, [], "ROOM_NOT_FOUND");   // 토큰도 보관 방은 못 연다
+      // 비공개 spring: 토큰으로 비멤버·비로그인 읽기
+      const [{ r }] = await q(`select public.room_get('spring', 'seed-spring') as r`);
+      assertEquals([r.slug, r.me], ["spring", null]);
+      await asUser(q, USERS.서연);
+      assertEquals((await q(`select public.room_get('spring', 'seed-spring') as r`))[0].r.me, { state: "none" });
+      await asUser(q, USERS.지훈);
+      await q(`select public.invite_rotate('spring')`);
+      await asUser(q, USERS.서연);
+      await expectFailSql(q, `select public.room_get('spring', 'seed-spring')`, [], "ROOM_NOT_FOUND");
+    },
+  },
+  {
+    name: "privileges (T7): catalog sweep — anon/authenticated EXECUTE allowlist (D7); public RPCs run under real roles",
+    run: async (q) => {
+      const can = async (role: string, fn: string) =>
+        (await q(`select has_function_privilege($1, $2, 'execute') as ok`, [role, fn]))[0].ok as boolean;
+      // 카탈로그 sweep: 확장 함수·0001 트리거 함수(handle_new_auth_user)를 뺀 public 함수 중 역할이 EXECUTE 가능한 전부
+      const sweep = async (role: string) => (await q(
+        `select p.oid::regprocedure::text as f from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and has_function_privilege($1, p.oid, 'execute')
+            and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
+            and p.proname <> 'handle_new_auth_user' order by 1`, [role])).map((x) => x.f as string);
+      // 출처: 0002 L261-264, 0003 L56-62, 0004 L340·592-597·784, 0005 L290-297·364-367, + 이 Task 의 room_get
+      const ANON = [
+        "can_read_room(bigint)", "can_read_submission(bigint,uuid)", "can_read_submissions(bigint)", "current_user_id()",
+        "invite_preview(text)", "is_room_leader(bigint)", "is_room_member(bigint)", "meta_get()",
+        "room_get(text,text)", "rooms_list(text,text,text,text[],integer,integer,text)",
+      ];
+      const AUTH = [
+        ...ANON,
+        "invite_get(text)", "invite_join(text)", "invite_rotate(text)", "is_my_task(bigint)",
+        "me_get()", "me_update(text,boolean)", "nickname_check(text)",
+        "room_apply(text,text)", "room_approve(text,uuid)", "room_applications(text)", "room_archive(text)",
+        "room_cancel_application(text)", "room_create(text,text,date,date,integer,boolean,text,text,text,integer,boolean,uuid,text[])",
+        "room_delete(text)", "room_join(text,text)", "room_leave(text)", "room_members_get(text)",
+        "room_open_recruit(text)", "room_reject(text,uuid)", "room_start(text)", "room_unarchive(text)", "room_update(text,jsonb)",
+      ].sort();
+      assertEquals(await sweep("anon"), ANON.sort());
+      assertEquals(await sweep("authenticated"), AUTH);
+      // 명시 양성 단언
+      for (const fn of ["public.rooms_list(text,text,text,text[],integer,integer,text)", "public.room_get(text,text)", "public.invite_preview(text)"]) {
+        assertEquals(await can("anon", fn), true, fn);
+      }
+      for (const fn of ["public.room_join(text,text)", "public.room_update(text,jsonb)", "public.invite_join(text)"]) {
+        assertEquals(await can("anon", fn), false, fn);
+        assertEquals(await can("authenticated", fn), true, fn);
+      }
+      // D3: 실제 역할로 실행
+      await setToday(q, TODAY);
+      await asAnon(q);
+      await q("set local role anon");
+      const [{ r }] = await q(`select public.room_get('aws') as r`);
+      assertEquals([r.slug, r.me], ["aws", null]);
+      await expectFailSql(q, `select public.room_get('spring')`, [], "ROOM_NOT_FOUND");
+      await q("reset role");
+    },
+  },
 ];
