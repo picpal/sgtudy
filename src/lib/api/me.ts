@@ -14,19 +14,27 @@ export async function signOut(): Promise<void> {
   if (error) throw error;
 }
 
-const NICK_RE = /^[\p{Script=Hangul}A-Za-z0-9_. ]+$/u;
+const NICK_RE = /^[가-힣A-Za-z0-9._]+( [가-힣A-Za-z0-9._]+)*$/;
 
-/** 03-api §1: 2~16자, 한글·영문·숫자·_·.·공백(연속 불가). 금칙어·중복은 서버(nickname_check)가 판정한다. */
-export function nicknameProblem(value: string): "length" | "chars" | "spaces" | null {
-  const v = value.trim();
-  if (v.length < 2 || v.length > 16) return "length";
-  if (!NICK_RE.test(v)) return "chars";
+/**
+ * 0002 nickname_problem 의 거울: NFC 후 trim 없이 검사, 2~16자(코드포인트), 완성형 한글[가-힣]·영문·숫자·_·.,
+ * 단어 사이 단일 공백. 서버는 전부 'invalid' 하나로 답하지만 안내 문구를 위해 갈래를 나눈다.
+ * 호출부는 value.trim() 을 넘긴다. 금칙어·중복은 서버(nickname_check)가 판정한다.
+ */
+export function nicknameProblem(value: string): "length" | "chars" | "spaces" | "invalid" | null {
+  const v = value.normalize("NFC");
+  if (v.startsWith(" ") || v.endsWith(" ")) return "invalid";
+  const len = [...v].length;
+  if (len < 2 || len > 16) return "length";
+  if (NICK_RE.test(v)) return null;
   if (/ {2,}/.test(v)) return "spaces";
-  return null;
+  if (/(?![가-힣])\p{Script=Hangul}/u.test(v)) return "invalid"; // 완성형이 아닌 한글 자모 (ㅋㅋ)
+  return "chars";
 }
 
 export const NICK_PROBLEM_TEXT: Record<NonNullable<ReturnType<typeof nicknameProblem>>, string> = {
   length: "2~16자로 입력해 주세요",
   chars: "한글·영문·숫자·_·. 만 쓸 수 있어요",
   spaces: "공백은 연속으로 쓸 수 없어요",
+  invalid: "앞뒤 공백 없이, 완성된 한글로 입력해 주세요",
 };
