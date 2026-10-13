@@ -85,7 +85,7 @@ export const MEMBERSHIP_CASES: Case[] = [
       // DRAFT 방도 모집중이 아니다
       const d = await createRoom(q, USERS.서연, { title: "Draft" });
       await asUser(q, USERS.지훈);
-      await expectFailSql(q, `select public.room_join($1)`, [d.slug], "ROOM_NOT_RECRUITING");
+      await expectFailSql(q, `select public.room_join($1)`, [d.slug], "ROOM_NOT_FOUND");   // 못 읽는 DRAFT 는 존재 자체를 숨긴다(03-api §0)
       await expectFailSql(q, `select public.room_join($1)`, ["no-such-room"], "ROOM_NOT_FOUND");
     },
   },
@@ -213,6 +213,50 @@ export const MEMBERSHIP_CASES: Case[] = [
     },
   },
   {
+    name: "existence oracle (I-1/I-2): outsider on unreadable room → ROOM_NOT_FOUND; readable room → NOT_LEADER/NOT_MEMBER",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      // 비공개 spring(ACTIVE): 승호는 멤버 행이 없다 — 그룹장·멤버 RPC 모두 존재를 숨긴다
+      await runTable(q, "spring", [
+        { as: USERS.승호, fn: "room_open_recruit", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_start", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_archive", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_unarchive", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_delete", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_update", args: [JSON.stringify({ title: "x" })], code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_applications", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_members_get", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "invite_get", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "invite_rotate", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_approve", args: [USERS.철수], code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_reject", args: [USERS.철수], code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_join", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_apply", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_leave", code: "ROOM_NOT_FOUND" },
+        { as: USERS.승호, fn: "room_cancel_application", code: "ROOM_NOT_FOUND" },
+        // 멤버(철수)는 읽을 수 있으니 NOT_LEADER
+        { as: USERS.철수, fn: "room_update", args: [JSON.stringify({ title: "x" })], code: "NOT_LEADER" },
+        { as: USERS.철수, fn: "invite_get", code: "NOT_LEADER" },
+      ]);
+      // 공개 aws: 비멤버(서연)·멤버(철수) 모두 읽을 수 있다 → NOT_LEADER / NOT_MEMBER
+      await runTable(q, "aws", [
+        { as: USERS.서연, fn: "room_update", args: [JSON.stringify({ title: "x" })], code: "NOT_LEADER" },
+        { as: USERS.서연, fn: "room_applications", code: "NOT_LEADER" },
+        { as: USERS.서연, fn: "invite_get", code: "NOT_LEADER" },
+        { as: USERS.철수, fn: "room_applications", code: "NOT_LEADER" },
+        { as: USERS.서연, fn: "room_leave", code: "NOT_MEMBER" },
+      ]);
+      // 서연의 DRAFT: 외부인은 참가도, 유효 토큰으로 읽기도 ROOM_NOT_FOUND
+      const d = await createRoom(q, USERS.서연, { title: "Oracle Draft" });
+      const [{ token }] = await q(`select token from public.room_invites where room_id = $1 and revoked_at is null`, [d.id]);
+      await asUser(q, USERS.승호);
+      await expectFailSql(q, `select public.room_join($1)`, [d.slug], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_join($1, $2)`, [d.slug, token], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_get($1, $2)`, [d.slug, token], "ROOM_NOT_FOUND");
+      await expectFailSql(q, `select public.room_open_recruit($1)`, [d.slug], "ROOM_NOT_FOUND");
+    },
+  },
+  {
     name: "privileges (T5): 8 public RPCs authenticated-only, helpers private, real execution under roles (D7)",
     run: async (q) => {
       const can = async (role: string, fn: string) =>
@@ -229,6 +273,7 @@ export const MEMBERSHIP_CASES: Case[] = [
         "public.room_transition_active(bigint,uuid)", "public.room_transition_ended(bigint)",
         "public.membership_result(bigint,uuid)", "public.assignment_resync(bigint)", "public.invite_check(bigint,text)",
         "public.room_join_precheck(public.rooms,uuid,text,text)", "public.room_decide_precheck(public.rooms,uuid,uuid)",
+        "public.require_leader(public.rooms,uuid,text)", "public.room_hide_unless_known(public.rooms,uuid,text)",
       ]) {
         assertEquals(await can("authenticated", fn), false, fn);
         assertEquals(await can("anon", fn), false, fn);
@@ -365,6 +410,8 @@ export const MEMBERSHIP_CASES: Case[] = [
       await q("set local role authenticated");
       const [{ g }] = await q(`select public.invite_get($1) as g`, ["docker"]);
       assertEquals(g.token, "seed-docker");
+      const [{ n }] = await q(`select public.invite_rotate($1) as n`, ["docker"]);
+      assertEquals(n.token.length, 32);
       await q("reset role");
       await asUser(q, USERS.현우);                                           // toeic 비멤버
       await q("set local role authenticated");

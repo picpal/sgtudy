@@ -126,6 +126,34 @@ export const ROOM_CASES: Case[] = [
     },
   },
   {
+    name: "room_create: 중복 태그 slug 는 첫 등장 순서로 하나만 (23505 원문 금지)",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await asUser(q, USERS.서연);
+      const [{ d }] = await q(`select public.room_create($1,$2,$3::date,$4::date,$5,$6,$7, p_tag_slugs => $8::text[]) as d`,
+        ["태그 중복", "소개", "2026-11-01", "2026-11-28", 4, true, "direct", ["cloud", "aws", "cloud", "aws"]]);
+      assertEquals(d.tags.map((t: any) => t.slug), ["cloud", "aws"]);
+      const rows = await q(`select tag_slug, sort_order from public.room_tags where room_id = $1 order by sort_order`, [d.id]);
+      assertEquals(rows.map((r) => [r.tag_slug, r.sort_order]), [["cloud", 0], ["aws", 1]]);
+    },
+  },
+  {
+    name: "room_get (M-1): 읽기 전용 — 활성 토큰이 없는 그룹장은 invite null, room_invites 행을 만들지 않는다",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      await q(`update public.room_invites set revoked_at = now() where room_id = 4 and revoked_at is null`);
+      const n = async () => (await q(`select count(*)::int as n from public.room_invites where room_id = 4`))[0].n as number;
+      const before = await n();
+      await asUser(q, USERS.철수);
+      const [{ r }] = await q(`select public.room_get($1) as r`, ["docker"]);
+      assertEquals([r.me, r.invite], [{ state: "leader" }, null]);
+      assertEquals(await n(), before);
+      // invite_get 이 만들면 다시 보인다
+      const [{ g }] = await q(`select public.invite_get($1) as g`, ["docker"]);
+      assertEquals((await q(`select public.room_get($1) as r`, ["docker"]))[0].r.invite, { url: g.url });
+    },
+  },
+  {
     name: "room_create: slug 는 slugify 결과이고 충돌 시 -2",
     run: async (q) => {
       await setToday(q, TODAY);
@@ -375,7 +403,7 @@ export const ROOM_CASES: Case[] = [
       await expectFailSql(q, `select public.room_archive($1)`, [d.slug], "ROOM_STATUS_INVALID");   // DRAFT 는 보관 불가
       await expectFailSql(q, `select public.room_unarchive($1)`, [d.slug], "ROOM_STATUS_INVALID"); // 보관 아님
       await asUser(q, USERS.민수);
-      await expectFailSql(q, `select public.room_delete($1)`, [d.slug], "NOT_LEADER");
+      await expectFailSql(q, `select public.room_delete($1)`, [d.slug], "ROOM_NOT_FOUND");   // 남의 DRAFT 는 못 읽으니 존재를 숨긴다(require_leader)
       await asUser(q, USERS.서연);
       await q(`select public.room_delete($1)`, [d.slug]);
       const [{ n }] = await q(`select count(*)::int as n from public.rooms where id = $1`, [d.id]);
@@ -592,7 +620,18 @@ export const ROOM_CASES: Case[] = [
       assertEquals((await listRooms(q, { size: 3, page: 5 })).items, []);
       // 정렬
       assertEquals(await slugs({ sort: "latest" }), ["jcg", "docker", "sqld", "cs", "toeic", "aws", "react", "algo"]);   // created_at desc
-      assertEquals(await slugs({ sort: "startDate" }), ["algo", "react", "aws", "jcg", "cs", "sqld", "toeic", "docker"]); // 같은 10/19 면 id desc → jcg(5) 가 cs(2) 앞
+      assertEquals(await slugs({ sort: "startDate" }), ["algo", "react", "aws", "jcg", "cs", "sqld", "toeic", "docker"]); // start_date asc, id desc — 같은 10/19 면 jcg(5) 가 cs(2) 앞
+      // startDate 정렬은 created_at 을 보지 않는다: cs 를 가장 최근 생성으로 바꿔도 jcg 가 앞
+      await q(`update public.rooms set created_at = now() + interval '1 day' where slug = 'cs'`);
+      assertEquals(await slugs({ sort: "startDate" }), ["algo", "react", "aws", "jcg", "cs", "sqld", "toeic", "docker"]);
+      assertEquals((await slugs({ sort: "latest" }))[0], "cs");
+      // 페이지 클램프: size 1~100, 아주 큰 page 도 22003 없이 빈 페이지
+      const big = await listRooms(q, { page: 30000000, size: 100 });
+      assertEquals([big.page, big.size, big.items], [30000000, 100, []]);
+      assertEquals((await listRooms(q, { size: 500 })).size, 100);
+      const one = await listRooms(q, { size: 0 });
+      assertEquals([one.size, one.items.length], [1, 1]);
+      assertEquals((await listRooms(q, { page: -3 })).page, 0);
       // 검증
       await expectFailSql(q, `select public.rooms_list('everyone','all',null,null,0,24,'default')`, [], "VALIDATION_FAILED");
       await expectFailSql(q, `select public.rooms_list('public','full',null,null,0,24,'default')`, [], "VALIDATION_FAILED");
@@ -637,7 +676,7 @@ export const ROOM_CASES: Case[] = [
       await asUser(q, USERS.철수);
       await q("set local role authenticated");
       const [{ r: m }] = await q(`select public.rooms_list('mine','all',null,null,0,24,'default') as r`);
-      assertEquals(m.items.length > 0, true);
+      assertEquals(m.totalElements, 4);                                    // aws·spring·sqld(PENDING)·algo — role MEMBER ∧ ACTIVE|PENDING
       await q("reset role");
     },
   },
@@ -768,7 +807,8 @@ export const ROOM_CASES: Case[] = [
           where n.nspname = 'public' and has_function_privilege($1, p.oid, 'execute')
             and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
             and p.proname <> 'handle_new_auth_user' order by 1`, [role])).map((x) => x.f as string);
-      // 출처: 0002 L261-264, 0003 L56-62, 0004 L340·592-597·784, 0005 L290-297·364-367, + 이 Task 의 room_get
+      // 출처: 0002(me_get·me_update·nickname_check·meta_get·current_user_id 의 GRANT), 0003(can_read_*·is_room_*·is_my_task),
+      // 0004(room_create·room_open_recruit…room_update·rooms_list·room_get), 0005(room_join…room_members_get·invite_preview/get/rotate/join)
       const ANON = [
         "can_read_room(bigint)", "can_read_submission(bigint,uuid)", "can_read_submissions(bigint)", "current_user_id()",
         "invite_preview(text)", "is_room_leader(bigint)", "is_room_member(bigint)", "meta_get()",
@@ -800,6 +840,11 @@ export const ROOM_CASES: Case[] = [
       const [{ r }] = await q(`select public.room_get('aws') as r`);
       assertEquals([r.slug, r.me], ["aws", null]);
       await expectFailSql(q, `select public.room_get('spring')`, [], "ROOM_NOT_FOUND");
+      await q("reset role");
+      await asUser(q, USERS.철수);
+      await q("set local role authenticated");
+      const [{ r: s }] = await q(`select public.room_get('spring') as r`);
+      assertEquals([s.slug, s.me], ["spring", { state: "active" }]);
       await q("reset role");
     },
   },

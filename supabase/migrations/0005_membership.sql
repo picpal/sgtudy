@@ -111,11 +111,25 @@ begin
   return true;
 end $$;
 
+-- 못 읽는 방(비공개·DRAFT·보관)이고 내 멤버 행도 없으면 ROOM_NOT_FOUND — 상태·존재를 숨긴다(03-api §0).
+-- 단 그 방의 회전된 토큰을 들고 오면 INVITE_REVOKED(토큰을 가진 사람에겐 숨길 것이 없다)
+create or replace function public.room_hide_unless_known(r public.rooms, p_uid uuid, p_token text default null) returns void
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if public.room_readable(r.id, p_uid, p_token)
+     or exists (select 1 from public.room_members m where m.room_id = r.id and m.user_id = p_uid) then
+    return;
+  end if;
+  perform public.invite_check(r.id, p_token);
+  perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요');
+end $$;
+
 -- 참가 공통 선행 검사. 반환: 내 기존 행(없으면 null)
 create or replace function public.room_join_precheck(r public.rooms, p_uid uuid, p_token text, p_mode text)
 returns public.room_members language plpgsql security definer set search_path = '' as $$
 declare m public.room_members;
 begin
+  perform public.room_hide_unless_known(r, p_uid, p_token);
   if r.archived_at is not null or r.status <> 'RECRUIT' then
     perform public.fail('ROOM_NOT_RECRUITING', '모집중인 방이 아니에요');
   end if;
@@ -141,10 +155,10 @@ end $$;
 -- ───────── room_join: RECRUIT·DIRECT, 정원 원자 판정 (D3) ─────────
 create or replace function public.room_join(p_slug text, p_invite_token text default null) returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare v_uid uuid := public.require_user(); r public.rooms; m public.room_members;
+declare v_uid uuid := public.require_user(); r public.rooms;
 begin
   r := public.room_lock(p_slug);
-  m := public.room_join_precheck(r, v_uid, p_invite_token, 'DIRECT');
+  perform public.room_join_precheck(r, v_uid, p_invite_token, 'DIRECT');
   perform public.room_take_seat(r.id);                       -- ROOM_FULL
   insert into public.room_members (room_id, user_id, role, status, joined_at)
   values (r.id, v_uid, 'MEMBER', 'ACTIVE', now())
@@ -158,10 +172,10 @@ end $$;
 -- ───────── room_apply: RECRUIT·APPROVAL, 대기자는 정원 미포함(단 이미 찼으면 ROOM_FULL) ─────────
 create or replace function public.room_apply(p_slug text, p_invite_token text default null) returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare v_uid uuid := public.require_user(); r public.rooms; m public.room_members; v_now timestamptz := now();
+declare v_uid uuid := public.require_user(); r public.rooms; v_now timestamptz := now();
 begin
   r := public.room_lock(p_slug);
-  m := public.room_join_precheck(r, v_uid, p_invite_token, 'APPROVAL');
+  perform public.room_join_precheck(r, v_uid, p_invite_token, 'APPROVAL');
   if r.member_count >= r.max_members then
     perform public.fail('ROOM_FULL', '정원이 찼어요', '{"field":"maxMembers"}'::jsonb);
   end if;
@@ -183,6 +197,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms; m public.room_members;
 begin
   r := public.room_lock(p_slug);
+  perform public.room_hide_unless_known(r, v_uid);
   select * into m from public.room_members where room_id = r.id and user_id = v_uid and status = 'ACTIVE';
   if not found then perform public.fail('NOT_MEMBER', '참가 중인 방이 아니에요'); end if;
   if m.role = 'LEADER' then perform public.fail('OWNER_CANNOT_LEAVE', '그룹장은 참가를 취소할 수 없어요'); end if;
@@ -201,6 +216,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms; m public.room_members;
 begin
   r := public.room_lock(p_slug);
+  perform public.room_hide_unless_known(r, v_uid);
   select * into m from public.room_members where room_id = r.id and user_id = v_uid;
   if not found or m.status = 'CANCELED' then perform public.fail('NOT_FOUND', '취소할 참가 신청이 없어요'); end if;
   if m.status <> 'PENDING' then perform public.fail('ALREADY_DECIDED', '이미 처리된 신청이에요. 새로고침해 주세요'); end if;
@@ -214,7 +230,7 @@ create or replace function public.room_decide_precheck(r public.rooms, p_uid uui
 returns public.room_members language plpgsql security definer set search_path = '' as $$
 declare m public.room_members;
 begin
-  if r.leader_id <> p_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  perform public.require_leader(r, p_uid);
   if r.archived_at is not null or r.status <> 'RECRUIT' then
     perform public.fail('ROOM_NOT_RECRUITING', '모집중인 방에서만 신청을 처리할 수 있어요');
   end if;
@@ -262,7 +278,7 @@ declare v_uid uuid := public.require_user(); r public.rooms;
 begin
   select * into r from public.rooms where slug = p_slug;
   if not found then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 볼 수 있어요'); end if;
+  perform public.require_leader(r, v_uid, '그룹장만 볼 수 있어요');
   return jsonb_build_object(
     'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
     'items', coalesce((
@@ -276,7 +292,7 @@ declare v_uid uuid := public.require_user(); r public.rooms;
 begin
   select * into r from public.rooms where slug = p_slug;
   if not found then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 볼 수 있어요'); end if;
+  perform public.require_leader(r, v_uid, '그룹장만 볼 수 있어요');
   return jsonb_build_object(
     'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
     'items', coalesce((
@@ -302,7 +318,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms; v_token text;
 begin
   r := public.room_lock(p_slug);
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 초대 링크를 볼 수 있어요'); end if;
+  perform public.require_leader(r, v_uid, '그룹장만 초대 링크를 볼 수 있어요');
   v_token := public.invite_ensure(r.id, v_uid);
   return jsonb_build_object('today', to_char(public.kst_today(), 'YYYY-MM-DD'), 'token', v_token, 'url', '/invite/' || v_token);
 end $$;
@@ -312,7 +328,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms; v_token text;
 begin
   r := public.room_lock(p_slug);
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 초대 링크를 바꿀 수 있어요'); end if;
+  perform public.require_leader(r, v_uid, '그룹장만 초대 링크를 바꿀 수 있어요');
   update public.room_invites set revoked_at = now() where room_id = r.id and revoked_at is null;
   v_token := public.invite_ensure(r.id, v_uid);
   return jsonb_build_object('today', to_char(public.kst_today(), 'YYYY-MM-DD'), 'token', v_token, 'url', '/invite/' || v_token);
@@ -350,7 +366,7 @@ end $$;
 -- join_mode 에 따라 참가/신청. 비공개 우회는 토큰을 그대로 넘겨 room_join/room_apply 가 판단
 create or replace function public.invite_join(p_token text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare v_uid uuid := public.require_user(); r public.rooms;
+declare v_uid uuid := public.require_user(); r public.rooms;   -- require_user() 를 resolve 보다 먼저: 비로그인은 INVITE_* 대신 AUTH_REQUIRED
 begin
   r := public.invite_resolve(p_token);
   if r.join_mode = 'DIRECT' then return public.room_join(r.slug, p_token); end if;
@@ -359,7 +375,7 @@ end $$;
 
 -- ───────── 공개 RPC GRANT (D7) ─────────
 -- 내부 함수(room_lock·*_json·invite_ensure·room_take/release_seat·room_transition_*·room_tick·assignment_resync·
--- membership_result·invite_check·invite_resolve·*_precheck)는 0002 의 default privileges 로 이미 비공개 — 아무것도 하지 않는다.
+-- membership_result·invite_check·invite_resolve·*_precheck·require_leader·room_hide_unless_known)는 0002 의 default privileges 로 이미 비공개 — 아무것도 하지 않는다.
 -- (`revoke … from anon, authenticated` 만으로는 PUBLIC 기본 EXECUTE 가 남아 anon 이 임의 uid 로 room_detail_json 을 부를 수 있었다 — 리뷰 D1)
 grant execute on function public.invite_preview(text) to anon, authenticated;
 grant execute on function public.invite_get(text)     to authenticated;

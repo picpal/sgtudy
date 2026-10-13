@@ -40,6 +40,8 @@ dbTest("capacity race: 5/6 room, two concurrent joins → exactly one ROOM_FULL,
     await rpc(leader.c, "room_open_recruit", { p_slug: room.slug });
 
     for (const n of [2, 3, 4, 5]) await rpc((await member(n)).c, "room_join", { p_slug: room.slug });   // 5/6
+    // HTTP 수준에서는 직렬화(락)와 우연한 순차 도착을 구분할 수 없다 — 이 사례는 결과 불변식만 본다.
+    // 락 자체의 증명은 PGlite 정원 사례(room_take_seat 의 조건부 UPDATE)가 맡는다.
     const a = await member(6), b = await member(7);
     const results = await Promise.all([
       a.c.rpc("room_join", { p_slug: room.slug }),
@@ -52,7 +54,8 @@ dbTest("capacity race: 5/6 room, two concurrent joins → exactly one ROOM_FULL,
     const { count } = await admin.from("room_members").select("*", { count: "exact", head: true }).eq("room_id", Number(room.id)).eq("status", "ACTIVE");
     assertEquals(count, 6);
   } finally {
-    await service().from("rooms").delete().eq("id", Number(room.id));   // 조건부 삭제(FK cascade) — 리더 RPC 에 의존하지 않는다
+    const { error } = await service().from("rooms").delete().eq("id", Number(room.id));   // 조건부 삭제(FK cascade) — 리더 RPC 에 의존하지 않는다
+    if (error) console.error("cleanup: delete room", room.id, error.message);   // 정리 실패가 본 단언을 가리지 않게 throw 하지 않는다
   }
 });
 
@@ -84,12 +87,14 @@ dbTest("rpc error mapping: message = code, details = Korean, hint = json", async
   // 내부 함수는 RPC 로 부를 수 없다 — Supabase 기본 GRANT 까지 걷어낸 0002 default privileges 의 실측(D1)
   const r4 = await u.c.rpc("assignment_resync", { p_room: 6 });
   assert(r4.error !== null, "assignment_resync must not be callable through PostgREST");
+  assert(["42501", "PGRST202"].includes(r4.error!.code), `unexpected ${r4.error!.code}: ${r4.error!.message}`);
   // 임의 uid(비공개 spring 그룹장 지훈)로 상세+초대 URL 을 빼내던 경로
   const r5 = await anon().rpc("room_detail_json", { p_room: 9, p_uid: "00000000-0000-4000-8000-000000000004" });
   assert(r5.error !== null, "room_detail_json must not be callable by anon");
   assert(["42501", "PGRST202"].includes(r5.error!.code), `unexpected ${r5.error!.code}: ${r5.error!.message}`);
   const r6 = await u.c.rpc("room_transition_active", { p_room: 6, p_actor: u.id });
   assert(r6.error !== null, "room_transition_active must not be callable by authenticated");
+  assert(["42501", "PGRST202"].includes(r6.error!.code), `unexpected ${r6.error!.code}: ${r6.error!.message}`);
 });
 
 dbTest("rooms_list/room_get through PostgREST for anon: 8 public rooms, aws detail", async () => {
@@ -99,4 +104,16 @@ dbTest("rooms_list/room_get through PostgREST for anon: 8 public rooms, aws deta
   assertEquals(list.tabCounts, { public: 8, mine: 0, created: 0 });
   const d = await rpc<{ slug: string; me: unknown; memberCount: number }>(a, "room_get", { p_slug: "aws" });
   assertEquals([d.slug, d.me, d.memberCount], ["aws", null, 4]);
+});
+
+dbTest("table writes: anon/authenticated hold no INSERT GRANT (0004 revoke, M-3) — 42501, not an RLS denial", async () => {
+  const e1 = (await anon().from("tags").insert({ slug: "x" + RUN, label: "x", tone: "blue" })).error;
+  assert(e1 !== null, "anon insert into tags must fail");
+  assertEquals(e1!.code, "42501");
+  assert(/permission denied for table/.test(e1!.message), e1!.message);   // RLS 거부는 "new row violates row-level security policy"
+  const u = await member(8);
+  const e2 = (await u.c.from("rooms").insert({ slug: "x" + RUN, title: "x", intro: "x", start_date: "2026-12-01", end_date: "2026-12-02", max_members: 2, leader_id: u.id })).error;
+  assert(e2 !== null, "authenticated insert into rooms must fail");
+  assertEquals(e2!.code, "42501");
+  assert(/permission denied for table/.test(e2!.message), e2!.message);
 });

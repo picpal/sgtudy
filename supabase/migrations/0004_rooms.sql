@@ -39,6 +39,16 @@ language sql stable security definer set search_path = '' as $$
                where i.room_id = r.id and i.token = p_token and i.revoked_at is null))))))
 $$;
 
+-- 그룹장 아님: 읽을 수도 없으면 ROOM_NOT_FOUND(비공개·DRAFT·보관 존재를 숨김, 03-api §0), 읽을 수 있으면 NOT_LEADER.
+-- 그룹장 RPC 는 bare NOT_LEADER 대신 이것을 쓴다(플랜 03 node_* 포함). p_msg 는 NOT_LEADER 의 detail 문구
+create or replace function public.require_leader(r public.rooms, p_uid uuid, p_msg text default '그룹장만 할 수 있어요') returns void
+language plpgsql stable security definer set search_path = '' as $$
+begin
+  if r.leader_id = p_uid then return; end if;
+  if not public.room_readable(r.id, p_uid) then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
+  perform public.fail('NOT_LEADER', p_msg);
+end $$;
+
 -- 보관 아닌 리프별 (유효 배정 수, 그중 제출 수). 회차·방 집계는 이걸 합산한다(02 §4.1)
 create or replace function public.room_leaf_stats(p_room bigint)
 returns table (node_id bigint, round_id bigint, parent_id bigint, title text, task_type text,
@@ -237,7 +247,9 @@ begin
   end if;
 
   if v_is_leader then
-    v_invite := jsonb_build_object('url', '/invite/' || public.invite_ensure(p_room, p_uid));
+    -- 읽기 전용(GET 안전): 활성 토큰을 SELECT 만 한다. 생성은 invite_get·invite_rotate·room_create 몫
+    select jsonb_build_object('url', '/invite/' || i.token) into v_invite
+    from public.room_invites i where i.room_id = p_room and i.revoked_at is null;
     select count(*)::int into v_pending from public.room_members m where m.room_id = p_room and m.status = 'PENDING';
   end if;
 
@@ -329,8 +341,8 @@ begin
   perform public.invite_ensure(v_id, v_uid);
 
   insert into public.room_tags (room_id, tag_slug, source, sort_order)
-  select v_id, t.slug, 'MANUAL', s.ord - 1
-  from unnest(p_tag_slugs) with ordinality as s(slug, ord)
+  select v_id, t.slug, 'MANUAL', (row_number() over (order by s.ord) - 1)::int
+  from (select u.slug, min(u.ord) as ord from unnest(p_tag_slugs) with ordinality as u(slug, ord) group by u.slug) s   -- 중복 slug 는 첫 등장만(23505 방지)
   join public.tags t on t.slug = s.slug;
 
   return public.room_detail_json(v_id, v_uid);
@@ -406,7 +418,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms;
 begin
   r := public.room_lock(p_slug);
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  perform public.require_leader(r, v_uid);
   if r.status <> 'DRAFT' then perform public.fail('ROOM_STATUS_INVALID', '준비중인 방만 모집을 시작할 수 있어요'); end if;
   if not exists (select 1 from public.goal_nodes n where n.room_id = r.id and n.task_type is not null and n.archived_at is null) then
     perform public.fail('ROOM_NO_LEAF_TASK', '말단 과제가 1개 이상 있어야 모집을 시작할 수 있어요');
@@ -426,7 +438,7 @@ declare
   v_warn  jsonb;
 begin
   r := public.room_lock(p_slug);
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  perform public.require_leader(r, v_uid);
   if r.status <> 'RECRUIT' then perform public.fail('ROOM_STATUS_INVALID', '모집중인 방만 시작할 수 있어요'); end if;
   if v_today > r.end_date then perform public.fail('INVALID_PERIOD', '종료일이 이미 지났어요', '{"field":"endDate"}'::jsonb); end if;
   update public.rooms set start_date = v_today, updated_at = now() where id = r.id;
@@ -442,7 +454,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms;
 begin
   r := public.room_lock(p_slug);
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  perform public.require_leader(r, v_uid);
   if r.status not in ('ACTIVE', 'ENDED') or r.archived_at is not null then
     perform public.fail('ROOM_STATUS_INVALID', '진행중이거나 종료된 방만 보관할 수 있어요');
   end if;
@@ -455,7 +467,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms;
 begin
   r := public.room_lock(p_slug);
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  perform public.require_leader(r, v_uid);
   if r.archived_at is null then perform public.fail('ROOM_STATUS_INVALID', '보관된 방이 아니에요'); end if;
   update public.rooms set archived_at = null, updated_at = now() where id = r.id;
   return public.room_detail_json(r.id, v_uid);
@@ -467,7 +479,7 @@ language plpgsql security definer set search_path = '' as $$
 declare v_uid uuid := public.require_user(); r public.rooms;
 begin
   r := public.room_lock(p_slug);
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  perform public.require_leader(r, v_uid);
   if r.status not in ('DRAFT', 'RECRUIT') then perform public.fail('ROOM_STATUS_INVALID', '진행중이거나 종료된 방은 삭제할 수 없어요. 보관해 주세요'); end if;
   delete from public.rooms where id = r.id;
 end $$;
@@ -495,7 +507,7 @@ declare
   v_warn   jsonb := '[]'::jsonb;
 begin
   r := public.room_lock(p_slug);
-  if r.leader_id <> v_uid then perform public.fail('NOT_LEADER', '그룹장만 할 수 있어요'); end if;
+  perform public.require_leader(r, v_uid);
   if r.archived_at is not null then perform public.fail('ROOM_NOT_EDITABLE', '보관된 방은 수정할 수 없어요'); end if;
   if p_patch is null or jsonb_typeof(p_patch) <> 'object' then
     perform public.fail('VALIDATION_FAILED', '수정 내용이 올바르지 않아요');
@@ -694,11 +706,11 @@ begin
       select r.*, row_number() over (order by
                case when v_sort = 'default' then case r.status when 'ACTIVE' then 0 when 'RECRUIT' then 1 when 'DRAFT' then 2 else 3 end end,
                case when v_sort in ('default', 'startDate') then r.start_date end,
-               r.created_at desc, r.id desc) as ord
+               case when v_sort <> 'startDate' then r.created_at end desc, r.id desc) as ord   -- startDate: start_date asc, id desc
       from public.rooms r
       where public.room_in_scope(r.id, v_scope, v_uid) and public.room_matches(r.id, v_status, v_q, v_tags)) o
     order by o.ord
-    limit v_size offset v_page * v_size
+    limit v_size offset (v_page::bigint * v_size)   -- int 곱셈 22003 방지
   ),
   mem as (
     select m.room_id, lower(m.role) as role, lower(m.status) as status
