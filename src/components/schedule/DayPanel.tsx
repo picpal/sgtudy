@@ -1,21 +1,21 @@
 import Link from "next/link";
 import { dday, md, weekdayKo } from "@/lib/date";
-import { routes, TODAY } from "@/lib/routes";
+import { routes } from "@/lib/routes";
 import { STATUS_LABEL } from "@/lib/types";
-import { shortName, STUDY, type Marker, type StudyId, type Task } from "@/data/schedule";
+import { shortName, type Marker, type Study, type Task } from "@/data/schedule";
 
-type Props = { sel: string; tasks: Task[]; markers: Marker[] };
+type Props = { sel: string; today: string; studies: Record<string, Study>; tasks: Task[]; markers: Marker[] };
 
-type Item = { key: string; study: StudyId; title: string; sub: string; badge: string; urgent?: boolean };
+type Item = { key: string; study: string; title: string; sub: string; badge: string; urgent?: boolean };
 
-export function DayPanel({ sel, tasks, markers }: Props) {
+export function DayPanel({ sel, today, studies, tasks, markers }: Props) {
   const starts: Item[] = markers
     .filter((mk) => mk.date === sel)
     .map((mk) => ({
       key: `s-${mk.study}`,
       study: mk.study,
       title: `${mk.round} 회차 시작`,
-      sub: STUDY[mk.study].pending ? "승인되면 참여할 수 있어요" : "새 과제가 열렸어요",
+      sub: studies[mk.study].pending ? "승인되면 참여할 수 있어요" : "새 과제가 열렸어요",
       badge: "시작",
     }));
   const due: Item[] = tasks
@@ -25,7 +25,7 @@ export function DayPanel({ sel, tasks, markers }: Props) {
       study: t.study,
       title: t.title,
       sub: `${t.round} · ${md(t.s)}–${md(t.e)} · ${STATUS_LABEL[t.st]}`,
-      badge: t.st === "done" || t.st === "late" ? STATUS_LABEL[t.st] : `마감 ${dday(TODAY, t.e)}`,
+      badge: t.st === "done" || t.st === "late" ? STATUS_LABEL[t.st] : `마감 ${dday(today, t.e)}`,
       urgent: t.st === "open",
     }));
   const ongoing: Item[] = tasks
@@ -46,13 +46,13 @@ export function DayPanel({ sel, tasks, markers }: Props) {
         <h2 className="m-0 text-[18px] font-bold">
           {Number(sel.slice(5, 7))}월 {Number(sel.slice(8, 10))}일 ({weekdayKo(sel)})
         </h2>
-        {sel === TODAY && <span className="rounded-[7px] bg-ink px-2 py-[2px] text-[12px] font-bold text-white">오늘</span>}
+        {sel === today && <span className="rounded-[7px] bg-ink px-2 py-[2px] text-[12px] font-bold text-white">오늘</span>}
       </div>
       {groups.map(([label, items]) => (
         <div key={label} className="flex flex-col gap-2">
           <div className="text-[12px] font-semibold text-muted">{label}</div>
           {items.map((it) => {
-            const S = STUDY[it.study];
+            const S = studies[it.study];
             return (
               <Link
                 key={it.key}
