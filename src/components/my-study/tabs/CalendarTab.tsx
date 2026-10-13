@@ -71,86 +71,89 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
         ))}
       </div>
 
-      <div className="relative overflow-hidden rounded-[16px] border border-line">
-        <div className="grid grid-cols-7 border-b border-line bg-surface-2">
-          {DOW.map((d, c) => (
-            <div key={d} className="p-[10px] text-[12px] font-semibold" style={{ color: dowColor(c) }}>
-              {d}
-            </div>
-          ))}
+      {/* 팝오버는 overflow-hidden 그리드 밖(바깥 relative)에 둔다 — 주간 보기에서 잘리지 않게 (Q1-06) */}
+      <div className="relative">
+        <div className="overflow-hidden rounded-[16px] border border-line">
+          <div className="grid grid-cols-7 border-b border-line bg-surface-2">
+            {DOW.map((d, c) => (
+              <div key={d} className="p-[10px] text-[12px] font-semibold" style={{ color: dowColor(c) }}>
+                {d}
+              </div>
+            ))}
+          </div>
+          {Array.from({ length: rows }, (_, ri) => {
+            const ws = addDays(gridStart, ri * 7);
+            const segs = weekSegments(calLeaves, ws);
+            return (
+              <div key={ws} className="relative" style={{ borderBottom: ri < rows - 1 ? "1px solid #EEF2F1" : 0, minHeight: isWeek ? 240 : 112 }}>
+                <div className="absolute inset-0 grid grid-cols-7">
+                  {Array.from({ length: 7 }, (_, c) => {
+                    const k = addDays(ws, c);
+                    const inM = isWeek || +k.slice(5, 7) === month;
+                    const isT = k === today;
+                    const markers = tree.roots.filter((r) => r.s === k && r.label);
+                    return (
+                      <div key={k} className="px-2 py-[6px]" style={{ borderRight: c < 6 ? "1px solid #EEF2F1" : 0, background: isT ? "#F4FBF8" : inM ? "#FFFFFF" : "#FAFBFB" }}>
+                        <span className="flex items-center justify-between gap-1">
+                          <span
+                            className="inline-flex h-[26px] min-w-[26px] items-center justify-center rounded-[13px] text-[13px]"
+                            style={{
+                              padding: `0 ${isWeek ? 8 : 0}px`,
+                              fontWeight: isT ? 700 : 500,
+                              background: isT ? "#1B2230" : "transparent",
+                              color: isT ? "#FFFFFF" : !inM ? "#A7B0BA" : c === 0 ? "#C0453A" : c === 6 ? "#2F5BC2" : "#1B2230",
+                            }}
+                          >
+                            {isWeek ? `${+k.slice(5, 7)}.${+k.slice(8, 10)}` : String(+k.slice(8, 10))}
+                          </span>
+                          <span className="flex gap-[3px]">
+                            {markers.map((r) => (
+                              <span key={r.id} title={`${r.label} ${r.title} 시작`} className="whitespace-nowrap rounded-[5px] bg-navy px-[6px] py-px text-[10px] font-bold text-white max-sm:h-[7px] max-sm:w-[7px] max-sm:self-center max-sm:rounded-full max-sm:p-0">
+                                <span className="max-sm:hidden">{r.label}</span>
+                              </span>
+                            ))}
+                          </span>
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="relative grid grid-cols-7 pb-[10px] pt-[38px]" style={{ gridAutoRows: 26, rowGap: 4 }}>
+                  {segs.map(({ l, col, span, isStart, isEnd, lane }) => {
+                    const wc = whoCode(l);
+                    const st = wc ? CODE_STATE[wc] : l.state;
+                    const [bg, fg, bdr] = BAR[st];
+                    const endCodes: Code[] = wc ? [wc] : l.people.map((p) => p.c);
+                    const lr = isStart ? 7 : 0;
+                    const rr = isEnd ? 7 : 0;
+                    return (
+                      <button
+                        key={l.id}
+                        type="button"
+                        title={`${l.crumb} · ${l.title} (${md(l.s)}–${md(l.e)})`}
+                        onClick={() => update({ calPick: l.id })}
+                        className="relative flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-left text-[12px] transition-shadow duration-100 hover:z-[2] hover:shadow-[0_3px_8px_rgba(27,34,48,.18)]"
+                        style={{
+                          gridColumn: `${col + 1} / span ${span}`,
+                          gridRow: lane + 1,
+                          margin: `0 ${isEnd ? 5 : 0}px 0 ${isStart ? 5 : 0}px`,
+                          borderRadius: `${lr}px ${rr}px ${rr}px ${lr}px`,
+                          border: bdr,
+                          background: bg,
+                          color: fg,
+                          fontWeight: st === "progress" || st === "delayed" ? 700 : 500,
+                        }}
+                      >
+                        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{isStart || col === 0 ? l.title : `${l.title} (계속)`}</span>
+                        {isEnd && <CodeIcons codes={endCodes} size={13} max={3} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
-        {Array.from({ length: rows }, (_, ri) => {
-          const ws = addDays(gridStart, ri * 7);
-          const segs = weekSegments(calLeaves, ws);
-          return (
-            <div key={ws} className="relative" style={{ borderBottom: ri < rows - 1 ? "1px solid #EEF2F1" : 0, minHeight: isWeek ? 240 : 112 }}>
-              <div className="absolute inset-0 grid grid-cols-7">
-                {Array.from({ length: 7 }, (_, c) => {
-                  const k = addDays(ws, c);
-                  const inM = isWeek || +k.slice(5, 7) === month;
-                  const isT = k === today;
-                  const markers = tree.roots.filter((r) => r.s === k && r.label);
-                  return (
-                    <div key={k} className="px-2 py-[6px]" style={{ borderRight: c < 6 ? "1px solid #EEF2F1" : 0, background: isT ? "#F4FBF8" : inM ? "#FFFFFF" : "#FAFBFB" }}>
-                      <span className="flex items-center justify-between gap-1">
-                        <span
-                          className="inline-flex h-[26px] min-w-[26px] items-center justify-center rounded-[13px] text-[13px]"
-                          style={{
-                            padding: `0 ${isWeek ? 8 : 0}px`,
-                            fontWeight: isT ? 700 : 500,
-                            background: isT ? "#1B2230" : "transparent",
-                            color: isT ? "#FFFFFF" : !inM ? "#A7B0BA" : c === 0 ? "#C0453A" : c === 6 ? "#2F5BC2" : "#1B2230",
-                          }}
-                        >
-                          {isWeek ? `${+k.slice(5, 7)}.${+k.slice(8, 10)}` : String(+k.slice(8, 10))}
-                        </span>
-                        <span className="flex gap-[3px]">
-                          {markers.map((r) => (
-                            <span key={r.id} title={`${r.label} ${r.title} 시작`} className="whitespace-nowrap rounded-[5px] bg-navy px-[6px] py-px text-[10px] font-bold text-white max-sm:h-[7px] max-sm:w-[7px] max-sm:self-center max-sm:rounded-full max-sm:p-0">
-                              <span className="max-sm:hidden">{r.label}</span>
-                            </span>
-                          ))}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="relative grid grid-cols-7 pb-[10px] pt-[38px]" style={{ gridAutoRows: 26, rowGap: 4 }}>
-                {segs.map(({ l, col, span, isStart, isEnd, lane }) => {
-                  const wc = whoCode(l);
-                  const st = wc ? CODE_STATE[wc] : l.state;
-                  const [bg, fg, bdr] = BAR[st];
-                  const endCodes: Code[] = wc ? [wc] : l.people.map((p) => p.c);
-                  const lr = isStart ? 7 : 0;
-                  const rr = isEnd ? 7 : 0;
-                  return (
-                    <button
-                      key={l.id}
-                      type="button"
-                      title={`${l.crumb} · ${l.title} (${md(l.s)}–${md(l.e)})`}
-                      onClick={() => update({ calPick: l.id })}
-                      className="relative flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-left text-[12px] transition-shadow duration-100 hover:z-[2] hover:shadow-[0_3px_8px_rgba(27,34,48,.18)]"
-                      style={{
-                        gridColumn: `${col + 1} / span ${span}`,
-                        gridRow: lane + 1,
-                        margin: `0 ${isEnd ? 5 : 0}px 0 ${isStart ? 5 : 0}px`,
-                        borderRadius: `${lr}px ${rr}px ${rr}px ${lr}px`,
-                        border: bdr,
-                        background: bg,
-                        color: fg,
-                        fontWeight: st === "progress" || st === "delayed" ? 700 : 500,
-                      }}
-                    >
-                      <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{isStart || col === 0 ? l.title : `${l.title} (계속)`}</span>
-                      {isEnd && <CodeIcons codes={endCodes} size={13} max={3} />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
 
         {pick && (
           <div role="dialog" aria-label="과제 상세" className="absolute right-3 top-12 z-[5] flex w-[300px] max-w-[calc(100%-24px)] flex-col gap-[10px] rounded-[16px] border border-line bg-surface p-4 shadow-[0_16px_40px_rgba(27,34,48,.18)]">

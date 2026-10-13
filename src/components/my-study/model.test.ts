@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, REF_DAY } from "./fixtures";
-import { EMPTY_OVERRIDES, buildTree, memberStats, overallPct, unassignedCount } from "./model";
+import { EMPTY_OVERRIDES, buildTree, dropFieldOv, isDirty, memberStats, overallPct, periodWarnings, stripFieldOv, unassignedCount } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -72,5 +72,49 @@ describe("buildTree with overrides (optimistic edits)", () => {
     const t = buildTree(AWS, { ...EMPTY_OVERRIDES, added: { root: ["새 회차"] } }, REF_DAY);
     expect(t.rootCount).toBe(6);
     expect(t.roots[5]).toMatchObject({ id: "root.new0", label: "6주차", s: "2026-11-05", e: "2026-11-11", kids: [] });   // 서버 기본 라벨 "{n}주차"(D14)와 같게 — 응답 후 깜빡임 없음
+  });
+});
+
+describe("per-node dirty overrides (Q2-05)", () => {
+  const ov = { ...EMPTY_OVERRIDES, titles: { "21": "바뀐 제목" }, dates: { "12": { e: "2026-10-09" } }, added: { root: ["새 회차"] }, removed: { "22": true } };
+  it("isDirty only for field edits of that node", () => {
+    expect(isDirty(ov, "21")).toBe(true);
+    expect(isDirty(ov, "12")).toBe(true);
+    expect(isDirty(ov, "11")).toBe(false);
+    expect(isDirty(ov, "22")).toBe(false); // 구조 변경은 즉시 RPC — 미저장 아님
+    expect(isDirty(ov, null)).toBe(false);
+  });
+  it("dropFieldOv discards one node's field edits, keeps others and structure", () => {
+    const d = dropFieldOv(ov, "21");
+    expect(d.titles).toEqual({});
+    expect(d.dates).toEqual({ "12": { e: "2026-10-09" } });
+    expect(d.added).toEqual({ root: ["새 회차"] });
+  });
+  it("stripFieldOv keeps only structural overrides — other tabs never show unsaved values", () => {
+    const s = stripFieldOv(ov);
+    expect(s).toEqual({ ...EMPTY_OVERRIDES, added: { root: ["새 회차"] }, removed: { "22": true } });
+    const t = buildTree(AWS, s, REF_DAY);
+    expect(t.nodes.find((n) => n.id === "21")!.title).toBe("EC2 인스턴스 유형 정리");
+  });
+  it("tree nodes carry parentId", () => {
+    const t = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
+    expect(t.nodes.find((n) => n.id === "311")!.parentId).toBe("31");
+    expect(t.nodes.find((n) => n.id === "1")!.parentId).toBeNull();
+  });
+});
+
+describe("periodWarnings (E4, Q1-10/Q2-21) — 경고만, 막지 않는다", () => {
+  const room = { start: "2026-10-01", end: "2026-11-04" };
+  it("inside parent and room → none", () => {
+    expect(periodWarnings({ s: "2026-10-08", e: "2026-10-14" }, { s: "2026-10-08", e: "2026-10-14" }, room)).toEqual([]);
+  });
+  it("child outside parent period", () => {
+    expect(periodWarnings({ s: "2026-11-09", e: "2026-11-30" }, { s: "2026-11-09", e: "2026-11-15" }, room)).toEqual([
+      "상위 항목 기간(11.09 – 11.15)을 벗어났어요",
+      "방 기간(10.01 – 11.04)을 벗어났어요",
+    ]);
+  });
+  it("root outside room period (회차 추가 beyond room end)", () => {
+    expect(periodWarnings({ s: "2026-11-05", e: "2026-11-11" }, null, room)).toEqual(["방 기간(10.01 – 11.04)을 벗어났어요"]);
   });
 });

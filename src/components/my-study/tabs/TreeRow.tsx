@@ -34,9 +34,10 @@ export function TreeRow({ n, isEdit, selected, open, onToggle, onClick, onAddChi
       className="flex min-h-[52px] items-center gap-2 border-b border-line-2 py-1 pl-2 pr-3"
       style={{ background: selected ? "#F0F9F6" : n.d === 0 ? "#FAFCFB" : "#FFFFFF", boxShadow: selected ? "inset 0 0 0 2px #3FB89C" : "none", opacity: n.archived ? 0.55 : 1 }}
     >
-      <span className="shrink-0" style={{ width: n.d * 22 }} />
+      {/* 390 폭에서도 제목·기간이 보이게: 들여쓰기 축소, 드래그 핸들·진척 막대·아바타는 숨기고 제목은 줄바꿈 (Q3-03) */}
+      <span className="w-[calc(var(--d)*22px)] shrink-0 max-sm:w-[calc(var(--d)*10px)]" style={{ "--d": n.d } as React.CSSProperties} />
       {isEdit && (
-        <span title="드래그해서 순서 변경" className="flex shrink-0 cursor-grab text-ghost">
+        <span title="드래그해서 순서 변경" className="flex shrink-0 cursor-grab text-ghost max-sm:hidden">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
           </svg>
@@ -54,13 +55,13 @@ export function TreeRow({ n, isEdit, selected, open, onToggle, onClick, onAddChi
         </button>
       )}
 
-      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-[10px] bg-transparent px-1 py-2 text-left text-ink">
+      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px] bg-transparent px-1 py-2 text-left text-ink">
         {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[7px] bg-navy px-2 py-[3px] text-[12px] font-bold text-white">{n.label}</span>}
         {n.leaf && <TypeBadge type={n.type} />}
-        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" style={{ fontSize: n.d === 0 ? 15 : 14, fontWeight: n.d === 0 ? 700 : n.leaf ? 500 : 600 }}>
+        <span className="min-w-0 max-w-full [overflow-wrap:anywhere]" style={{ fontSize: n.d === 0 ? 15 : 14, fontWeight: n.d === 0 ? 700 : n.leaf ? 500 : 600 }}>
           {n.title}
         </span>
-        <span className="shrink-0 text-[12px] text-muted">
+        <span className="shrink-0 whitespace-nowrap text-[12px] text-muted">
           {md(n.s)} – {md(n.e)}
         </span>
         {n.archived && <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">보관됨</span>}
@@ -68,13 +69,15 @@ export function TreeRow({ n, isEdit, selected, open, onToggle, onClick, onAddChi
 
       {n.leaf ? (
         <>
-          <AvatarStack people={n.people} size={28} ring="#FFFFFF" iconSize={14} overflowSize={30} />
+          <span className="max-sm:hidden">
+            <AvatarStack people={n.people} size={28} ring="#FFFFFF" iconSize={14} overflowSize={30} />
+          </span>
           {n.asg === 0 && <span className="shrink-0 rounded-[7px] bg-[#FDF4E1] px-2 py-[3px] text-[12px] font-semibold text-amber-text">담당자 미정</span>}
           <span className="w-9 shrink-0 text-right text-[12px] font-semibold text-ink-2">{n.asg ? `${n.sub}/${n.asg}` : ""}</span>
         </>
       ) : (
-        <span className="flex w-[120px] shrink-0 items-center gap-2">
-          <ProgressBar pct={n.pct} height={6} fill={n.pct === 100 ? "#1E9E6A" : "#12A386"} className="flex-1" />
+        <span className="flex w-[120px] shrink-0 items-center gap-2 max-sm:w-auto">
+          <ProgressBar pct={n.pct} height={6} fill={n.pct === 100 ? "#1E9E6A" : "#12A386"} className="flex-1 max-sm:hidden" />
           <span className="w-9 text-right text-[12px] font-bold">{n.pct}%</span>
         </span>
       )}

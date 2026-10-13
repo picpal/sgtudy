@@ -3,7 +3,7 @@
  * React 와 무관하게 입력 → 출력만 한다. "오늘"과 "나"는 인자로 받는다.
  */
 import { addDays, dday, diffDays, md, parseISO } from "@/lib/date";
-import { TASK_TYPE_KO } from "@/lib/api/format";
+import { TASK_TYPE_KO, mmdd } from "@/lib/api/format";
 import type { Curriculum, NodeDto } from "@/lib/api/types";
 import type { Tone } from "@/lib/palette";
 import type { TaskStatus } from "@/lib/types";
@@ -39,6 +39,25 @@ export type Overrides = {
 
 export const EMPTY_OVERRIDES: Overrides = { titles: {}, descs: {}, dates: {}, typeOv: {}, assignOv: {}, added: {}, removed: {}, archived: {} };
 
+/** 편집 패널이 "저장" 전까지 모아 두는 필드 — 구조 변경(added/removed/archived)은 즉시 RPC 라 미저장 대상이 아니다 */
+const FIELD_KEYS = ["titles", "descs", "dates", "typeOv", "assignOv"] as const;
+
+/** 그 노드에 저장하지 않은 수정이 있나 (Q2-05) */
+export const isDirty = (ov: Overrides, id: string | null): boolean => !!id && FIELD_KEYS.some((k) => id in ov[k]);
+
+/** 한 노드의 미저장 수정만 버린다 */
+export function dropFieldOv(ov: Overrides, id: string): Overrides {
+  const out = { ...ov };
+  FIELD_KEYS.forEach((k) => {
+    const { [id]: _omit, ...rest } = ov[k] as Record<string, unknown>; // eslint-disable-line @typescript-eslint/no-unused-vars
+    (out as Record<string, unknown>)[k] = rest;
+  });
+  return out;
+}
+
+/** 구조 오버라이드만 남긴다 — 커리큘럼 편집 패널 밖(개요·보드·캘린더·간트)에는 저장된 값만 보인다 */
+export const stripFieldOv = (ov: Overrides): Overrides => ({ ...ov, titles: {}, descs: {}, dates: {}, typeOv: {}, assignOv: {} });
+
 /** 추가(미저장) 노드의 임시 id */
 export const tempId = (parentId: string, i: number) => `${parentId}.new${i}`;
 const TEMP_ORDER = 10_000;
@@ -47,6 +66,7 @@ const TEMP_ORDER = 10_000;
 
 type NodeBase = {
   id: string;
+  parentId: string | null;
   /** 속한 회차(루트) id — 보드 회차 필터 */
   roundId: string;
   /** depth: 루트 0 (= DTO depth − 2) */
@@ -125,7 +145,7 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
     const d = n.depth - 2;
     const roundId = d === 0 ? n.id : n.roundId;
     const kidsRaw = [...(byParent.get(n.id) ?? []), ...(ov.added[n.id] ?? []).map((t, i) => tempChild(n, t, i))];
-    const base = { id: n.id, roundId, d, title, desc, s, e, archived, archivedByParent, crumb: crumbs.join(" › "), temp };
+    const base = { id: n.id, parentId: n.parentId, roundId, d, title, desc, s, e, archived, archivedByParent, crumb: crumbs.join(" › "), temp };
 
     if (n.task && kidsRaw.length === 0) {
       const type: TaskType = ov.typeOv[n.id] ?? TASK_TYPE_KO[n.task.type];
@@ -222,6 +242,14 @@ export function memberStats(leaves: LeafNode[], userId: string): { done: number;
 export const findNode = (nodes: TreeNode[], id: string | null) => (id ? (nodes.find((n) => n.id === id) ?? null) : null);
 
 export const ddayLabel = (today: string, e: string) => dday(today, e);
+
+/** 분석서 E4 — 상위 기간·방 기간 밖이면 경고 문구 (저장·생성은 막지 않는다) */
+export function periodWarnings(n: { s: string; e: string }, parent: { s: string; e: string } | null, room: { start: string; end: string }): string[] {
+  const out: string[] = [];
+  if (parent && (n.s < parent.s || n.e > parent.e)) out.push(`상위 항목 기간(${mmdd(parent.s)} – ${mmdd(parent.e)})을 벗어났어요`);
+  if (n.s < room.start || n.e > room.end) out.push(`방 기간(${mmdd(room.start)} – ${mmdd(room.end)})을 벗어났어요`);
+  return out;
+}
 
 /* ---------------- 보드 ---------------- */
 
