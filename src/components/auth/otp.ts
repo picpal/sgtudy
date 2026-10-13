@@ -53,3 +53,17 @@ export function authErrorMessage(e: unknown): string {
   if (e instanceof Error) return `로그인에 실패했어요 · ${e.message}`;
   return "로그인에 실패했어요";
 }
+
+export const RESEND_SEC = 60;
+
+/**
+ * 코드 발송 빈도 제한(over_email_send_rate_limit)이면 다시 받을 수 있을 때까지 남은 초, 아니면 null.
+ * GoTrue 는 "...only request this after N seconds." 로 초를 알려 준다. 없으면 우리가 보낸 시각(sentAt, ms) 기준, 그것도 없으면 1분.
+ */
+export function rateLimitWait(e: unknown, sentAt: number | null, now: number): number | null {
+  if (typeof e !== "object" || e === null || (e as { code?: unknown }).code !== "over_email_send_rate_limit") return null;
+  const m = /(\d+)\s*seconds?/.exec(String((e as { message?: unknown }).message ?? ""));
+  if (m) return Number(m[1]);
+  if (sentAt !== null) return Math.max(1, Math.ceil(RESEND_SEC - (now - sentAt) / 1000));
+  return RESEND_SEC;
+}

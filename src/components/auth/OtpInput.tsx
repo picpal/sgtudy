@@ -15,9 +15,11 @@ export function OtpInput({ value, onChange, disabled }: Props) {
     if (!disabled && empty) focusAt(0);
   }, [disabled, empty]);
 
+  // 포커스는 이벤트 안에서 바로 옮긴다 — rAF 로 미루면 다음 프레임 전에 친 숫자가 같은 칸을 덮어쓰고,
+  // 틀린 코드로 칸이 비워진 뒤 0번 칸 포커스(위 effect)보다 늦게 실행돼 6번째 칸에 남는다(Q1-15, Q2-15)
   const commit = (r: { digits: Digits; focus: number }) => {
+    focusAt(r.focus);
     onChange(r.digits);
-    requestAnimationFrame(() => focusAt(r.focus));
   };
 
   return (
