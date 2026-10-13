@@ -28,8 +28,8 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
     try {
       const res = await joinByInvite(token);
       setP((prev) => ({ ...prev, me: res.me, room: { ...prev.room, memberCount: res.memberCount } }));
-      router.refresh();
       if (res.me?.state === "active") router.push(routes.myStudy(r.slug));
+      else router.refresh();
     } catch (e) {
       const err = toApiError(e);
       if (err.code === "AUTH_REQUIRED") return router.push(routes.login(routes.invite(token)));
@@ -63,7 +63,7 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
           </button>
         );
       default: {
-        const text = act === "full" ? "정원 마감" : act === "ended" ? "종료된 스터디예요" : "이미 진행 중인 스터디예요";
+        const text = act === "inactive" ? "이탈 처리된 멤버예요" : act === "full" ? "정원 마감" : act === "ended" ? "종료된 스터디예요" : "이미 진행 중인 스터디예요";
         return <button type="button" disabled className="h-12 rounded-[24px] bg-slate-soft text-[15px] font-semibold text-muted">{text}</button>;
       }
     }

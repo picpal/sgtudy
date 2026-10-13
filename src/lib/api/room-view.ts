@@ -1,19 +1,28 @@
 import { rpc, type Db } from "@/lib/api/errors";
 import { curIndexOf, curOf, ddayOf, glanceOf, periodLong, periodShort, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
 import type { MembershipResult, RoomCardDto, RoomDetail, RoomTagDto } from "@/lib/api/types";
+import { routes } from "@/lib/routes";
 import type { RoomStatus } from "@/lib/types";
 import type { Action, BaseAction, Room, RoomMember } from "@/data/room-view";
 
 export const fetchRoomDetail = (slug: string, client?: Db, inviteToken?: string) =>
   rpc<RoomDetail>("room_get", { p_slug: slug, p_invite_token: inviteToken ?? null }, client);
-export const joinRoom = (slug: string) => rpc<MembershipResult>("room_join", { p_slug: slug, p_invite_token: null });
-export const applyRoom = (slug: string) => rpc<MembershipResult>("room_apply", { p_slug: slug, p_invite_token: null });
+/** 비공개 방은 room_join_precheck 가 초대 토큰을 검사한다 → ?invite= 로 연 방이면 토큰을 그대로 넘긴다 */
+export const joinRoom = (slug: string, inviteToken?: string) => rpc<MembershipResult>("room_join", { p_slug: slug, p_invite_token: inviteToken ?? null });
+export const applyRoom = (slug: string, inviteToken?: string) => rpc<MembershipResult>("room_apply", { p_slug: slug, p_invite_token: inviteToken ?? null });
+
+/** 로그인/온보딩 뒤 돌아올 방 주소. 초대 토큰을 유지해야 비공개 방이 다시 열린다 (safeReturnTo 통과: 원문에 %2f·%2e 없음) */
+export const roomReturnTo = (slug: string, inviteToken?: string): string =>
+  `${routes.room(slug)}${inviteToken ? `?invite=${encodeURIComponent(inviteToken)}` : ""}`;
+
+/** ?invite=a&invite=b → 첫 값 */
+export const firstParam = (v: string | string[] | undefined): string | undefined => (Array.isArray(v) ? v[0] : v) || undefined;
 export const leaveRoom = (slug: string) => rpc<MembershipResult>("room_leave", { p_slug: slug });
 export const cancelApplication = (slug: string) => rpc<MembershipResult>("room_cancel_application", { p_slug: slug });
 
 type ActionInput = Pick<RoomDetail, "status" | "joinMode" | "memberCount" | "maxMembers" | "me">;
 
-/** 03-api §3: 비로그인→login · leader→owner · active&recruit→leave · active&(active|ended)→joined · pending→pending · ended→ended · active→activeClosed · full→full · approval→apply · direct→join */
+/** 03-api §3: 비로그인→login · leader→owner · active&recruit→leave · active&(active|ended)→joined · pending→pending · inactive→inactive · ended→ended · active→activeClosed · full→full · approval→apply · direct→join */
 export function actionOf(d: ActionInput): Action {
   const st = d.me?.state;
   if (!d.me) return "login";
@@ -21,6 +30,8 @@ export function actionOf(d: ActionInput): Action {
   const recruiting = d.status === "recruit" || d.status === "draft";
   if (st === "active") return recruiting ? "leave" : "joined";
   if (st === "pending") return "pending";
+  // 이탈 처리된 멤버는 서버가 MEMBER_NOT_ACTIVE 로 막는다 → 참가 버튼 대신 비활성 안내 (초대 화면과 같은 규칙)
+  if (st === "inactive") return "inactive";
   if (d.status === "ended") return "ended";
   if (d.status === "active") return "activeClosed";
   if (d.memberCount >= d.maxMembers) return "full";

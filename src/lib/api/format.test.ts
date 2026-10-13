@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays } from "@/lib/date";
-import { curIndexOf, curOf, ddayOf, glanceOf, periodCard, periodLong, periodShort, periodWeeks, roundRow, roundsWindow, rulesOf } from "./format";
+import { curIndexOf, curOf, ddayOf, endPart, glanceOf, periodCard, periodLong, periodShort, periodWeeks, roundRow, roundsWindow, rulesOf } from "./format";
 import type { RoomDetail, RoundSummary } from "./types";
 
 const TODAY = "2026-10-12";
@@ -140,12 +140,32 @@ describe("curOf (roomview §1.3 / mystudy §3.8)", () => {
   });
 });
 
+describe("curOf final-batch rules", () => {
+  it("ended room with no assignments (overallPct null) → '—', not 0%", () => {
+    expect(curOf({ status: "ended", startDate: "2026-07-01", endDate: "2026-09-30", currentRound: null, rounds: weekly(3, "2026-07-01"),
+      stats: stats({ roundCount: 3, overallPct: null }) }, TODAY).title).toBe("13주 완주 · 전체 달성률 —");
+  });
+  it("gap pill says 완료 when the previous round is fully submitted (matches roundRow)", () => {
+    const gap = [{ ...weekly(1, "2026-10-01")[0], endDate: "2026-10-05", pct: 100 }, { ...weekly(1, "2026-10-15")[0], id: "2", label: "2주차" }];
+    const dto = { status: "active" as const, startDate: "2026-10-01", endDate: "2026-12-31", currentRound: gap[0], rounds: gap, stats: stats({ roundCount: 2 }) };
+    expect(curOf(dto, TODAY).pill).toBe("1주차 · 완료");
+    expect(roundRow(gap[0], "active", TODAY, false).state).toBe("완료");
+  });
+});
+
 describe("curOf server gap shape (preflight C2)", () => {
   it("currentRound = previous ended round (server fallback) → no current round", () => {
     const gap = [{ ...weekly(1, "2026-10-01")[0], endDate: "2026-10-05" }, { ...weekly(1, "2026-10-15")[0], id: "2", label: "2주차" }];
     expect(curOf({ status: "active", startDate: "2026-10-01", endDate: "2026-12-31", currentRound: gap[0], rounds: gap, stats: stats({ roundCount: 2 }) }, TODAY)).toEqual({
       pill: "1주차 · 기간 종료", title: "진행 중인 회차가 없어요", meta: "다음 회차 10.15 시작", tasks: [],
     });
+  });
+});
+
+describe("endPart", () => {
+  it("same year → MM.DD, cross year → YYYY.MM.DD", () => {
+    expect(endPart("2026-11-02", "2026-12-27")).toBe("12.27");
+    expect(endPart("2026-10-05", "2027-01-31")).toBe("2027.01.31");
   });
 });
 

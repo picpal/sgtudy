@@ -4,11 +4,11 @@ import type { RoomStatus, TaskStatus } from "@/lib/types";
 /** RoomView.dc.html ROOMS 객체를 그대로 옮긴 목업. 문구·숫자는 원본과 동일. */
 
 /** 참가 CTA 의 기본 상태. recruit 는 사용자의 join 값에 따라 join/apply/leave/pending 으로 갈린다. */
-export type BaseAction = "recruit" | "owner" | "full" | "joined" | "activeClosed" | "ended";
+export type BaseAction = "recruit" | "owner" | "full" | "joined" | "inactive" | "activeClosed" | "ended";
 export type JoinState = "none" | "joined" | "pending";
 /** 공개 식별자 = slug (D1). 목업 8개 리터럴에서 string 으로 넓힘 */
 export type RoomId = string;
-export type Action = "login" | "join" | "apply" | "leave" | "pending" | "joined" | "owner" | "full" | "activeClosed" | "ended";
+export type Action = "login" | "join" | "apply" | "leave" | "pending" | "inactive" | "joined" | "owner" | "full" | "activeClosed" | "ended";
 
 export type RoomTag = { label: string; tone: Tone; auto: boolean };
 export type RoomMember = {

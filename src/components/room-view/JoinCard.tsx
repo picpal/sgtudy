@@ -5,19 +5,21 @@ import { routes } from "@/lib/routes";
 import { type Action, type Room } from "@/data/room-view";
 import { StatusBadge } from "./StatusBadge";
 
-type Props = { room: Room; act: Action; busy?: boolean; onJoin: () => void; onApply: () => void; onCancel: () => void };
+/** loginHref: 로그인 후 돌아올 주소(초대 토큰 포함)까지 담은 /login 링크 */
+type Props = { room: Room; act: Action; busy?: boolean; loginHref: string; onJoin: () => void; onApply: () => void; onCancel: () => void };
 
 const DISABLED: Partial<Record<Action, [label: string, note: string]>> = {
   full: ["정원 마감", "자리가 생기면 다시 참가할 수 있어요"],
   activeClosed: ["모집 종료", "이미 진행 중인 스터디는 참가할 수 없어요"],
   ended: ["모집 종료", "종료된 스터디예요 · 기록은 계속 볼 수 있어요"],
+  inactive: ["참가할 수 없어요", "이탈 처리된 멤버예요 · 그룹장에게 문의해 주세요"],
 };
 
-const PRIMARY = "flex h-[50px] items-center justify-center gap-2 rounded-[25px] font-semibold text-white hover:text-white";
+const PRIMARY = "flex h-[50px] items-center justify-center gap-2 rounded-[25px] font-semibold text-white hover:text-white disabled:opacity-60";
 const SECONDARY = "flex h-11 items-center justify-center gap-[6px] rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink";
 const NOTE = "text-center text-[12px] text-muted";
 
-function Cta({ room, act, busy, onJoin, onApply, onCancel }: Props) {
+function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
   const dis = DISABLED[act];
   if (dis) {
     return (
@@ -33,7 +35,7 @@ function Cta({ room, act, busy, onJoin, onApply, onCancel }: Props) {
     case "login":
       return (
         <div className="flex flex-col gap-[6px]">
-          <Link href={routes.login(routes.room(room.id))} className={`${PRIMARY} bg-navy text-[16px]`}>로그인하고 참가</Link>
+          <Link href={loginHref} className={`${PRIMARY} bg-navy text-[16px]`}>로그인하고 참가</Link>
           <span className={NOTE}>이메일 인증 코드로 바로 로그인할 수 있어요</span>
         </div>
       );

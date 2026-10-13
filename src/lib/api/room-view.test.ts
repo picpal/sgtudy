@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addDays } from "@/lib/date";
-import { actionOf, applyMembership, groupSidebar, toRoom, toSidebarRoom } from "./room-view";
+import { safeReturnTo } from "@/lib/routes";
+import { actionOf, applyMembership, firstParam, groupSidebar, roomReturnTo, toRoom, toSidebarRoom } from "./room-view";
 import type { RoomCardDto, RoomDetail, RoundSummary } from "./types";
 
 const TODAY = "2026-10-12";
@@ -14,6 +15,29 @@ const detail = (o: Partial<RoomDetail> = {}): RoomDetail => ({
   leader: P("u-seoyeon", "서연", "blue"), leaderDoesTasks: true, tags: [{ slug: "english", label: "영어", tone: "blue", auto: true }, { slug: "toeic", label: "토익", tone: "peach", auto: true }],
   members: [{ ...P("u-seoyeon", "서연", "blue"), role: "leader", status: "active", joinedAt: "2026-10-01T00:00:00.000Z" }, { ...P("u-dohyun", "도현"), role: "member", status: "active", joinedAt: "2026-10-02T00:00:00.000Z" }],
   me: { state: "none" }, currentRound: null, rounds: weekly(8, "2026-11-02"), stats: stats(), myProgress: null, invite: null, pendingCount: 0, ...o,
+});
+
+describe("actionOf — inactive viewer (T7 rule)", () => {
+  it("inactive member gets a disabled 'inactive' CTA instead of join/apply", () => {
+    expect(actionOf(detail({ me: { state: "inactive" } }))).toBe("inactive");
+    expect(actionOf(detail({ joinMode: "approval", me: { state: "inactive" } }))).toBe("inactive");
+    expect(toRoom(detail({ me: { state: "inactive" } }), TODAY, "u-x").base).toBe("inactive");
+  });
+});
+
+describe("roomReturnTo / firstParam (private invite entry)", () => {
+  it("keeps the invite token and survives safeReturnTo", () => {
+    expect(roomReturnTo("spring", "abc_DEF-123")).toBe("/rooms/spring?invite=abc_DEF-123");
+    expect(safeReturnTo(roomReturnTo("spring", "abc_DEF-123"))).toBe("/rooms/spring?invite=abc_DEF-123");
+    expect(roomReturnTo("spring")).toBe("/rooms/spring");
+    expect(roomReturnTo("spring", "a b&c")).toBe("/rooms/spring?invite=a%20b%26c");
+  });
+  it("firstParam takes the first of repeated params", () => {
+    expect(firstParam(["a", "b"])).toBe("a");
+    expect(firstParam("x")).toBe("x");
+    expect(firstParam(undefined)).toBeUndefined();
+    expect(firstParam("")).toBeUndefined();
+  });
 });
 
 describe("actionOf (03-api §3 결정 순서, roomview §3.5 목업 대응)", () => {

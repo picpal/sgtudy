@@ -15,6 +15,10 @@ describe("inviteActionOf (03-api §3 순서)", () => {
   it("leader → owner", () => expect(inviteActionOf(w({}, { state: "leader" }))).toBe("owner"));
   it("active member on recruit room → joined (초대 화면엔 취소 없음)", () => expect(inviteActionOf(w({}, { state: "active" }))).toBe("joined"));
   it("pending → pending", () => expect(inviteActionOf(w({ joinMode: "approval" }, { state: "pending" }))).toBe("pending"));
+  it("inactive member → inactive (not join/apply)", () => {
+    expect(inviteActionOf(w({}, { state: "inactive" }))).toBe("inactive");
+    expect(inviteActionOf(w({ joinMode: "approval" }, { state: "inactive" }))).toBe("inactive");
+  });
   it("ended / active / full", () => {
     expect(inviteActionOf(w({ status: "ended" }))).toBe("ended");
     expect(inviteActionOf(w({ status: "active" }))).toBe("activeClosed");

@@ -1,21 +1,27 @@
 import { notFound } from "next/navigation";
 import { RoomViewScreen } from "@/components/room-view/RoomViewScreen";
 import { toApiError } from "@/lib/api/errors";
-import { fetchRoomDetail } from "@/lib/api/room-view";
+import { getServerClient } from "@/lib/api/me.server";
+import { fetchRoomDetail, firstParam } from "@/lib/api/room-view";
 import { DEFAULT_PARAMS, fetchRooms } from "@/lib/api/rooms";
 import type { RoomDetail } from "@/lib/api/types";
-import { createClient } from "@/lib/supabase/server";
 
-export default async function RoomPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ invite?: string }> }) {
-  const [{ id }, { invite }] = await Promise.all([params, searchParams]);
-  const client = await createClient();
-  let detail: RoomDetail;
+/** room_get 실패 중 ROOM_NOT_FOUND 만 404 로 바꾼다 (notFound() 는 try 밖에서) */
+async function loadDetail(slug: string, client: Awaited<ReturnType<typeof getServerClient>>, invite?: string): Promise<RoomDetail | null> {
   try {
-    detail = await fetchRoomDetail(id, client, invite);
+    return await fetchRoomDetail(slug, client, invite);
   } catch (e) {
-    if (toApiError(e).code === "ROOM_NOT_FOUND") notFound();
+    if (toApiError(e).code === "ROOM_NOT_FOUND") return null;
     throw e;
   }
-  const list = await fetchRooms(DEFAULT_PARAMS, client);
-  return <RoomViewScreen key={id} detail={detail} list={list} />;
+}
+
+export default async function RoomPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ invite?: string | string[] }> }) {
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  const invite = firstParam(sp.invite);
+  const client = await getServerClient();
+  // 상세와 사이드바 목록은 서로 독립 → 병렬
+  const [detail, list] = await Promise.all([loadDetail(id, client, invite), fetchRooms(DEFAULT_PARAMS, client)]);
+  if (!detail) notFound();
+  return <RoomViewScreen key={id} detail={detail} list={list} invite={invite} />;
 }

@@ -36,8 +36,10 @@ export function RoomSidebar({ selected, items, total }: Props) {
         </svg>
         카드 목록으로
       </Link>
+      {/* 목록은 첫 페이지(24개)만 받는다 — 잘렸으면 보이는 개수로 적는다 */}
       <h2 className="flex items-baseline gap-2 text-[18px] font-bold">
-        전체 스터디<span className="text-[13px] font-medium text-muted">{total}개</span>
+        {items.length < total ? "공개 스터디" : "전체 스터디"}
+        <span className="text-[13px] font-medium text-muted">{items.length < total ? items.length : total}개</span>
       </h2>
       <label className="flex h-[42px] items-center gap-2 rounded-[21px] border border-line px-[14px]">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6675" strokeWidth="2" strokeLinecap="round" aria-hidden="true">

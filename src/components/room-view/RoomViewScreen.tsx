@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
-import { actionOf, applyMembership, applyRoom, cancelApplication, joinRoom, leaveRoom, toRoom, toSidebarRoom } from "@/lib/api/room-view";
+import { actionOf, applyMembership, applyRoom, cancelApplication, joinRoom, leaveRoom, roomReturnTo, toRoom, toSidebarRoom } from "@/lib/api/room-view";
 import type { MembershipResult, RoomDetail, RoomListResponse } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
@@ -16,7 +16,8 @@ import { RoomInfo } from "./RoomInfo";
 import { JoinCard } from "./JoinCard";
 import { GlanceCard } from "./GlanceCard";
 
-export function RoomViewScreen({ detail, list }: { detail: RoomDetail; list: RoomListResponse }) {
+/** invite: ?invite= 로 연 비공개 방의 토큰 — 참가/신청 RPC 와 로그인 복귀 주소에 그대로 이어 붙인다 */
+export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; list: RoomListResponse; invite?: string }) {
   const me = useMe();
   const router = useRouter();
   const [dto, setDto] = useState(detail);
@@ -27,6 +28,8 @@ export function RoomViewScreen({ detail, list }: { detail: RoomDetail; list: Roo
   const act = actionOf(dto);
   const sidebar = useMemo(() => list.items.map((d) => toSidebarRoom(d, list.today)), [list]);
   const closeToast = useCallback(() => setToast(null), []);
+  const closeConfirm = useCallback(() => setConfirm(null), []);
+  const returnTo = roomReturnTo(dto.slug, invite);
 
   const run = async (fn: () => Promise<MembershipResult>, okText: string) => {
     setBusy(true);
@@ -37,8 +40,8 @@ export function RoomViewScreen({ detail, list }: { detail: RoomDetail; list: Roo
       router.refresh(); // 사이드바 mark·탭 카운트 재동기화
     } catch (e) {
       const err = toApiError(e);
-      if (err.code === "AUTH_REQUIRED") return router.push(routes.login(routes.room(dto.slug)));
-      if (err.code === "ONBOARDING_REQUIRED") return router.push(routes.onboarding(routes.room(dto.slug)));
+      if (err.code === "AUTH_REQUIRED") return router.push(routes.login(returnTo));
+      if (err.code === "ONBOARDING_REQUIRED") return router.push(routes.onboarding(returnTo));
       setToast({ text: err.message, tone: "bad" });
     } finally {
       setBusy(false);
@@ -59,8 +62,9 @@ export function RoomViewScreen({ detail, list }: { detail: RoomDetail; list: Roo
                 room={room}
                 act={act}
                 busy={busy}
-                onJoin={() => run(() => joinRoom(dto.slug), "참가했어요")}
-                onApply={() => run(() => applyRoom(dto.slug), "참가 신청했어요 · 그룹장이 승인하면 알려 드려요")}
+                loginHref={routes.login(returnTo)}
+                onJoin={() => run(() => joinRoom(dto.slug, invite), "참가했어요")}
+                onApply={() => run(() => applyRoom(dto.slug, invite), "참가 신청했어요 · 그룹장이 승인하면 알려 드려요")}
                 onCancel={() => setConfirm(act === "leave" ? "leave" : "cancel")}
               />
               <GlanceCard glance={room.glance} />
@@ -75,7 +79,7 @@ export function RoomViewScreen({ detail, list }: { detail: RoomDetail; list: Roo
         confirmLabel={confirm === "leave" ? "참가 취소" : "신청 취소"}
         danger
         busy={busy}
-        onCancel={() => setConfirm(null)}
+        onCancel={closeConfirm}
         onConfirm={() => (confirm === "leave" ? run(() => leaveRoom(dto.slug), "참가를 취소했어요") : run(() => cancelApplication(dto.slug), "신청을 취소했어요"))}
       />
       <Toast msg={toast} onClose={closeToast} />
