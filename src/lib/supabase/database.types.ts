@@ -885,6 +885,7 @@ export type Database = {
       }
     }
     Functions: {
+      assignment_resync: { Args: { p_room: number }; Returns: undefined }
       can_read_room: { Args: { p_room: number }; Returns: boolean }
       can_read_submission: {
         Args: { p_author: string; p_node: number }
@@ -896,6 +897,48 @@ export type Database = {
         Args: { p_code: string; p_detail: string; p_hint?: Json }
         Returns: undefined
       }
+      invite_check: {
+        Args: { p_room: number; p_token: string }
+        Returns: boolean
+      }
+      invite_ensure: { Args: { p_by: string; p_room: number }; Returns: string }
+      invite_get: { Args: { p_slug: string }; Returns: Json }
+      invite_join: { Args: { p_token: string }; Returns: Json }
+      invite_preview: { Args: { p_token: string }; Returns: Json }
+      invite_resolve: {
+        Args: { p_token: string }
+        Returns: {
+          archived_at: string | null
+          cover_file_id: string | null
+          created_at: string
+          description_md: string
+          end_date: string
+          ended_at: string | null
+          id: number
+          intro: string
+          join_mode: string
+          leader_does_tasks: boolean
+          leader_id: string
+          max_members: number
+          member_count: number
+          min_members: number | null
+          rules_md: string
+          slug: string
+          start_date: string
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+          visibility: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rooms"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      invite_rotate: { Args: { p_slug: string }; Returns: Json }
       is_my_task: { Args: { p_node: number }; Returns: boolean }
       is_room_leader: { Args: { p_room: number }; Returns: boolean }
       is_room_member: { Args: { p_room: number }; Returns: boolean }
@@ -916,18 +959,264 @@ export type Database = {
         }
         Returns: string
       }
+      like_escape: { Args: { p_text: string }; Returns: string }
       me_get: { Args: never; Returns: Json }
       me_update: {
         Args: { p_nickname?: string; p_optional_mail_enabled?: boolean }
+        Returns: Json
+      }
+      membership_result: {
+        Args: { p_room: number; p_user: string }
         Returns: Json
       }
       meta_get: { Args: never; Returns: Json }
       nickname_check: { Args: { p_value: string }; Returns: Json }
       nickname_normalize: { Args: { p_value: string }; Returns: string }
       nickname_problem: { Args: { p_value: string }; Returns: string }
+      notify_publish: {
+        Args: {
+          p_actor: string
+          p_dedupe_prefix: string
+          p_kind: string
+          p_model: Json
+          p_node: number
+          p_recipients: string[]
+          p_room: number
+        }
+        Returns: number
+      }
+      patch_bool: { Args: { p_key: string; p_patch: Json }; Returns: boolean }
+      patch_date: { Args: { p_key: string; p_patch: Json }; Returns: string }
+      patch_int: { Args: { p_key: string; p_patch: Json }; Returns: number }
       pct: { Args: { p_asg: number; p_sub: number }; Returns: number }
       person_json: { Args: { p_user: string }; Returns: Json }
+      require_leader: {
+        Args: {
+          p_msg?: string
+          p_uid: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: undefined
+      }
       require_user: { Args: never; Returns: string }
+      room_applications: { Args: { p_slug: string }; Returns: Json }
+      room_apply: {
+        Args: { p_invite_token?: string; p_slug: string }
+        Returns: Json
+      }
+      room_approve: { Args: { p_slug: string; p_user: string }; Returns: Json }
+      room_archive: { Args: { p_slug: string }; Returns: Json }
+      room_cancel_application: { Args: { p_slug: string }; Returns: Json }
+      room_create: {
+        Args: {
+          p_cover_file_id?: string
+          p_description_md?: string
+          p_end_date: string
+          p_intro: string
+          p_is_public: boolean
+          p_join_mode: string
+          p_leader_does_tasks?: boolean
+          p_max_members: number
+          p_min_members?: number
+          p_rules_md?: string
+          p_start_date: string
+          p_tag_slugs?: string[]
+          p_title: string
+        }
+        Returns: Json
+      }
+      room_current_round_id: {
+        Args: { p_room: number; p_today: string }
+        Returns: number
+      }
+      room_decide_precheck: {
+        Args: {
+          p_uid: string
+          p_user: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: {
+          applied_at: string | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: number
+          joined_at: string | null
+          left_at: string | null
+          role: string
+          room_id: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "room_members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      room_delete: { Args: { p_slug: string }; Returns: undefined }
+      room_detail_json: {
+        Args: { p_room: number; p_uid: string }
+        Returns: Json
+      }
+      room_get: {
+        Args: { p_invite_token?: string; p_slug: string }
+        Returns: Json
+      }
+      room_hide_unless_known: {
+        Args: {
+          p_token?: string
+          p_uid: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: undefined
+      }
+      room_in_scope: {
+        Args: { p_room: number; p_scope: string; p_uid: string }
+        Returns: boolean
+      }
+      room_join: {
+        Args: { p_invite_token?: string; p_slug: string }
+        Returns: Json
+      }
+      room_join_precheck: {
+        Args: {
+          p_mode: string
+          p_token: string
+          p_uid: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: {
+          applied_at: string | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          id: number
+          joined_at: string | null
+          left_at: string | null
+          role: string
+          room_id: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "room_members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      room_leaf_stats: {
+        Args: { p_room: number }
+        Returns: {
+          asg: number
+          end_date: string
+          node_id: number
+          parent_id: number
+          round_id: number
+          sort_order: number
+          start_date: string
+          sub: number
+          task_type: string
+          title: string
+        }[]
+      }
+      room_leave: { Args: { p_slug: string }; Returns: Json }
+      room_lock: {
+        Args: { p_slug: string }
+        Returns: {
+          archived_at: string | null
+          cover_file_id: string | null
+          created_at: string
+          description_md: string
+          end_date: string
+          ended_at: string | null
+          id: number
+          intro: string
+          join_mode: string
+          leader_does_tasks: boolean
+          leader_id: string
+          max_members: number
+          member_count: number
+          min_members: number | null
+          rules_md: string
+          slug: string
+          start_date: string
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+          visibility: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rooms"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      room_matches: {
+        Args: {
+          p_q: string
+          p_room: number
+          p_status: string
+          p_tags: string[]
+        }
+        Returns: boolean
+      }
+      room_me_json: { Args: { p_room: number; p_uid: string }; Returns: Json }
+      room_members_get: { Args: { p_slug: string }; Returns: Json }
+      room_members_json: {
+        Args: { p_room: number; p_uid: string }
+        Returns: Json
+      }
+      room_open_recruit: { Args: { p_slug: string }; Returns: Json }
+      room_readable: {
+        Args: { p_room: number; p_token?: string; p_uid: string }
+        Returns: boolean
+      }
+      room_reject: { Args: { p_slug: string; p_user: string }; Returns: Json }
+      room_release_seat: { Args: { p_room: number }; Returns: undefined }
+      room_round_stats: {
+        Args: { p_room: number }
+        Returns: {
+          asg: number
+          end_date: string
+          label: string
+          leaf_count: number
+          round_id: number
+          sort_order: number
+          start_date: string
+          sub: number
+          title: string
+        }[]
+      }
+      room_start: { Args: { p_slug: string }; Returns: Json }
+      room_tags_json: { Args: { p_room: number }; Returns: Json }
+      room_take_seat: { Args: { p_room: number }; Returns: undefined }
+      room_tick: { Args: never; Returns: Json }
+      room_transition_active: {
+        Args: { p_actor: string; p_room: number }
+        Returns: undefined
+      }
+      room_transition_ended: { Args: { p_room: number }; Returns: undefined }
+      room_unarchive: { Args: { p_slug: string }; Returns: Json }
+      room_update: { Args: { p_patch: Json; p_slug: string }; Returns: Json }
+      rooms_list: {
+        Args: {
+          p_page?: number
+          p_q?: string
+          p_scope?: string
+          p_size?: number
+          p_sort?: string
+          p_status?: string
+          p_tags?: string[]
+        }
+        Returns: Json
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       slugify: { Args: { p_id: number; p_title: string }; Returns: string }
