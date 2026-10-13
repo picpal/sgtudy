@@ -12,6 +12,8 @@
 
 ## Global Constraints
 
+> **실행 결과(2026-10-13, main 머지)** — 아래 본문과 다른 점: 행위성 kind 의 txid 는 **호출자**가 붙인다(0005/0006 이 이미 붙임 — 본문 L73·호출 계약 표의 `<epoch>`/`<YYYYMMDD>` 접미는 실제로 `:<txid>`); `submission_target` 공용 가드(room_lock → 존재 은닉 → 상태 → 보관 → 리프 → 담당자); `leader_room` 대신 `require_leader`; `room_tag_json` 대신 0004 `room_tags_json`; 태그 자동 선택은 CURATED 만, `tags_search` 는 읽을 수 있는 방의 CUSTOM 만; 시드 ROUND_STARTED 는 잡의 자연 키; member_count_audit 은 19:32 UTC·잠금 후 집계; Task 9 미실행. 시드 요약(L69) 보정: 도윤 IAM 제출 있음, DynamoDB 설계 퀴즈 `-P-P`(지은·하나), react 4주차 10/12 시작. 판정 전체는 SDD 원장(.superpowers, 미커밋)에 있었다.
+
 
 > **plan 02·03 실행에서 넘어온 인계(2026-10-13)** — 이 플랜 실행 전 반영:
 > - `submission_upsert` 는 `room_lock`(또는 리프 `FOR UPDATE`)을 먼저 잡는다 — `node_delete` 의 NODE_HAS_SUBMISSIONS 검사와 경합하면 raw 23503 이 난다.

@@ -204,6 +204,7 @@ type TaskDetail = { node: NodeDto; path: { id: string; title: string; label: str
 type Submission = { id: string; bodyMd: string; links: string[]; files: FileMeta[]; firstSubmittedAt: string; isLate: boolean; updatedAt: string };
 type FileMeta = { id: string; name: string; contentType: string; size: number; status: "pending"|"ready" };
 ```
+> plan 04 구현 메모: 객체 키 확장자는 **소문자**(`[a-z0-9]{1,10}`)여야 한다 — 프론트가 키를 만들 때 소문자로 바꾼다(`photo.PNG` → `….png`). `file_register` 는 Storage 메타의 mimetype 을 우선 저장(화이트리스트 통과 후). 같은 fileId 재등록은 object_path 가 같을 때만 갱신. `links` 에 null/비문자열 원소 → `INVALID_LINK {index}`. 제출·파일 등록은 방 잠금(`room_lock`)으로 직렬화된다.
 
 ## 6. 내 스터디 · 내 일정
 
@@ -248,6 +249,13 @@ type NotificationKind = "ROUND_STARTED"|"TASK_ALL_SUBMITTED"|"TASK_COMPLETION_DI
   |"DEADLINE_REMINDER"|"TASK_ASSIGNED"|"TASK_UNASSIGNED"|"SCHEDULE_CHANGED"|"ROOM_STARTED"|"ROOM_ENDED"|"ROOM_START_BLOCKED"|"MEMBER_DEACTIVATED";
 type NotificationSettings = { reminderD1: boolean; reminderD3: boolean; taskAssigned: boolean; scheduleChanged: boolean; roomStartEnd: boolean; completionMode: "daily"|"immediate" };
 ```
+> plan 04 구현 메모:
+> - `tags_search` 는 CURATED 태그 + **호출자가 읽을 수 있는 방에서 쓰인** CUSTOM 태그만 돌려준다(비공개 방 라벨 비노출). 자동 선택(`tag_autoselect`)은 CURATED 만.
+> - `room_tags_suggest` 의 SQL 경로는 동기 `{ today, items }` 를 돌려준다(위 표의 `202 { jobId }` 는 Edge Function 경로 — 미구현). plan 05 어댑터는 SQL 응답을 쓴다.
+> - `Notification.room` 은 수신자가 그 방을 더 읽을 수 없으면 `null`(title/body 는 생성 시점 스냅샷).
+> - 행위성 알림(JOIN_*, TASK_ASSIGNED/UNASSIGNED, SCHEDULE_CHANGED)의 txid 접미는 **호출자**가 붙인다; `notify_publish` 는 prefix 뒤에 `:<recipient>` 만 붙인다.
+> - 한 저장에서 담당 추가 + 기간 변경이면 TASK_ASSIGNED 와 SCHEDULE_CHANGED 가 각각 나간다(설정 토글이 kind 별로 독립). SCHEDULE_CHANGED 수신자 = 현재 리프 담당자(활성 참가자 전원 아님). 방 기간 변경(`room_update`) 알림은 미구현 — 후속 과제.
+> - `notifications_list` 의 잘못된 커서 → `VALIDATION_FAILED`.
 
 ## 8. 스케줄 작업
 
