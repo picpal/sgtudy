@@ -508,6 +508,9 @@ create or replace function public.member_count_audit() returns int
 language plpgsql security definer set search_path = '' as $$
 declare v_n int;
 begin
+  -- 잠금과 집계를 다른 문장으로 나눈다: READ COMMITTED 에서 문장마다 새 스냅샷을 잡으므로, 잠금을 얻은 뒤의 집계는
+  -- 그 사이 커밋된 동시 join(0004:111 의 member_count + 1)을 반영한다. 한 문장이면 낡은 집계가 새 값을 덮어써 정원 가드가 느슨해진다.
+  perform 1 from public.rooms order by id for update;
   with c as (select room_id, count(*)::int as n from public.room_members where status = 'ACTIVE' group by room_id)
   update public.rooms r set member_count = c.n from c where c.room_id = r.id and r.member_count <> c.n;
   get diagnostics v_n = row_count;

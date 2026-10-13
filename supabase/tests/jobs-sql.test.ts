@@ -1,12 +1,12 @@
 import { assert, assertEquals } from "@std/assert";
-import { applySeed, asUser, openDb, setToday } from "./_harness.ts";
+import { applySeed, asUser, expectFail, openDb, setToday } from "./_harness.ts";
 import { cases, nodeId, one, roomId, setNow, uidOf, type Q } from "./_fixtures.ts";
 import { submit } from "./_submit.ts";
 
 const db = await openDb();
 await applySeed(db);
 const run = async (q: Q, fn: string) => (await one(q, `select public.${fn}() as n`)).n;
-/** 시드 §4 의 'seed:*' 행은 제외 */
+/** 시드 §4 가 미리 넣은 알림은 제외 — 이번 케이스 트랜잭션(now())에서 생긴 행만 본다 */
 const kinds = (q: Q, uid: string, kind: string) =>
   q(`select title, node_id::text as node, room_id::text as room from public.notifications
      where user_id = $1::uuid and kind = $2 and created_at >= now() order by id`, [uid, kind]);
@@ -28,7 +28,7 @@ cases("jobs", db, [
     assertEquals((await one(q, "select status from public.rooms where id = $1::bigint", [d.id])).status, "DRAFT");   // 전환은 안 한다
   } },
 
-  { name: "job_round_started: aws 3주차 on 10/15 → ACTIVE members (4), not INACTIVE 도윤; idempotent; 10/12 = spring 2주차 → 5", run: async (q) => {
+  { name: "job_round_started: aws 3주차 on 10/15 → ACTIVE members (4), not INACTIVE 도윤; idempotent; 10/12 = spring 5 + react 5 (minus seeded natural keys)", run: async (q) => {
     await setToday(q, "2026-10-15");
     const n = Number(await run(q, "job_round_started"));
     assertEquals(n, 4);                                                        // 10/15 시작 회차 = aws 3주차뿐
@@ -39,7 +39,7 @@ cases("jobs", db, [
     }
     assertEquals((await kinds(q, await uidOf(q, "도윤"), "ROUND_STARTED")).length, 0);
     assertEquals(Number(await run(q, "job_round_started")), 0);
-    // 10/12 에는 spring 2주차가 시작한다(src/data/my-study.ts:362) — spring ACTIVE 5명에게 1건씩. 시드 알림은 'seed:*' 키라 충돌하지 않는다
+    // 10/12 에는 spring 2주차가 시작한다(src/data/my-study.ts:362) — spring ACTIVE 5명에게 1건씩. 시드가 같은 자연 키로 미리 넣은 행은 dedupe 되고, kinds() 는 created_at >= now() 로 걸러진다
     await setToday(q, "2026-10-12");
     const springActive = Number((await one(q, "select count(*)::int as n from public.room_members m join public.rooms r on r.id = m.room_id where r.slug = 'spring' and m.status = 'ACTIVE'")).n);
     assertEquals(springActive, 5);
@@ -112,8 +112,12 @@ cases("jobs", db, [
     await ins(young, "READY", new Date().toISOString(), null);                 // 방금 등록(업로드 중 묶음)
     await ins(old, "DELETED", "2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z");
     await q("insert into storage.objects (bucket_id, name, owner_id) values ('attachments', $1, $2), ('attachments', $3, $2)", [path(old), cheolsu, path(orphan)]);
+    const mail = (sentAt: string) => q(`insert into public.mail_outbox (to_email, template, model, status, sent_at, created_at)
+      values ('m@example.com', 't', '{}'::jsonb, 'SENT', $1::timestamptz, $1::timestamptz) returning id::text as id`, [sentAt]);
+    const oldMail = (await mail("2026-09-01T00:00:00Z"))[0].id, newMail = (await mail(new Date().toISOString()))[0].id;
     const r = (await one(q, "select public.job_cleanup() as r")).r;
-    assertEquals([r.filesExpired, r.orphansExpired], [1, 1]);
+    assertEquals([r.filesExpired, r.orphansExpired, r.mailPurged], [1, 1, 1]);
+    assertEquals((await q("select id::text as id from public.mail_outbox where id in ($1::bigint, $2::bigint)", [oldMail, newMail])).map((x) => x.id), [newMail]);
     const st = async (id: string) => (await one(q, "select status, (deleted_at is not null) as del from public.files where id = $1::uuid", [id]));
     assertEquals(await st(stale), { status: "DELETED", del: true });
     assertEquals(await st(fresh), { status: "PENDING", del: false });
@@ -124,7 +128,10 @@ cases("jobs", db, [
     assertEquals((await one(q, "select public.job_cleanup() as r")).r.filesExpired, 0);   // 재실행 0
   } },
 
-  { name: "member_count_audit: repairs drifted member_count (I7)", run: async (q) => {
+  { name: "member_count_audit: repairs drifted member_count (I7); locks rooms before counting (no stale write over a concurrent join)", run: async (q) => {
+    // PGlite 는 단일 연결이라 경합을 재현할 수 없다 — 정의에 선행 잠금이 있는지만 고정한다
+    const def = (await one(q, "select pg_get_functiondef('public.member_count_audit()'::regprocedure) as d")).d as string;
+    assert(/for update/i.test(def), "member_count_audit must lock rooms before counting");
     await q("update public.rooms set member_count = 1 where slug = 'aws'");
     assertEquals(Number(await run(q, "member_count_audit")), 1);
     assertEquals((await one(q, "select member_count as n from public.rooms where slug = 'aws'")).n, 4);
@@ -136,6 +143,13 @@ cases("jobs", db, [
       for (const role of ["anon", "authenticated"]) {
         assertEquals((await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, `public.${fn}`])).v, false, `${role} ${fn}`);
       }
+    }
+    // 실제 역할로 실행해도 막힌다 (D7) — 쓰기를 하는 job_cleanup 으로 확인
+    for (const role of ["anon", "authenticated"]) {
+      await asUser(q, await uidOf(q, "철수"));
+      await q(`set local role ${role}`);
+      await expectFail(q("select public.job_cleanup()"), "permission denied");
+      await q("reset role");
     }
   } },
 ]);
