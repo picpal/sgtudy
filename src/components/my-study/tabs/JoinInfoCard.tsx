@@ -16,7 +16,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy }: 
   const nextLeaf = room.next?.nodeId ? tree.leaves.find((l) => l.id === room.next!.nodeId) : undefined;
 
   return (
-    <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px] max-[901px]:max-w-none">
+    <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px] @max-[788px]:grid @max-[788px]:max-w-none @max-[788px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] @max-[788px]:items-start">
       <div className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
         <div className="flex items-center justify-between">
           <StatusBadge status={room.status} draft={room.draft} />

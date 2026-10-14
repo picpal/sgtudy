@@ -89,7 +89,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         <div className="mx-auto flex min-h-0 w-full max-w-[1408px] flex-1 items-stretch gap-4 max-[901px]:flex-wrap">
           <StudySidebar selected={detail.slug} groups={groups} />
           <main className="thin-scroll min-h-0 min-w-0 flex-[999_1_640px] overflow-y-auto rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:overflow-visible max-[901px]:px-4">
-            <div className="flex flex-wrap items-start gap-7">
+            {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}
+            <div className="flex flex-wrap items-start gap-7 @container">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                 <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} />
                 {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} onGoCurriculum={() => update({ tab: "curriculum" })} />}
