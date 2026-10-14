@@ -31,3 +31,39 @@ describe("headingTag (V2-06)", () => {
     expect([1, 2, 3].map((l) => headingTag(l as 1 | 2 | 3))).toEqual(["h4", "h5", "h6"]);
   });
 });
+
+describe("parseMarkdown — 에디터가 만드는 블록", () => {
+  it("GFM 표 (정렬·셀 안 파이프·줄바꿈)", () => {
+    expect(parseMarkdown("| 항목 | 설명 |\n| :--- | ---: |\n| a\\|b | 1<br>2 |\n\n끝")).toEqual([
+      { type: "table", table: { align: ["left", "right"], header: ["항목", "설명"], rows: [["a|b", "1\n2"]] } },
+      { type: "p", lines: ["끝"] },
+    ]);
+  });
+  it("파이프가 있어도 구분 행이 없으면 문단", () => {
+    expect(parseMarkdown("a | b\nc")).toEqual([{ type: "p", lines: ["a | b", "c"] }]);
+  });
+  it("체크리스트는 목록과 따로 묶는다", () => {
+    expect(parseMarkdown("- [ ] 할 일\n- [x] 끝남\n- 그냥")).toEqual([
+      { type: "task", items: [{ text: "할 일", done: false }, { text: "끝남", done: true }] },
+      { type: "ul", items: ["그냥"] },
+    ]);
+  });
+  it("인용은 안쪽을 다시 파싱", () => {
+    expect(parseMarkdown("> 참고\n> - 하나")).toEqual([{ type: "quote", blocks: [{ type: "p", lines: ["참고"] }, { type: "ul", items: ["하나"] }] }]);
+  });
+  it("코드 블록은 들여쓰기·마크다운을 그대로 둔다, 닫는 펜스가 없으면 끝까지", () => {
+    expect(parseMarkdown("```ts\n  **x**\n```\n본문")).toEqual([{ type: "code", lang: "ts", text: "  **x**" }, { type: "p", lines: ["본문"] }]);
+    expect(parseMarkdown("```\na")).toEqual([{ type: "code", lang: "", text: "a" }]);
+  });
+  it("구분선, 깊은 제목은 ###", () => {
+    expect(parseMarkdown("a\n\n---\n\n#### 깊음")).toEqual([{ type: "p", lines: ["a"] }, { type: "hr" }, { type: "h", level: 3, text: "깊음" }]);
+  });
+});
+
+describe("parseInline — 취소선·밑줄 기울임", () => {
+  it("~~취소~~ 와 _기울임_, 단어 속 밑줄은 글자", () => {
+    expect(parseInline("~~취소~~ _기울임_ snake_case_name")).toEqual([
+      { t: "s", v: "취소" }, { t: "text", v: " " }, { t: "i", v: "기울임" }, { t: "text", v: " snake_case_name" },
+    ]);
+  });
+});
