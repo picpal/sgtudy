@@ -45,7 +45,7 @@ export function DayPanel({ sel, today, studies, tasks, markers, ref }: Props) {
   ).filter(([, items]) => items.length);
 
   return (
-    <section ref={ref} className="thin-scroll box-border flex min-h-0 flex-[1_1_0] flex-col gap-[14px] overflow-auto rounded-[20px] bg-surface p-5 max-[901px]:flex-none max-[901px]:overflow-visible">
+    <section ref={ref} className="box-border flex scroll-mt-4 flex-col gap-[14px] rounded-[20px] bg-surface p-5">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="m-0 text-[18px] font-bold">
           {Number(sel.slice(5, 7))}월 {Number(sel.slice(8, 10))}일 ({weekdayKo(sel)})

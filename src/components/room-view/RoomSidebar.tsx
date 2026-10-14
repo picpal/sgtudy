@@ -7,6 +7,7 @@ import { PAL } from "@/lib/palette";
 import type { RoomStatus } from "@/lib/types";
 import { MARK } from "@/data/room-view";
 import { groupSidebar, type SidebarRoom } from "@/lib/api/room-view";
+import { stickyAside, useStickyFit } from "@/lib/useStickyFit";
 
 type Filter = "all" | RoomStatus;
 const CHIPS: { id: Filter; label: string }[] = [
@@ -23,6 +24,8 @@ export function RoomSidebar({ selected, items, total }: Props) {
   const [q, setQ] = useState("");
   // ≤900 에서는 상세 아래에 접힌 채로 둔다 — 넓은 화면에선 항상 펼침
   const [open, setOpen] = useState(false);
+  // 한 페이지 스크롤: 목록이 화면에 다 들어가면 붙고, 길면 페이지와 함께 내려간다(안쪽 스크롤 없음)
+  const [ref, fits] = useStickyFit<HTMLElement>();
   const fold = open ? "" : "max-[901px]:hidden";
   const query = q.trim().toLowerCase();
 
@@ -33,7 +36,8 @@ export function RoomSidebar({ selected, items, total }: Props) {
   return (
     <aside
       aria-label="전체 스터디 목록"
-      className="flex min-h-0 flex-[1_1_300px] max-w-[380px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[901px]:max-w-none max-sm:px-4"
+      ref={ref}
+      className={`${stickyAside(fits)} flex flex-[1_1_300px] max-w-[380px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[901px]:max-w-none max-sm:px-4`}
     >
       <Link href={routes.home()} className="inline-flex min-h-7 items-center gap-[6px] text-[13px] font-medium text-ink-3 hover:text-ink">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -62,7 +66,7 @@ export function RoomSidebar({ selected, items, total }: Props) {
           <span className="text-[13px] font-medium text-muted">{count}개</span>
         </span>
       </h2>
-      <div id="room-sidebar-list" className={`flex min-h-0 flex-1 flex-col gap-[14px] ${fold}`}>
+      <div id="room-sidebar-list" className={`flex flex-col gap-[14px] ${fold}`}>
         <label className="flex h-[42px] items-center gap-2 rounded-[21px] border border-line px-[14px]">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6675" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
@@ -94,7 +98,7 @@ export function RoomSidebar({ selected, items, total }: Props) {
           })}
         </div>
 
-        <div className="thin-scroll -mx-[10px] flex min-h-0 flex-1 flex-col gap-[14px] overflow-y-auto px-[10px] py-[6px] max-[901px]:overflow-visible">
+        <div className="-mx-[10px] flex flex-col gap-[14px] px-[10px] py-[6px]">
           {groups.map((g) => (
             <div key={g.key} className="flex flex-col gap-[10px]">
               <div className="mt-1 text-[12px] font-medium text-muted">{g.label}</div>

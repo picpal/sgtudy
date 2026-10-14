@@ -5,7 +5,7 @@ import { taskHref } from "./calc";
 
 export function UpcomingPanel({ today, studies, upcoming }: { today: string; studies: Record<string, Study>; upcoming: Task[] }) {
   return (
-    <section className="thin-scroll box-border flex min-h-0 flex-[1_1_0] flex-col gap-3 overflow-auto rounded-[20px] bg-surface p-5 max-[901px]:flex-none max-[901px]:overflow-visible">
+    <section className="box-border flex flex-col gap-3 rounded-[20px] bg-surface p-5">
       <h2 className="m-0 flex items-center gap-2 text-[16px] font-bold">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#B4462B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M4 21V4M4 4h12l-2 4 2 4H4" />

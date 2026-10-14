@@ -142,9 +142,11 @@
   overflow: hidden;
 }
 
-/* 얇은 스크롤바 (패널 내부 스크롤 공통) */
+/* 얇은 스크롤바 (가로 스크롤·알림 목록 공통).
+   세로 overscroll 은 막지 않는다 — overflow-x:auto 는 overflow-y 도 auto 로 만들어, 세로로 넘칠 게 없어도 contain 이면
+   휠·터치가 문서로 넘어가지 않는다(간트·표 위에서 페이지가 안 내려가던 원인). 세로를 가둘 곳(알림 목록)은 따로 overscroll-contain */
 .thin-scroll {
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--line-dash) transparent;
 }

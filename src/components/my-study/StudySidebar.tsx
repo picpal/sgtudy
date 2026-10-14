@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { filterSidebarGroups } from "@/lib/api/my-study";
 import { routes } from "@/lib/routes";
+import { stickyAside, useStickyFit } from "@/lib/useStickyFit";
 import type { SidebarGroup } from "@/data/my-study";
 
 /** collapsed: 커리큘럼 편집 화면이 열린 동안 넓은 화면에서는 목록을 접어 편집기에 폭을 준다 (좁은 화면은 원래 한 줄로 접혀 있다) */
@@ -14,8 +15,10 @@ export function StudySidebar({ selected, groups, collapsed = false }: { selected
   const shown = filterSidebarGroups(groups, q);
   const total = groups.reduce((a, g) => a + g.items.length, 0);
   const body = open ? "flex" : "hidden min-[901px]:flex";
+  // 한 페이지 스크롤: 목록이 화면에 다 들어가면 붙고, 길면 페이지와 함께 내려간다(안쪽 스크롤 없음)
+  const [ref, fits] = useStickyFit<HTMLElement>();
   return (
-    <aside aria-label="내 스터디 목록" className={`${collapsed ? "min-[901px]:hidden" : ""} flex min-h-0 flex-[1_1_300px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[901px]:max-w-none max-[901px]:py-[14px] min-[901px]:max-w-[380px]`}>
+    <aside ref={ref} aria-label="내 스터디 목록" className={`${collapsed ? "min-[901px]:hidden" : ""} ${stickyAside(fits)} flex flex-[1_1_300px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[901px]:max-w-none max-[901px]:py-[14px] min-[901px]:max-w-[380px]`}>
       <h2 className="m-0 text-[18px] font-bold max-[901px]:hidden">내 스터디</h2>
       <button
         type="button"
@@ -29,7 +32,7 @@ export function StudySidebar({ selected, groups, collapsed = false }: { selected
           <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
-      <div id="my-study-list" className={`${body} min-h-0 flex-1 flex-col gap-[14px]`}>
+      <div id="my-study-list" className={`${body} flex-col gap-[14px]`}>
         <div className="flex gap-2">
           <label className="flex h-[42px] flex-1 items-center gap-2 rounded-[21px] border border-line px-[14px]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6675" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -42,7 +45,7 @@ export function StudySidebar({ selected, groups, collapsed = false }: { selected
           {/* 필터 버튼은 동작이 없어 뺐다 (Q3-06) — 상태는 아래 그룹 라벨로 구분된다 */}
         </div>
 
-        <div className="thin-scroll -mx-[10px] flex min-h-0 flex-1 flex-col gap-[14px] overflow-y-auto px-[10px] py-[6px] max-[901px]:overflow-visible">
+        <div className="-mx-[10px] flex flex-col gap-[14px] px-[10px] py-[6px]">
           {q.trim() && shown.length === 0 && <p className="m-0 py-4 text-center text-[13px] text-muted">‘{q.trim()}’에 맞는 스터디가 없어요</p>}
           {shown.map((g) => (
             <div key={g.label} className="flex flex-col gap-[10px]">

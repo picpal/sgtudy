@@ -21,7 +21,8 @@ const dayColor = (i: number) => (i === 0 ? "#C0453A" : i === 6 ? "#2F5BC2" : "#4
 export function MonthGrid({ y, m, sel, today, studies, tasks, markers, onPick }: Props) {
   const weeks = monthWeeks(y, m);
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[16px] border border-line">
+    // overflow-clip: 둥근 모서리만 자르고 스크롤 영역은 만들지 않는다(한 페이지 스크롤)
+    <div className="flex flex-col overflow-clip rounded-[16px] border border-line">
       <div className="grid grid-cols-7 border-b border-line bg-surface-2">
         {WEEKDAY_KO.map((wd, i) => (
           <div key={wd} className="p-[10px] text-[12px] font-semibold max-sm:px-1" style={{ color: dayColor(i) }}>
@@ -29,8 +30,8 @@ export function MonthGrid({ y, m, sel, today, studies, tasks, markers, onPick }:
           </div>
         ))}
       </div>
-      {/* 주 행은 남는 높이를 나눠 갖되(flex-grow) 레인이 많으면 막대 높이만큼 늘어난다 — 다음 주 행 밑으로 숨지 않게 (schedule §1-5) */}
-      <div className="thin-scroll flex min-h-0 flex-1 flex-col overflow-auto">
+      {/* 주 행은 최소 높이를 갖되 레인이 많으면 막대 높이만큼 늘어난다 — 다음 주 행 밑으로 숨지 않게 (schedule §1-5). 달력은 내용만큼 자라고 페이지가 스크롤된다 */}
+      <div className="flex flex-col">
         {weeks.map((days) => (
           <WeekRow key={days[0]} days={days} m={m} sel={sel} today={today} studies={studies} tasks={tasks} markers={markers} onPick={onPick} />
         ))}
@@ -44,7 +45,7 @@ type WeekProps = Omit<Props, "y"> & { days: string[] };
 function WeekRow({ days, m, sel, today, studies, tasks, markers, onPick }: WeekProps) {
   const segs = packWeek(tasks, days[0]);
   return (
-    <div className="relative min-h-[96px] flex-[1_0_auto] border-b border-line-2">
+    <div className="relative min-h-[96px] flex-[1_0_auto] border-b border-line-2 min-[901px]:min-h-[112px]">
       {/* 레이어 A: 날짜 셀 */}
       <div className="absolute inset-0 grid grid-cols-7">
         {days.map((k, c) => {

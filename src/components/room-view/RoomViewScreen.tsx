@@ -60,12 +60,13 @@ export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; l
   };
 
   return (
-    <div className="flex min-h-screen flex-col p-4 min-[901px]:h-screen">
+    // 한 페이지 스크롤 — 화면 높이에 가두지 않는다. 옆 목록은 화면에 다 들어갈 때만 붙는다(RoomSidebar)
+    <div className="flex min-h-screen flex-col p-4">
       <AppHeader active="home" variant="card" bell={<NotificationBell />} />
       {/* ≤900(포함): 선택한 방이 먼저, 목록은 그 아래에서 접힌다 (Q1-08/Q3-07). Tailwind max-[901px] = width < 901 */}
-      <div className="mx-auto flex w-full min-h-0 max-w-[1408px] flex-1 gap-4 max-[901px]:flex-wrap">
+      <div className="mx-auto flex w-full max-w-[1408px] flex-1 items-start gap-4 max-[901px]:flex-wrap">
         <RoomSidebar selected={dto.slug} items={sidebar} total={list.tabCounts.public} />
-        <main className="thin-scroll min-h-0 min-w-0 flex-[999_1_640px] overflow-y-auto rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:order-first max-[901px]:overflow-visible max-sm:px-4">
+        <main className="min-w-0 flex-[999_1_640px] self-stretch rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:order-first max-sm:px-4">
           {/* 정보(460) + 간격(28) + 참가 카드(300) = 788 보다 좁으면 카드가 아래로 떨어진다 — 그땐 360 에 묶지 않고 두 카드를 나란히 (태블릿·좁은 PC) */}
           <div className="flex flex-wrap items-start gap-7 @container">
             <RoomInfo room={room} onShare={share} />

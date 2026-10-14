@@ -16,8 +16,9 @@ export function ListView({ y, m, today, studies, tasks }: Props) {
   const keys = [...groups.keys()].sort();
 
   return (
-    <div className="box-border flex min-h-0 flex-1 flex-col overflow-hidden rounded-[16px] border border-line bg-surface py-5 pr-[6px]">
-      <div className="thin-scroll min-h-0 flex-1 overflow-auto scroll-smooth pr-[10px] pb-4 pl-5 [scrollbar-gutter:stable] [&::-webkit-scrollbar-track]:m-0 max-sm:pl-3 max-sm:pr-1">
+    // 한 페이지 스크롤 — 목록은 내용만큼 자라고, 주 제목은 페이지 스크롤에 붙는다(overflow-clip 은 sticky 를 막지 않는다)
+    <div className="box-border flex flex-col overflow-clip rounded-[16px] border border-line bg-surface py-5 pr-[6px]">
+      <div className="pr-4 pb-4 pl-5 max-sm:pl-3 max-sm:pr-1">
         <div className="flex flex-col gap-7">
           {keys.map((ws) => {
             const we = addDays(ws, 6);

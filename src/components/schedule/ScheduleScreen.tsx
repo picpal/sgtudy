@@ -15,6 +15,7 @@ import { DayPanel } from "./DayPanel";
 import { UpcomingPanel } from "./UpcomingPanel";
 import { ScheduleEmpty } from "./ScheduleEmpty";
 import { monthSel } from "./calc";
+import { stickyAside, useStickyFit } from "@/lib/useStickyFit";
 
 export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   const [data, setData] = useState(() => toScheduleData(initial));
@@ -77,23 +78,30 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   };
   const toggle = (id: string) => setOff(on(id) ? [...off, id] : off.filter((x) => x !== id));
 
-  // ≤900 (CSS 는 Tailwind max-[901px] = width < 901, JS 는 max-width: 900px — 같은 구간) 에서는 일 패널이 달력 아래라, 날짜를 누르면 패널을 화면으로 끌어온다 (Q3-05)
+  // 날짜를 누르면 일 패널을 화면으로 끌어온다(페이지 스크롤). ≤900 (CSS 는 Tailwind max-[901px] = width < 901, JS 는 max-width: 900px — 같은 구간)
+  // 에서는 패널이 달력 아래라 항상 (Q3-05), 넓은 화면은 요약 열이 붙지 못해(화면보다 길다) 패널 머리가 화면 밖일 때만
   const dayRef = useRef<HTMLElement>(null);
+  const [asideRef, asideFits] = useStickyFit<HTMLElement>();
   const pick = (k: string) => {
     setSel(k);
-    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    const el = dayRef.current;
+    if (!el) return;
+    const narrow = window.matchMedia("(max-width: 900px)").matches;
+    const top = el.getBoundingClientRect().top;
+    if (!narrow && top >= 0 && top < window.innerHeight - 120) return;
     const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    dayRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+    el.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
   };
 
   if (data.studies.length === 0) return <ScheduleEmpty />;
 
   return (
-    // 화면 높이에 가두는 건 >900 이고 세로도 860 이상일 때만 — 1024×768·1280×800 처럼 낮은 가로 화면에서 가두면 달력이 4주만 보이고 안에서 스크롤된다
-    <div className="box-border flex min-h-screen flex-col p-4 min-[901px]:[@media(min-height:860px)]:h-screen">
+    // 한 페이지 스크롤 — 화면 높이에 가두지 않는다. 예전에는 넓은 화면을 h-screen 에 가두고 달력·패널에 안쪽 스크롤(overflow-auto +
+    // overscroll-behavior: contain)을 두었는데, 넘칠 게 없는 안쪽 스크롤러도 휠·터치를 붙잡고 문서로 넘기지 않아 화면 밖 내용을 볼 수 없었다
+    <div className="box-border flex min-h-screen flex-col p-4">
       <AppHeader active="schedule" variant="card" bell={<NotificationBell />} />
-      <div className="mx-auto flex w-full max-w-[1408px] min-h-0 flex-1 items-stretch gap-4 max-[901px]:flex-wrap">
-        <main className="flex min-h-0 min-w-0 flex-[999_1_720px] flex-col rounded-[20px] bg-surface px-6 pt-6 pb-[18px] max-sm:px-4 max-sm:pt-4" aria-busy={loading}>
+      <div className="mx-auto flex w-full max-w-[1408px] flex-1 items-start gap-4 max-[901px]:flex-wrap">
+        <main className="flex min-w-0 flex-[999_1_720px] flex-col self-stretch rounded-[20px] bg-surface px-6 pt-6 pb-[18px] max-sm:px-4 max-sm:pt-4" aria-busy={loading}>
           <Toolbar y={y} m={m} view={view} off={off} studies={data.studies} onPrev={() => shift(-1)} onNext={() => shift(1)} onToday={goToday} onToggle={toggle} onView={setView} />
           {view === "month" ? (
             <MonthGrid y={y} m={m} sel={sel} today={today} studies={data.studyMap} tasks={tasks} markers={markers} onPick={pick} />
@@ -103,7 +111,7 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
           {view === "month" && <Legend />}
         </main>
         {/* >900 에서는 폭을 고정해(340, 넓으면 380) 일 패널 제목이 줄어들지 않게 한다 (V2-01). ≤900 은 달력 아래로 내려가고, 태블릿(601~900)은 두 패널을 나란히 */}
-        <aside aria-label="일정 요약" className="flex min-h-0 min-w-0 flex-col gap-4 max-[901px]:basis-full min-[601px]:max-[901px]:grid min-[601px]:max-[901px]:grid-cols-2 min-[601px]:max-[901px]:items-start min-[901px]:flex-[0_0_340px] min-[1201px]:basis-[380px]">
+        <aside ref={asideRef} aria-label="일정 요약" className={`${stickyAside(asideFits)} flex min-w-0 flex-col gap-4 max-[901px]:basis-full min-[601px]:max-[901px]:grid min-[601px]:max-[901px]:grid-cols-2 min-[601px]:max-[901px]:items-start min-[901px]:flex-[0_0_340px] min-[1201px]:basis-[380px]`}>
           <DayPanel ref={dayRef} sel={sel} today={today} studies={data.studyMap} tasks={tasks} markers={markers} />
           <UpcomingPanel today={today} studies={data.studyMap} upcoming={upcoming} />
         </aside>

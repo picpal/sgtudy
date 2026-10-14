@@ -139,7 +139,7 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
               모두 읽음
             </button>
           </div>
-          <div className="thin-scroll max-h-[420px] overflow-y-auto border-t border-line-2">
+          <div className="thin-scroll max-h-[420px] overflow-y-auto overscroll-contain border-t border-line-2">
             {error && <p role="alert" className="m-0 px-4 py-3 text-[13px] text-warn">{error}</p>}
             {items === null && !error && <p className="m-0 px-4 py-6 text-center text-[13px] text-muted">불러오는 중…</p>}
             {items?.length === 0 && <p className="m-0 px-4 py-6 text-center text-[13px] text-muted">아직 알림이 없어요</p>}
