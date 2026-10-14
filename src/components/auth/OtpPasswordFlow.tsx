@@ -10,7 +10,7 @@ import { AuthShell } from "./AuthShell";
 import { OtpInput } from "./OtpInput";
 import { EMPTY_DIGITS, RESEND_SEC, authErrorMessage, errorCode, isComplete, isResetNoAccount, rateLimitWait, type Digits } from "./otp";
 import { HAS_PASSWORD_KEY, otpFlowStep, signupAccountKind, type Verified } from "./flow";
-import { passwordFormError } from "./password";
+import { PASSWORD_MISMATCH_TEXT, passwordFormError } from "./password";
 import { PasswordFields } from "./PasswordFields";
 import { fieldClass, labelClass, primaryClass } from "./styles";
 
@@ -44,7 +44,7 @@ export type OtpFlowResume = { email: string; verified: Exclude<Verified, "has_pa
 export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode; returnTo: string; resume?: OtpFlowResume }) {
   const router = useRouter();
   const params = useSearchParams();
-  const flow = mode === "reset" ? "reset" : "login";
+  const flow = mode;
   const [email, setEmail] = useState("");
   // 코드를 보냈(거나 빈도 제한으로 이미 보낸 것으로 보이는) 주소. 계정은 소문자로 저장되니 소문자로 쓴다(Q2-18)
   const [sentTo, setSentTo] = useState<string | null>(resume?.email ?? null);
@@ -59,6 +59,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
   const sentAt = useRef<number | null>(null);
   const pushed = useRef(false);
   const emailRef = useRef<HTMLInputElement>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
   const addr = email.trim().toLowerCase();
   const dest = safeReturnTo(returnTo);
   const back = dest === "/" ? undefined : dest;
@@ -141,6 +142,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
 
   const onDigits = (d: Digits) => {
     setDigits(d);
+    if (error) setError(""); // 다시 입력하기 시작하면 "맞지 않거나 만료" 를 지운다
     if (isComplete(d) && !busy) void verify(d);
   };
 
@@ -153,6 +155,8 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
   const savePassword = async (ev: FormEvent) => {
     ev.preventDefault();
     const problem = passwordFormError(password, confirm);
+    // 불일치는 확인 칸 밑에 이미 떠 있다 — 같은 말을 한 번 더 띄우지 않고 그 칸으로 보낸다
+    if (problem === PASSWORD_MISMATCH_TEXT) return confirmRef.current?.focus();
     if (problem) return setError(problem);
     setBusy(true);
     setError("");
@@ -190,7 +194,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
       router.refresh();
     } catch (e) {
       setBusy(false);
-      setError(authErrorMessage(e));
+      setError(authErrorMessage(e, flow));
     }
   };
 
@@ -198,7 +202,8 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
     return (
       <AuthShell title="이미 가입된 계정이에요" subtitle={`${sentTo} 은(는) 비밀번호가 있는 계정이에요. 비밀번호로 로그인하거나, 방금 이메일을 인증했으니 새 비밀번호를 정할 수 있어요.`}>
         {error && <p role="alert" className="m-0 text-[13px] text-warn">{error}</p>}
-        <button type="button" onClick={() => void toLogin()} disabled={busy} className={primaryClass}>
+        {/* 코드 확인 뒤 포커스가 body 로 떨어지지 않게 첫 선택지에 둔다 */}
+        <button type="button" onClick={() => void toLogin()} disabled={busy} autoFocus className={primaryClass}>
           비밀번호로 로그인하기
         </button>
         <button type="button" onClick={() => setVerified("reset")} disabled={busy} className="h-11 text-[14px] font-semibold text-mint">
@@ -234,6 +239,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
             label={verified === "reset" ? "새 비밀번호" : "비밀번호"}
             autoFocus
             disabled={busy}
+            confirmRef={confirmRef}
           />
           {error && <p role="alert" className="m-0 text-[13px] text-warn">{error}</p>}
           <button type="submit" disabled={busy || !password || !confirm} className={primaryClass}>
@@ -248,7 +254,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
     const limited = rateLimited && left > 0;
     return (
       <AuthShell title={COPY[mode].title} subtitle={COPY[mode].subtitle}>
-        <form onSubmit={onEmail} className="flex flex-col gap-3">
+        <form onSubmit={onEmail} noValidate className="flex flex-col gap-3">
           <label className={labelClass}>
             이메일
             <input
@@ -260,6 +266,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
               onChange={(e) => {
                 setEmail(e.target.value);
                 setRateLimited(false);
+                setError("");
               }}
               placeholder="you@example.com"
               aria-invalid={!!error && !limited}

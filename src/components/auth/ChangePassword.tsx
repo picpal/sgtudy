@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { HAS_PASSWORD_KEY } from "./flow";
 import { OtpInput } from "./OtpInput";
 import { EMPTY_DIGITS, RESEND_SEC, authErrorMessage, isComplete, rateLimitWait, type Digits } from "./otp";
-import { passwordFormError } from "./password";
+import { PASSWORD_MISMATCH_TEXT, passwordFormError } from "./password";
 import { PasswordFields } from "./PasswordFields";
 
 type Msg = { tone: "ok" | "bad"; text: string };
@@ -23,6 +23,7 @@ export function ChangePassword({ email }: { email: string }) {
   const [left, setLeft] = useState(0);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg | null>(null);
+  const confirmRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (left <= 0) return;
@@ -39,9 +40,9 @@ export function ChangePassword({ email }: { email: string }) {
     setDigits(EMPTY_DIGITS);
     if (error) {
       const wait = rateLimitWait(error, null, Date.now());
-      if (wait === null) return setMsg({ tone: "bad", text: authErrorMessage(error) });
+      if (wait === null) return setMsg({ tone: "bad", text: authErrorMessage(error, "change") });
       setLeft(wait);
-      setMsg({ tone: "bad", text: authErrorMessage(error) });
+      setMsg({ tone: "bad", text: authErrorMessage(error, "change") });
     } else setLeft(RESEND_SEC);
     setStep("code");
   };
@@ -49,6 +50,7 @@ export function ChangePassword({ email }: { email: string }) {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const problem = passwordFormError(password, confirm);
+    if (problem === PASSWORD_MISMATCH_TEXT) return confirmRef.current?.focus(); // 확인 칸 밑에 이미 떠 있다
     if (problem) return setMsg({ tone: "bad", text: problem });
     await sendCode();
   };
@@ -60,7 +62,7 @@ export function ChangePassword({ email }: { email: string }) {
     setBusy(false);
     if (error) {
       setDigits(EMPTY_DIGITS);
-      return setMsg({ tone: "bad", text: authErrorMessage(error) });
+      return setMsg({ tone: "bad", text: authErrorMessage(error, "change") });
     }
     setPassword("");
     setConfirm("");
@@ -70,6 +72,7 @@ export function ChangePassword({ email }: { email: string }) {
 
   const onDigits = (d: Digits) => {
     setDigits(d);
+    if (msg?.tone === "bad") setMsg(null);
     if (isComplete(d) && !busy) void verify(d);
   };
 
@@ -110,7 +113,7 @@ export function ChangePassword({ email }: { email: string }) {
       ) : (
         <form onSubmit={submit} className="flex flex-col gap-3">
           <input type="email" autoComplete="username" value={email} readOnly hidden />
-          <PasswordFields password={password} confirm={confirm} onPassword={edit(setPassword)} onConfirm={edit(setConfirm)} label="새 비밀번호" disabled={busy} />
+          <PasswordFields password={password} confirm={confirm} onPassword={edit(setPassword)} onConfirm={edit(setConfirm)} label="새 비밀번호" disabled={busy} confirmRef={confirmRef} />
           {note}
           <button type="submit" disabled={busy || !password || !confirm} className="flex h-11 items-center justify-center rounded-[22px] border border-line-3 text-[14px] font-semibold text-ink disabled:text-faint">
             {busy ? "코드 보내는 중…" : "인증 코드 받고 변경"}

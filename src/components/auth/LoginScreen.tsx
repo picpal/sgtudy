@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { fetchMe } from "@/lib/api/me";
 import { routes, safeReturnTo } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/client";
 import { AuthShell } from "./AuthShell";
 import { authErrorMessage, errorCode } from "./otp";
+import { PasswordInput } from "./PasswordInput";
 import { fieldClass, labelClass, primaryClass } from "./styles";
 
 /** 기본 로그인: 이메일 + 비밀번호. 인증 코드는 가입(routes.signup)과 비밀번호 재설정(routes.resetPassword)에서만 쓴다 */
@@ -17,22 +18,41 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // 어느 칸이 문제인지 — 형식 오류는 그 칸만, 로그인 실패는 둘 다 aria-invalid
+  const [bad, setBad] = useState<"email" | "password" | "both" | null>(null);
   const [badCredentials, setBadCredentials] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const addr = email.trim().toLowerCase();
   const dest = safeReturnTo(returnTo);
   const back = dest === "/" ? undefined : dest;
+
+  const errorId = useId();
+  // 고치기 시작하면 지난 오류는 지운다 — "비밀번호 만들기" 안내는 아래 상자에 늘 있다
+  const clearError = () => {
+    if (!error) return;
+    setError("");
+    setBad(null);
+    setBadCredentials(false);
+  };
 
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
       setError("이메일 주소를 확인해 주세요");
+      setBad("email");
       emailRef.current?.focus(); // Q2-19: 오류 필드로 포커스
       return;
     }
-    if (!password) return setError("비밀번호를 입력해 주세요");
+    if (!password) {
+      setError("비밀번호를 입력해 주세요");
+      setBad("password");
+      passwordRef.current?.focus();
+      return;
+    }
     setBusy(true);
     setError("");
+    setBad(null);
     setBadCredentials(false);
     try {
       const { error: e } = await createClient().auth.signInWithPassword({ email: addr, password });
@@ -42,16 +62,19 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
       router.refresh();
     } catch (e) {
       setBusy(false);
-      setPassword("");
+      const wrong = errorCode(e) === "invalid_credentials";
+      if (wrong) setPassword(""); // 연결 실패 등에는 그대로 두고 다시 누르기만 하면 되게
       setError(authErrorMessage(e));
+      setBad(wrong ? "both" : null);
+      passwordRef.current?.focus();
       // 모든 로그인 실패에 똑같이 붙는다(계정 존재와 무관) — 기존 호스팅 사용자는 아직 비밀번호가 없다
-      setBadCredentials(errorCode(e) === "invalid_credentials");
+      setBadCredentials(wrong);
     }
   };
 
   return (
     <AuthShell title="로그인" subtitle="이메일과 비밀번호로 로그인해요.">
-      <form onSubmit={submit} className="flex flex-col gap-3">
+      <form onSubmit={submit} noValidate className="flex flex-col gap-3">
         <label className={labelClass}>
           이메일
           <input
@@ -60,18 +83,32 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
             autoComplete="email"
             autoFocus
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              clearError();
+            }}
             placeholder="you@example.com"
-            aria-invalid={!!error}
+            aria-invalid={bad === "email" || bad === "both"}
+            aria-describedby={error ? errorId : undefined}
             className={fieldClass}
           />
         </label>
         <label className={labelClass}>
           비밀번호
-          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} aria-invalid={!!error} className={fieldClass} />
+          <PasswordInput
+            inputRef={passwordRef}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              clearError();
+            }}
+            aria-invalid={bad === "password" || bad === "both"}
+            aria-describedby={error ? errorId : undefined}
+          />
         </label>
         {error && (
-          <div role="alert" className="flex flex-col gap-1 text-[13px]">
+          <div id={errorId} role="alert" className="flex flex-col gap-1 text-[13px]">
             <p className="m-0 text-warn">{error}</p>
             {badCredentials && (
               <p className="m-0 text-muted">

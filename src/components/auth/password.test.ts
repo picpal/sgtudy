@@ -38,7 +38,7 @@ describe("passwordFormError", () => {
     expect(passwordFormError("abc", "abc")).toBe("비밀번호는 8자 이상이어야 해요");
     expect(passwordFormError("abcdefgh", "abcdefgh")).toBe("비밀번호에 영문과 숫자를 함께 써 주세요");
     expect(passwordFormError("a1" + "가".repeat(24), "x")).toMatch(/너무 길어요/);
-    expect(passwordFormError("abcd1234", "abcd1235")).toBe("비밀번호 확인이 맞지 않아요");
+    expect(passwordFormError("abcd1234", "abcd1235")).toBe("비밀번호가 서로 달라요");
     expect(passwordFormError("abcd1234", "abcd1234")).toBeNull();
   });
 });
