@@ -89,7 +89,8 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   if (data.studies.length === 0) return <ScheduleEmpty />;
 
   return (
-    <div className="box-border flex h-screen flex-col p-4 max-[901px]:h-auto max-[901px]:min-h-screen">
+    // 화면 높이에 가두는 건 >900 이고 세로도 860 이상일 때만 — 1024×768·1280×800 처럼 낮은 가로 화면에서 가두면 달력이 4주만 보이고 안에서 스크롤된다
+    <div className="box-border flex min-h-screen flex-col p-4 min-[901px]:[@media(min-height:860px)]:h-screen">
       <AppHeader active="schedule" variant="card" bell={<NotificationBell />} />
       <div className="mx-auto flex w-full max-w-[1408px] min-h-0 flex-1 items-stretch gap-4 max-[901px]:flex-wrap">
         <main className="flex min-h-0 min-w-0 flex-[999_1_720px] flex-col rounded-[20px] bg-surface px-6 pt-6 pb-[18px] max-sm:px-4 max-sm:pt-4" aria-busy={loading}>
@@ -101,8 +102,8 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
           )}
           {view === "month" && <Legend />}
         </main>
-        {/* >900 에서는 폭을 고정해(340, 넓으면 380) 일 패널 제목이 줄어들지 않게 한다 (V2-01). ≤900 은 달력 아래로 내려간다 */}
-        <aside aria-label="일정 요약" className="flex min-h-0 min-w-0 flex-col gap-4 max-[901px]:basis-full min-[901px]:flex-[0_0_340px] min-[1201px]:basis-[380px]">
+        {/* >900 에서는 폭을 고정해(340, 넓으면 380) 일 패널 제목이 줄어들지 않게 한다 (V2-01). ≤900 은 달력 아래로 내려가고, 태블릿(601~900)은 두 패널을 나란히 */}
+        <aside aria-label="일정 요약" className="flex min-h-0 min-w-0 flex-col gap-4 max-[901px]:basis-full min-[601px]:max-[901px]:grid min-[601px]:max-[901px]:grid-cols-2 min-[601px]:max-[901px]:items-start min-[901px]:flex-[0_0_340px] min-[1201px]:basis-[380px]">
           <DayPanel ref={dayRef} sel={sel} today={today} studies={data.studyMap} tasks={tasks} markers={markers} />
           <UpcomingPanel today={today} studies={data.studyMap} upcoming={upcoming} />
         </aside>
