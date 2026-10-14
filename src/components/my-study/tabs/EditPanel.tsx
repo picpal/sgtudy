@@ -92,7 +92,12 @@ export function EditPanel({ n, parent, period, members, S, update, api, go, requ
     <aside
       ref={panel}
       aria-labelledby="edit-panel-title"
-      className="flex scroll-mt-4 flex-col gap-[14px] rounded-[16px] border border-line bg-surface p-[18px] shadow-[0_10px_30px_rgba(27,34,48,.06)] @min-[760px]:sticky @min-[760px]:top-4 @min-[760px]:max-w-[340px] @min-[760px]:flex-[1_1_280px] @min-[760px]:self-start"
+      className={
+        "flex scroll-mt-4 flex-col gap-[14px] rounded-[16px] border border-line bg-surface p-[18px] shadow-[0_10px_30px_rgba(27,34,48,.06)] " +
+        // 트리 옆에서는 설명을 쓸 만한 폭을 먼저 잡고(360 → 420 → 460) 나머지를 트리에 준다. 화면보다 길면 패널 안에서 스크롤
+        // (main 위쪽 96px + sticky top 16px + 아래 여백 32px = 144px)
+        "@min-[760px]:sticky @min-[760px]:top-4 @min-[760px]:max-h-[calc(100dvh-144px)] @min-[760px]:flex-[0_0_360px] @min-[760px]:self-start @min-[760px]:overflow-y-auto @min-[840px]:basis-[420px] @min-[960px]:basis-[460px] thin-scroll"
+      }
     >
       <div className="flex items-center justify-between gap-2">
         <h3 id="edit-panel-title" ref={heading} tabIndex={-1} className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[12px] font-normal text-muted outline-none" title={path}>
@@ -138,7 +143,8 @@ export function EditPanel({ n, parent, period, members, S, update, api, go, requ
           value={n.desc}
           onChange={(v) => update((p) => ({ ...patchOv(p, "descs", { ...p.ov.descs, [id]: v }), saved: "" }))}
           placeholder="목표, 참고 링크, 제출 형식 등을 적어 주세요"
-          minHeight={110}
+          minHeight={260}
+          maxHeight={440}
         />
       </div>
 

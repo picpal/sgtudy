@@ -8,7 +8,7 @@ function EditorSkeleton() {
   return (
     <div aria-busy="true" aria-label="에디터 불러오는 중" className="overflow-hidden rounded-[10px] border border-line-3 bg-surface">
       <div className="h-10 border-b border-line-2 bg-surface-3" />
-      <div className="h-[140px]" />
+      <div className="h-[240px]" />
     </div>
   );
 }

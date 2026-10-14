@@ -108,7 +108,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, period }: Props) 
         </div>
 
         {isEdit && !selNode && (
-          <div className="rounded-[16px] border border-dashed border-line-dash px-[18px] py-6 text-center text-[13px] leading-[1.6] text-muted @min-[760px]:max-w-[340px] @min-[760px]:flex-[1_1_260px]">
+          <div className="rounded-[16px] border border-dashed border-line-dash px-[18px] py-6 text-center text-[13px] leading-[1.6] text-muted @min-[760px]:flex-[0_0_360px] @min-[840px]:basis-[420px] @min-[960px]:basis-[460px]">
             편집할 회차나 과제를 <span className="@min-[760px]:hidden">위 목록</span>
             <span className="hidden @min-[760px]:inline">왼쪽</span>에서 선택하세요.
             <br />

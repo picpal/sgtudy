@@ -3,10 +3,12 @@
 import { EditorView } from "@codemirror/view";
 
 export const editorTheme = EditorView.theme({
-  "&": { backgroundColor: "transparent", color: "var(--ink)", fontSize: "14px" },
+  // 글은 15px/1.7 — 설명·규칙을 길게 써도 읽히는 크기 (패널 안 보조 글씨 12–13px 보다 한 단계 크게)
+  "&": { backgroundColor: "transparent", color: "var(--ink)", fontSize: "15px" },
   "&.cm-focused": { outline: "none" },
-  ".cm-scroller": { fontFamily: "inherit", lineHeight: "1.75" },
-  ".cm-content": { padding: "10px 12px", caretColor: "var(--mint)", minHeight: "var(--md-min-h, 120px)" },
+  // 내용만큼 자라다가 --md-max-h 에서 멈추고 편집 면 안에서 스크롤한다 (큰 창에서는 none → 창 높이를 채운다)
+  ".cm-scroller": { fontFamily: "inherit", lineHeight: "1.7", maxHeight: "var(--md-max-h, none)", overflowY: "auto", scrollbarWidth: "thin" },
+  ".cm-content": { padding: "12px 14px", caretColor: "var(--mint)", minHeight: "var(--md-min-h, 240px)" },
   ".cm-line": { padding: "0" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--mint)", borderLeftWidth: "2px" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": { backgroundColor: "var(--mint-soft)" },
@@ -56,7 +58,7 @@ export const editorTheme = EditorView.theme({
   // width 0 + min-width 100%: 넓은 표가 편집 면 자체를 넓히지 않고 이 안에서 가로 스크롤된다
   ".cm-table-scroll": { overflowX: "auto", scrollbarWidth: "thin", width: "0", minWidth: "100%" },
   // 내용 폭만큼 넓어지고(좁은 패널에서는 가로 스크롤), 넓은 칸에서는 꽉 채운다
-  ".cm-table": { borderCollapse: "collapse", width: "max-content", minWidth: "100%", fontSize: "13px", lineHeight: "1.6" },
+  ".cm-table": { borderCollapse: "collapse", width: "max-content", minWidth: "100%", fontSize: "14px", lineHeight: "1.6" },
   ".cm-table .cm-cell": {
     border: "1px solid var(--line-3)", padding: "6px 10px", verticalAlign: "top", whiteSpace: "pre-wrap",
     wordBreak: "keep-all", overflowWrap: "anywhere", minWidth: "72px", maxWidth: "240px", textAlign: "left", cursor: "text",
