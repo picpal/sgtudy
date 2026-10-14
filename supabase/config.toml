@@ -10,7 +10,7 @@ max_rows = 1000
 [db]
 port = 54322
 shadow_port = 54320
-major_version = 15
+major_version = 17
 
 [db.migrations]
 enabled = true
@@ -69,6 +69,15 @@ secure_password_change = false
 max_frequency = "60s"
 otp_length = 6
 otp_expiry = 600
+
+# 메일 템플릿 — 로컬(Mailpit)과 호스팅이 같은 파일을 쓴다. 호스팅 반영: scripts/apply-hosted-auth.sh
+[auth.email.template.magic_link]
+subject = "[슥터디] 로그인 인증 코드"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "[슥터디] 가입 인증 코드"
+content_path = "./supabase/templates/confirmation.html"
 
 [auth.sms]
 enable_signup = false

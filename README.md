@@ -53,6 +53,8 @@ npm test                                # Vitest(프론트 순수 함수·어댑
 - 환경변수: `.env.example` 참조. Vercel 에는 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` 만.
 - 호스팅 프로젝트 Auth 설정: Email OTP 켜기, 템플릿에 `{{ .Token }}`, OTP 길이 6, 만료 600초, 재전송 60초, Redirect URLs 에 `https://sgtudy.vercel.app/**`.
 - 로컬 로그인: OTP 메일은 Mailpit(http://127.0.0.1:54324)에서 본다. 시드 사용자 이메일은 `supabase/seed.sql` §1.
+- 인증 메일 템플릿: `supabase/templates/{magic_link,confirmation}.html`(6자리 `{{ .Token }}`). 로컬은 config.toml 로 자동 적용, 호스팅은 `scripts/apply-hosted-auth.sh`(`.env.local` 의 `SMTP_HOST/PORT/USER/PASS/SENDER_EMAIL` 필요, `--dry-run` 으로 먼저 확인). 무료 플랜 기본 발송기는 템플릿 수정이 막혀 있어 커스텀 SMTP(발송 전용 키 — Brevo·SES 등)가 필요하다.
+- 로컬 DB 는 호스팅과 같은 PG 17(`[db] major_version = 17`). `supabase link` 는 `supabase/.temp/*-version` 에 호스팅 이미지 버전을 고정하는데, CLI 2.75 에서는 `gotrue-version` 고정이 HS256 키를 거부해 로컬 관리자 API·env 테스트가 깨진다 → link 후 `rm supabase/.temp/gotrue-version`(storage/rest 고정은 유지).
 - 로컬 DB 테스트(`*-db.test.ts`)를 돌리려면:
   `eval "$(supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY`
 - 목업 데이터는 `src/data/*.ts` 에 화면별로 분리돼 있어, Phase 7 에서 `src/lib/api/*.ts` 어댑터가 같은 export 시그니처로 교체한다.
