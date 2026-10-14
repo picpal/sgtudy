@@ -1,0 +1,45 @@
+/**
+ * 커리큘럼 편집 화면의 열린 항목 ↔ URL(?item=) 동기화 규칙.
+ * 브라우저 뒤로 가기가 목록으로 돌아가고, 새로고침하면 같은 편집 화면이 다시 열리게 한다.
+ * 화면 상태가 원본이고 URL 은 따라간다 — 실제 history 호출은 MyStudyScreen 이 한다.
+ */
+
+/** 서버 노드 id 만 URL 에 싣는다 (낙관적 임시 노드 "root.new0" 등은 제외) */
+export const isUrlItem = (id: string | null | undefined): id is string => !!id && /^\d+$/.test(id);
+
+export function readItem(search: string): string | null {
+  const v = new URLSearchParams(search).get("item");
+  return isUrlItem(v) ? v : null;
+}
+
+/** 현재 주소에서 item 만 바꾼 주소. 항목이 있으면 커리큘럼 탭·편집 모드도 같이 싣는다 (새로고침으로 다시 열리게) */
+export function withItem(href: string, item: string | null): string {
+  const u = new URL(href, "http://x");
+  if (item) {
+    u.searchParams.set("tab", "curriculum");
+    u.searchParams.set("mode", "edit");
+    u.searchParams.set("item", item);
+  } else u.searchParams.delete("item");
+  const q = u.searchParams.toString();
+  return `${u.pathname}${q ? `?${q}` : ""}${u.hash}`;
+}
+
+export type UrlStep = "none" | "push" | "replace" | "back";
+
+/**
+ * 화면에 열린 항목(open)이 주소의 항목(url)과 다를 때 history 를 어떻게 맞출지.
+ * - 목록 → 편집: push (뒤로 가기 = 목록)
+ * - 편집 → 다른 편집: replace (목록 하나 위에 편집 기록 하나만)
+ * - 편집 → 목록: 이 화면이 쌓은 기록이면 back(앞으로 가기로 다시 열 수 있게), 아니면(새로고침·외부 링크 진입) replace
+ */
+export function urlStep(url: string | null, open: string | null, pushedHere: boolean): UrlStep {
+  if (open !== null && !isUrlItem(open)) return "none"; // 임시 노드 — 서버 id 가 오면 그때 맞춘다
+  if (url === open) return "none";
+  if (open === null) return pushedHere ? "back" : "replace";
+  return url === null ? "push" : "replace";
+}
+
+/** 주소의 항목이 트리에 있으면 그 id, 없거나(삭제됨·잘못된 값) 비었으면 null = 목록 */
+export function itemTarget(url: string | null, exists: (id: string) => boolean): string | null {
+  return url && exists(url) ? url : null;
+}

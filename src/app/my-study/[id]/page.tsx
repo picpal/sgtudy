@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
+import { isUrlItem } from "@/components/my-study/editUrl";
 import { MyStudyScreen } from "@/components/my-study/MyStudyScreen";
 import type { TabId } from "@/components/my-study/StudyHeaderInfo";
 import { toApiError } from "@/lib/api/errors";
@@ -16,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return roomMetadata((await params).id);
 }
 
-export default async function MyStudyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; mode?: string; task?: string }> }) {
+export default async function MyStudyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; mode?: string; task?: string; item?: string }> }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   await requireMe(routes.myStudy(id));
   const client = await getServerClient();
@@ -34,9 +35,11 @@ export default async function MyStudyPage({ params, searchParams }: { params: Pr
   const tab = TABS.includes(sp.tab as TabId) ? (sp.tab as TabId) : "overview";
   // ?task= 는 알림(D8) 진입 — 리프 포커스. 숫자 id 가 아니면 무시
   const task = sp.task && /^\d+$/.test(sp.task) ? sp.task : undefined;
+  // ?item= 은 그룹장 편집 화면에 열린 항목 — 새로고침하면 다시 연다(없는 id 는 화면이 목록으로 돌린다)
+  const item = isUrlItem(sp.item) ? sp.item : undefined;
   // key 로 방 변경 시 화면 상태(탭·편집 오버라이드 등)를 리셋한다.
   return (
     <MyStudyScreen key={`${id}:${task ?? ""}`} detail={detail} curriculum={curriculum} studies={studies}
-      initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} initialLeaf={task} />
+      initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} initialLeaf={task} initialItem={item} />
   );
 }

@@ -13,7 +13,8 @@ import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { TodayProvider } from "@/lib/today";
-import { buildTree, stripFieldOv } from "./model";
+import { itemTarget, readItem, urlStep, withItem } from "./editUrl";
+import { buildTree, findNode, isDirty, stripFieldOv } from "./model";
 import { INITIAL_STATE, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
@@ -25,9 +26,9 @@ import { CalendarTab } from "./tabs/CalendarTab";
 import { GanttTab } from "./tabs/GanttTab";
 import { useCurriculumApi } from "./useCurriculumApi";
 
-type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string };
+type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string; initialItem?: string };
 
-export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf }: Props) {
+export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf, initialItem }: Props) {
   const me = useMe();
   const router = useRouter();
   const isLeader = detail.me?.state === "leader";
@@ -39,6 +40,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     tab: initialTab,
     curMode: isLeader ? initialMode : "view",
     ...(focusLeaf ? goLeafPatch(focusLeaf) : {}),
+    // ?item=: 그룹장 편집 화면을 그 항목으로 다시 연다 (새로고침). 없는 id 면 목록 — 아래 URL 동기화가 주소에서 지운다
+    ...(isLeader && !focusLeaf && initialItem && curriculum.nodes.some((n) => n.id === initialItem) ? { tab: "curriculum" as const, curMode: "edit" as const, editSel: initialItem } : {}),
   });
   const [toast, setToast] = useState<ToastMsg>(null);
   const update = useCallback((patch: Patch) => setS((prev) => ({ ...prev, ...(typeof patch === "function" ? patch(prev) : patch) })), []);
@@ -52,6 +55,47 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const goLeaf = useCallback((id: string) => update(goLeafPatch(id)), [update]);
   const api = useCurriculumApi(detail.slug, setCur, update, setToast);
   const closeToast = useCallback(() => setToast(null), []);
+
+  // 편집 화면(?item=) ↔ 주소 동기화 — 열면 push(뒤로 가기 = 목록), 닫으면 쌓았던 기록을 back. 새로고침하면 다시 열린다
+  const openItem = S.tab === "curriculum" && S.curMode === "edit" && findNode(tree.nodes, S.editSel) ? S.editSel : null;
+  // pushed: 지금 주소의 편집 기록을 이 화면이 목록 기록 위에 쌓았는지 — history.state 는 Next 라우터가 갈아 끼우므로 메모리에 둔다.
+  // 새로고침으로 바로 열린 편집 화면은 아래가 목록이라는 보장이 없어 back 대신 replace 로 닫는다
+  const pushed = useRef<string | null>(null);
+  useEffect(() => {
+    const url = readItem(window.location.search);
+    const step = urlStep(url, openItem, url !== null && pushed.current === url);
+    const href = withItem(window.location.href, openItem);
+    if (step === "push") window.history.pushState(null, "", href);
+    else if (step === "replace") window.history.replaceState(null, "", href);
+    else if (step === "back") window.history.back();
+    if (step !== "none") pushed.current = step === "push" || (step === "replace" && pushed.current) ? openItem : null;
+  }, [openItem]);
+  // 브라우저 뒤로·앞으로 → 주소의 항목을 연다/닫는다. 미저장 수정이 있으면 주소를 되돌려 놓고 먼저 묻는다 (조용히 버리지 않는다)
+  const live = useRef({ S, tree, openItem });
+  useEffect(() => {
+    live.current = { S, tree, openItem };
+  });
+  useEffect(() => {
+    const onPop = () => {
+      const { S: s, tree: t, openItem: open } = live.current;
+      const url = readItem(window.location.search);
+      const target = itemTarget(url, (id) => !!findNode(t.nodes, id));
+      // 앞으로 가기로 돌아온 기록의 항목이 그새 삭제됐으면 주소에서도 지운다
+      if (url && !target) window.history.replaceState(null, "", withItem(window.location.href, null));
+      if (target === open) return;
+      if (open && isDirty(s.ov, s.editSel)) {
+        window.history.pushState(null, "", withItem(window.location.href, open));
+        pushed.current = open;
+        update({ leave: { sel: target }, confirm: false });
+        return;
+      }
+      // 앞으로 가기로 연 편집 기록은 목록 기록 위에 있다 → 닫을 때 back
+      pushed.current = target;
+      update(target ? { tab: "curriculum", curMode: "edit", editSel: target, confirm: false, leave: null, saved: "" } : { editSel: null, confirm: false, leave: null, saved: "" });
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [update]);
 
   // 참가 취소(모집 기간) · 신청 취소(승인 대기) — 확인 대화상자 + 처리 중 가드 (Q1-01, Q1-12)
   const [confirm, setConfirm] = useState<"leave" | "cancel" | null>(null);
@@ -84,11 +128,12 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
 
   return (
     <TodayProvider today={today}>
-      <div className="flex h-screen flex-col p-4 max-[901px]:h-auto max-[901px]:min-h-screen">
+      {/* 편집 화면(?item=)은 한 페이지 스크롤 — 안쪽 스크롤 영역 없이 편집기가 글만큼 자라고 문서가 스크롤된다 (저장 막대는 화면 위에 붙는다) */}
+      <div className={`flex flex-col p-4 ${openItem ? "min-h-screen" : "h-screen max-[901px]:h-auto max-[901px]:min-h-screen"}`}>
         <AppHeader active="myStudy" variant="card" bell={<NotificationBell />} />
         <div className="mx-auto flex min-h-0 w-full max-w-[1408px] flex-1 items-stretch gap-4 max-[901px]:flex-wrap">
-          <StudySidebar selected={detail.slug} groups={groups} />
-          <main className="thin-scroll min-h-0 min-w-0 flex-[999_1_640px] overflow-y-auto rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:overflow-visible max-[901px]:px-4">
+          <StudySidebar selected={detail.slug} groups={groups} collapsed={openItem !== null} />
+          <main className={`min-w-0 flex-[999_1_640px] rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:px-4 ${openItem ? "" : "thin-scroll min-h-0 overflow-y-auto max-[901px]:overflow-visible"}`}>
             {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}
             <div className="flex flex-wrap items-start gap-7 @container">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">

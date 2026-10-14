@@ -12,10 +12,14 @@ export type MarkdownEditorProps = {
   /** 접근성 이름 — 바깥 라벨 요소 id 가 있으면 labelledBy 를 쓴다 */
   label?: string;
   labelledBy?: string;
-  /** 편집 면 최소 높이(px) */
-  minHeight?: number;
-  /** 편집 면 최대 높이(px) — 내용이 이보다 길면 편집 면 안에서 스크롤한다 */
-  maxHeight?: number;
+  /** 편집 면 최소 높이 — 숫자는 px, 문자열은 CSS 길이 그대로(예: "max(420px, calc(100dvh - 400px))") */
+  minHeight?: number | string;
+  /** 편집 면 최대 높이 — 내용이 이보다 길면 편집 면 안에서 스크롤한다. "none" 이면 내용만큼 자란다 */
+  maxHeight?: number | string;
+  /** 툴바를 스크롤 부모 위쪽(이 오프셋)에 붙여 둔다 — 편집 면이 내용만큼 자라는 전용 편집 화면용 */
+  stickyToolbar?: string;
+  /** 본문 줄 폭 상한(px) — 넓은 편집 면에서 글 줄이 너무 길어지지 않게 가운데 정렬한다 */
+  contentMaxWidth?: number;
   /** 툴바의 "크게 쓰기" — 같은 편집기를 큰 창으로 띄운다 (기본 켜짐) */
   expandable?: boolean;
   /** 툴바에 보일 도구 — 없으면 전부. 읽기 화면이 줄 목록으로만 보여 주는 칸(운영 규칙)은 인라인·글머리 목록만 준다 */
@@ -81,7 +85,7 @@ function Icon({ name }: { name: string }) {
 }
 
 /** 서식 툴바 — 탭 정지 하나 + 좌우 화살표 이동 (WAI-ARIA toolbar). 묶음 사이에 세로 구분선 */
-function Toolbar({ groups, view, onExpand, expandRef }: { groups: Tool[][]; view: RefObject<EditorView | null>; onExpand?: () => void; expandRef?: RefObject<HTMLButtonElement | null> }) {
+function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Tool[][]; view: RefObject<EditorView | null>; onExpand?: () => void; expandRef?: RefObject<HTMLButtonElement | null>; stickyTop?: string }) {
   const bar = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -101,7 +105,9 @@ function Toolbar({ groups, view, onExpand, expandRef }: { groups: Tool[][]; view
       role="toolbar"
       aria-label="서식 도구"
       onKeyDown={onKey}
-      className="flex flex-wrap items-center gap-x-[6px] gap-y-[2px] border-b border-line-2 bg-surface-3 px-[6px] py-1"
+      className={`flex flex-wrap items-center gap-x-[6px] gap-y-[2px] border-b border-line-2 bg-surface-3 py-1 ${stickyTop !== undefined ? "sticky z-[1]" : ""}`}
+      // 본문 줄 폭 상한(--md-content-max)이 있으면 도구 줄도 같은 세로줄에서 시작한다 — 넓은 편집 면에서 툴바만 왼쪽 끝에 떨어져 보이지 않게
+      style={{ paddingInline: "max(6px, calc((100% - var(--md-content-max, 100%)) / 2 + 6px))", ...(stickyTop !== undefined ? { top: stickyTop } : {}) }}
     >
       {groups.map((g, gi) => (
         <div key={gi} role="group" className="flex shrink-0 items-center gap-[2px]">
@@ -152,7 +158,7 @@ function Toolbar({ groups, view, onExpand, expandRef }: { groups: Tool[][]; view
   );
 }
 
-const FRAME = "overflow-hidden rounded-[10px] border border-line-3 bg-surface font-normal text-ink focus-within:border-mint focus-within:shadow-[0_0_0_3px_#DDF4EE]";
+const FRAME = "rounded-[10px] border border-line-3 bg-surface font-normal text-ink focus-within:border-mint focus-within:shadow-[0_0_0_3px_#DDF4EE]";
 
 /**
  * 라이브 프리뷰 마크다운 에디터 — 쓰는 즉시 서식이 보이고 원문은 마크다운 그대로(work-note 에디터 이식).
@@ -163,7 +169,9 @@ const FRAME = "overflow-hidden rounded-[10px] border border-line-3 bg-surface fo
  * 그래서 값·되돌리기 기록·캐럿이 그대로 이어지고, 부모의 저장 흐름(onChange)도 바뀌지 않는다.
  * showModal 은 top layer 라 @container(레이아웃 격리) 안에서도 화면 전체 기준으로 뜬다.
  */
-export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy, minHeight = 240, maxHeight = 480, expandable = true, tools, className = "" }: MarkdownEditorProps) {
+const len = (v: number | string) => (typeof v === "number" ? `${v}px` : v);
+
+export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy, minHeight = 240, maxHeight = 480, expandable = true, tools, stickyToolbar, contentMaxWidth, className = "" }: MarkdownEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const bigHost = useRef<HTMLDivElement>(null);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -222,8 +230,12 @@ export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy
   const groups = tools ? GROUPS.map((g) => g.filter((t) => tools.includes(t.cmd))).filter((g) => g.length > 0) : GROUPS;
   return (
     <>
-      <div className={`${FRAME} ${className}`} style={{ ["--md-min-h" as string]: `${minHeight}px`, ["--md-max-h" as string]: `${maxHeight}px` }}>
-        <Toolbar groups={groups} view={view} onExpand={expandable ? expand : undefined} expandRef={expandBtn} />
+      <div
+        // sticky 툴바는 overflow:hidden 조상 안에서 붙지 않는다 → 둥근 모서리만 자르는 clip 으로
+        className={`${FRAME} ${stickyToolbar !== undefined ? "overflow-clip" : "overflow-hidden"} ${className}`}
+        style={{ ["--md-min-h" as string]: len(minHeight), ["--md-max-h" as string]: len(maxHeight), ...(contentMaxWidth ? { ["--md-content-max" as string]: `${contentMaxWidth}px` } : {}) }}
+      >
+        <Toolbar groups={groups} view={view} onExpand={expandable ? expand : undefined} expandRef={expandBtn} stickyTop={stickyToolbar} />
         <div ref={host} className="text-left" />
       </div>
       {expandable && (
@@ -242,7 +254,7 @@ export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy
               완료
             </button>
           </div>
-          <div className={`${FRAME} flex min-h-0 flex-1 flex-col`} style={{ ["--md-min-h" as string]: "100%", ["--md-max-h" as string]: "none" }}>
+          <div className={`${FRAME} flex min-h-0 flex-1 flex-col overflow-hidden`} style={{ ["--md-min-h" as string]: "100%", ["--md-max-h" as string]: "none" }}>
             <Toolbar groups={groups} view={view} />
             <div ref={bigHost} className="min-h-0 flex-1 text-left [&>.cm-editor]:h-full [&_.cm-content]:text-[16px]" />
           </div>

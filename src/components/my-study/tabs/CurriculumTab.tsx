@@ -1,12 +1,13 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { PillButton, Seg } from "../bits";
 import { addDays } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
 import { allParentsClosed, findNode, isDirty, overallPct, unassignedCount, visibleNodes, type Tree } from "../model";
 import type { CurMode, Leave, ScreenState, Update } from "../state";
 import type { CurriculumApi } from "../useCurriculumApi";
-import { EditPanel } from "./EditPanel";
+import { EditView } from "./EditView";
 import { LeafDetail } from "./LeafDetail";
 import { TreeRow } from "./TreeRow";
 
@@ -43,6 +44,31 @@ export function CurriculumTab({ tree, S, update, api, canEdit, period }: Props) 
   const addChild = (id: string) => request({ add: id });
   const addRound = () => request({ add: null });
 
+  // 편집 화면에서 목록으로 돌아오면 열었던 행으로 포커스·스크롤을 돌려준다
+  // (삭제해서 행이 없으면 상위 행, 그것도 없으면 "회차 추가")
+  const lastOpen = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (selNode) {
+      lastOpen.current = [selNode.id, selNode.parentId ?? ""];
+      return;
+    }
+    const ids = lastOpen.current;
+    lastOpen.current = null;
+    if (!ids) return;
+    const row = (id: string) => (id ? document.querySelector<HTMLButtonElement>(`[data-node="${CSS.escape(id)}"] [data-row-main]`) : null);
+    const btn = row(ids[0]) ?? row(ids[1]) ?? document.querySelector<HTMLButtonElement>("[data-add-round]");
+    btn?.focus({ preventScroll: true });
+    btn?.scrollIntoView({ block: "center" });
+  }, [selNode]);
+
+  // 편집할 항목이 열리면 목록 대신 전용 편집 화면 (?item=)
+  if (selNode)
+    return (
+      <div className="mt-[18px] @container">
+        <EditView key={selNode.id} n={selNode} parent={parentNode} period={period} members={tree.members} S={S} update={update} api={api} go={go} request={request} />
+      </div>
+    );
+
   return (
     <div className="mt-[18px] flex flex-col gap-[14px] @container">
       <div className="flex flex-wrap items-center gap-2">
@@ -56,8 +82,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, period }: Props) 
       </div>
       {isEdit && (
         <p className="m-0 text-[12px] text-muted">
-          그룹장에게만 보이는 편집 모드 미리보기예요. 항목을 누르면 <span className="@min-[760px]:hidden">아래 편집 패널에서</span>
-          <span className="hidden @min-[760px]:inline">오른쪽에서</span> 수정할 수 있어요.
+          그룹장에게만 보이는 편집 모드 미리보기예요. 회차나 과제를 누르면 편집 화면이 열려요 · 추가하면 바로 편집 화면으로 이동해요.
         </p>
       )}
       {warn > 0 && (
@@ -71,51 +96,37 @@ export function CurriculumTab({ tree, S, update, api, canEdit, period }: Props) 
         </div>
       )}
 
-      {/* 컨테이너 폭 760 이상이면 트리 옆 sticky 패널, 미만이면 트리 아래 (Q2-06/Q2-07/Q3-04) */}
-      <div className="flex flex-col gap-4 @min-[760px]:flex-row @min-[760px]:items-start">
-        {/* 모서리 행은 컨테이너 안쪽 반경(16-1px)을 따라가야 선택 링(inset)이 둥근 클립에 잘리지 않는다 */}
-        <div role="tree" aria-label="커리큘럼" className="min-w-0 overflow-hidden rounded-[16px] border border-line @min-[760px]:flex-[999_1_440px] [&>div:first-child>[role=treeitem]]:rounded-t-[15px] [&>div:last-child>[role=treeitem]]:rounded-b-[15px]">
-          {rows.map((n) => {
-            const open = !S.closed[n.id];
-            return (
-              <div key={n.id}>
-                <TreeRow
-                  n={n}
-                  isEdit={isEdit}
-                  selected={isEdit && S.editSel === n.id}
-                  open={open}
-                  onToggle={() => toggle(n.id)}
-                  onClick={() => {
-                    if (isEdit) request({ sel: n.id });
-                    else if (n.leaf) update((p) => ({ openLeaf: p.openLeaf === n.id ? null : n.id }));
-                    else toggle(n.id);
-                  }}
-                  onAddChild={!n.leaf ? () => addChild(n.id) : undefined}
-                />
-                {!isEdit && n.leaf && S.openLeaf === n.id && <LeafDetail n={n} />}
-              </div>
-            );
-          })}
-          {isEdit && (
-            <button type="button" onClick={addRound} className="flex h-[50px] w-full items-center justify-center gap-[6px] bg-surface-3 text-[14px] font-semibold text-mint first:rounded-t-[15px] last:rounded-b-[15px] focus-visible:-outline-offset-2">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-              회차 추가
-            </button>
-          )}
-          {isEdit && nextRoundOut && <p className="m-0 bg-surface-3 px-4 pb-3 text-center text-[12px] font-medium text-amber-text">방 종료일({mmdd(period.end)}) 이후에 만들어져요 · 추가는 할 수 있어요</p>}
-        </div>
-
-        {isEdit && !selNode && (
-          <div className="rounded-[16px] border border-dashed border-line-dash px-[18px] py-6 text-center text-[13px] leading-[1.6] text-muted @min-[760px]:flex-[0_0_360px] @min-[840px]:basis-[420px] @min-[960px]:basis-[460px]">
-            편집할 회차나 과제를 <span className="@min-[760px]:hidden">위 목록</span>
-            <span className="hidden @min-[760px]:inline">왼쪽</span>에서 선택하세요.
-            <br />
-            제목·기간·과제 유형·담당자를 바꿀 수 있어요.
-          </div>
+      {/* 모서리 행은 컨테이너 안쪽 반경(16-1px)을 따라가야 선택 링(inset)이 둥근 클립에 잘리지 않는다 */}
+      <div role="tree" aria-label="커리큘럼" className="min-w-0 overflow-hidden rounded-[16px] border border-line [&>div:first-child>[role=treeitem]]:rounded-t-[15px] [&>div:last-child>[role=treeitem]]:rounded-b-[15px]">
+        {rows.map((n) => {
+          const open = !S.closed[n.id];
+          return (
+            <div key={n.id}>
+              <TreeRow
+                n={n}
+                isEdit={isEdit}
+                open={open}
+                onToggle={() => toggle(n.id)}
+                onClick={() => {
+                  if (isEdit) request({ sel: n.id });
+                  else if (n.leaf) update((p) => ({ openLeaf: p.openLeaf === n.id ? null : n.id }));
+                  else toggle(n.id);
+                }}
+                onAddChild={!n.leaf ? () => addChild(n.id) : undefined}
+              />
+              {!isEdit && n.leaf && S.openLeaf === n.id && <LeafDetail n={n} />}
+            </div>
+          );
+        })}
+        {isEdit && (
+          <button type="button" data-add-round onClick={addRound} className="flex h-[50px] w-full items-center justify-center gap-[6px] bg-surface-3 text-[14px] font-semibold text-mint first:rounded-t-[15px] last:rounded-b-[15px] focus-visible:-outline-offset-2">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            회차 추가
+          </button>
         )}
-        {selNode && <EditPanel key={selNode.id} n={selNode} parent={parentNode} period={period} members={tree.members} S={S} update={update} api={api} go={go} request={request} />}
+        {isEdit && nextRoundOut && <p className="m-0 bg-surface-3 px-4 pb-3 text-center text-[12px] font-medium text-amber-text">방 종료일({mmdd(period.end)}) 이후에 만들어져요 · 추가는 할 수 있어요</p>}
       </div>
     </div>
   );

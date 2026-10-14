@@ -8,7 +8,6 @@ import type { TreeNode } from "../model";
 type Props = {
   n: TreeNode;
   isEdit: boolean;
-  selected: boolean;
   open: boolean;
   onToggle: () => void;
   onClick: () => void;
@@ -21,7 +20,7 @@ const Plus = () => (
   </svg>
 );
 
-export function TreeRow({ n, isEdit, selected, open, onToggle, onClick, onAddChild }: Props) {
+export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild }: Props) {
   const canAdd = isEdit && !n.leaf && n.d <= 2;
   const cantAdd = isEdit && !n.leaf && n.d > 2;
   const addTip = n.d <= 2 ? `${n.title}에 하위 과제 추가` : "최대 5단계까지만 만들 수 있어요";
@@ -30,9 +29,10 @@ export function TreeRow({ n, isEdit, selected, open, onToggle, onClick, onAddChi
       role="treeitem"
       aria-level={n.d + 2}
       aria-expanded={n.leaf ? undefined : open}
-      aria-selected={isEdit ? selected : undefined}
+      aria-selected={isEdit ? false : undefined}
+      data-node={n.id}
       className="flex min-h-[52px] items-center gap-2 border-b border-line-2 py-1 pl-2 pr-3"
-      style={{ background: selected ? "#F0F9F6" : n.d === 0 ? "#FAFCFB" : "#FFFFFF", boxShadow: selected ? "inset 0 0 0 2px #3FB89C" : "none", opacity: n.archived ? 0.55 : 1 }}
+      style={{ background: n.d === 0 ? "#FAFCFB" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}
     >
       {/* 390 폭에서도 제목·기간이 보이게: 들여쓰기 축소, 드래그 핸들·진척 막대·아바타는 숨기고 제목은 줄바꿈 (Q3-03) */}
       <span className="w-[calc(var(--d)*22px)] shrink-0 max-sm:w-[calc(var(--d)*10px)]" style={{ "--d": n.d } as React.CSSProperties} />
@@ -55,7 +55,7 @@ export function TreeRow({ n, isEdit, selected, open, onToggle, onClick, onAddChi
         </button>
       )}
 
-      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px] bg-transparent px-1 py-2 text-left text-ink">
+      <button type="button" data-row-main onClick={onClick} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px] bg-transparent px-1 py-2 text-left text-ink">
         {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[7px] bg-navy px-2 py-[3px] text-[12px] font-bold text-white">{n.label}</span>}
         {n.leaf && <TypeBadge type={n.type} />}
         <span className="min-w-0 max-w-full [overflow-wrap:anywhere]" style={{ fontSize: n.d === 0 ? 15 : 14, fontWeight: n.d === 0 ? 700 : n.leaf ? 500 : 600 }}>
@@ -83,8 +83,11 @@ export function TreeRow({ n, isEdit, selected, open, onToggle, onClick, onAddChi
       )}
 
       {canAdd && (
-        <button type="button" title={addTip} aria-label={addTip} onClick={onAddChild} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-line-3 bg-surface text-mint">
-          <Plus />
+        // 누르는 자리는 44px, 보이는 상자는 32px
+        <button type="button" title={addTip} aria-label={addTip} onClick={onAddChild} className="group -mx-[6px] flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-transparent text-mint">
+          <span className="flex h-8 w-8 items-center justify-center rounded-[9px] border border-line-3 bg-surface group-hover:border-mint">
+            <Plus />
+          </span>
         </button>
       )}
       {cantAdd && (

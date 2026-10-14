@@ -8,7 +8,8 @@ export const editorTheme = EditorView.theme({
   "&.cm-focused": { outline: "none" },
   // 내용만큼 자라다가 --md-max-h 에서 멈추고 편집 면 안에서 스크롤한다 (큰 창에서는 none → 창 높이를 채운다)
   ".cm-scroller": { fontFamily: "inherit", lineHeight: "1.7", maxHeight: "var(--md-max-h, none)", overflowY: "auto", scrollbarWidth: "thin" },
-  ".cm-content": { padding: "12px 14px", caretColor: "var(--mint)", minHeight: "var(--md-min-h, 240px)" },
+  // --md-content-max: 넓은 편집 화면에서 글 줄 폭 상한(가운데 정렬). 없으면 폭을 다 쓴다
+  ".cm-content": { padding: "12px 14px", caretColor: "var(--mint)", minHeight: "var(--md-min-h, 240px)", maxWidth: "var(--md-content-max, none)", margin: "0 auto" },
   ".cm-line": { padding: "0" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--mint)", borderLeftWidth: "2px" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": { backgroundColor: "var(--mint-soft)" },

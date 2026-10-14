@@ -6,7 +6,8 @@ import { filterSidebarGroups } from "@/lib/api/my-study";
 import { routes } from "@/lib/routes";
 import type { SidebarGroup } from "@/data/my-study";
 
-export function StudySidebar({ selected, groups }: { selected: string; groups: SidebarGroup[] }) {
+/** collapsed: 커리큘럼 편집 화면이 열린 동안 넓은 화면에서는 목록을 접어 편집기에 폭을 준다 (좁은 화면은 원래 한 줄로 접혀 있다) */
+export function StudySidebar({ selected, groups, collapsed = false }: { selected: string; groups: SidebarGroup[]; collapsed?: boolean }) {
   const [q, setQ] = useState("");
   // ≤900: 선택한 방 내용이 먼저 보이도록 목록은 접어 둔다 (Q1-08). 넓은 화면은 항상 펼침
   const [open, setOpen] = useState(false);
@@ -14,7 +15,7 @@ export function StudySidebar({ selected, groups }: { selected: string; groups: S
   const total = groups.reduce((a, g) => a + g.items.length, 0);
   const body = open ? "flex" : "hidden min-[901px]:flex";
   return (
-    <aside aria-label="내 스터디 목록" className="flex min-h-0 flex-[1_1_300px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[901px]:max-w-none max-[901px]:py-[14px] min-[901px]:max-w-[380px]">
+    <aside aria-label="내 스터디 목록" className={`${collapsed ? "min-[901px]:hidden" : ""} flex min-h-0 flex-[1_1_300px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[901px]:max-w-none max-[901px]:py-[14px] min-[901px]:max-w-[380px]`}>
       <h2 className="m-0 text-[18px] font-bold max-[901px]:hidden">내 스터디</h2>
       <button
         type="button"

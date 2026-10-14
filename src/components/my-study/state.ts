@@ -14,7 +14,10 @@ export type ScreenState = {
   closed: Record<string, boolean>;
   openLeaf: string | null;
   curMode: CurMode;
+  /** 편집 화면에 열린 항목 — 있으면 목록 대신 전용 편집 화면 (URL ?item=) */
   editSel: string | null;
+  /** 방금 추가한 항목 — 편집 화면이 열리면 제목을 선택해 바로 고쳐 쓰게 한다 */
+  justAdded: string | null;
   confirm: boolean;
   leave: Leave | null;
   saved: string;
@@ -36,6 +39,7 @@ export const INITIAL_STATE: ScreenState = {
   openLeaf: null,
   curMode: "view",
   editSel: null,
+  justAdded: null,
   confirm: false,
   leave: null,
   saved: "",

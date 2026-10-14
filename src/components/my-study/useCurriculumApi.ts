@@ -6,7 +6,8 @@ import { toApiError } from "@/lib/api/errors";
 import { nodeArchive, nodeCreate, nodeDelete, nodeUpdate, patchOf } from "@/lib/api/my-study";
 import type { Curriculum, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
-import { dropFieldOv, type Overrides, type TreeNode } from "./model";
+import { isUrlItem } from "./editUrl";
+import { dropFieldOv, tempId, type Overrides, type TreeNode } from "./model";
 import type { Update } from "./state";
 
 export type CurriculumApi = {
@@ -43,16 +44,21 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   const create = useCallback(
     async (parentId: string | null) => {
       const key = parentId ?? "root";
-      update((p) => ({ ov: { ...p.ov, added: { ...p.ov.added, [key]: [...(p.ov.added[key] ?? []), parentId ? "새 과제" : "새 회차"] } }, closed: parentId ? { ...p.closed, [parentId]: false } : p.closed, confirm: false, saved: "" }));
+      // 응답을 기다리지 않고 임시 노드의 편집 화면을 바로 연다 — 서버 id 가 오면 그 항목으로 바꿔 연다
+      update((p) => {
+        const list = p.ov.added[key] ?? [];
+        return { ov: { ...p.ov, added: { ...p.ov.added, [key]: [...list, parentId ? "새 과제" : "새 회차"] } }, closed: parentId ? { ...p.closed, [parentId]: false } : p.closed, editSel: tempId(key, list.length), confirm: false, saved: "" };
+      });
       try {
         const cur = await nodeCreate(slug, parentId);
         const created = cur.nodes.filter((n) => n.parentId === parentId).sort((a, b) => b.sortOrder - a.sortOrder)[0];
         setCur(cur);
-        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) }, editSel: created?.id ?? null }));
+        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) }, editSel: created?.id ?? null, justAdded: created?.id ?? null }));
         toast({ text: parentId ? "새 과제를 추가했어요" : "새 회차를 추가했어요", tone: "ok" }); // Q3-14
         router.refresh(); // 개요의 회차 창·현재 회차는 room_get(detail) 에서 온다
       } catch (e) {
-        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) } }));
+        // 만들지 못한 임시 노드의 편집 화면은 닫는다 (목록으로)
+        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) }, editSel: p.editSel && !isUrlItem(p.editSel) ? null : p.editSel }));
         fail(e);
       }
     },
