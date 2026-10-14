@@ -7,7 +7,7 @@ import { fetchMe } from "@/lib/api/me";
 import { routes, safeReturnTo } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/client";
 import { AuthShell } from "./AuthShell";
-import { authErrorMessage } from "./otp";
+import { authErrorMessage, errorCode } from "./otp";
 import { fieldClass, labelClass, primaryClass } from "./styles";
 
 /** 기본 로그인: 이메일 + 비밀번호. 인증 코드는 가입(routes.signup)과 비밀번호 재설정(routes.resetPassword)에서만 쓴다 */
@@ -17,6 +17,7 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [badCredentials, setBadCredentials] = useState(false);
   const emailRef = useRef<HTMLInputElement>(null);
   const addr = email.trim().toLowerCase();
   const dest = safeReturnTo(returnTo);
@@ -32,6 +33,7 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
     if (!password) return setError("비밀번호를 입력해 주세요");
     setBusy(true);
     setError("");
+    setBadCredentials(false);
     try {
       const { error: e } = await createClient().auth.signInWithPassword({ email: addr, password });
       if (e) throw e;
@@ -42,6 +44,8 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
       setBusy(false);
       setPassword("");
       setError(authErrorMessage(e));
+      // 모든 로그인 실패에 똑같이 붙는다(계정 존재와 무관) — 기존 호스팅 사용자는 아직 비밀번호가 없다
+      setBadCredentials(errorCode(e) === "invalid_credentials");
     }
   };
 
@@ -66,7 +70,19 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
           비밀번호
           <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} aria-invalid={!!error} className={fieldClass} />
         </label>
-        {error && <p role="alert" className="m-0 text-[13px] text-warn">{error}</p>}
+        {error && (
+          <div role="alert" className="flex flex-col gap-1 text-[13px]">
+            <p className="m-0 text-warn">{error}</p>
+            {badCredentials && (
+              <p className="m-0 text-muted">
+                인증 코드로만 쓰던 계정이면 →{" "}
+                <Link href={routes.resetPassword(back)} className="font-semibold text-mint">
+                  비밀번호 만들기
+                </Link>
+              </p>
+            )}
+          </div>
+        )}
         <button type="submit" disabled={busy} className={primaryClass}>
           {busy ? "로그인 중…" : "로그인"}
         </button>

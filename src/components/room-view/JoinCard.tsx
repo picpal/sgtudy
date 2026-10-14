@@ -36,7 +36,7 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
       return (
         <div className="flex flex-col gap-[6px]">
           <Link href={loginHref} className={`${PRIMARY} bg-navy text-[16px]`}>로그인하고 참가</Link>
-          <span className={NOTE}>이메일 인증 코드로 바로 로그인할 수 있어요</span>
+          <span className={NOTE}>이메일과 비밀번호로 로그인 · 처음이면 회원가입</span>
         </div>
       );
     case "join":

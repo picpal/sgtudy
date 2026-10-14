@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { otpFlowStep, signupAccountKind } from "./flow";
+import { otpFlowStep, resumeVerified, signupAccountKind } from "./flow";
 
 describe("signupAccountKind (가입 코드 확인 직후)", () => {
   const now = Date.parse("2026-10-14T10:00:00Z");
@@ -29,5 +29,19 @@ describe("otpFlowStep", () => {
     expect(otpFlowStep("existing", false, "a@b.c")).toBe("password");
     expect(otpFlowStep("reset", true, "a@b.c")).toBe("password");
     expect(otpFlowStep("has_password", true, "a@b.c")).toBe("notice");
+  });
+});
+
+describe("resumeVerified (로그인한 채 /signup·/reset-password 재방문)", () => {
+  const now = Date.parse("2026-10-14T10:00:00Z");
+  it("account with a password → null (page redirects to returnTo)", () => {
+    expect(resumeVerified({ created_at: "2026-10-14T09:59:00Z", user_metadata: { has_password: true } }, "signup", now)).toBeNull();
+    expect(resumeVerified({ created_at: "2025-01-01T00:00:00Z", user_metadata: { has_password: true } }, "reset", now)).toBeNull();
+  });
+  it("no password yet → back to the password step", () => {
+    expect(resumeVerified({ created_at: "2026-10-14T09:55:00Z", user_metadata: {} }, "signup", now)).toBe("new");
+    expect(resumeVerified({ created_at: "2025-01-01T00:00:00Z", user_metadata: {} }, "signup", now)).toBe("existing");
+    expect(resumeVerified({ created_at: "2025-01-01T00:00:00Z", user_metadata: null }, "reset", now)).toBe("reset");
+    expect(otpFlowStep(resumeVerified({ user_metadata: {} }, "reset", now), false, null)).toBe("password");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_DIGITS, applyBackspace, applyDigit, applyPaste, authErrorMessage, isComplete, rateLimitWait } from "./otp";
+import { EMPTY_DIGITS, applyBackspace, applyDigit, applyPaste, authErrorMessage, isComplete, isResetNoAccount, rateLimitWait } from "./otp";
 
 describe("OTP digit model (§4.1 자동 포커스 이동)", () => {
   it("typing a digit fills the box and moves focus right", () => {
@@ -51,6 +51,17 @@ describe("authErrorMessage", () => {
     expect(authErrorMessage(noSignup, "reset")).toBe("가입된 계정이 없거나 코드를 보낼 수 없어요");
     expect(authErrorMessage(noSignup)).toBe("이메일 로그인이 꺼져 있어요 · 관리자에게 문의해 주세요");
     expect(authErrorMessage({ name: "AuthApiError", code: "otp_expired", message: "x" }, "reset")).toBe("코드가 맞지 않거나 만료됐어요");
+  });
+  it("reset flow: no-account errors are treated as sent (isResetNoAccount)", () => {
+    expect(isResetNoAccount({ name: "AuthApiError", code: "otp_disabled", message: "Signups not allowed for otp" })).toBe(true);
+    expect(isResetNoAccount({ name: "AuthApiError", code: "user_not_found", message: "x" })).toBe(true);
+    expect(isResetNoAccount({ name: "AuthApiError", code: "over_email_send_rate_limit", message: "x" })).toBe(false);
+    expect(isResetNoAccount(new Error("x"))).toBe(false);
+    expect(isResetNoAccount(null)).toBe(false);
+  });
+  it("maps reauthentication codes (password change on /me)", () => {
+    expect(authErrorMessage({ name: "AuthApiError", code: "reauthentication_not_valid", message: "x" })).toBe("코드가 맞지 않거나 만료됐어요");
+    expect(authErrorMessage({ name: "AuthApiError", code: "reauthentication_needed", message: "x" })).toBe("보안을 위해 이메일 인증을 다시 해 주세요");
   });
   it("falls back to a generic message", () => {
     expect(authErrorMessage(new TypeError("Failed to fetch"))).toBe("로그인에 실패했어요 · Failed to fetch");

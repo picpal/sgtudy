@@ -25,3 +25,13 @@ export function otpFlowStep(verified: Verified | null, codeParam: boolean, sentT
   if (verified) return verified === "has_password" ? "notice" : "password";
   return codeParam && sentTo ? "otp" : "email";
 }
+
+/**
+ * 로그인한 채로 /signup·/reset-password 에 들어왔을 때(코드 확인 뒤 비밀번호를 정하기 전에 탭을 닫거나 새로고침한 경우).
+ * 비밀번호가 없으면 그 단계로 다시 보내고(가입은 계정 나이로 새/기존 문구, 재설정은 "reset"), 있으면 null → 페이지가 returnTo 로 보낸다.
+ */
+export function resumeVerified(user: AuthUserLike, mode: "signup" | "reset", now = Date.now()): Exclude<Verified, "has_password"> | null {
+  const kind = signupAccountKind(user, now);
+  if (kind === "has_password") return null;
+  return mode === "reset" ? "reset" : kind;
+}

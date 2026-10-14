@@ -46,16 +46,28 @@ const AUTH_CODE_TEXT: Record<string, string> = {
   email_not_confirmed: "이메일 인증이 끝나지 않은 계정이에요 · 회원가입에서 인증해 주세요",
   weak_password: "비밀번호는 8자 이상, 영문과 숫자를 함께 써 주세요",
   same_password: "지금 쓰는 비밀번호와 다른 비밀번호를 정해 주세요",
+  // 비밀번호 변경 재인증(config.toml secure_password_change = true)
+  reauthentication_not_valid: "코드가 맞지 않거나 만료됐어요",
+  reauth_nonce_missing: "보안을 위해 이메일 인증 코드를 입력해 주세요",
+  reauthentication_needed: "보안을 위해 이메일 인증을 다시 해 주세요",
 };
 
 /** 비밀번호 재설정은 계정을 만들지 않는다(shouldCreateUser: false) — 없는 주소도 계정 존재를 드러내지 않는 같은 문구 */
 const NO_ACCOUNT_TEXT = "가입된 계정이 없거나 코드를 보낼 수 없어요";
-const RESET_CODE_TEXT: Record<string, string> = {
-  // GoTrue: 없는 주소 + create_user false → 422 otp_disabled "Signups not allowed for otp"
-  otp_disabled: NO_ACCOUNT_TEXT,
-  user_not_found: NO_ACCOUNT_TEXT,
-  signup_disabled: NO_ACCOUNT_TEXT,
-};
+// GoTrue: 없는 주소 + create_user false → 422 otp_disabled "Signups not allowed for otp"
+const RESET_NO_ACCOUNT_CODES = ["otp_disabled", "user_not_found", "signup_disabled"];
+const RESET_CODE_TEXT: Record<string, string> = Object.fromEntries(RESET_NO_ACCOUNT_CODES.map((c) => [c, NO_ACCOUNT_TEXT]));
+
+/**
+ * 재설정 코드 발송이 "없는 주소" 로 실패했는지. 화면은 이 경우도 보낸 것처럼 코드 단계로 넘어가
+ * 계정 존재를 드러내지 않는다(남는 위험: GoTrue /otp 를 직접 부르면 422/200 이 구분된다 — README).
+ */
+export function isResetNoAccount(e: unknown): boolean {
+  return typeof e === "object" && e !== null && RESET_NO_ACCOUNT_CODES.includes(String((e as { code?: unknown }).code));
+}
+
+export const errorCode = (e: unknown): string | undefined =>
+  typeof e === "object" && e !== null && typeof (e as { code?: unknown }).code === "string" ? (e as { code: string }).code : undefined;
 
 /** supabase-js AuthApiError { code } → 문구. 그 외는 원문을 붙인다(Review Focus 4). */
 export function authErrorMessage(e: unknown, flow: "login" | "reset" = "login"): string {

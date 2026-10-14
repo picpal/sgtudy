@@ -8,7 +8,7 @@ import { routes, safeReturnTo } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/client";
 import { AuthShell } from "./AuthShell";
 import { OtpInput } from "./OtpInput";
-import { EMPTY_DIGITS, RESEND_SEC, authErrorMessage, isComplete, rateLimitWait, type Digits } from "./otp";
+import { EMPTY_DIGITS, RESEND_SEC, authErrorMessage, errorCode, isComplete, isResetNoAccount, rateLimitWait, type Digits } from "./otp";
 import { HAS_PASSWORD_KEY, otpFlowStep, signupAccountKind, type Verified } from "./flow";
 import { passwordFormError } from "./password";
 import { PasswordFields } from "./PasswordFields";
@@ -37,20 +37,23 @@ const COPY = {
   },
 } as const;
 
+/** 로그인했지만 비밀번호가 아직 없을 때(코드 확인 뒤 떠났다 돌아옴) 서버 페이지가 넘기는 시작 상태 */
+export type OtpFlowResume = { email: string; verified: Exclude<Verified, "has_password"> };
+
 /** 가입(shouldCreateUser: true)·재설정(false) 공용: 이메일 → 6자리 코드 → 비밀번호 정하기 → (닉네임) → returnTo */
-export function OtpPasswordFlow({ mode, returnTo }: { mode: OtpFlowMode; returnTo: string }) {
+export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode; returnTo: string; resume?: OtpFlowResume }) {
   const router = useRouter();
   const params = useSearchParams();
   const flow = mode === "reset" ? "reset" : "login";
   const [email, setEmail] = useState("");
   // 코드를 보냈(거나 빈도 제한으로 이미 보낸 것으로 보이는) 주소. 계정은 소문자로 저장되니 소문자로 쓴다(Q2-18)
-  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(resume?.email ?? null);
   const [digits, setDigits] = useState<Digits>(EMPTY_DIGITS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [rateLimited, setRateLimited] = useState(false);
   const [left, setLeft] = useState(0);
-  const [verified, setVerified] = useState<Verified | null>(null);
+  const [verified, setVerified] = useState<Verified | null>(resume?.verified ?? null);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const sentAt = useRef<number | null>(null);
@@ -94,7 +97,8 @@ export function OtpPasswordFlow({ mode, returnTo }: { mode: OtpFlowMode; returnT
     setRateLimited(false);
     const { error: e } = await createClient().auth.signInWithOtp({ email: to, options: { shouldCreateUser: mode === "signup" } });
     setBusy(false);
-    if (e) {
+    // 재설정: 없는 주소도 보낸 것처럼 코드 단계로 — 화면 분기로 계정 존재를 드러내지 않는다(코드 확인은 "맞지 않거나 만료" 로 끝난다)
+    if (e && !(mode === "reset" && isResetNoAccount(e))) {
       // 1분 안에 다시 요청: 남은 시간을 보여 주고, 이미 받은 코드를 입력하러 갈 수 있게 한다(Q2-08, Q2-30)
       const wait = rateLimitWait(e, sentTo === to ? sentAt.current : null, Date.now());
       if (wait !== null) {
@@ -157,6 +161,21 @@ export function OtpPasswordFlow({ mode, returnTo }: { mode: OtpFlowMode; returnT
       if (e) throw e;
       await finish();
     } catch (e2) {
+      // 재인증 켜짐(secure_password_change): 24시간보다 오래된 세션(resume)은 nonce 가 필요하다 →
+      // 로그아웃하고 이메일 단계부터 다시(새 코드 확인 = 새 세션이라 nonce 없이 바뀐다)
+      if (errorCode(e2) === "reauthentication_needed") {
+        try {
+          await signOut();
+        } catch {
+          /* 이미 끊긴 세션 — 그대로 이메일 단계로 */
+        }
+        setEmail(sentTo ?? "");
+        setSentTo(null);
+        setVerified(null);
+        setPassword("");
+        setConfirm("");
+        router.refresh();
+      }
       setBusy(false);
       setError(authErrorMessage(e2, flow));
     }
@@ -272,7 +291,14 @@ export function OtpPasswordFlow({ mode, returnTo }: { mode: OtpFlowMode; returnT
   }
 
   return (
-    <AuthShell title="인증 코드 입력" subtitle={`${sentTo} 로 보낸 6자리 코드를 입력해 주세요. 코드는 10분 동안 유효해요.`}>
+    <AuthShell
+      title="인증 코드 입력"
+      subtitle={
+        mode === "reset"
+          ? `가입된 주소라면 ${sentTo} 로 6자리 코드를 보냈어요. 코드는 10분 동안 유효해요.`
+          : `${sentTo} 로 보낸 6자리 코드를 입력해 주세요. 코드는 10분 동안 유효해요.`
+      }
+    >
       <OtpInput value={digits} onChange={onDigits} disabled={busy} />
       {error && <p role="alert" className="m-0 text-[13px] text-warn">{error}</p>}
       <div className="flex items-center justify-between text-[13px]">

@@ -56,7 +56,8 @@ npm test                                # Vitest(프론트 순수 함수·어댑
 - 호스팅 프로젝트 Auth 설정: Email OTP 켜기, 템플릿에 `{{ .Token }}`, OTP 길이 6, 만료 600초, 재전송 60초, Redirect URLs 에 `https://sgtudy.vercel.app/**`.
 - 로컬 로그인: 기본은 이메일+비밀번호. 가입·비밀번호 재설정 코드 메일은 Mailpit(http://127.0.0.1:54324)에서 본다. 시드 사용자(`supabase/seed.sql` §1)는 비밀번호가 없으니 `/reset-password` 로 만들거나 아래 마스터 계정을 쓴다.
 - 비밀번호 정책: 8자 이상, 영문+숫자(`src/components/auth/password.ts` ↔ config.toml `minimum_password_length`·`password_requirements` ↔ 호스팅 `scripts/apply-hosted-auth.sh`). config.toml 변경은 로컬 Supabase 재시작 후 적용된다.
-- 인증 메일 템플릿: `supabase/templates/{magic_link,confirmation}.html`(6자리 `{{ .Token }}`). 로컬은 config.toml 로 자동 적용, 호스팅은 `scripts/apply-hosted-auth.sh`(`.env.local` 의 `SMTP_HOST/PORT/USER/PASS/SENDER_EMAIL` 필요, `--dry-run` 으로 먼저 확인). 무료 플랜 기본 발송기는 템플릿 수정이 막혀 있어 커스텀 SMTP(발송 전용 키 — Brevo·SES 등)가 필요하다.
+- 비밀번호 변경(`/me`)은 재인증: `reauthenticate()` → 이메일 6자리 코드 → `updateUser({ password, nonce })` (config.toml `secure_password_change = true` ↔ 호스팅 `security_update_password_require_reauthentication`). GoTrue 는 **24시간 안에 만든 세션은 nonce 를 검사하지 않는다** — 가입·재설정 직후 비밀번호 저장이 그래서 되지만, 막 로그인한 세션을 탈취당하면 코드 없이 바꿀 수 있다(남는 위험). 화면은 늘 코드를 받는다.
+- 인증 메일 템플릿: `supabase/templates/{magic_link,confirmation,reauthentication}.html`(6자리 `{{ .Token }}`). magic_link 는 가입(기존 계정)·재설정 공용이라 "인증 코드" 로 중립, confirmation 은 새 가입, reauthentication 은 비밀번호 변경 본인 확인. 로컬은 config.toml 로 자동 적용, 호스팅은 `scripts/apply-hosted-auth.sh`(`.env.local` 의 `SMTP_HOST/PORT/USER/PASS/SENDER_EMAIL` 필요, `--dry-run` 으로 먼저 확인). 무료 플랜 기본 발송기는 템플릿 수정이 막혀 있어 커스텀 SMTP(발송 전용 키 — Brevo·SES 등)가 필요하다.
 - 로컬 DB 는 호스팅과 같은 PG 17(`[db] major_version = 17`). `supabase link` 는 `supabase/.temp/*-version` 에 호스팅 이미지 버전을 고정하는데, CLI 2.75 에서는 `gotrue-version` 고정이 HS256 키를 거부해 로컬 관리자 API·env 테스트가 깨진다 → link 후 `rm supabase/.temp/gotrue-version`(storage/rest 고정은 유지).
 - 로컬 DB 테스트(`*-db.test.ts`)를 돌리려면:
   `eval "$(supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY`
@@ -76,12 +77,20 @@ scripts/master-user.sh create --local    # 또는 --hosted. .env.local 의 MASTE
 scripts/master-user.sh delete --hosted   # 실오픈 전
 ```
 
-- 이메일 기본값 `sgtudy-master@example.com`(예약 도메인 — 메일이 실제로 가지 않음). 비밀번호는 `.env.local` 에만 있고 스크립트는 이메일만 출력한다. 서비스 롤 키는 실행 때 `supabase status`/`supabase projects api-keys` 에서 읽고 디스크에 쓰지 않는다.
-- `create` 는 멱등: 이미 있으면 비밀번호를 `.env.local` 값으로 맞춘다.
+- 이메일 기본값 `sgtudy-master@example.com`(예약 도메인 — 메일이 실제로 가지 않음). 비밀번호는 `.env.local` 에만 있고 스크립트는 이메일만 출력한다. 서비스 롤 키는 실행 때 `supabase status`/`supabase projects api-keys` 에서 읽고 디스크에 쓰지 않는다. `.env.local` 은 실행하지 않고 `MASTER_EMAIL`·`MASTER_PASSWORD`·`SUPABASE_PROJECT_REF` 만 읽는다.
+- 안전장치: 만들 때 `app_metadata.sgtudy_master = true` 를 붙이고, 이 표식이 없는 기존 사용자는 `create`·`delete` 모두 **거절**한다(주소를 잘못 넣어도 실사용자를 덮어쓰거나 지우지 않음). `--hosted` 는 `@example.com` 만 — 다른 주소는 `--force-email` + `[y/N]` 확인. 로컬 smoke: `supabase/tests/master-user-db.test.ts`(test:db).
+- `create` 는 멱등: 이미 있고 표식이 있으면 비밀번호를 `.env.local` 값으로 맞춘다(user_metadata 는 키만 더한다).
 - 실오픈 전 체크리스트
   1. 마스터가 리더인 방은 앱에서 삭제, 남의 방 참가는 탈퇴 — 방·멤버·초대·과제·제출·파일은 FK(NO ACTION)라 남아 있으면 `delete` 가 거절하고 남은 행을 보여 준다.
   2. `scripts/master-user.sh delete --hosted` → "지웠어요" 확인(프로필·알림은 함께 지워지고 메일 대기열은 user_id 가 비워진다).
   3. `.env.local` 의 `MASTER_*` 줄 삭제, 공유했던 비밀번호 폐기.
+
+### 인증 · 실오픈 전 체크리스트
+
+- [ ] **CAPTCHA 켜기**: Authentication → Attack Protection → Turnstile(Cloudflare) 사이트 키·시크릿 등록, 앱의 `signInWithPassword`·`signInWithOtp`·`reauthenticate` 에 `options.captchaToken` 전달. 지금 방어는 IP 단위 rate limit 뿐이다(분산 IP credential stuffing·`/signup` 반복으로 메일 쿼터 `rate_limit_email_sent` 30/h 소진 — 그동안 모든 가입·재설정이 막힘).
+- [ ] **미확인 사용자 정리**: `/signup` 코드 발송이 주소마다 계정 행을 만든다. 주기적으로(예: 주 1회) `email_confirmed_at is null and created_at < now() - interval '1 day'` 인 auth 사용자를 관리자 API 로 지운다(앱 데이터가 없는 행만 — FK NO ACTION 이라 데이터가 있으면 삭제가 막힌다).
+- [ ] `scripts/apply-hosted-auth.sh` 가 찍는 rate limit(`rate_limit_otp`·`rate_limit_verify`·`rate_limit_token_refresh`·`rate_limit_email_sent`)·재인증 값 확인.
+- 남는 위험(문서화): 재설정 화면은 없는 주소도 "가입된 주소라면 코드가 갔어요" 로 똑같이 코드 단계로 가지만, GoTrue `/otp` 를 anon 키로 직접 부르면 없는 주소(422 `otp_disabled`)와 있는 주소(200)가 구분된다. 로그인도 GoTrue 가 있는 계정만 bcrypt 비교를 해 응답 시간 차이가 난다. 둘 다 GoTrue 고유 동작 — 막으려면 서버 라우트로 감싸야 한다(CAPTCHA 가 대량 열거는 늦춘다). 비밀번호 변경 재인증의 24시간 예외도 위 참고.
 
 ### 배포 전 체크리스트 (수동 · 게이트)
 
