@@ -15,7 +15,20 @@ import { createClient } from "@/lib/supabase/server";
 /** 서버 클라이언트(쿠키 기반). C6: 서버 파일의 rpc()/fetch*() 에는 이걸 넘긴다 */
 export const getServerClient = cache(createClient);
 
-/** 로그인 사용자(Auth). 비로그인이면 null */
+/**
+ * 로그인 여부·식별만 필요할 때(가드·me_get 전 확인). JWT 를 검증한 claims, 비로그인이면 null.
+ * 호스팅은 비대칭키(ES256)라 JWKS 로 로컬 검증 → getUser() 의 Auth 왕복이 없다.
+ */
+export const getAuthClaims = cache(async () => {
+  const { data } = await (await getServerClient()).auth.getClaims();
+  return data?.claims ?? null;
+});
+
+/**
+ * Auth 서버의 최신 사용자 객체(왕복 1회). 비로그인이면 null.
+ * /signup·/reset-password 는 비밀번호 설정 여부(user_metadata·identities)를 봐야 하는데 JWT claims 는 발급 시점 값이라
+ * updateUser 직후에 낡을 수 있으므로 이쪽을 쓴다.
+ */
 export const getAuthUser = cache(async () => {
   const {
     data: { user },
@@ -25,7 +38,7 @@ export const getAuthUser = cache(async () => {
 
 /** 비로그인이면 null. me_get 은 온보딩 전에도 허용(03-api §1). 실패 시 throw */
 export const getMe = cache(async (): Promise<Me | null> => {
-  if (!(await getAuthUser())) return null;
+  if (!(await getAuthClaims())) return null;
   return rpc<Me>("me_get", {}, await getServerClient());
 });
 

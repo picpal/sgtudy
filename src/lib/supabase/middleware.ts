@@ -4,7 +4,9 @@ import { isProtectedPath, loginUrl } from "./return-to";
 
 /**
  * 세션 쿠키 갱신 + 보호 라우트 가드(D6). @supabase/ssr 공식 패턴: 요청 쿠키와 응답 쿠키를 함께 갱신한다.
- * getUser() 는 Auth 서버에 토큰을 검증시키므로 getSession() 대신 쓴다.
+ * 가드는 로그인 여부만 보면 되므로 getClaims() 로 JWT 를 검증한다 — 호스팅(ES256)은 JWKS(캐시)로 로컬 검증해
+ * Auth 왕복이 없고, 대칭키(로컬 HS256)면 내부에서 getUser 와 같은 서버 검증으로 떨어진다. getSession() 은 서명 검증이 없어 쓰지 않는다.
+ * getClaims() 도 만료 임박 토큰은 먼저 refresh 하므로 아래 setAll 쿠키 갱신 패턴은 그대로 동작한다.
  */
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -31,7 +33,8 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
     },
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims.sub ?? null;
 
   if (!user && isProtectedPath(request.nextUrl.pathname)) {
     const returnTo = request.nextUrl.pathname + request.nextUrl.search;
