@@ -66,9 +66,10 @@ export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; l
       <div className="mx-auto flex w-full min-h-0 max-w-[1408px] flex-1 gap-4 max-[901px]:flex-wrap">
         <RoomSidebar selected={dto.slug} items={sidebar} total={list.tabCounts.public} />
         <main className="thin-scroll min-h-0 min-w-0 flex-[999_1_640px] overflow-y-auto rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:order-first max-[901px]:overflow-visible max-sm:px-4">
-          <div className="flex flex-wrap items-start gap-7">
+          {/* 정보(460) + 간격(28) + 참가 카드(300) = 788 보다 좁으면 카드가 아래로 떨어진다 — 그땐 360 에 묶지 않고 두 카드를 나란히 (태블릿·좁은 PC) */}
+          <div className="flex flex-wrap items-start gap-7 @container">
             <RoomInfo room={room} onShare={share} />
-            <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px]">
+            <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px] @max-[788px]:grid @max-[788px]:max-w-none @max-[788px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] @max-[788px]:items-start">
               <JoinCard
                 room={room}
                 act={act}
