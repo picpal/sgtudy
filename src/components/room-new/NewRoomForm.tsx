@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Switch } from "@/components/ui/Switch";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { rpc, toApiError } from "@/lib/api/errors";
@@ -11,9 +12,11 @@ import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
 import { EMPTY_VALUES, clampCp, firstErrorKey, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
+// 운영 규칙은 읽기 화면에서 줄마다 한 항목(rulesOf)으로 보인다 — 표·코드 블록·제목처럼 줄을 넘는 모양은 주지 않는다
+const RULE_TOOLS = ["bold", "italic", "strike", "code", "link", "bullet"] as const;
+
 const field = "h-12 w-full rounded-[12px] border border-line-3 px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE]";
 const JOIN_MODES = [["direct", "바로 참가", "누구나 바로 들어와요"], ["approval", "승인제", "그룹장이 승인해야 참가돼요"]] as const;
-const area = "min-h-[96px] w-full resize-y rounded-[12px] border border-line-3 px-4 py-3 text-[14px] text-ink outline-none focus:border-mint";
 
 function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
   return (
@@ -22,6 +25,16 @@ function Field({ label, error, children }: { label: string; error?: string; chil
       {children}
       {error && <span role="alert" className="text-[12px] font-medium text-warn">{error}</span>}
     </label>
+  );
+}
+
+/** 마크다운 에디터 칸 — 편집 면은 <label> 로 감쌀 수 없어(contenteditable) id 로 이름을 잇는다 */
+function EditorField({ id, label, children }: { id: string; label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-[6px]">
+      <span id={id} className="text-[12px] font-semibold text-ink-3">{label}</span>
+      {children}
+    </div>
   );
 }
 
@@ -132,8 +145,8 @@ export function NewRoomForm() {
           <button type="button" onClick={() => setMore((m) => !m)} aria-expanded={more} className="h-11 self-start text-[14px] font-semibold text-mint">{more ? "접기" : "더 설정하기"}</button>
           {more && (
             <div className="flex flex-col gap-4 rounded-[14px] bg-surface-2 p-4">
-              <Field label="상세 설명 (마크다운)"><textarea className={area} value={v.descriptionMd} onChange={(e) => set("descriptionMd", e.target.value)} /></Field>
-              <Field label="운영 규칙 (마크다운 · 한 줄에 하나, '- ' 로 시작)"><textarea className={area} value={v.rulesMd} onChange={(e) => set("rulesMd", e.target.value)} placeholder={"- 마감은 회차 마지막 날 23:59(KST)예요."} /></Field>
+              <EditorField id="new-room-desc" label="상세 설명"><MarkdownEditor labelledBy="new-room-desc" value={v.descriptionMd} onChange={(x) => set("descriptionMd", x)} placeholder="스터디 목표, 진행 방식, 준비물 등을 적어 주세요" /></EditorField>
+              <EditorField id="new-room-rules" label="운영 규칙 (한 줄에 하나씩 목록으로)"><MarkdownEditor labelledBy="new-room-rules" value={v.rulesMd} onChange={(x) => set("rulesMd", x)} placeholder="- 마감은 회차 마지막 날 23:59(KST)예요." minHeight={96} tools={RULE_TOOLS} /></EditorField>
               <Field label="최소 인원 (선택)" error={errors.minMembers}><input name="minMembers" aria-invalid={!!errors.minMembers} type="number" inputMode="numeric" min={1} className={field} value={v.minMembers} onChange={(e) => set("minMembers", e.target.value)} /></Field>
               <div className="flex items-center justify-between">
                 <span><span className="block text-[14px] font-semibold">그룹장도 과제 수행</span><span className="block text-[12px] text-muted">끄면 공통 과제 담당자에서 빠져요 (시작 후 변경 불가)</span></span>

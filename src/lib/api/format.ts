@@ -148,9 +148,9 @@ export function glanceOf(stats: RoomDetail["stats"], status: RoomStatusDto): { r
   return { rounds, tasks };
 }
 
-/** rules_md → 불릿 배열 (D14: 마크다운 1필드, 프론트가 "- " 라인 분해) */
+/** rules_md → 불릿 배열 (D14: 마크다운 1필드, 프론트가 줄 단위로 분해). 줄 앞 목록 표식(-, *, +, 1., - [ ])은 뗀다 */
 export const rulesOf = (md: string): string[] =>
   md
     .split(/\r?\n/)
-    .map((l) => l.replace(/^\s*[-*]\s+/, "").trim())
+    .map((l) => l.replace(/^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/, "").trim())
     .filter(Boolean);

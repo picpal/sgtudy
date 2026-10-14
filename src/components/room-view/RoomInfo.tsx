@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { Inline, MarkdownView } from "@/components/my-study/MarkdownView";
 import { PAL } from "@/lib/palette";
 import { type Room } from "@/data/room-view";
 import { StatusBadge } from "./StatusBadge";
@@ -131,14 +132,16 @@ export function RoomInfo({ room, onShare }: { room: Room; onShare: () => void })
       <H3 className="mb-[10px] mt-[30px]" icon={<><path d="M12 11v6" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.4" fill="#FFFFFF" /></>}>
         스터디 소개
       </H3>
-      <p className="text-[14px] leading-[1.75] text-ink-2">{room.about}</p>
+      <MarkdownView src={room.about} />
 
       <H3 className="mb-[10px] mt-[26px]" icon={<path d="m8 12.2 2.8 2.8L16.5 9" stroke="#FFFFFF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />}>
         운영 규칙
       </H3>
       <ul className="list-disc pl-5 text-[14px] leading-[1.75] text-ink-2">
         {room.rules.map((r) => (
-          <li key={r}>{r}</li>
+          <li key={r}>
+            <Inline text={r} />
+          </li>
         ))}
       </ul>
 

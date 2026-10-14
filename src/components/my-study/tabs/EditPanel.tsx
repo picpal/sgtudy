@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { TaskType } from "@/data/my-study";
 import { Seg } from "../bits";
 import { dropFieldOv, periodWarnings, type TreeMember, type TreeNode } from "../model";
@@ -128,10 +129,18 @@ export function EditPanel({ n, parent, period, members, S, update, api, go, requ
           ))}
         </div>
       )}
-      <label className="flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
-        설명 (마크다운)
-        <textarea rows={3} value={n.desc} onChange={(e) => update((p) => ({ ...patchOv(p, "descs", { ...p.ov.descs, [id]: e.target.value }), saved: "" }))} placeholder="목표, 참고 링크, 제출 형식 등을 적어 주세요" className="resize-y rounded-[10px] border border-line-3 px-3 py-[10px] text-[13px] font-normal text-ink" />
-      </label>
+      <div className="flex flex-col gap-[6px]">
+        <span id={`desc-label-${id}`} className="text-[12px] font-semibold text-ink-3">
+          설명
+        </span>
+        <MarkdownEditor
+          labelledBy={`desc-label-${id}`}
+          value={n.desc}
+          onChange={(v) => update((p) => ({ ...patchOv(p, "descs", { ...p.ov.descs, [id]: v }), saved: "" }))}
+          placeholder="목표, 참고 링크, 제출 형식 등을 적어 주세요"
+          minHeight={110}
+        />
+      </div>
 
       {n.leaf && (
         <>
