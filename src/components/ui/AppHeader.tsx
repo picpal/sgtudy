@@ -167,7 +167,8 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
         })}
       </nav>
       <div className="flex-[1_1_24px] max-sm:flex-1" />
-      {children && <div className="flex min-w-0 max-sm:order-9 max-sm:w-full [&>*]:max-sm:w-full">{children}</div>}
+      {/* ≤900: 한 줄에 다 들어가지 않아(768·820 에서 벨·아바타가 둘째 줄로 밀렸다) 검색 등 끼운 요소를 맨 아래 전폭 줄로 내린다 */}
+      {children && <div className="flex min-w-0 max-[901px]:order-9 max-[901px]:w-full [&>*]:max-[901px]:flex-auto">{children}</div>}
       {me ? (
         <>
           {bell}
