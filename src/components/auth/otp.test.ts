@@ -64,8 +64,24 @@ describe("authErrorMessage", () => {
     expect(authErrorMessage({ name: "AuthApiError", code: "reauthentication_needed", message: "x" })).toBe("보안을 위해 이메일 인증을 다시 해 주세요");
   });
   it("falls back to a generic message", () => {
-    expect(authErrorMessage(new TypeError("Failed to fetch"))).toBe("로그인에 실패했어요 · Failed to fetch");
+    expect(authErrorMessage(new Error("boom"))).toBe("로그인에 실패했어요 · boom");
     expect(authErrorMessage("??")).toBe("로그인에 실패했어요");
+  });
+  it("names the flow in the fallback so sign-up / reset / change never say 로그인", () => {
+    expect(authErrorMessage(new Error("boom"), "signup")).toBe("회원가입을 진행하지 못했어요 · boom");
+    expect(authErrorMessage(new Error("boom"), "reset")).toBe("비밀번호 재설정을 진행하지 못했어요 · boom");
+    expect(authErrorMessage("??", "change")).toBe("비밀번호를 바꾸지 못했어요");
+    expect(authErrorMessage({ name: "AuthApiError", code: "otp_expired", message: "x" }, "signup")).toBe("코드가 맞지 않거나 만료됐어요");
+  });
+  it("network failures get a connection hint, not raw 'Failed to fetch'", () => {
+    const offline = Object.assign(new Error("Failed to fetch"), { name: "AuthRetryableFetchError", status: 0 });
+    expect(authErrorMessage(offline)).toBe("인터넷 연결을 확인하고 다시 시도해 주세요");
+    expect(authErrorMessage(offline, "signup")).toBe("인터넷 연결을 확인하고 다시 시도해 주세요");
+    expect(authErrorMessage(new TypeError("Failed to fetch"))).toBe("인터넷 연결을 확인하고 다시 시도해 주세요");
+    expect(authErrorMessage(new TypeError("Load failed"), "reset")).toBe("인터넷 연결을 확인하고 다시 시도해 주세요");
+    const down = Object.assign(new Error("Service Unavailable"), { name: "AuthRetryableFetchError", status: 503 });
+    expect(authErrorMessage(down)).toBe("서버에 잠시 연결할 수 없어요 · 잠시 후 다시 시도해 주세요");
+    expect(authErrorMessage(new TypeError("x is not a function"))).toBe("로그인에 실패했어요 · x is not a function");
   });
 });
 

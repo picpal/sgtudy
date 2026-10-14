@@ -69,15 +69,41 @@ export function isResetNoAccount(e: unknown): boolean {
 export const errorCode = (e: unknown): string | undefined =>
   typeof e === "object" && e !== null && typeof (e as { code?: unknown }).code === "string" ? (e as { code: string }).code : undefined;
 
-/** supabase-js AuthApiError { code } → 문구. 그 외는 원문을 붙인다(Review Focus 4). */
-export function authErrorMessage(e: unknown, flow: "login" | "reset" = "login"): string {
+export type AuthFlow = "login" | "signup" | "reset" | "change";
+
+/** 코드로 못 옮긴 실패의 머리말 — 가입·재설정·변경 화면에 "로그인에 실패했어요" 가 뜨지 않게 흐름별로 */
+const FAIL_TEXT: Record<AuthFlow, string> = {
+  login: "로그인에 실패했어요",
+  signup: "회원가입을 진행하지 못했어요",
+  reset: "비밀번호 재설정을 진행하지 못했어요",
+  change: "비밀번호를 바꾸지 못했어요",
+};
+export const NETWORK_TEXT = "인터넷 연결을 확인하고 다시 시도해 주세요";
+const UNAVAILABLE_TEXT = "서버에 잠시 연결할 수 없어요 · 잠시 후 다시 시도해 주세요";
+
+/**
+ * supabase-js 는 fetch 자체가 실패하면 AuthRetryableFetchError(status 0, "Failed to fetch"),
+ * 502/503/504 면 같은 이름에 그 status 를 준다. 우리 API(fetchMe)는 TypeError 를 그대로 던질 수 있다.
+ */
+function networkText(e: unknown): string | null {
+  if (typeof e !== "object" || e === null) return null;
+  const { name, status, message } = e as { name?: unknown; status?: unknown; message?: unknown };
+  if (name === "AuthRetryableFetchError") return status === 0 || status === undefined ? NETWORK_TEXT : UNAVAILABLE_TEXT;
+  if (e instanceof TypeError && /fetch|network|load failed/i.test(String(message))) return NETWORK_TEXT;
+  return null;
+}
+
+/** supabase-js AuthApiError { code } → 문구. 네트워크 실패는 연결 안내, 그 외는 흐름별 머리말에 원문을 붙인다(Review Focus 4). */
+export function authErrorMessage(e: unknown, flow: AuthFlow = "login"): string {
   if (typeof e === "object" && e !== null && "code" in e && typeof (e as { code: unknown }).code === "string") {
     const code = (e as { code: string }).code;
     const known = (flow === "reset" && RESET_CODE_TEXT[code]) || AUTH_CODE_TEXT[code];
     if (known) return known;
   }
-  if (e instanceof Error) return `로그인에 실패했어요 · ${e.message}`;
-  return "로그인에 실패했어요";
+  const net = networkText(e);
+  if (net) return net;
+  if (e instanceof Error && e.message) return `${FAIL_TEXT[flow]} · ${e.message}`;
+  return FAIL_TEXT[flow];
 }
 
 export const RESEND_SEC = 60;
