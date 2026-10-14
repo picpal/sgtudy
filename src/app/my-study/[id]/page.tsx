@@ -6,8 +6,7 @@ import type { TabId } from "@/components/my-study/StudyHeaderInfo";
 import { toApiError } from "@/lib/api/errors";
 import { getServerClient, requireMe } from "@/lib/api/me.server";
 import { fetchCurriculum, fetchMyStudies } from "@/lib/api/my-study";
-import { roomMetadata } from "@/lib/api/room-meta.server";
-import { fetchRoomDetail } from "@/lib/api/room-view";
+import { getRoomDetail, roomMetadata } from "@/lib/api/room-meta.server";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 
@@ -19,11 +18,16 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function MyStudyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; mode?: string; task?: string; item?: string }> }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
+  // 데이터 RPC 는 로그인·온보딩 확인(me_get)을 기다리지 않고 함께 출발한다 — 거절은 아래 try 에서 받으므로 미리 삼켜 둔다.
+  // room_get 은 generateMetadata 와 같은 요청 메모(getRoomDetail)를 쓴다.
+  const pending = getServerClient().then((client) =>
+    Promise.all([getRoomDetail(id), fetchCurriculum(id, client), fetchMyStudies(client)]),
+  );
+  pending.catch(() => {});
   await requireMe(routes.myStudy(id));
-  const client = await getServerClient();
   let data: [RoomDetail, Curriculum, MeStudies];
   try {
-    data = await Promise.all([fetchRoomDetail(id, client), fetchCurriculum(id, client), fetchMyStudies(client)]);
+    data = await pending;
   } catch (e) {
     if (toApiError(e).code === "ROOM_NOT_FOUND") notFound();
     throw e;
