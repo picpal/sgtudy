@@ -271,7 +271,6 @@ export function EditView({ n, parent, period, members, S, update, api, go, reque
             maxHeight="none"
             expandable={false}
             stickyToolbar="var(--edit-bar-h, 68px)"
-            contentMaxWidth={920}
           />
         </div>
       </div>
