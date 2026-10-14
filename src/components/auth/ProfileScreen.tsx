@@ -9,6 +9,7 @@ import { toApiError } from "@/lib/api/errors";
 import { updateMe } from "@/lib/api/me";
 import type { Me } from "@/lib/api/types";
 import { AVATAR_PAL } from "@/lib/palette";
+import { ChangePassword } from "./ChangePassword";
 import { NicknameField } from "./NicknameField";
 import type { NickHint } from "./nickname";
 
@@ -103,6 +104,8 @@ export function ProfileScreen({ me }: { me: Me }) {
           {mailOk && <p role="status" className="m-0 text-[13px]" style={{ color: "#0D7A64" }}>{mailOk}</p>}
           <p className="m-0 text-[12px] text-muted">기본 알림(참가 승인·회차 시작·전원 제출)은 항상 발송돼요.</p>
         </section>
+
+        <ChangePassword email={me.email} />
       </main>
     </div>
   );
