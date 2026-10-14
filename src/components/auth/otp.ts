@@ -42,12 +42,26 @@ const AUTH_CODE_TEXT: Record<string, string> = {
   otp_disabled: "이메일 로그인이 꺼져 있어요 · 관리자에게 문의해 주세요",
   validation_failed: "이메일 주소를 확인해 주세요",
   email_address_invalid: "이메일 주소를 확인해 주세요",
+  invalid_credentials: "이메일 또는 비밀번호가 맞지 않아요",
+  email_not_confirmed: "이메일 인증이 끝나지 않은 계정이에요 · 회원가입에서 인증해 주세요",
+  weak_password: "비밀번호는 8자 이상, 영문과 숫자를 함께 써 주세요",
+  same_password: "지금 쓰는 비밀번호와 다른 비밀번호를 정해 주세요",
+};
+
+/** 비밀번호 재설정은 계정을 만들지 않는다(shouldCreateUser: false) — 없는 주소도 계정 존재를 드러내지 않는 같은 문구 */
+const NO_ACCOUNT_TEXT = "가입된 계정이 없거나 코드를 보낼 수 없어요";
+const RESET_CODE_TEXT: Record<string, string> = {
+  // GoTrue: 없는 주소 + create_user false → 422 otp_disabled "Signups not allowed for otp"
+  otp_disabled: NO_ACCOUNT_TEXT,
+  user_not_found: NO_ACCOUNT_TEXT,
+  signup_disabled: NO_ACCOUNT_TEXT,
 };
 
 /** supabase-js AuthApiError { code } → 문구. 그 외는 원문을 붙인다(Review Focus 4). */
-export function authErrorMessage(e: unknown): string {
+export function authErrorMessage(e: unknown, flow: "login" | "reset" = "login"): string {
   if (typeof e === "object" && e !== null && "code" in e && typeof (e as { code: unknown }).code === "string") {
-    const known = AUTH_CODE_TEXT[(e as { code: string }).code];
+    const code = (e as { code: string }).code;
+    const known = (flow === "reset" && RESET_CODE_TEXT[code]) || AUTH_CODE_TEXT[code];
     if (known) return known;
   }
   if (e instanceof Error) return `로그인에 실패했어요 · ${e.message}`;

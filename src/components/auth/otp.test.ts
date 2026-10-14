@@ -40,6 +40,18 @@ describe("authErrorMessage", () => {
     expect(authErrorMessage({ name: "AuthApiError", code: "otp_expired", message: "x" })).toBe("코드가 맞지 않거나 만료됐어요");
     expect(authErrorMessage({ name: "AuthApiError", code: "otp_disabled", message: "x" })).toBe("이메일 로그인이 꺼져 있어요 · 관리자에게 문의해 주세요");
   });
+  it("maps password login / password policy codes", () => {
+    expect(authErrorMessage({ name: "AuthApiError", code: "invalid_credentials", message: "Invalid login credentials" })).toBe("이메일 또는 비밀번호가 맞지 않아요");
+    expect(authErrorMessage({ name: "AuthWeakPasswordError", code: "weak_password", message: "x" })).toBe("비밀번호는 8자 이상, 영문과 숫자를 함께 써 주세요");
+    expect(authErrorMessage({ name: "AuthApiError", code: "same_password", message: "x" })).toBe("지금 쓰는 비밀번호와 다른 비밀번호를 정해 주세요");
+    expect(authErrorMessage({ name: "AuthApiError", code: "over_request_rate_limit", message: "x" })).toBe("요청이 너무 많아요 · 잠시 후 다시 시도해 주세요");
+  });
+  it("reset flow: unknown email does not reveal whether an account exists", () => {
+    const noSignup = { name: "AuthApiError", code: "otp_disabled", message: "Signups not allowed for otp" };
+    expect(authErrorMessage(noSignup, "reset")).toBe("가입된 계정이 없거나 코드를 보낼 수 없어요");
+    expect(authErrorMessage(noSignup)).toBe("이메일 로그인이 꺼져 있어요 · 관리자에게 문의해 주세요");
+    expect(authErrorMessage({ name: "AuthApiError", code: "otp_expired", message: "x" }, "reset")).toBe("코드가 맞지 않거나 만료됐어요");
+  });
   it("falls back to a generic message", () => {
     expect(authErrorMessage(new TypeError("Failed to fetch"))).toBe("로그인에 실패했어요 · Failed to fetch");
     expect(authErrorMessage("??")).toBe("로그인에 실패했어요");

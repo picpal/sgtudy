@@ -52,7 +52,9 @@ refresh_token_reuse_interval = 10
 enable_signup = true
 enable_anonymous_sign_ins = false
 enable_manual_linking = false
-minimum_password_length = 6
+# 비밀번호 정책 — src/components/auth/password.ts 와 같은 값. 호스팅 반영: scripts/apply-hosted-auth.sh
+minimum_password_length = 8
+password_requirements = "letters_digits"
 
 [auth.rate_limit]
 email_sent = 30

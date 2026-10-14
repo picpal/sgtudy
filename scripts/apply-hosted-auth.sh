@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 호스팅 Supabase Auth 에 커스텀 SMTP + 한국어 OTP 메일 템플릿을 적용한다.
+# 호스팅 Supabase Auth 에 커스텀 SMTP + 한국어 OTP 메일 템플릿 + 비밀번호 정책(8자 이상, 영문+숫자)을 적용한다.
 #
 # 필요한 값(.env.local, 커밋 금지):
 #   SUPABASE_PROJECT_REF   호스팅 프로젝트 ref (기본: neqlsvufmdxgqnwtevau)
@@ -52,6 +52,10 @@ print(json.dumps({
   "mailer_templates_magic_link_content": read("supabase/templates/magic_link.html"),
   "mailer_subjects_confirmation": "[슥터디] 가입 인증 코드",
   "mailer_templates_confirmation_content": read("supabase/templates/confirmation.html"),
+  # config.toml minimum_password_length = 8 / password_requirements = "letters_digits" 와 같은 값.
+  # Management API 는 문자 집합을 ':' 로 구분해 받는다(집합마다 한 자 이상) — CLI 가 letters_digits 를 이 값으로 바꾼다
+  "password_min_length": 8,
+  "password_required_characters": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:0123456789",
 }))
 PY
 )
@@ -71,4 +75,5 @@ curl -s -H "Authorization: Bearer $TOKEN" "$API" | python3 -c '
 import sys, json
 d = json.load(sys.stdin)
 print("smtp_host:", d.get("smtp_host"), "| sender:", d.get("smtp_admin_email"), "| otp:", d.get("mailer_otp_length"), d.get("mailer_otp_exp"), "s")
+print("password:", d.get("password_min_length"), "chars, required sets:", d.get("password_required_characters"))
 print("templates carry code:", all("{{ .Token }}" in (d.get(k) or "") for k in ("mailer_templates_magic_link_content", "mailer_templates_confirmation_content")))'
