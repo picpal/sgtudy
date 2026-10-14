@@ -1,6 +1,6 @@
 # 슥터디 (sgtudy)
 
-스터디 그룹 목표·일정 관리 웹. Next.js 16 + Supabase(Postgres RPC · Auth 이메일 OTP · Storage).
+스터디 그룹 목표·일정 관리 웹. Next.js 16 + Supabase(Postgres RPC · Auth 이메일+비밀번호, 가입·재설정은 이메일 OTP · Storage).
 
 - 프로덕션: https://sgtudy.vercel.app
 - 디자인 스펙: `docs/claude-design-prompt.md`, 화면별 구현 스펙 `docs/specs/*.md`
@@ -22,7 +22,9 @@ npm run lint
 | 방 상세 (둘러보기) | `/rooms/[id]` | `src/components/room-view`, `src/data/room-view.ts` |
 | 내 스터디 | `/my-study/[id]` | `src/components/my-study`, `src/data/my-study.ts` |
 | 내 일정 | `/schedule` | `src/components/schedule`, `src/data/schedule.ts` |
-| 로그인 (이메일 OTP) | `/login` | `src/components/auth/LoginScreen.tsx` |
+| 로그인 (이메일+비밀번호) | `/login` | `src/components/auth/LoginScreen.tsx` |
+| 회원가입 (이메일 코드 → 비밀번호) | `/signup` | `src/components/auth/OtpPasswordFlow.tsx` |
+| 비밀번호 재설정 (이메일 코드 → 새 비밀번호) | `/reset-password` | `src/components/auth/OtpPasswordFlow.tsx` |
 | 닉네임 설정 | `/onboarding` | `src/components/auth/OnboardingScreen.tsx` |
 | 내 프로필 | `/me` | `src/components/auth/ProfileScreen.tsx` |
 | 초대 링크 | `/invite/[token]` | `src/components/auth/InviteScreen.tsx` |
@@ -52,7 +54,8 @@ npm test                                # Vitest(프론트 순수 함수·어댑
 
 - 환경변수: `.env.example` 참조. Vercel 에는 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` 만.
 - 호스팅 프로젝트 Auth 설정: Email OTP 켜기, 템플릿에 `{{ .Token }}`, OTP 길이 6, 만료 600초, 재전송 60초, Redirect URLs 에 `https://sgtudy.vercel.app/**`.
-- 로컬 로그인: OTP 메일은 Mailpit(http://127.0.0.1:54324)에서 본다. 시드 사용자 이메일은 `supabase/seed.sql` §1.
+- 로컬 로그인: 기본은 이메일+비밀번호. 가입·비밀번호 재설정 코드 메일은 Mailpit(http://127.0.0.1:54324)에서 본다. 시드 사용자(`supabase/seed.sql` §1)는 비밀번호가 없으니 `/reset-password` 로 만들거나 아래 마스터 계정을 쓴다.
+- 비밀번호 정책: 8자 이상, 영문+숫자(`src/components/auth/password.ts` ↔ config.toml `minimum_password_length`·`password_requirements` ↔ 호스팅 `scripts/apply-hosted-auth.sh`). config.toml 변경은 로컬 Supabase 재시작 후 적용된다.
 - 인증 메일 템플릿: `supabase/templates/{magic_link,confirmation}.html`(6자리 `{{ .Token }}`). 로컬은 config.toml 로 자동 적용, 호스팅은 `scripts/apply-hosted-auth.sh`(`.env.local` 의 `SMTP_HOST/PORT/USER/PASS/SENDER_EMAIL` 필요, `--dry-run` 으로 먼저 확인). 무료 플랜 기본 발송기는 템플릿 수정이 막혀 있어 커스텀 SMTP(발송 전용 키 — Brevo·SES 등)가 필요하다.
 - 로컬 DB 는 호스팅과 같은 PG 17(`[db] major_version = 17`). `supabase link` 는 `supabase/.temp/*-version` 에 호스팅 이미지 버전을 고정하는데, CLI 2.75 에서는 `gotrue-version` 고정이 HS256 키를 거부해 로컬 관리자 API·env 테스트가 깨진다 → link 후 `rm supabase/.temp/gotrue-version`(storage/rest 고정은 유지).
 - 로컬 DB 테스트(`*-db.test.ts`)를 돌리려면:
@@ -63,6 +66,22 @@ npm test                                # Vitest(프론트 순수 함수·어댑
 - 프론트 어댑터: `src/lib/api/{errors,format,me,notifications,invite,rooms,room-view,my-study,schedule}.ts`. 순수 변환 함수는 `npm test`(Vitest)로 목업 숫자(toeic 8주, aws 현재 회차 33%·D-2 — 전체 달성률은 24%, algo 87%)를 회귀 검증한다.
 - 로컬 E2E: `docs/superpowers/plans/2026-10-13-backend-05-frontend-integration.md` Task 15 체크리스트(ego-browser, http://localhost:3100, OTP 는 Mailpit).
 - Vercel: `vercel env add NEXT_PUBLIC_SUPABASE_URL production` / `vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production` (preview 도 동일). `service_role` 은 넣지 않는다. `.vercelignore` 로 `supabase/`·`docs/` 제외.
+
+### 테스트 마스터 계정 · 실오픈 전 삭제 체크리스트
+
+테스트는 마스터 계정(닉네임 "마스터")으로 `/login` 에서 이메일+비밀번호로 로그인해 쓴다.
+
+```bash
+scripts/master-user.sh create --local    # 또는 --hosted. .env.local 의 MASTER_EMAIL/MASTER_PASSWORD 사용(없으면 생성해 덧붙임)
+scripts/master-user.sh delete --hosted   # 실오픈 전
+```
+
+- 이메일 기본값 `sgtudy-master@example.com`(예약 도메인 — 메일이 실제로 가지 않음). 비밀번호는 `.env.local` 에만 있고 스크립트는 이메일만 출력한다. 서비스 롤 키는 실행 때 `supabase status`/`supabase projects api-keys` 에서 읽고 디스크에 쓰지 않는다.
+- `create` 는 멱등: 이미 있으면 비밀번호를 `.env.local` 값으로 맞춘다.
+- 실오픈 전 체크리스트
+  1. 마스터가 리더인 방은 앱에서 삭제, 남의 방 참가는 탈퇴 — 방·멤버·초대·과제·제출·파일은 FK(NO ACTION)라 남아 있으면 `delete` 가 거절하고 남은 행을 보여 준다.
+  2. `scripts/master-user.sh delete --hosted` → "지웠어요" 확인(프로필·알림은 함께 지워지고 메일 대기열은 user_id 가 비워진다).
+  3. `.env.local` 의 `MASTER_*` 줄 삭제, 공유했던 비밀번호 폐기.
 
 ### 배포 전 체크리스트 (수동 · 게이트)
 
