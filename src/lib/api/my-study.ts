@@ -1,6 +1,6 @@
 import { rpc, type Db } from "@/lib/api/errors";
 import { curIndexOf, curOf, ddayOf, mmdd, periodLong, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
-import type { Curriculum, MeStudies, NodePatch, RoomDetail } from "@/lib/api/types";
+import type { Curriculum, MeState, MeStudies, MyPermissions, NodePatch, RoomDetail, RoomMemberAdminDto } from "@/lib/api/types";
 import { dday, diffDays, weekdayKo } from "@/lib/date";
 import type { MemberInfo, NextDue, Room, RoundRow, SidebarGroup } from "@/data/my-study";
 import type { Overrides, Tree, TreeNode } from "@/components/my-study/model";
@@ -11,6 +11,13 @@ export const nodeCreate = (slug: string, parentId: string | null) => rpc<Curricu
 export const nodeUpdate = (slug: string, nodeId: string, patch: NodePatch) => rpc<Curriculum>("node_update", { p_slug: slug, p_node_id: nodeId, p_patch: patch });
 export const nodeDelete = (slug: string, nodeId: string) => rpc<Curriculum>("node_delete", { p_slug: slug, p_node_id: nodeId });
 export const nodeArchive = (slug: string, nodeId: string, archived: boolean) => rpc<Curriculum>(archived ? "node_archive" : "node_unarchive", { p_slug: slug, p_node_id: nodeId });
+/** 그룹장 전용: ACTIVE 멤버에게 커리큘럼 편집을 맡기거나(allow=true) 거둔다. 멱등 */
+export const setCurriculumEditor = (slug: string, userId: string, allow: boolean, client?: Db) =>
+  rpc<RoomMemberAdminDto>("member_set_curriculum_editor", { p_slug: slug, p_user: userId, p_allow: allow }, client);
+
+/** 호출자가 커리큘럼을 편집할 수 있나 — RoomDetail·Curriculum 의 myPermissions. 없으면(구 응답) 그룹장만 */
+export const canEditCurriculumOf = (d: { myPermissions?: MyPermissions; me?: MeState }): boolean =>
+  d.myPermissions?.canEditCurriculum ?? d.me?.state === "leader";
 
 function minTextOf(d: RoomDetail): { minText: string; minOk: boolean } {
   if (d.minMembers === null) return { minText: "", minOk: true };

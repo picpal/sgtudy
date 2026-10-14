@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { AWS } from "@/components/my-study/fixtures";
 import { EMPTY_OVERRIDES, buildTree } from "@/components/my-study/model";
 import type { MeStudies, RoomDetail } from "./types";
-import { filterSidebarGroups, patchOf, toSidebarGroups, toStudyRoom } from "./my-study";
+import type { Db } from "./errors";
+import { canEditCurriculumOf, filterSidebarGroups, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
 
 const TODAY = "2026-10-12";
 const P = (userId: string, nickname: string, tone: RoomDetail["leader"]["tone"]) => ({ userId, nickname, tone });
@@ -145,5 +146,23 @@ describe("filterSidebarGroups (Q3-06)", () => {
     expect(filterSidebarGroups(groups, "aws")).toEqual([{ label: "진행중", items: [groups[0].items[0]] }]);
     expect(filterSidebarGroups(groups, "백준")).toEqual([groups[1]]);
     expect(filterSidebarGroups(groups, "zzzz")).toEqual([]);
+  });
+});
+
+describe("curriculum editors (0011)", () => {
+  it("canEditCurriculumOf: server myPermissions wins, older payloads fall back to leader", () => {
+    expect(canEditCurriculumOf({ ...aws, myPermissions: { canEditCurriculum: true } })).toBe(true);
+    expect(canEditCurriculumOf({ ...aws, me: { state: "leader" }, myPermissions: { canEditCurriculum: false } })).toBe(false);
+    expect(canEditCurriculumOf({ ...aws, me: { state: "leader" } })).toBe(true);
+    expect(canEditCurriculumOf({ ...aws, me: { state: "active" } })).toBe(false);
+    expect(canEditCurriculumOf({ myPermissions: { canEditCurriculum: true } })).toBe(true);
+    expect(canEditCurriculumOf({})).toBe(false);
+  });
+  it("setCurriculumEditor calls member_set_curriculum_editor with slug/user/allow", async () => {
+    const calls: [string, Record<string, unknown>][] = [];
+    const row = { userId: "u1", nickname: "철수", tone: "blue", role: "member", status: "active", joinedAt: null, canEditCurriculum: true };
+    const client = { rpc: (name: string, args: Record<string, unknown>) => { calls.push([name, args]); return Promise.resolve({ data: row, error: null }); } } as unknown as Db;
+    await expect(setCurriculumEditor("aws", "u1", true, client)).resolves.toEqual(row);
+    expect(calls).toEqual([["member_set_curriculum_editor", { p_slug: "aws", p_user: "u1", p_allow: true }]]);
   });
 });

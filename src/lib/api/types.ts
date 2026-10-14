@@ -99,10 +99,21 @@ export type RoundSummary = {
   pct: number | null;
   tasks?: LeafSummary[];
 };
+/** 호출자 권한 (0011). 서버는 room_get·curriculum_get·node_* 응답에 늘 넣는다 — 비로그인은 false */
+export type MyPermissions = { canEditCurriculum: boolean };
 export type RoomMemberDto = Person & {
   role: "leader" | "member";
   status: "active" | "pending" | "inactive";
   joinedAt: string | null;
+  /** 실효 커리큘럼 편집 권한(그룹장 true, ACTIVE 멤버는 위임 여부). 서버는 늘 보낸다 — 선택형은 기존 픽스처 호환용 */
+  canEditCurriculum?: boolean;
+};
+/** room_members_get.items · member_set_curriculum_editor 반환 (그룹장 전용 멤버 한 줄) */
+export type RoomMemberAdminDto = Person & {
+  role: "leader" | "member";
+  status: "active" | "pending" | "inactive" | "rejected" | "canceled" | "expired";
+  joinedAt: string | null;
+  canEditCurriculum: boolean;
 };
 export type RoomDetail = {
   today: string;
@@ -146,6 +157,7 @@ export type RoomDetail = {
   } | null;
   invite: { url: string } | null;
   pendingCount: number;
+  myPermissions?: MyPermissions;
 };
 
 export type MembershipResult = {
@@ -175,7 +187,7 @@ export type InvitePreview = {
 };
 
 /* ---------- 커리큘럼 ---------- */
-export type CurriculumMember = Person & { role: "leader" | "member"; status: "active" | "inactive"; doesTasks: boolean };
+export type CurriculumMember = Person & { role: "leader" | "member"; status: "active" | "inactive"; doesTasks: boolean; canEditCurriculum?: boolean };
 export type NodeDto = {
   id: string;
   parentId: string | null;
@@ -206,6 +218,7 @@ export type Curriculum = {
   nodes: NodeDto[];
   stats: { overallPct: number | null; leafCount: number; unassignedCount: number };
   warnings?: { code: string; nodeId?: string }[];
+  myPermissions?: MyPermissions;
 };
 export type NodePatch = {
   title?: string;
