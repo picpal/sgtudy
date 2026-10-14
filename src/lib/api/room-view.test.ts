@@ -14,7 +14,7 @@ const detail = (o: Partial<RoomDetail> = {}): RoomDetail => ({
   status: "recruit", archived: false, isPublic: true, joinMode: "direct", startDate: "2026-11-02", endDate: "2026-12-27", maxMembers: 8, minMembers: 4, memberCount: 2,
   leader: P("u-seoyeon", "서연", "blue"), leaderDoesTasks: true, tags: [{ slug: "english", label: "영어", tone: "blue", auto: true }, { slug: "toeic", label: "토익", tone: "peach", auto: true }],
   members: [{ ...P("u-seoyeon", "서연", "blue"), role: "leader", status: "active", joinedAt: "2026-10-01T00:00:00.000Z" }, { ...P("u-dohyun", "도현"), role: "member", status: "active", joinedAt: "2026-10-02T00:00:00.000Z" }],
-  me: { state: "none" }, currentRound: null, rounds: weekly(8, "2026-11-02"), stats: stats(), myProgress: null, invite: null, pendingCount: 0, ...o,
+  me: { state: "none" }, currentRound: null, rounds: weekly(8, "2026-11-02"), stats: stats(), myProgress: null, invite: null, pendingCount: 0, myPermissions: { canEditCurriculum: false }, ...o,
 });
 
 describe("actionOf — inactive viewer (T7 rule)", () => {

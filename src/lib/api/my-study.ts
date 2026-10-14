@@ -58,6 +58,7 @@ export function toStudyRoom(d: RoomDetail, tree: Tree, today: string, meId: stri
   const members: MemberInfo[] = d.members.map((m) => ({
     name: m.nickname, done: 0, total: 0, leader: m.role === "leader", me: m.userId === meId, left: m.status === "inactive", pending: m.status === "pending",
     noBar: m.role === "leader" && !d.leaderDoesTasks, userId: m.userId, tone: m.tone,
+    editor: m.role === "member" && m.status === "active" && !!m.canEditCurriculum,
   }));
   const rounds: RoundRow[] = win.rows.map((r) => {
     const rr = roundRow(r, d.status, today, r.id === curId);

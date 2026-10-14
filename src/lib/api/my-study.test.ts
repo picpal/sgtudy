@@ -29,7 +29,7 @@ const aws: RoomDetail = {
   ],
   stats: { roundCount: 5, leafCount: 8, commonCount: 5, designatedCount: 3, totalAssignments: 25, totalSubmissions: 6, overallPct: 24, unassignedCount: 0, startWeekdays: [4] },
   myProgress: { submitted: 2, assigned: 6, nextDue: { nodeId: "21", title: "EC2 인스턴스 유형 정리", roundLabel: "2주차", dueDate: "2026-10-14" } },
-  invite: null, pendingCount: 0,
+  invite: null, pendingCount: 0, myPermissions: { canEditCurriculum: false },
 };
 const tree = buildTree(AWS, EMPTY_OVERRIDES, TODAY);
 
@@ -59,7 +59,7 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
       rounds: [{ id: "s1", label: "1주차", title: "데이터 모델링의 이해", startDate: "2026-10-26", endDate: "2026-11-01", leafCount: 2, assigned: 0, submitted: 0, pct: null }] };
     const s = toStudyRoom(sqld, tree, TODAY, "u1");
     expect(s).toMatchObject({ minText: "최소 3명 · 2명 더 필요해요", minOk: false, action: "pending", dday: "D-14", next: null });
-    expect(s.members).toEqual([{ name: "가은", done: 0, total: 0, leader: true, me: false, left: false, pending: false, noBar: true, userId: "u9", tone: "amber" }, { name: "철수", done: 0, total: 0, leader: false, me: true, left: false, pending: true, noBar: false, userId: "u1", tone: "blue" }]);
+    expect(s.members).toEqual([{ name: "가은", done: 0, total: 0, leader: true, me: false, left: false, pending: false, noBar: true, userId: "u9", tone: "amber", editor: false }, { name: "철수", done: 0, total: 0, leader: false, me: true, left: false, pending: true, noBar: false, userId: "u1", tone: "blue", editor: false }]);
     expect(s.rounds[0]).toMatchObject({ state: "예정", alt: "과제 2개", sub: 0, total: 0 });
   });
   it("action by room status and role (Q1-12/Q2-13)", () => {
@@ -150,11 +150,15 @@ describe("filterSidebarGroups (Q3-06)", () => {
 });
 
 describe("curriculum editors (0011)", () => {
+  it("toStudyRoom marks delegated editors (active members only, never the leader)", () => {
+    const d: RoomDetail = { ...aws, members: aws.members.map((m) => ({ ...m, canEditCurriculum: m.role === "leader" || m.userId === "u3" || m.userId === "u5" })) };
+    expect(toStudyRoom(d, tree, TODAY, "u1").members.map((m) => [m.userId, m.editor])).toEqual([["u2", false], ["u3", true], ["u1", false], ["u4", false], ["u5", false]]);
+  });
   it("canEditCurriculumOf: server myPermissions wins, older payloads fall back to leader", () => {
     expect(canEditCurriculumOf({ ...aws, myPermissions: { canEditCurriculum: true } })).toBe(true);
     expect(canEditCurriculumOf({ ...aws, me: { state: "leader" }, myPermissions: { canEditCurriculum: false } })).toBe(false);
-    expect(canEditCurriculumOf({ ...aws, me: { state: "leader" } })).toBe(true);
-    expect(canEditCurriculumOf({ ...aws, me: { state: "active" } })).toBe(false);
+    expect(canEditCurriculumOf({ me: { state: "leader" } })).toBe(true);
+    expect(canEditCurriculumOf({ me: { state: "active" } })).toBe(false);
     expect(canEditCurriculumOf({ myPermissions: { canEditCurriculum: true } })).toBe(true);
     expect(canEditCurriculumOf({})).toBe(false);
   });

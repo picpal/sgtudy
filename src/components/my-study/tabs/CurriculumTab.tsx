@@ -11,13 +11,14 @@ import { EditView } from "./EditView";
 import { LeafDetail } from "./LeafDetail";
 import { TreeRow } from "./TreeRow";
 
-type Props = { tree: Tree; S: ScreenState; update: Update; api: CurriculumApi; canEdit: boolean; period: { start: string; end: string } };
+type Props = { tree: Tree; S: ScreenState; update: Update; api: CurriculumApi; canEdit: boolean; isLeader: boolean; period: { start: string; end: string } };
 
-export function CurriculumTab({ tree, S, update, api, canEdit, period }: Props) {
-  const isEdit = S.curMode === "edit";
+export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period }: Props) {
+  // 권한을 거둬 간 직후 등 편집할 수 없는데 모드가 남아 있으면 보기로 그린다
+  const isEdit = canEdit && S.curMode === "edit";
   const rows = visibleNodes(tree.roots, S.closed);
   const overall = overallPct(tree.roots) ?? 0;
-  // 담당자 배정 안내는 그룹장에게만 (Q1-11/Q2-12)
+  // 담당자 배정 안내는 편집할 수 있는 사람에게만 (Q1-11/Q2-12 — 그룹장 + 편집 권한을 받은 팀원)
   const warn = canEdit ? unassignedCount(tree.leaves) : 0;
   const selNode = isEdit ? findNode(tree.nodes, S.editSel) : null;
   const parentNode = selNode ? findNode(tree.nodes, selNode.parentId) : null;
@@ -78,11 +79,12 @@ export function CurriculumTab({ tree, S, update, api, canEdit, period }: Props) 
         <span className="flex-[1_1_20px]" />
         <PillButton onClick={() => update({ closed: {} })}>모두 펼치기</PillButton>
         <PillButton onClick={() => update({ closed: allParentsClosed(tree.nodes) })}>모두 접기</PillButton>
-        {canEdit && <Seg<CurMode> label="보기 모드" value={S.curMode} onChange={setMode} options={[["view", "참가자 보기"], ["edit", "그룹장 편집 미리보기"]]} />}
+        {canEdit && <Seg<CurMode> label="보기 모드" value={S.curMode} onChange={setMode} options={[["view", "보기"], ["edit", "편집"]]} />}
       </div>
       {isEdit && (
         <p className="m-0 text-[12px] text-muted">
-          그룹장에게만 보이는 편집 모드 미리보기예요. 회차나 과제를 누르면 편집 화면이 열려요 · 추가하면 바로 편집 화면으로 이동해요.
+          회차나 과제를 누르면 편집 화면이 열려요 · 추가하면 바로 편집 화면으로 이동해요.
+          {isLeader ? " 개요 탭 멤버 관리에서 팀원에게 편집 권한을 줄 수 있어요." : " 그룹장이 준 편집 권한으로 고치고 있어요."}
         </p>
       )}
       {warn > 0 && (

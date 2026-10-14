@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
-import { toSidebarGroups, toStudyRoom } from "@/lib/api/my-study";
+import { canEditCurriculumOf, toSidebarGroups, toStudyRoom } from "@/lib/api/my-study";
 import { cancelApplication, leaveRoom } from "@/lib/api/room-view";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
@@ -23,6 +23,7 @@ import { JoinInfoCard } from "./tabs/JoinInfoCard";
 import { CurriculumTab } from "./tabs/CurriculumTab";
 import { BoardTab } from "./tabs/BoardTab";
 import { CalendarTab } from "./tabs/CalendarTab";
+import { MemberAdminCard } from "./tabs/MemberAdminCard";
 import { GanttTab } from "./tabs/GanttTab";
 import { useCurriculumApi } from "./useCurriculumApi";
 
@@ -33,15 +34,17 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const router = useRouter();
   const isLeader = detail.me?.state === "leader";
   const [cur, setCur] = useState(curriculum);
+  // 커리큘럼 편집 — 그룹장 + 그룹장이 권한을 준 팀원. node_* 응답의 myPermissions 로 갱신된다(거둬지면 false)
+  const canEdit = canEditCurriculumOf({ myPermissions: cur.myPermissions, me: detail.me });
   // 알림 링크 ?task={nodeId}(D8): 그 리프가 이 방 커리큘럼에 있으면 커리큘럼 탭 + 리프 열림으로 시작(goLeafPatch 가 tab 을 curriculum 으로 바꾼다)
   const focusLeaf = initialLeaf && curriculum.nodes.some((n) => n.id === initialLeaf && n.task) ? initialLeaf : null;
   const [S, setS] = useState<ScreenState>({
     ...INITIAL_STATE,
     tab: initialTab,
-    curMode: isLeader ? initialMode : "view",
+    curMode: canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) ? initialMode : "view",
     ...(focusLeaf ? goLeafPatch(focusLeaf) : {}),
-    // ?item=: 그룹장 편집 화면을 그 항목으로 다시 연다 (새로고침). 없는 id 면 목록 — 아래 URL 동기화가 주소에서 지운다
-    ...(isLeader && !focusLeaf && initialItem && curriculum.nodes.some((n) => n.id === initialItem) ? { tab: "curriculum" as const, curMode: "edit" as const, editSel: initialItem } : {}),
+    // ?item=: 편집 화면을 그 항목으로 다시 연다 (새로고침). 없는 id 면 목록 — 아래 URL 동기화가 주소에서 지운다
+    ...(canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) && !focusLeaf && initialItem && curriculum.nodes.some((n) => n.id === initialItem) ? { tab: "curriculum" as const, curMode: "edit" as const, editSel: initialItem } : {}),
   });
   const [toast, setToast] = useState<ToastMsg>(null);
   const update = useCallback((patch: Patch) => setS((prev) => ({ ...prev, ...(typeof patch === "function" ? patch(prev) : patch) })), []);
@@ -57,7 +60,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const closeToast = useCallback(() => setToast(null), []);
 
   // 편집 화면(?item=) ↔ 주소 동기화 — 열면 push(뒤로 가기 = 목록), 닫으면 쌓았던 기록을 back. 새로고침하면 다시 열린다
-  const openItem = S.tab === "curriculum" && S.curMode === "edit" && findNode(tree.nodes, S.editSel) ? S.editSel : null;
+  const openItem = canEdit && S.tab === "curriculum" && S.curMode === "edit" && findNode(tree.nodes, S.editSel) ? S.editSel : null;
   // pushed: 지금 주소의 편집 기록을 이 화면이 목록 기록 위에 쌓았는지 — history.state 는 Next 라우터가 갈아 끼우므로 메모리에 둔다.
   // 새로고침으로 바로 열린 편집 화면은 아래가 목록이라는 보장이 없어 back 대신 replace 로 닫는다
   const pushed = useRef<string | null>(null);
@@ -140,7 +143,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                 <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} />
                 {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} onGoCurriculum={() => update({ tab: "curriculum" })} />}
-                {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={isLeader} period={{ start: detail.startDate, end: detail.endDate }} />}
+                {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} />}
                 {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
@@ -156,6 +159,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                   goLeaf={goLeaf}
                   onCancel={setConfirm}
                   busy={busy}
+                  admin={isLeader ? <MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} /> : undefined}
                 />
               )}
             </div>

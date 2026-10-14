@@ -3,11 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { toApiError } from "@/lib/api/errors";
-import { nodeArchive, nodeCreate, nodeDelete, nodeUpdate, patchOf } from "@/lib/api/my-study";
+import { fetchCurriculum, nodeArchive, nodeCreate, nodeDelete, nodeUpdate, patchOf } from "@/lib/api/my-study";
 import type { Curriculum, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
-import { dropFieldOv, tempId, type Overrides, type TreeNode } from "./model";
+import { EMPTY_OVERRIDES, dropFieldOv, tempId, type Overrides, type TreeNode } from "./model";
 import type { Update } from "./state";
 
 export type CurriculumApi = {
@@ -35,10 +35,19 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   const fail = useCallback(
     (e: unknown) => {
       const err = toApiError(e);
+      if (err.code === "NOT_CURRICULUM_EDITOR") {
+        // 편집하는 사이 그룹장이 권한을 거뒀다 — 편집 모드를 닫고(편집 스위치도 사라짐) 커리큘럼을 다시 받는다
+        toast({ text: "커리큘럼 편집 권한이 없어요", tone: "bad" });
+        setCur((c) => ({ ...c, myPermissions: { canEditCurriculum: false } }));
+        update({ curMode: "view", editSel: null, confirm: false, leave: null, saved: "", ov: EMPTY_OVERRIDES });
+        fetchCurriculum(slug).then(setCur, () => {});
+        router.refresh();
+        return;
+      }
       toast({ text: err.message, tone: "bad" });
       if (err.code === "ROOM_NOT_EDITABLE" || err.code === "NOT_LEADER") update({ curMode: "view", editSel: null });
     },
-    [toast, update],
+    [toast, update, setCur, slug, router],
   );
 
   const create = useCallback(

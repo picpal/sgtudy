@@ -8,7 +8,7 @@ import type { TaskStatus } from "@/lib/types";
 export const REF_DAY = "2026-10-12";
 
 const M = (userId: string, nickname: string, tone: CurriculumMember["tone"], role: CurriculumMember["role"] = "member", status: CurriculumMember["status"] = "active"): CurriculumMember =>
-  ({ userId, nickname, tone, role, status, doesTasks: true });
+  ({ userId, nickname, tone, role, status, doesTasks: true, canEditCurriculum: role === "leader" });
 const MEMBERS = [M("u2", "민수", "mint", "leader"), M("u3", "지은", "peach"), M("u1", "철수", "blue"), M("u4", "하나", "lav"), M("u5", "도윤", "slate", "member", "inactive")];
 const byId = Object.fromEntries(MEMBERS.map((m) => [m.userId, m]));
 
@@ -42,4 +42,5 @@ export const AWS: Curriculum = {
     leaf("52", "5", "5", 3, 2, "DynamoDB 설계 퀴즈", "designated", "11-01", "11-04", [["u3", "planned"], ["u4", "planned"]]),
   ],
   stats: { overallPct: 24, leafCount: 8, unassignedCount: 0 },
+  myPermissions: { canEditCurriculum: true },
 };

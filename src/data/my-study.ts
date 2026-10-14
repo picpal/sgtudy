@@ -25,6 +25,8 @@ export type MemberInfo = {
   pending?: boolean;
   /** 막대·점수 없이 "–" */
   noBar?: boolean;
+  /** 그룹장이 커리큘럼 편집을 맡긴 팀원 (그룹장 자신은 표시 안 함) */
+  editor?: boolean;
   userId?: string;
   tone?: Tone;
 };

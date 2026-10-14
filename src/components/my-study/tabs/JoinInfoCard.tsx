@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { StudyRoom } from "@/lib/api/my-study";
@@ -7,10 +8,10 @@ import { toneOfName } from "../bits";
 import { memberStats, overallPct, type Tree } from "../model";
 import { StatusBadge } from "../StudyHeaderInfo";
 
-type Props = { room: StudyRoom; tree: Tree; onMyTasks: () => void; goLeaf: (id: string) => void; onCancel: (kind: "leave" | "cancel") => void; busy: boolean };
+type Props = { room: StudyRoom; tree: Tree; onMyTasks: () => void; goLeaf: (id: string) => void; onCancel: (kind: "leave" | "cancel") => void; busy: boolean; admin?: ReactNode };
 
 /** 우측 aside "참가 정보" + "내 다음 마감" */
-export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy }: Props) {
+export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, admin }: Props) {
   const overall = overallPct(tree.roots);
   const full = room.capCur >= room.capMax;
   const nextLeaf = room.next?.nodeId ? tree.leaves.find((l) => l.id === room.next!.nodeId) : undefined;
@@ -83,6 +84,11 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy }: 
                       </svg>
                     )}
                     {m.me && <span className="rounded-[6px] bg-blue-soft px-[6px] py-px text-[11px] font-semibold text-blue-text">나</span>}
+                    {m.editor && (
+                      <span title="커리큘럼 편집 권한" className="rounded-[6px] bg-mint-soft px-[6px] py-px text-[11px] font-semibold text-mint-dark">
+                        편집
+                      </span>
+                    )}
                     {dim && <span className="rounded-[6px] bg-slate-soft px-[6px] py-px text-[11px] font-semibold text-ink-3">{m.left ? "이탈" : "승인 대기"}</span>}
                   </span>
                   {hasBar && <ProgressBar pct={pct} height={5} fill={pct === 100 ? "#1E9E6A" : pct === 0 ? "#D64545" : "#12A386"} className="w-14! shrink-0" />}
@@ -130,6 +136,8 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy }: 
           </button>
         )}
       </div>
+
+      {admin}
 
       {room.next && (
         <div className="flex flex-col gap-[10px] rounded-[20px] border border-[#CBEBE1] bg-[#F2FBF8] px-5 py-[18px]">
