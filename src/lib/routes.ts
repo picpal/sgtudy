@@ -20,8 +20,12 @@ export const routes = {
   schedule: () => "/schedule",
   /** 방 만들기 (디자인 §4.3) */
   createRoom: () => "/rooms/new",
-  /** 이메일 OTP 로그인 (§4.1) — returnTo 가 있으면 plan 01 loginUrl 과 같은 값 */
+  /** 이메일+비밀번호 로그인 (§4.1) — returnTo 가 있으면 plan 01 loginUrl 과 같은 값 */
   login: (returnTo?: string) => (returnTo ? loginUrl(returnTo) : "/login"),
+  /** 회원가입: 이메일 인증 코드 → 비밀번호 정하기 → 닉네임 */
+  signup: (returnTo?: string) => withReturn("/signup", returnTo),
+  /** 비밀번호 재설정(코드로만 쓰던 계정의 비밀번호 만들기 포함): 이메일 인증 코드 → 새 비밀번호 */
+  resetPassword: (returnTo?: string) => withReturn("/reset-password", returnTo),
   /** 닉네임 설정 (§4.1) */
   onboarding: (returnTo?: string) => withReturn("/onboarding", returnTo),
   /** 내 프로필 (§4.13) */

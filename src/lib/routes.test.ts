@@ -30,6 +30,10 @@ describe("routes", () => {
   it("builds auth routes", () => {
     expect(routes.login()).toBe("/login");
     expect(routes.login("/rooms/aws")).toBe("/login?returnTo=%2Frooms%2Faws");
+    expect(routes.signup()).toBe("/signup");
+    expect(routes.signup("/rooms/aws")).toBe("/signup?returnTo=%2Frooms%2Faws");
+    expect(routes.resetPassword()).toBe("/reset-password");
+    expect(routes.resetPassword("/invite/t")).toBe("/reset-password?returnTo=%2Finvite%2Ft");
     expect(routes.onboarding("/invite/t")).toBe("/onboarding?returnTo=%2Finvite%2Ft");
     expect(routes.me()).toBe("/me");
     expect(routes.invite("tok")).toBe("/invite/tok");
