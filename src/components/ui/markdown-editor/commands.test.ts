@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { codeBlock, heading, insertRule, insertTable, link, linesIn, tableTemplate, toggleLines, wrapInline, type Edit } from "./commands";
-import { parseGfmTable } from "./gfmTable";
+import { parseGfmTable } from "@/lib/markdown/gfmTable";
 
 /** 편집 결과 문서 (changes 는 원문 좌표 기준, 뒤에서부터 적용) */
 function apply(doc: string, e: Edit): string {
@@ -29,6 +29,19 @@ describe("wrapInline", () => {
     const doc = "a `code` c";
     const e = wrapInline(doc, 2, 8, "`", "`", "");
     expect(apply(doc, e)).toBe("a code c");
+  });
+  it("굵게 안쪽에 기울임을 누르면 굵게를 지키고 기울임을 더한다", () => {
+    const doc = "**굵게**";
+    const e = wrapInline(doc, 2, 4, "*", "*", "");
+    expect(apply(doc, e)).toBe("***굵게***");
+    expect(sel(doc, e)).toBe("굵게");
+    expect(apply(doc, wrapInline(doc, 0, 6, "*", "*", ""))).toBe("***굵게***"); // 표식까지 잡아도 같다
+  });
+  it("굵은 기울임에서 기울임만 벗긴다", () => {
+    const doc = "***x***";
+    expect(apply(doc, wrapInline(doc, 3, 4, "*", "*", ""))).toBe("**x**");
+    expect(apply(doc, wrapInline(doc, 3, 4, "**", "**", ""))).toBe("*x*");
+    expect(apply("*x*", wrapInline("*x*", 1, 2, "*", "*", ""))).toBe("x");
   });
 });
 

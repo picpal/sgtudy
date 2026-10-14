@@ -77,7 +77,8 @@ export const editorTheme = EditorView.theme({
   ".cm-row-handle": { width: "12px", minWidth: "12px", padding: "0", verticalAlign: "middle" },
   ".cm-table-widget:hover .cm-col-handle, .cm-table-widget:hover .cm-row-handle, .cm-table-widget:focus-within .cm-col-handle, .cm-table-widget:focus-within .cm-row-handle": { opacity: ".6" },
   "@media (hover: none)": { ".cm-col-handle, .cm-row-handle": { opacity: ".6" } },
-  ".cm-col-handle:hover, .cm-row-handle:hover": { opacity: "1", backgroundColor: "var(--surface-2)" },
+  ".cm-col-handle:hover, .cm-row-handle:hover, .cm-col-handle[aria-expanded=true], .cm-row-handle[aria-expanded=true]": { opacity: "1", backgroundColor: "var(--surface-2)" },
+  ".cm-col-handle:focus-visible, .cm-row-handle:focus-visible": { opacity: "1", color: "var(--ink)", backgroundColor: "var(--mint-soft)", outline: "2px solid var(--mint)", outlineOffset: "-2px" },
   ".cm-table-menu": {
     position: "fixed", zIndex: "50", backgroundColor: "var(--surface)", border: "1px solid var(--line)", borderRadius: "10px",
     boxShadow: "0 10px 30px rgba(27,34,48,.12)", padding: "4px", minWidth: "150px", display: "flex", flexDirection: "column",

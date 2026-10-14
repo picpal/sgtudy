@@ -196,4 +196,8 @@ describe("rulesOf", () => {
     expect(rulesOf("- 첫째\n* 둘째\n\n셋째\n")).toEqual(["첫째", "둘째", "셋째"]);
     expect(rulesOf("")).toEqual([]);
   });
+  it("strips checklist and numbered markers too", () => {
+    expect(rulesOf("- [ ] a\n1. b\n- [x] c\n2) d\n+ e")).toEqual(["a", "b", "c", "d", "e"]);
+    expect(rulesOf("2026년 규칙")).toEqual(["2026년 규칙"]);
+  });
 });

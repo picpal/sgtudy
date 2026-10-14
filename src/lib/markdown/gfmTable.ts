@@ -1,5 +1,5 @@
 // gfmTable.ts — GFM 표 마크다운 ↔ 모델 순수 변환 + 구조조작. CodeMirror/DOM 의존 없음.
-// work-note(frontend/src/editor/gfmTable.ts)에서 이식. 셀 인라인 렌더는 my-study/markdown.ts 의 parseInline 으로 통일해 여기서 뺐다.
+// work-note(frontend/src/editor/gfmTable.ts)에서 이식. 셀 인라인 렌더는 lib/markdown/inline.ts 의 parseInline 으로 통일해 여기서 뺐다.
 // 모델의 셀 텍스트는 "논리 평문"(파이프=|, 줄바꿈=\n)이며, 직렬화 시에만 GFM 안전 형태로 이스케이프한다.
 
 export type Align = "none" | "left" | "center" | "right";

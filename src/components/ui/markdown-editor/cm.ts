@@ -2,7 +2,7 @@
 // 하나의 편집 면. 마크다운 표식(#, **, ` 등)은 캐럿이 있는 줄에서만 보이고 나머지 줄은 서식대로 보인다.
 // 체크박스·구분선·표는 캐럿이 바깥에 있을 때 위젯으로 그린다(표는 셀을 바로 편집).
 // work-note(frontend/src/editor/cm.ts)에서 이식 — 위키링크·이미지·mermaid·코드 언어/자동완성·첨부는 sgtudy 에 필요 없어 뺐다.
-import { Annotation, EditorState, Prec, StateEffect, StateField, Transaction, type Range } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, Prec, StateEffect, StateField, Transaction, type Range } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType, keymap, placeholder as cmPlaceholder, type DecorationSet } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
@@ -19,9 +19,9 @@ class CheckboxWidget extends WidgetType {
   toDOM(view: EditorView) {
     const span = document.createElement("span");
     span.className = "cm-md-checkbox" + (this.checked ? " done" : "");
-    span.setAttribute("role", "checkbox");
-    span.setAttribute("aria-checked", String(this.checked));
-    span.setAttribute("aria-label", this.checked ? "완료 표시 해제" : "완료로 표시");
+    // 마우스 지름길일 뿐이라 보조기기에는 숨긴다 — 포커스를 받지 못하는 checkbox 역할은 거짓말이 된다.
+    // 키보드로는 캐럿 줄에서 원문 [ ]/[x] 를 직접 고친다
+    span.setAttribute("aria-hidden", "true");
     if (this.checked) span.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     span.addEventListener("mousedown", (e) => {
       e.preventDefault();
@@ -132,7 +132,9 @@ function buildDecorations(state: EditorState): DecorationSet {
         return;
       }
       if (name === "ListMark" && !lineActive(nf)) {
-        if (/^[-*+]$/.test(state.sliceDoc(nf, nt))) out.push(Decoration.replace({ widget: new BulletWidget() }).range(nf, nt));
+        // 체크리스트 줄은 체크박스만 — 읽기 화면과 같게 글머리 기호(와 뒤 공백)를 감춘다
+        if (node.node.nextSibling?.name === "Task") out.push(Decoration.replace({}).range(nf, state.sliceDoc(nt, nt + 1) === " " ? nt + 1 : nt));
+        else if (/^[-*+]$/.test(state.sliceDoc(nf, nt))) out.push(Decoration.replace({ widget: new BulletWidget() }).range(nf, nt));
         return;
       }
     },
@@ -229,6 +231,9 @@ export interface CreateOpts {
   onChange: (value: string) => void;
 }
 
+// 되돌리기 기록 — 바깥 값으로 문서를 통째로 바꿀 때 기록을 비우려고 compartment 에 둔다
+const historySlot = new Compartment();
+
 export function create(parent: Element, opts: CreateOpts): EditorView {
   const attrs: Record<string, string> = { "aria-multiline": "true" };
   if (opts.labelledBy) attrs["aria-labelledby"] = opts.labelledBy;
@@ -236,7 +241,7 @@ export function create(parent: Element, opts: CreateOpts): EditorView {
   const state = EditorState.create({
     doc: opts.doc,
     extensions: [
-      history(),
+      historySlot.of(history()),
       formatKeymap,
       Prec.highest(keymap.of([{ key: "Enter", run: exitEmptyQuote }])),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -259,8 +264,14 @@ export function create(parent: Element, opts: CreateOpts): EditorView {
   return new EditorView({ state, parent });
 }
 
-/** 바깥 값이 바뀌었을 때(버리기 등) 문서를 통째로 맞춘다 — 되돌리기 기록·onChange 없이 */
+/** 바깥 값이 바뀌었을 때(버리기 등) 문서를 통째로 맞춘다 — onChange 없이, 되돌리기 기록도 비운다.
+ *  기록을 남겨 두면 버리기 뒤 ⌘Z 가 옛 편집을 새 문서 위에 다시 얹어 원문이 깨진다 */
 export function setDoc(view: EditorView, value: string): void {
   if (view.state.doc.toString() === value) return;
-  view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value }, annotations: [External.of(true), Transaction.addToHistory.of(false)] });
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: value },
+    effects: historySlot.reconfigure([]),
+    annotations: [External.of(true), Transaction.addToHistory.of(false)],
+  });
+  view.dispatch({ effects: historySlot.reconfigure(history()), annotations: External.of(true) });
 }

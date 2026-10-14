@@ -12,6 +12,9 @@ import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
 import { EMPTY_VALUES, clampCp, firstErrorKey, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
+// 운영 규칙은 읽기 화면에서 줄마다 한 항목(rulesOf)으로 보인다 — 표·코드 블록·제목처럼 줄을 넘는 모양은 주지 않는다
+const RULE_TOOLS = ["bold", "italic", "strike", "code", "link", "bullet"] as const;
+
 const field = "h-12 w-full rounded-[12px] border border-line-3 px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE]";
 const JOIN_MODES = [["direct", "바로 참가", "누구나 바로 들어와요"], ["approval", "승인제", "그룹장이 승인해야 참가돼요"]] as const;
 
@@ -143,7 +146,7 @@ export function NewRoomForm() {
           {more && (
             <div className="flex flex-col gap-4 rounded-[14px] bg-surface-2 p-4">
               <EditorField id="new-room-desc" label="상세 설명"><MarkdownEditor labelledBy="new-room-desc" value={v.descriptionMd} onChange={(x) => set("descriptionMd", x)} placeholder="스터디 목표, 진행 방식, 준비물 등을 적어 주세요" /></EditorField>
-              <EditorField id="new-room-rules" label="운영 규칙 (한 줄에 하나씩 목록으로)"><MarkdownEditor labelledBy="new-room-rules" value={v.rulesMd} onChange={(x) => set("rulesMd", x)} placeholder="- 마감은 회차 마지막 날 23:59(KST)예요." minHeight={96} /></EditorField>
+              <EditorField id="new-room-rules" label="운영 규칙 (한 줄에 하나씩 목록으로)"><MarkdownEditor labelledBy="new-room-rules" value={v.rulesMd} onChange={(x) => set("rulesMd", x)} placeholder="- 마감은 회차 마지막 날 23:59(KST)예요." minHeight={96} tools={RULE_TOOLS} /></EditorField>
               <Field label="최소 인원 (선택)" error={errors.minMembers}><input name="minMembers" aria-invalid={!!errors.minMembers} type="number" inputMode="numeric" min={1} className={field} value={v.minMembers} onChange={(e) => set("minMembers", e.target.value)} /></Field>
               <div className="flex items-center justify-between">
                 <span><span className="block text-[14px] font-semibold">그룹장도 과제 수행</span><span className="block text-[12px] text-muted">끄면 공통 과제 담당자에서 빠져요 (시작 후 변경 불가)</span></span>

@@ -3,7 +3,7 @@
  * CodeMirror 의존이 없어 vitest 로 바로 검증한다. 뷰에 적용하는 건 cm.ts 의 run().
  * work-note(frontend/src/editor/cm.ts 의 wrap/prefix/heading/block)를 이식하면서 토글·다중 줄을 보탰다.
  */
-import { serializeGfmTable } from "./gfmTable";
+import { serializeGfmTable } from "@/lib/markdown/gfmTable";
 
 export type Change = { from: number; to: number; insert: string };
 export type Edit = { changes: Change[]; anchor: number; head?: number };
@@ -41,12 +41,23 @@ function skipLineMark(doc: string, from: number, to: number): number {
   return m ? Math.min(from + m[0].length, Math.max(from, to)) : from;
 }
 
+/** pos 에서 dir 쪽으로 이어진 ch 개수 */
+function runOf(s: string, pos: number, dir: 1 | -1, ch: string): number {
+  let n = 0;
+  for (let i = dir === 1 ? pos : pos - 1; i >= 0 && i < s.length && s[i] === ch; i += dir) n++;
+  return n;
+}
+
 /** 굵게·기울임·취소선·인라인 코드 — 선택을 left/right 로 감싼다. 이미 감싸져 있으면 벗긴다(토글). */
 export function wrapInline(doc: string, start: number, to: number, left: string, right: string, placeholder: string): Edit {
   const from = skipLineMark(doc, start, to);
   const sel = doc.slice(from, to);
+  // 기울임(*)은 굵게(**)와 글자를 나눠 쓴다 — 붙은 * 가 홀수 개(*, ***)일 때만 기울임으로 본다. **굵게** 안쪽에 기울임을 누르면 ***굵게*** 가 된다
+  const italic = left === "*" && right === "*";
+  const outer = italic ? runOf(doc, from, -1, "*") % 2 === 1 && runOf(doc, to, 1, "*") % 2 === 1 : true;
+  const inner = italic ? runOf(sel, 0, 1, "*") % 2 === 1 && runOf(sel, sel.length, -1, "*") % 2 === 1 : true;
   // 선택 바깥에 표식이 붙어 있음: **|굵게|**
-  if (doc.slice(from - left.length, from) === left && doc.slice(to, to + right.length) === right && from - left.length >= 0) {
+  if (outer && doc.slice(from - left.length, from) === left && doc.slice(to, to + right.length) === right && from - left.length >= 0) {
     return {
       changes: [{ from: from - left.length, to: to + right.length, insert: sel }],
       anchor: from - left.length,
@@ -54,7 +65,7 @@ export function wrapInline(doc: string, start: number, to: number, left: string,
     };
   }
   // 선택 안쪽이 표식으로 시작·끝남: |**굵게**|
-  if (sel.length >= left.length + right.length && sel.startsWith(left) && sel.endsWith(right)) {
+  if (inner && sel.length >= left.length + right.length && sel.startsWith(left) && sel.endsWith(right)) {
     const inner = sel.slice(left.length, sel.length - right.length);
     return { changes: [{ from, to, insert: inner }], anchor: from, head: from + inner.length };
   }

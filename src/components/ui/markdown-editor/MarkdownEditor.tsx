@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { EditorView } from "@codemirror/view";
 import { create, run, setDoc, type Command } from "./cm";
+import { mod } from "./platform";
 
 export type MarkdownEditorProps = {
   value: string;
@@ -13,6 +14,8 @@ export type MarkdownEditorProps = {
   labelledBy?: string;
   /** 편집 면 최소 높이(px) */
   minHeight?: number;
+  /** 툴바에 보일 도구 — 없으면 전부. 읽기 화면이 줄 목록으로만 보여 주는 칸(운영 규칙)은 인라인·글머리 목록만 준다 */
+  tools?: readonly Command[];
   className?: string;
 };
 
@@ -32,7 +35,6 @@ const ICON: Record<string, ReactNode> = {
   hr: <><line x1="3" y1="12" x2="21" y2="12" /><line x1="7" y1="6" x2="17" y2="6" opacity=".45" /><line x1="7" y1="18" x2="17" y2="18" opacity=".45" /></>,
 };
 
-const mod = typeof navigator !== "undefined" && /Mac|iP(hone|ad|od)/.test(navigator.platform) ? "⌘" : "Ctrl+";
 
 type Tool = { cmd: Command; label: string; key?: string; cap?: string };
 const GROUPS: Tool[][] = [
@@ -68,7 +70,7 @@ const GROUPS: Tool[][] = [
  * 값 계약은 textarea 와 같다: value(문자열) 를 받고 onChange(문자열) 로 돌려준다.
  * CodeMirror 를 끌어오므로 직접 쓰지 말고 ./index 의 지연 로드 래퍼를 쓴다.
  */
-export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy, minHeight = 120, className = "" }: MarkdownEditorProps) {
+export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy, minHeight = 120, tools, className = "" }: MarkdownEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -116,6 +118,7 @@ export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy
     btns[next].focus();
   };
 
+  const groups = tools ? GROUPS.map((g) => g.filter((t) => tools.includes(t.cmd))).filter((g) => g.length > 0) : GROUPS;
   let idx = 0;
   return (
     <div
@@ -129,7 +132,7 @@ export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy
         onKeyDown={onBarKey}
         className="flex flex-wrap items-center gap-x-[10px] gap-y-[2px] border-b border-line-2 bg-surface-3 px-[6px] py-1"
       >
-        {GROUPS.map((g, gi) => (
+        {groups.map((g, gi) => (
           <div key={gi} role="group" className="flex shrink-0 items-center gap-[2px]">
             {g.map((t) => {
               const tip = t.key ? `${t.label} (${mod}${t.key})` : t.label;

@@ -5,9 +5,12 @@
 import { EditorView, WidgetType } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
-import { parseInline } from "@/components/my-study/markdown";
-import { parseGfmTable, serializeGfmTable, insertRow, deleteRow, insertColumn, deleteColumn, setAlign, seqColumns, setSeqColumn, renumberSeq } from "./gfmTable";
-import type { TableModel, Align } from "./gfmTable";
+import { parseInline } from "@/lib/markdown/inline";
+import { parseGfmTable, serializeGfmTable, insertRow, deleteRow, insertColumn, deleteColumn, setAlign, seqColumns, setSeqColumn, renumberSeq } from "@/lib/markdown/gfmTable";
+import type { TableModel, Align } from "@/lib/markdown/gfmTable";
+import { mod, shift } from "./platform";
+
+const KEYS_HELP = `Esc 또는 마지막 칸에서 Tab: 표 밖으로 · ${mod}${shift}↓ 행 추가 · ${mod}${shift}→ 열 추가 · 첫 칸에서 ←, 제목 행에서 ↑: 행·열 메뉴`;
 
 /** 셀 표시용 인라인 렌더 — 읽기 화면(MarkdownView)과 같은 parseInline 결과를 DOM 노드로만 만든다(HTML 문자열 주입 없음). */
 export function renderCell(cell: HTMLElement, raw: string): void {
@@ -22,6 +25,16 @@ export function renderCell(cell: HTMLElement, raw: string): void {
       cell.appendChild(el);
     }
   });
+}
+
+/** 셀 안 캐럿이 맨 앞(선택 없음)인지 — 첫 열에서 ← 로 행 핸들로 나갈 때만 쓴다 */
+function caretAtStart(cell: HTMLElement): boolean {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return false;
+  const r = document.createRange();
+  r.selectNodeContents(cell);
+  r.setEnd(sel.getRangeAt(0).startContainer, sel.getRangeAt(0).startOffset);
+  return r.toString().length === 0;
 }
 
 /** 표를 새로 넣은 직후 첫 셀에 포커스를 주기 위한 예약 — 다음 toDOM 이 소비한다 */
@@ -104,6 +117,7 @@ export class TableWidget extends WidgetType {
     scroll.className = "cm-table-scroll";
     const table = document.createElement("table");
     table.className = "cm-table";
+    table.setAttribute("aria-description", KEYS_HELP);
 
     const thead = document.createElement("thead");
 
@@ -150,6 +164,9 @@ export class TableWidget extends WidgetType {
     cell.dataset.align = align;
     if (align !== "none") cell.style.textAlign = align;
     cell.setAttribute("contenteditable", "plaintext-only"); // 편집은 평문, 표시는 인라인 렌더
+    // 순차 탭 정지에서 뺀다 — 편집 면에서 Tab 을 누르면 표 셀로 빨려 들어갔다 마지막 칸 Tab 으로 다시 편집 면에 돌아오는 고리가 생긴다.
+    // 셀 사이 이동은 위젯이 직접 한다(Tab·Enter·화살표)
+    cell.tabIndex = -1;
     cell.dataset.raw = text;             // 원문 마크다운 — 직렬화 출처(렌더된 innerText 아님)
     renderCell(cell, text); // 비포커스: 굵게/기울임/취소선/코드/링크 렌더
     // 포커스 시 원문 노출(마커가 렌더돼 있을 때만 — 평문 셀은 캐럿 유지)
@@ -303,25 +320,50 @@ export class TableWidget extends WidgetType {
       sel?.addRange(r);
       return;
     }
-    if (e.key === "Tab") {
+    // Esc → 표 밖(다음 줄)으로. 키보드 사용자가 표에 갇히지 않게 (WCAG 2.1.2)
+    if (e.key === "Escape") {
       e.preventDefault();
-      const cells = this.allCells();
-      const idx = cells.indexOf(cell);
-      if (e.shiftKey) {
-        if (idx > 0) cells[idx - 1].focus();
+      this.leave("after");
+      return;
+    }
+    const cells = this.allCells();
+    const { r, col } = this.coordOf(cells.indexOf(cell));
+    // ⌘⇧↓ 아래에 행 추가 · ⌘⇧→ 오른쪽에 열 추가 (핸들 tooltip 에 적혀 있다)
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowRight")) {
+      e.preventDefault();
+      this.commit();
+      if (e.key === "ArrowDown") this.applyOp(this.keepingSeq((m) => insertRow(m, r)), { r: r + 1, col: this.firstEditableCol(col) });
+      else this.applyOp((m) => insertColumn(m, col + 1), { r, col: col + 1 });
+      return;
+    }
+    // 제목 행에서 ↑ → 열 핸들, 첫 열 맨 앞에서 ← → 행 핸들 (핸들에서 Enter·Space 로 메뉴)
+    if (!e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      if (e.key === "ArrowUp" && r === 0) {
+        e.preventDefault();
+        this.handleAt("col", col)?.focus();
         return;
       }
-      if (idx + 1 < cells.length) { cells[idx + 1].focus(); return; }
-      // 마지막 셀에서 Tab → 새 본문 행 추가 후 첫 편집 가능 셀(seq 열은 건너뜀)
-      this.commit(); // 현재 편집분 먼저 반영
-      const newRowVisual = 1 + this.bodyRowCount();
-      this.applyOp(this.keepingSeq((m) => insertRow(m, m.rows.length)), { r: newRowVisual, col: this.firstEditableCol() });
+      if (e.key === "ArrowLeft" && col === 0 && r > 0 && caretAtStart(cell)) {
+        e.preventDefault();
+        this.handleAt("row", r - 1)?.focus();
+        return;
+      }
+    }
+    if (e.key === "Tab") {
+      e.preventDefault();
+      const idx = cells.indexOf(cell);
+      // 첫 칸에서 Shift+Tab → 표 앞으로, 마지막 칸에서 Tab → 표 뒤로. 행 추가는 마지막 행의 Enter 가 맡는다
+      if (e.shiftKey) {
+        if (idx > 0) cells[idx - 1].focus();
+        else this.leave("before");
+        return;
+      }
+      if (idx + 1 < cells.length) cells[idx + 1].focus();
+      else this.leave("after");
       return;
     }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      const cells = this.allCells();
-      const { r, col } = this.coordOf(cells.indexOf(cell));
       const lastVisualRow = this.bodyRowCount(); // 본문 마지막 행의 visual r
       if (r >= lastVisualRow) {
         this.commit();
@@ -334,9 +376,55 @@ export class TableWidget extends WidgetType {
     // Shift+Enter: plaintext-only 기본 줄바꿈 허용(preventDefault 안 함) → innerText에 \n
   }
 
+  /** 표 밖으로 나간다 — 편집분을 확정하고 CodeMirror 캐럿을 표 뒤(after)나 앞(before)에 두고 편집 면에 포커스.
+   *  표 바로 아랫줄에 쓴 글은 GFM 이 표의 행으로 읽으므로, 뒤로 나갈 때는 빈 줄 하나를 사이에 둔 빈 줄로 간다(없으면 만든다).
+   *  캐럿이 표에 닿으면 표가 원문으로 풀리므로 표의 첫·끝 줄에는 두지 않는다 */
+  protected leave(where: "after" | "before"): void {
+    this.closeMenu();
+    this.commit();
+    const view = this.view;
+    const range = this.currentRange();
+    if (!view || !range) return;
+    const doc = view.state.doc;
+    const blank = (l: { text: string } | null) => !!l && l.text.trim() === "";
+    let anchor: number;
+    let insert: { at: number; text: string } | null = null;
+    if (where === "after") {
+      const gap = range.to < doc.length ? doc.lineAt(range.to + 1) : null;
+      const next = gap && gap.to < doc.length ? doc.lineAt(gap.to + 1) : null;
+      if (blank(gap) && blank(next)) anchor = next!.from;
+      else if (blank(gap)) { insert = { at: gap!.to, text: "\n" }; anchor = gap!.to + 1; }
+      else { insert = { at: range.to, text: "\n\n" }; anchor = range.to + 2; }
+    } else {
+      const gap = range.from > 0 ? doc.lineAt(range.from - 1) : null;
+      const prev = gap && gap.from > 0 ? doc.lineAt(gap.from - 1) : null;
+      if (blank(gap) && blank(prev)) anchor = prev!.from;
+      else if (blank(gap) && prev) anchor = prev.to; // 앞 블록의 끝
+      else if (blank(gap)) { insert = { at: 0, text: "\n" }; anchor = 0; }
+      else if (gap) anchor = gap.to;
+      else { insert = { at: 0, text: "\n\n" }; anchor = 0; }
+    }
+    try {
+      view.dispatch({
+        changes: insert ? { from: insert.at, insert: insert.text } : undefined,
+        selection: { anchor },
+        scrollIntoView: true,
+        userEvent: insert ? "input" : "select",
+      });
+      view.focus();
+    } catch {
+      /* 뷰가 파괴 중이면 무시 */
+    }
+  }
+
+  protected handleAt(kind: "col" | "row", i: number): HTMLElement | undefined {
+    return this.dom?.querySelectorAll<HTMLElement>(kind === "col" ? ".cm-col-handle" : ".cm-row-handle")[i];
+  }
+
   // ---- Task 8: 행/열 핸들 + 메뉴 ----
 
   private menuEl?: HTMLElement;
+  private menuAnchor?: HTMLElement;
   private onDocDown = (e: MouseEvent) => {
     if (this.menuEl && !this.menuEl.contains(e.target as Node)) this.closeMenu();
   };
@@ -352,11 +440,14 @@ export class TableWidget extends WidgetType {
     th.className = "cm-col-handle";
     th.contentEditable = "false";
     th.textContent = "⋯";
-    th.title = "열 메뉴";
-    th.setAttribute("role", "button");
-    th.setAttribute("aria-label", `${col + 1}번째 열 메뉴`);
-    th.addEventListener("mousedown", (e) => e.preventDefault());
-    th.addEventListener("click", () => this.openColMenu(col, th));
+    th.title = `열 메뉴 (Enter) · 셀에서 ${mod}${shift}→ 오른쪽에 열 추가`;
+    this.asHandle(th, `${col + 1}번째 열 메뉴`, (kb) => this.openColMenu(col, th, kb), (e) => {
+      if (e.key === "ArrowDown") this.focusCellAt(0, col);
+      else if (e.key === "ArrowLeft") this.handleAt("col", col - 1)?.focus();
+      else if (e.key === "ArrowRight") this.handleAt("col", col + 1)?.focus();
+      else return false;
+      return true;
+    });
     return th;
   }
   private makeRowHandle(bodyIdx: number): HTMLElement {
@@ -364,16 +455,38 @@ export class TableWidget extends WidgetType {
     td.className = "cm-row-handle";
     td.contentEditable = "false";
     td.textContent = "⋮";
-    td.title = "행 메뉴";
-    td.setAttribute("role", "button");
-    td.setAttribute("aria-label", `${bodyIdx + 1}번째 행 메뉴`);
-    td.addEventListener("mousedown", (e) => e.preventDefault());
-    td.addEventListener("click", () => this.openRowMenu(bodyIdx, td));
+    td.title = `행 메뉴 (Enter) · 셀에서 ${mod}${shift}↓ 아래에 행 추가`;
+    this.asHandle(td, `${bodyIdx + 1}번째 행 메뉴`, (kb) => this.openRowMenu(bodyIdx, td, kb), (e) => {
+      if (e.key === "ArrowRight") this.focusCellAt(bodyIdx + 1, 0);
+      else if (e.key === "ArrowUp") this.handleAt("row", bodyIdx - 1)?.focus();
+      else if (e.key === "ArrowDown") this.handleAt("row", bodyIdx + 1)?.focus();
+      else return false;
+      return true;
+    });
     return td;
   }
 
-  private openColMenu(col: number, anchor: HTMLElement): void {
-    this.openMenu(anchor, [
+  /** 핸들 = 메뉴 버튼. 셀에서 화살표로 들어오고(순차 탭 정지는 아님), Enter·Space 로 메뉴를 연다. Esc·Tab 은 셀과 같이 표 밖으로 */
+  private asHandle(el: HTMLElement, label: string, open: (keyboard: boolean) => void, arrows: (e: KeyboardEvent) => boolean): void {
+    el.tabIndex = -1;
+    el.setAttribute("role", "button");
+    el.setAttribute("aria-label", label);
+    el.setAttribute("aria-haspopup", "menu");
+    el.setAttribute("aria-expanded", "false");
+    el.addEventListener("mousedown", (e) => e.preventDefault());
+    el.addEventListener("click", () => open(false));
+    el.addEventListener("keydown", (e) => {
+      if (this.maybeHistoryKey(e)) return;
+      e.stopPropagation();
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(true); }
+      else if (e.key === "Escape" || (e.key === "Tab" && !e.shiftKey)) { e.preventDefault(); this.leave("after"); }
+      else if (e.key === "Tab") { e.preventDefault(); this.leave("before"); }
+      else if (arrows(e)) e.preventDefault();
+    });
+  }
+
+  private openColMenu(col: number, anchor: HTMLElement, keyboard = false): void {
+    this.openMenu(anchor, keyboard, [
       { label: "왼쪽에 열 추가", run: () => this.applyOp((m) => insertColumn(m, col), { r: 0, col }) },
       { label: "오른쪽에 열 추가", run: () => this.applyOp((m) => insertColumn(m, col + 1), { r: 0, col: col + 1 }) },
       { label: "열 삭제", run: () => this.applyOp((m) => deleteColumn(m, col), { r: 0, col: Math.max(0, col - 1) }) },
@@ -387,9 +500,9 @@ export class TableWidget extends WidgetType {
       { label: "표 삭제", run: () => this.removeTable(), danger: true },
     ]);
   }
-  private openRowMenu(bodyIdx: number, anchor: HTMLElement): void {
+  private openRowMenu(bodyIdx: number, anchor: HTMLElement, keyboard = false): void {
     // 캐럿 열은 seq 열을 건너뛴다 — firstEditableCol() 참조.
-    this.openMenu(anchor, [
+    this.openMenu(anchor, keyboard, [
       { label: "위에 행 추가", run: () => this.applyOp(this.keepingSeq((m) => insertRow(m, bodyIdx)), { r: bodyIdx + 1, col: this.firstEditableCol() }) },
       { label: "아래에 행 추가", run: () => this.applyOp(this.keepingSeq((m) => insertRow(m, bodyIdx + 1)), { r: bodyIdx + 2, col: this.firstEditableCol() }) },
       { label: "행 삭제", run: () => this.applyOp(this.keepingSeq((m) => deleteRow(m, bodyIdx)), { r: Math.max(0, bodyIdx), col: this.firstEditableCol() }) },
@@ -411,13 +524,29 @@ export class TableWidget extends WidgetType {
     }
   }
 
-  private openMenu(anchor: HTMLElement, items: ({ label: string; run: () => void; danger?: boolean } | { sep: true })[]): void {
+  private openMenu(anchor: HTMLElement, keyboard: boolean, items: ({ label: string; run: () => void; danger?: boolean } | { sep: true })[]): void {
     this.closeMenu();
     if (!this.dom) return;
     const menu = document.createElement("div");
     menu.className = "cm-table-menu";
     menu.contentEditable = "false";
     menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", anchor.getAttribute("aria-label") ?? "표 메뉴");
+    // 메뉴 키보드: ↑↓·Home·End 로 항목 이동, Esc·Tab 은 닫고 핸들로 돌아간다 (WAI-ARIA menu)
+    menu.addEventListener("keydown", (e) => {
+      if (this.maybeHistoryKey(e)) return;
+      e.stopPropagation();
+      const btns = Array.from(menu.querySelectorAll<HTMLButtonElement>("button"));
+      const i = btns.indexOf(document.activeElement as HTMLButtonElement);
+      if (e.key === "Escape" || e.key === "Tab") { e.preventDefault(); this.closeMenu(); anchor.focus(); return; }
+      const next = e.key === "ArrowDown" ? (i + 1) % btns.length : e.key === "ArrowUp" ? (i - 1 + btns.length) % btns.length : e.key === "Home" ? 0 : e.key === "End" ? btns.length - 1 : -1;
+      if (next < 0) return;
+      e.preventDefault();
+      btns[next].focus();
+    });
+    menu.addEventListener("focusout", (e) => {
+      if (this.menuEl === menu && !menu.contains(e.relatedTarget as Node | null) && e.relatedTarget !== anchor) this.closeMenu();
+    });
     for (const it of items) {
       if ("sep" in it) {
         const sep = document.createElement("div");
@@ -429,13 +558,27 @@ export class TableWidget extends WidgetType {
       b.type = "button";
       b.textContent = it.label;
       b.setAttribute("role", "menuitem");
+      b.tabIndex = -1;
       if (it.danger) b.className = "danger";
       b.addEventListener("mousedown", (e) => e.preventDefault());
       b.addEventListener("click", (e) => { e.preventDefault(); it.run(); this.closeMenu(); });
       menu.appendChild(b);
     }
     this.dom.appendChild(menu);
-    // 고정 위치 — 에디터의 둥근 테두리(overflow:hidden)·스크롤 영역에 잘리지 않게. 화면 밖으로 넘치면 안쪽으로 당긴다
+    this.menuEl = menu;
+    this.menuAnchor = anchor;
+    this.placeMenu();
+    anchor.setAttribute("aria-expanded", "true");
+    if (keyboard) menu.querySelector<HTMLButtonElement>("button")?.focus();
+    setTimeout(() => {
+      document.addEventListener("mousedown", this.onDocDown);
+      window.addEventListener("scroll", this.onScroll, true); // 고정 메뉴가 표와 떨어져 떠다니지 않게
+    }, 0);
+  }
+  /** 고정 위치 — 에디터의 둥근 테두리(overflow:hidden)·스크롤 영역에 잘리지 않게. 화면 밖으로 넘치면 안쪽으로 당긴다 */
+  private placeMenu(): void {
+    const menu = this.menuEl, anchor = this.menuAnchor;
+    if (!menu || !anchor) return;
     const a = anchor.getBoundingClientRect();
     const m = menu.getBoundingClientRect();
     const left = Math.max(8, Math.min(a.left, window.innerWidth - m.width - 8));
@@ -443,20 +586,27 @@ export class TableWidget extends WidgetType {
     const top = below + m.height > window.innerHeight - 8 ? Math.max(8, a.top - m.height - 4) : below;
     menu.style.left = left + "px";
     menu.style.top = top + "px";
-    this.menuEl = menu;
-    setTimeout(() => {
-      document.addEventListener("mousedown", this.onDocDown);
-      window.addEventListener("scroll", this.onScroll, true); // 고정 메뉴가 표와 떨어져 떠다니지 않게
-    }, 0);
   }
+  /** 스크롤하면 고정 메뉴를 핸들 옆으로 다시 붙이고, 핸들이 화면 밖으로 나가면 닫는다.
+   *  (바로 닫으면 키보드로 핸들에 들어설 때 표 영역이 핸들 쪽으로 가로 스크롤되면서 방금 연 메뉴가 닫혔다) */
   private onScroll = (e: Event) => {
-    if (this.menuEl && !this.menuEl.contains(e.target as Node)) this.closeMenu();
+    if (!this.menuEl || this.menuEl.contains(e.target as Node)) return;
+    const a = this.menuAnchor?.getBoundingClientRect();
+    if (!a || a.bottom < 0 || a.top > window.innerHeight) this.closeMenu();
+    else this.placeMenu();
   };
   private closeMenu(): void {
     document.removeEventListener("mousedown", this.onDocDown);
     window.removeEventListener("scroll", this.onScroll, true);
-    this.menuEl?.remove();
-    this.menuEl = undefined;
+    const anchor = this.menuAnchor;
+    anchor?.setAttribute("aria-expanded", "false");
+    this.menuAnchor = undefined;
+    const menu = this.menuEl;
+    this.menuEl = undefined; // remove() 가 일으키는 focusout 이 다시 닫으려 들지 않게 먼저 비운다
+    const hadFocus = !!menu?.contains(document.activeElement);
+    menu?.remove();
+    // 포커스가 메뉴 안에 있었으면 body 로 떨어지지 않게 핸들로 돌려준다
+    if (hadFocus && anchor?.isConnected) anchor.focus({ preventScroll: true });
   }
 
   // ---- 셀 범위 선택(드래그) + 복사(TSV)/삭제 ----
@@ -575,9 +725,12 @@ export class TableWidget extends WidgetType {
     }, pastedCols), start);
   }
 
+  /** DOM 이 빠질 때 메뉴와 디바운스 타이머만 정리한다. 여기서는 커밋하지 않는다 — destroy 는 뷰 업데이트·view.destroy() 도중에 불려
+   *  dispatch 가 예외로 끝나고, 미뤄 보내면(microtask) 이미 바뀐 문서(undo·버리기)를 낡은 DOM 으로 덮을 수 있다.
+   *  셀 편집분은 셀 blur 가 먼저 커밋한다 */
   destroy(): void {
     const o = this.owner();
     o.closeMenu();
-    o.commit(); // 언마운트/노트전환 안전망 — 미커밋분 최종 반영(best-effort)
+    if (o.commitTimer) { clearTimeout(o.commitTimer); o.commitTimer = undefined; }
   }
 }
