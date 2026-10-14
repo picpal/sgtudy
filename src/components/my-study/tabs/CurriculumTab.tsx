@@ -73,7 +73,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, period }: Props) 
 
       {/* 컨테이너 폭 760 이상이면 트리 옆 sticky 패널, 미만이면 트리 아래 (Q2-06/Q2-07/Q3-04) */}
       <div className="flex flex-col gap-4 @min-[760px]:flex-row @min-[760px]:items-start">
-        <div role="tree" aria-label="커리큘럼" className="min-w-0 overflow-hidden rounded-[16px] border border-line @min-[760px]:flex-[999_1_440px]">
+        {/* 모서리 행은 컨테이너 안쪽 반경(16-1px)을 따라가야 선택 링(inset)이 둥근 클립에 잘리지 않는다 */}
+        <div role="tree" aria-label="커리큘럼" className="min-w-0 overflow-hidden rounded-[16px] border border-line @min-[760px]:flex-[999_1_440px] [&>div:first-child>[role=treeitem]]:rounded-t-[15px] [&>div:last-child>[role=treeitem]]:rounded-b-[15px]">
           {rows.map((n) => {
             const open = !S.closed[n.id];
             return (
@@ -96,7 +97,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, period }: Props) 
             );
           })}
           {isEdit && (
-            <button type="button" onClick={addRound} className="flex h-[50px] w-full items-center justify-center gap-[6px] bg-surface-3 text-[14px] font-semibold text-mint">
+            <button type="button" onClick={addRound} className="flex h-[50px] w-full items-center justify-center gap-[6px] bg-surface-3 text-[14px] font-semibold text-mint first:rounded-t-[15px] last:rounded-b-[15px] focus-visible:-outline-offset-2">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
                 <path d="M12 5v14M5 12h14" />
               </svg>
