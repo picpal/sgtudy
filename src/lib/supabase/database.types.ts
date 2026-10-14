@@ -424,6 +424,7 @@ export type Database = {
       room_members: {
         Row: {
           applied_at: string | null
+          can_edit_curriculum: boolean
           created_at: string
           decided_at: string | null
           decided_by: string | null
@@ -438,6 +439,7 @@ export type Database = {
         }
         Insert: {
           applied_at?: string | null
+          can_edit_curriculum?: boolean
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
@@ -452,6 +454,7 @@ export type Database = {
         }
         Update: {
           applied_at?: string | null
+          can_edit_curriculum?: boolean
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
@@ -888,6 +891,10 @@ export type Database = {
       allowed_mime_types: { Args: never; Returns: string[] }
       app_now: { Args: never; Returns: string }
       assignment_resync: { Args: { p_room: number }; Returns: undefined }
+      can_edit_curriculum: {
+        Args: { p_uid: string; r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: boolean
+      }
       can_read_room: { Args: { p_room: number }; Returns: boolean }
       can_read_submission: {
         Args: { p_author: string; p_node: number }
@@ -1084,6 +1091,20 @@ export type Database = {
         Args: { p_nickname?: string; p_optional_mail_enabled?: boolean }
         Returns: Json
       }
+      member_admin_json: {
+        Args: {
+          m: Database["public"]["Tables"]["room_members"]["Row"]
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: Json
+      }
+      member_can_edit_curriculum: {
+        Args: {
+          m: Database["public"]["Tables"]["room_members"]["Row"]
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: boolean
+      }
       member_count_audit: { Args: never; Returns: number }
       member_deactivate: {
         Args: { p_decisions?: Json; p_slug: string; p_user: string }
@@ -1091,6 +1112,10 @@ export type Database = {
       }
       member_deactivate_preview: {
         Args: { p_slug: string; p_user: string }
+        Returns: Json
+      }
+      member_set_curriculum_editor: {
+        Args: { p_allow: boolean; p_slug: string; p_user: string }
         Returns: Json
       }
       membership_result: {
@@ -1266,6 +1291,10 @@ export type Database = {
       patch_int: { Args: { p_key: string; p_patch: Json }; Returns: number }
       pct: { Args: { p_asg: number; p_sub: number }; Returns: number }
       person_json: { Args: { p_user: string }; Returns: Json }
+      require_curriculum_editor: {
+        Args: { p_uid: string; r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: undefined
+      }
       require_leader: {
         Args: {
           p_msg?: string
@@ -1313,6 +1342,7 @@ export type Database = {
         }
         Returns: {
           applied_at: string | null
+          can_edit_curriculum: boolean
           created_at: string
           decided_at: string | null
           decided_by: string | null
@@ -1366,6 +1396,7 @@ export type Database = {
         }
         Returns: {
           applied_at: string | null
+          can_edit_curriculum: boolean
           created_at: string
           decided_at: string | null
           decided_by: string | null

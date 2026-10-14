@@ -793,7 +793,7 @@ export const ROOM_CASES: Case[] = [
         "submission_upsert(bigint,text,text[],uuid[])", "file_register(bigint,text,text,text,bigint)",
         "notifications_list(text,integer)", "notifications_unread_count()", "notifications_read(bigint)", "notifications_read_all()",
         "settings_get(text)", "settings_put(text,jsonb)",
-        "member_deactivate_preview(text,uuid)", "member_deactivate(text,uuid,jsonb)",
+        "member_deactivate_preview(text,uuid)", "member_deactivate(text,uuid,jsonb)", "member_set_curriculum_editor(text,uuid,boolean)",
         "room_tags_put(text,text[],text[])", "room_tags_suggest(text)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());

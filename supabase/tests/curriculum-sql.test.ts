@@ -149,11 +149,11 @@ sqlTest("node_create(회차): 기본값 label/title/기간, index 로 앞에 끼
   await expectFail(q(`select public.node_create($1, null, 'x', null, 'weird')`, [room.slug]), "VALIDATION_FAILED");
   await asUser(q, await uid(q, "민수"));
   await expectFail(q(`select public.node_create($1)`, [room.slug]), "ROOM_NOT_FOUND");   // DRAFT 외부인
-  // D6: 비공개 방(spring)의 외부인은 존재도 모른다, 멤버는 NOT_LEADER
+  // D6: 비공개 방(spring)의 외부인은 존재도 모른다, 멤버는 NOT_CURRICULUM_EDITOR
   await asUser(q, await uid(q, "승호"));
   await expectFail(q(`select public.node_create($1)`, ["spring"]), "ROOM_NOT_FOUND");
   await asUser(q, await uid(q, "철수"));
-  await expectFail(q(`select public.node_create($1)`, ["spring"]), "NOT_LEADER");
+  await expectFail(q(`select public.node_create($1)`, ["spring"]), "NOT_CURRICULUM_EDITOR");
 }));
 
 sqlTest("node_create(하위): 기본값·부모 기간 상속·resync, 리프→부모 전환, 제출물 있는 리프·깊이 6·보관 부모는 거부", withCase(db, async (q) => {
@@ -211,7 +211,7 @@ sqlTest("node_delete: 서브트리에 제출물이 있으면 NODE_HAS_SUBMISSION
   assertEquals(c.stats, { overallPct: 29, leafCount: 7, unassignedCount: 0 });    // 6/21, 리프 8 → 7
   await expectFail(call(q, "node_delete", ["aws", w3]), "NODE_NOT_FOUND");
   await asUser(q, await uid(q, "철수"));
-  await expectFail(call(q, "node_delete", ["aws", iam]), "NOT_LEADER");
+  await expectFail(call(q, "node_delete", ["aws", iam]), "NOT_CURRICULUM_EDITOR");
 }));
 
 sqlTest("node_archive/unarchive: 서브트리 전파, 집계·배정 제외/복구(is_late 보존), 부모 보관 중이면 PARENT_ARCHIVED", withCase(db, async (q) => {
@@ -309,7 +309,7 @@ sqlTest("node_update: 제목·설명·기간·라벨, 경고 PERIOD_OUTSIDE_PARE
   await expectFail(upd(q, "aws", ec2, { descriptionMd: "x".repeat(20001) }), "VALIDATION_FAILED");
   await expectFail(q(`select public.node_update($1, $2, 'null'::jsonb)`, ["aws", ec2]), "VALIDATION_FAILED");
   await asUser(q, await uid(q, "철수"));
-  await expectFail(upd(q, "aws", ec2, { title: "x" }), "NOT_LEADER");
+  await expectFail(upd(q, "aws", ec2, { title: "x" }), "NOT_CURRICULUM_EDITOR");
 }));
 
 sqlTest("node_update(taskType): 제출물 있으면 양방향 NODE_HAS_SUBMISSIONS, 회차는 NODE_NOT_LEAF, 공통→지정은 담당자 승계·source DESIGNATED", withCase(db, async (q) => {
@@ -525,7 +525,7 @@ sqlTest("node_move: 서브트리 깊이 초과·보관 부모·제출물 있는 
   await asUser(q, await uid(q, "민수"));
   await expectFail(mv(q, "aws", await nodeByTitle(q, aws, "VPC 실습"), await nodeByTitle(q, aws, "IAM 정책 이해"), null), "NODE_HAS_SUBMISSIONS");
   await asUser(q, await uid(q, "철수"));
-  await expectFail(mv(q, "aws", await nodeByTitle(q, aws, "VPC 실습"), null, 0), "NOT_LEADER");
+  await expectFail(mv(q, "aws", await nodeByTitle(q, aws, "VPC 실습"), null, 0), "NOT_CURRICULUM_EDITOR");
 }));
 
 sqlTest("node_move/indent/outdent: 보관된 노드는 이동 전에 거부된다(리프 TASK_ARCHIVED · 비리프 PARENT_ARCHIVED), 살아 있는 대상 리프는 그대로", withCase(db, async (q) => {

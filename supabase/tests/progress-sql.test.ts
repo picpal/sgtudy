@@ -58,7 +58,7 @@ sqlTest("node_assert_editable: 그룹장·상태·보관 검사, node_get: 방 �
   await asUser(q, await uid(q, "민수"));
   await expectFail(q("select public.node_assert_editable($1)", [room.slug]), "ROOM_NOT_FOUND");   // DRAFT: 외부인은 존재도 모른다 (I-2)
   await q("update public.rooms set status = 'RECRUIT' where id = $1", [room.id]);
-  await expectFail(q("select public.node_assert_editable($1)", [room.slug]), "NOT_LEADER");   // 공개 RECRUIT 는 읽을 수 있다
+  await expectFail(q("select public.node_assert_editable($1)", [room.slug]), "NOT_CURRICULUM_EDITOR");   // 공개 RECRUIT 는 읽을 수 있다
   await q("update public.rooms set status = 'DRAFT' where id = $1", [room.id]);
   await asAnon(q);
   await expectFail(q("select public.node_assert_editable($1)", [room.slug]), "AUTH_REQUIRED");
