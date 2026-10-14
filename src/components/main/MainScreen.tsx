@@ -107,7 +107,7 @@ export function MainScreen({ initial }: { initial: RoomListResponse }) {
 
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]" aria-busy={loading} style={{ opacity: loading ? 0.6 : 1 }}>
           {rooms.map((r) => (
-            <RoomCard key={r.id} room={r} selectedTags={selectedLabels} />
+            <RoomCard key={r.id} room={r} selectedTags={selectedLabels} anonymous={!me} />
           ))}
         </div>
       </main>

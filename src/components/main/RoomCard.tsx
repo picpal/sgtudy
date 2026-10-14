@@ -22,16 +22,17 @@ const SLOT_TONE: Record<CardStatus, { bg: string; label: string; bar: string; tr
   ended: { bg: "#F4F6F7", label: "#4A5563", bar: "#7A8594", track: "#DDE2E5" },
 };
 
-type Props = { room: Room; selectedTags: string[] };
+/** anonymous: 비로그인이면 카드를 누를 때 로그인부터 — 로그인 뒤 그 방으로 돌아온다 */
+type Props = { room: Room; selectedTags: string[]; anonymous?: boolean };
 
-export function RoomCard({ room, selectedTags }: Props) {
+export function RoomCard({ room, selectedTags, anonymous = false }: Props) {
   const badge = STATUS_BADGE[room.status];
   const tone = SLOT_TONE[room.status];
   const isFull = room.cur >= room.max;
 
   return (
     <Link
-      href={routes.room(room.id)}
+      href={anonymous ? routes.login(routes.room(room.id)) : routes.room(room.id)}
       className="flex flex-col overflow-hidden rounded-[18px] border border-line bg-surface text-ink no-underline transition-[transform,box-shadow] duration-[180ms] ease-[ease] hover:-translate-y-1.5 hover:text-ink hover:shadow-[0_14px_28px_rgba(27,34,48,0.10)]"
     >
       <div className="flex flex-[1_1_auto] flex-col gap-[10px] px-[18px] pb-4 pt-[18px]">
