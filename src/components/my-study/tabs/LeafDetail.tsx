@@ -4,6 +4,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
+import { MarkdownView } from "../MarkdownView";
 import { CODE_COLOR, CODE_LABEL, ddayLabel, type LeafNode } from "../model";
 
 /** 참가자 보기에서 리프 행 아래 펼쳐지는 상세 */
@@ -15,6 +16,7 @@ export function LeafDetail({ n }: { n: LeafNode }) {
       <div className="text-[12px] text-muted">
         {n.crumb} · {md(n.s)}({weekdayKo(n.s)}) – {md(n.e)}({weekdayKo(n.e)}) · {n.state === "complete" ? "전원 제출" : ddayLabel(today, n.e)}
       </div>
+      {n.desc.trim() && <MarkdownView src={n.desc} className="text-[13px] leading-[1.7]" />}
       <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
         {n.people.map((p) => {
           const me = p.userId === meId;

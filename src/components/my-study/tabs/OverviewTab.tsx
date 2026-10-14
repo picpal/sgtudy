@@ -7,7 +7,7 @@ import { STATUS_LABEL, type TaskStatus } from "@/lib/types";
 import type { StudyRoom } from "@/lib/api/my-study";
 import { RingedStatus, TypeBadge, toneOfName } from "../bits";
 import type { Tree } from "../model";
-import { MarkdownView } from "../MarkdownView";
+import { Inline, MarkdownView } from "../MarkdownView";
 
 const MAX_PEOPLE = 4;
 
@@ -115,7 +115,9 @@ export function OverviewTab({ room, tree, onGoCurriculum }: { room: StudyRoom; t
       <H3 mt={26} icon={<path d="m8 12.2 2.8 2.8L16.5 9" stroke="#FFFFFF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />}>운영 규칙</H3>
       <ul className="m-0 pl-5 text-[14px] leading-[1.75] text-ink-2">
         {room.rules.map((r) => (
-          <li key={r}>{r}</li>
+          <li key={r}>
+            <Inline text={r} />
+          </li>
         ))}
       </ul>
 
