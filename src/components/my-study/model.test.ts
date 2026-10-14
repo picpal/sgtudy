@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, REF_DAY } from "./fixtures";
-import { EMPTY_OVERRIDES, buildTree, dropFieldOv, isDirty, memberStats, overallPct, periodWarnings, stripFieldOv, unassignedCount } from "./model";
+import { EMPTY_OVERRIDES, buildTree, dropFieldOv, ganttRange, isDirty, memberStats, overallPct, periodWarnings, stripFieldOv, unassignedCount } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -116,5 +116,18 @@ describe("periodWarnings (E4, Q1-10/Q2-21) — 경고만, 막지 않는다", () 
   });
   it("root outside room period (회차 추가 beyond room end)", () => {
     expect(periodWarnings({ s: "2026-11-05", e: "2026-11-11" }, null, room)).toEqual(["방 기간(10.01 – 11.04)을 벗어났어요"]);
+  });
+});
+
+describe("ganttRange", () => {
+  it("empty curriculum still shows 5 weeks from this week's Sunday (no 1-week stub)", () => {
+    expect(ganttRange([], "2026-10-14")).toEqual({ start: "2026-10-11", nDays: 35 });
+  });
+  it("non-empty: Sunday before the first start to Saturday after the last end", () => {
+    const roots = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY).roots;
+    const { start, nDays } = ganttRange(roots, REF_DAY);
+    expect(new Date(start + "T00:00:00Z").getUTCDay()).toBe(0);
+    expect(nDays % 7).toBe(0);
+    expect(start <= roots[0].s).toBe(true);
   });
 });

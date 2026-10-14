@@ -333,7 +333,8 @@ export function packLanes<T extends { col: number; span: number; lane: number }>
 /* ---------------- 간트 ---------------- */
 
 export function ganttRange(roots: ParentNode[], today: string): { start: string; nDays: number } {
-  if (roots.length === 0) return { start: weekStartOf(today), nDays: 7 };
+  // 과제가 없어도 1주짜리 토막 대신 이번 주부터 5주를 그려 헤더가 끊겨 보이지 않게 한다
+  if (roots.length === 0) return { start: weekStartOf(today), nDays: 35 };
   const rS = roots.reduce((a, r) => (r.s < a ? r.s : a), roots[0].s);
   const rE = roots.reduce((a, r) => (r.e > a ? r.e : a), roots[0].e);
   const start = weekStartOf(rS);
