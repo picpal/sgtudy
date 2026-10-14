@@ -70,7 +70,7 @@ export function MainScreen({ initial }: { initial: RoomListResponse }) {
       <main className="mx-auto max-w-[1376px] px-8 pb-16 pt-9 max-sm:px-4">
         <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="m-0 text-[28px] font-bold tracking-[-0.02em]">스터디 방</h1>
+            <h1 className="m-0 text-[28px] font-bold tracking-[-0.02em]">슥터디 룸</h1>
             <p className="mb-0 mt-[6px] text-[15px] text-muted">함께 목표를 세우고, 누가 어디까지 왔는지 한눈에 확인하세요.</p>
           </div>
           <Link href={createHref} className="flex h-[46px] items-center gap-2 rounded-[14px] bg-navy px-5 text-[15px] font-semibold text-white hover:text-white">
