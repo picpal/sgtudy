@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LeaderPanel } from "@/components/room-view/LeaderPanel";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NotificationBell } from "@/components/ui/NotificationBell";
@@ -159,7 +160,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                   goLeaf={goLeaf}
                   onCancel={setConfirm}
                   busy={busy}
-                  admin={isLeader ? <MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} /> : undefined}
+                  admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} /></> : undefined}
                 />
               )}
             </div>

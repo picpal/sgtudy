@@ -92,7 +92,7 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
           <Link href={routes.myStudy(room.id)} className={`${PRIMARY} bg-navy text-[15px]`}>
             내가 만든 방 · 관리하기
           </Link>
-          {/* plan 06: 그룹장 패널(승인 대기 ${pendingCount}명 · 초대 링크 복사 · 모집 시작) */}
+          {/* 그룹장 패널(모집 시작·초대 링크·승인 대기)은 이 카드 아래 LeaderPanel 로 따로 붙는다 (RoomViewScreen) */}
         </div>
       );
   }

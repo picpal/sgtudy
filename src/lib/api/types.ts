@@ -258,9 +258,17 @@ export type ScheduleResponse = {
 };
 
 /* ---------- 알림 ---------- */
+/** 서버 notification_kinds() (0008 + 0012 CURRICULUM_EDITOR_*). 제목·링크는 서버가 렌더하므로 화면은 kind 로 분기하지 않는다 */
+export const NOTIFICATION_KINDS = [
+  "ROUND_STARTED", "TASK_ALL_SUBMITTED", "TASK_COMPLETION_DIGEST", "JOIN_REQUESTED", "JOIN_APPROVED", "JOIN_REJECTED",
+  "JOIN_EXPIRED", "DEADLINE_REMINDER", "TASK_ASSIGNED", "TASK_UNASSIGNED", "SCHEDULE_CHANGED", "ROOM_STARTED",
+  "ROOM_ENDED", "ROOM_START_BLOCKED", "MEMBER_DEACTIVATED", "CURRICULUM_EDITOR_GRANTED", "CURRICULUM_EDITOR_REVOKED",
+] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export type NotificationDto = {
   id: string;
-  kind: string;
+  /** 모르는 kind 가 와도 깨지지 않게 string 도 받는다 */
+  kind: NotificationKind | (string & {});
   title: string;
   body: string | null;
   room: { slug: string; title: string } | null;

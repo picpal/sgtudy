@@ -15,6 +15,7 @@ import { RoomSidebar } from "./RoomSidebar";
 import { RoomInfo } from "./RoomInfo";
 import { JoinCard } from "./JoinCard";
 import { GlanceCard } from "./GlanceCard";
+import { LeaderPanel } from "./LeaderPanel";
 
 /** invite: ?invite= 로 연 비공개 방의 토큰 — 참가/신청 RPC 와 로그인 복귀 주소에 그대로 이어 붙인다 */
 export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; list: RoomListResponse; invite?: string }) {
@@ -49,7 +50,7 @@ export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; l
     }
   };
 
-  // 공유: 초대 토큰 없이 방 주소만 복사한다 (비공개 방 토큰은 그룹장 패널 몫 — plan 06)
+  // 공유: 초대 토큰 없이 방 주소만 복사한다 (비공개 방 초대 링크는 그룹장 패널 LeaderPanel 이 복사한다)
   const share = async () => {
     try {
       await navigator.clipboard.writeText(new URL(routes.room(dto.slug), window.location.origin).href);
@@ -80,6 +81,14 @@ export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; l
                 onApply={() => run(() => applyRoom(dto.slug, invite), "참가 신청했어요 · 그룹장이 승인하면 알려 드려요")}
                 onCancel={() => setConfirm(act === "leave" ? "leave" : "cancel")}
               />
+              {act === "owner" && (
+                <LeaderPanel
+                  detail={dto}
+                  toast={setToast}
+                  onDetail={(d) => setDto((prev) => ({ ...prev, ...d, today: prev.today }))}
+                  onMembership={(r) => setDto((d) => applyMembership(d, r))}
+                />
+              )}
               <GlanceCard glance={room.glance} />
             </aside>
           </div>
