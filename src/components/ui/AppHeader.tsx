@@ -86,6 +86,11 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
   const focusOnOpen = useRef<"first" | "last" | null>(null);
 
   const items = () => menuItems(menuRef.current);
+  // "내 프로필" 링크는 메뉴가 열려야 마운트돼 뷰포트 prefetch 를 못 받는다 → 아바타에 손이 가면(hover·focus·열기) /me 를 미리 받아
+  // 클릭 즉시 loading 스켈레톤이 뜨게 한다. router.prefetch 는 같은 주소를 캐시에서 재사용한다
+  const prefetchMe = () => {
+    if (pathname !== routes.me()) router.prefetch(routes.me());
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -120,6 +125,7 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
       return;
     }
     focusOnOpen.current = e.key === "ArrowDown" ? "first" : "last";
+    prefetchMe();
     setOpen(true);
   };
   // role=menu 안에서 ↑/↓/Home/End 로 항목 사이를 돈다
@@ -180,7 +186,12 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
               aria-haspopup="menu"
               aria-expanded={open}
               ref={avatarRef}
-              onClick={() => setOpen((v) => !v)}
+              onClick={() => {
+                if (!open) prefetchMe();
+                setOpen((v) => !v);
+              }}
+              onPointerEnter={prefetchMe}
+              onFocus={prefetchMe}
               onKeyDown={onAvatarKey}
               className="flex h-11 w-11 items-center justify-center rounded-full text-[15px] font-bold"
               style={{ background: AVATAR_PAL[me.tone].bg, color: AVATAR_PAL[me.tone].fg }}
