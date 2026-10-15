@@ -1,3 +1,5 @@
+import { CAPTCHA_FAILED_TEXT } from "./captcha";
+
 export type Digits = [string, string, string, string, string, string];
 export const EMPTY_DIGITS: Digits = ["", "", "", "", "", ""];
 
@@ -50,6 +52,8 @@ const AUTH_CODE_TEXT: Record<string, string> = {
   reauthentication_not_valid: "코드가 맞지 않거나 만료됐어요",
   reauth_nonce_missing: "보안을 위해 이메일 인증 코드를 입력해 주세요",
   reauthentication_needed: "보안을 위해 이메일 인증을 다시 해 주세요",
+  // CAPTCHA(Turnstile): 토큰이 없거나·만료·이미 쓴 토큰이면 GoTrue 가 400 captcha_failed
+  captcha_failed: CAPTCHA_FAILED_TEXT,
 };
 
 /** 비밀번호 재설정은 계정을 만들지 않는다(shouldCreateUser: false) — 없는 주소도 계정 존재를 드러내지 않는 같은 문구 */

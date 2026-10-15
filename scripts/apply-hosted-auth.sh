@@ -9,6 +9,9 @@
 #   SMTP_SENDER_EMAIL      발신 주소 (발송 서비스에서 인증한 주소)
 #   SMTP_SENDER_NAME       표시 이름 (기본: 슥터디)
 #   AUTH_EMAIL_RATE_PER_HOUR  시간당 인증 메일 상한 (기본: 30)
+#   TURNSTILE_SECRET_KEY   (선택) Cloudflare Turnstile 시크릿. 있으면 CAPTCHA 를 켠다
+#                          (security_captcha_enabled/provider=turnstile/secret). 없으면 CAPTCHA 설정은 건드리지 않는다.
+#                          켜기 전에 NEXT_PUBLIC_TURNSTILE_SITE_KEY 를 넣은 프론트를 먼저 배포할 것 — README "CAPTCHA 켜기"
 # 접근 토큰: SUPABASE_ACCESS_TOKEN, 없으면 macOS 키체인의 Supabase CLI 로그인 토큰.
 #
 # 사용: scripts/apply-hosted-auth.sh --dry-run   # 보낼 설정 확인(비밀번호 가림)
@@ -38,7 +41,7 @@ fi
 BODY=$(python3 - <<'PY'
 import json, os
 def read(p): return open(p, encoding="utf-8").read()
-print(json.dumps({
+body = {
   "smtp_host": os.environ["SMTP_HOST"],
   "smtp_port": os.environ["SMTP_PORT"],
   "smtp_user": os.environ["SMTP_USER"],
@@ -67,12 +70,21 @@ print(json.dumps({
   # Management API 는 문자 집합을 ':' 로 구분해 받는다(집합마다 한 자 이상) — CLI 가 letters_digits 를 이 값으로 바꾼다
   "password_min_length": 8,
   "password_required_characters": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:0123456789",
-}))
+}
+# CAPTCHA(선택): 시크릿이 있을 때만 켠다. GoTrue 가 /signup·/otp·/recover·/resend·/token(password) 에서 토큰을 검사한다
+secret = (os.environ.get("TURNSTILE_SECRET_KEY") or "").strip()
+if secret:
+  body.update({
+    "security_captcha_enabled": True,
+    "security_captcha_provider": "turnstile",
+    "security_captcha_secret": secret,
+  })
+print(json.dumps(body))
 PY
 )
 
 if [ "$DRY" = 1 ]; then
-  printf '%s' "$BODY" | python3 -c 'import sys,json;d=json.load(sys.stdin);d["smtp_pass"]="***";[d.update({k:f"<{len(v)} chars>"}) for k,v in list(d.items()) if k.startswith("mailer_templates")];print(json.dumps(d,ensure_ascii=False,indent=1))'
+  printf '%s' "$BODY" | python3 -c 'import sys,json;d=json.load(sys.stdin);d["smtp_pass"]="***";"security_captcha_secret" in d and d.update(security_captcha_secret="***");[d.update({k:f"<{len(v)} chars>"}) for k,v in list(d.items()) if k.startswith("mailer_templates")];print(json.dumps(d,ensure_ascii=False,indent=1))'
   echo "(dry run — project $REF, nothing sent)"; exit 0
 fi
 

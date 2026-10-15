@@ -13,6 +13,7 @@ import { HAS_PASSWORD_KEY, otpFlowStep, signupAccountKind, type Verified } from 
 import { PASSWORD_MISMATCH_TEXT, passwordFormError } from "./password";
 import { PasswordFields } from "./PasswordFields";
 import { fieldClass, labelClass, primaryClass } from "./styles";
+import { useCaptcha } from "./Turnstile";
 
 /** 코드 단계는 ?step=code 히스토리 항목 — 브라우저 뒤로가기가 이메일 단계로 돌아오게 한다(Q2-08) */
 const STEP_KEY = "step";
@@ -64,6 +65,8 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
   const dest = safeReturnTo(returnTo);
   const back = dest === "/" ? undefined : dest;
   const step = otpFlowStep(verified, params.get(STEP_KEY) === "code", sentTo);
+  // 코드 발송(/otp)만 CAPTCHA 대상 — 코드 확인(/verify)·비밀번호 저장(/user)은 GoTrue 가 검사하지 않는다
+  const captcha = useCaptcha(mode);
 
   useEffect(() => {
     if (left <= 0) return;
@@ -93,10 +96,16 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
   };
 
   const send = async (to: string) => {
+    const blocked = captcha.block();
+    if (blocked) {
+      setRateLimited(false);
+      return setError(blocked);
+    }
     setBusy(true);
     setError("");
     setRateLimited(false);
-    const { error: e } = await createClient().auth.signInWithOtp({ email: to, options: { shouldCreateUser: mode === "signup" } });
+    const { error: e } = await createClient().auth.signInWithOtp({ email: to, options: { shouldCreateUser: mode === "signup", ...captcha.options } });
+    captcha.reset(); // 토큰은 한 번만 쓴다 — 재전송에는 새 토큰
     setBusy(false);
     // 재설정: 없는 주소도 보낸 것처럼 코드 단계로 — 화면 분기로 계정 존재를 드러내지 않는다(코드 확인은 "맞지 않거나 만료" 로 끝난다)
     if (e && !(mode === "reset" && isResetNoAccount(e))) {
@@ -283,6 +292,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
           ) : (
             error && <p role="alert" className="m-0 text-[13px] text-warn">{error}</p>
           )}
+          {captcha.widget}
           <button type="submit" disabled={busy || limited} className={primaryClass}>
             {busy ? "보내는 중…" : limited ? `${left}초 뒤에 다시 받기` : "인증 코드 받기"}
           </button>
@@ -308,6 +318,8 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
     >
       <OtpInput value={digits} onChange={onDigits} disabled={busy} />
       {error && <p role="alert" className="m-0 text-[13px] text-warn">{error}</p>}
+      {/* 재전송용 — 코드 입력(/verify)에는 필요 없다 */}
+      {captcha.widget}
       <div className="flex items-center justify-between text-[13px]">
         <button type="button" onClick={toEmail} className="h-11 text-muted">
           이메일 바꾸기

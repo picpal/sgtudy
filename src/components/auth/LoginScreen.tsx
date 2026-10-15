@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AuthShell } from "./AuthShell";
 import { authErrorMessage, errorCode } from "./otp";
 import { PasswordInput } from "./PasswordInput";
+import { useCaptcha } from "./Turnstile";
 import { fieldClass, labelClass, primaryClass } from "./styles";
 
 /** 기본 로그인: 이메일 + 비밀번호. 인증 코드는 가입(routes.signup)과 비밀번호 재설정(routes.resetPassword)에서만 쓴다 */
@@ -26,6 +27,8 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
   const addr = email.trim().toLowerCase();
   const dest = safeReturnTo(returnTo);
   const back = dest === "/" ? undefined : dest;
+  // NEXT_PUBLIC_TURNSTILE_SITE_KEY 가 있을 때만 — 없으면 지금과 같다
+  const captcha = useCaptcha("login");
 
   const errorId = useId();
   // 고치기 시작하면 지난 오류는 지운다 — "비밀번호 만들기" 안내는 아래 상자에 늘 있다
@@ -50,12 +53,18 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
       passwordRef.current?.focus();
       return;
     }
+    const blocked = captcha.block();
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
     setBusy(true);
     setError("");
     setBad(null);
     setBadCredentials(false);
     try {
-      const { error: e } = await createClient().auth.signInWithPassword({ email: addr, password });
+      const { error: e } = await createClient().auth.signInWithPassword({ email: addr, password, options: { ...captcha.options } });
+      captcha.reset(); // 토큰은 한 번만 쓴다 — 다음 시도에 새 토큰
       if (e) throw e;
       const me = await fetchMe();
       router.replace(me.onboarded ? dest : routes.onboarding(dest));
@@ -120,6 +129,7 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
             )}
           </div>
         )}
+        {captcha.widget}
         <button type="submit" disabled={busy} className={primaryClass}>
           {busy ? "로그인 중…" : "로그인"}
         </button>

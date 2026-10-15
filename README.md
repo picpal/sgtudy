@@ -87,7 +87,14 @@ scripts/master-user.sh delete --hosted   # 실오픈 전
 
 ### 인증 · 실오픈 전 체크리스트
 
-- [ ] **CAPTCHA 켜기**: Authentication → Attack Protection → Turnstile(Cloudflare) 사이트 키·시크릿 등록, 앱의 `signInWithPassword`·`signInWithOtp`·`reauthenticate` 에 `options.captchaToken` 전달. 지금 방어는 IP 단위 rate limit 뿐이다(분산 IP credential stuffing·`/signup` 반복으로 메일 쿼터 `rate_limit_email_sent` 30/h 소진 — 그동안 모든 가입·재설정이 막힘).
+- [ ] **CAPTCHA 켜기 (Cloudflare Turnstile)** — 지금 방어는 IP 단위 rate limit 뿐이다(분산 IP credential stuffing·`/signup` 반복으로 메일 쿼터 `rate_limit_email_sent` 30/h 소진 — 그동안 모든 가입·재설정이 막힘). 코드는 준비돼 있다: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` 가 있을 때만 `/login`·`/signup`·`/reset-password` 에 위젯(`src/components/auth/Turnstile.tsx`, explicit render·한국어·`interaction-only`)을 그리고 `options.captchaToken` 을 보낸다. 없으면 지금과 똑같다. **순서를 지킬 것** — 호스팅을 먼저 켜면 토큰 없는 프론트의 로그인·가입·재설정이 전부 400 `captcha_failed` 로 막힌다.
+  1. (사용자) Cloudflare 대시보드 → Turnstile → 위젯 추가. 도메인 `sgtudy.vercel.app`, `localhost`. 모드는 Managed(권장) 또는 Invisible. 사이트 키·시크릿 키를 받는다.
+  2. Vercel **production** 에 `NEXT_PUBLIC_TURNSTILE_SITE_KEY`(사이트 키) 를 `vercel env add`, `.env.local` 에 `TURNSTILE_SECRET_KEY`(시크릿) 를 넣는다. 시크릿은 Vercel 에 넣지 않는다.
+  3. 프론트 배포(`NEXT_PUBLIC_*` 는 빌드 때 박히므로 env 추가 뒤 **새로 빌드**해야 한다). 배포본에서 로그인 화면 Network 에 `challenges.cloudflare.com` 이 뜨고, 로그인 요청 본문 `gotrue_meta_security.captcha_token` 이 채워지는지 확인 — 이 시점엔 호스팅이 아직 검사하지 않으니 토큰이 있어도 없어도 통과한다.
+  4. `scripts/apply-hosted-auth.sh --dry-run` → `security_captcha_enabled: true`·`provider: turnstile`·`secret: ***` 확인 → `scripts/apply-hosted-auth.sh` 로 적용(마지막 줄 `captcha: True turnstile`).
+  5. 배포본에서 로그인·가입 코드 발송·재설정 코드 발송·재전송을 한 번씩 확인. 막히면 되돌리기: Dashboard → Authentication → Attack Protection 에서 CAPTCHA 끄기(또는 `.env.local` 에서 시크릿을 빼고 끄는 PATCH).
+  - 토큰을 보내는 호출: `signInWithPassword`(POST `/token?grant_type=password`), `signInWithOtp`(POST `/otp` — 가입·재설정 코드 발송·재전송). GoTrue 는 `/verify`(코드 확인)·`/user`(비밀번호 저장)·`/reauthenticate`(/me 비밀번호 변경 코드, 로그인 세션 필요)는 검사하지 않는다 — `verifyOtp`·`updateUser`·`reauthenticate` 는 그대로. 토큰은 한 번만 쓰므로 매 시도 뒤 위젯을 reset 한다. 오류 `captcha_failed` 와 토큰 없음은 한국어 안내(`src/components/auth/captcha.ts`).
+  - 로컬은 끈 채로 둔다(`supabase/config.toml` 의 `[auth.captcha]` 주석 — 켜면 `supabase stop/start` 가 필요하고 토큰 없는 스크립트 로그인이 막힌다). 위젯만 보려면 `.env.local` 에 테스트 사이트 키 `1x00000000000000000000AA`(항상 통과) / `2x00000000000000000000AB`(항상 실패).
 - [ ] **미확인 사용자 정리**: `/signup` 코드 발송이 주소마다 계정 행을 만든다. 주기적으로(예: 주 1회) `email_confirmed_at is null and created_at < now() - interval '1 day'` 인 auth 사용자를 관리자 API 로 지운다(앱 데이터가 없는 행만 — FK NO ACTION 이라 데이터가 있으면 삭제가 막힌다).
 - [ ] `scripts/apply-hosted-auth.sh` 가 찍는 rate limit(`rate_limit_otp`·`rate_limit_verify`·`rate_limit_token_refresh`·`rate_limit_email_sent`)·재인증 값 확인.
 - 남는 위험(문서화): 재설정 화면은 없는 주소도 "가입된 주소라면 코드가 갔어요" 로 똑같이 코드 단계로 가지만, GoTrue `/otp` 를 anon 키로 직접 부르면 없는 주소(422 `otp_disabled`)와 있는 주소(200)가 구분된다. 로그인도 GoTrue 가 있는 계정만 bcrypt 비교를 해 응답 시간 차이가 난다. 둘 다 GoTrue 고유 동작 — 막으려면 서버 라우트로 감싸야 한다(CAPTCHA 가 대량 열거는 늦춘다). 비밀번호 변경 재인증의 24시간 예외도 위 참고.
