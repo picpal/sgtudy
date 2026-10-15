@@ -95,7 +95,7 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemo
 
       {canAdd && (
         // 누르는 자리는 44px, 보이는 상자는 32px
-        <button type="button" title={addTip} aria-label={addTip} onClick={onAddChild} className="group -mx-[6px] flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-transparent text-mint">
+        <button type="button" title={addTip} aria-label={addTip} onClick={onAddChild} className="group -mx-[6px] -my-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-transparent text-mint">
           <span className="flex h-8 w-8 items-center justify-center rounded-[9px] border border-line-3 bg-surface group-hover:border-mint">
             <Plus />
           </span>
@@ -118,7 +118,7 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemo
           aria-label={`${n.title || "제목 없는 항목"} 삭제`}
           aria-expanded={onRemove ? asking : undefined}
           onClick={onRemove}
-          className="group -mx-[6px] flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-transparent text-warn disabled:text-ghost"
+          className="group -mx-[6px] -my-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-transparent text-warn disabled:text-ghost"
         >
           <span className={`flex h-8 w-8 items-center justify-center rounded-[9px] border group-disabled:border-line group-disabled:bg-[#F4F6F7] ${asking ? "border-warn bg-[#FFF7F6]" : "border-line-3 bg-surface group-hover:border-warn"}`}>
             <Trash />
