@@ -78,15 +78,38 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // pushed: 지금 주소의 편집 기록을 이 화면이 목록 기록 위에 쌓았는지 — history.state 는 Next 라우터가 갈아 끼우므로 메모리에 둔다.
   // 새로고침으로 바로 열린 편집 화면은 아래가 목록이라는 보장이 없어 back 대신 replace 로 닫는다
   const pushed = useRef<string | null>(null);
+  // overView: 지금 편집 기록을 같은 항목의 보기 상세 기록 위에 쌓았는지 (상세 → "편집" = push, 뒤로 = 상세)
+  const overView = useRef(false);
+  const backTab = useRef<TabId | null>(null);
+  const shownTab = useRef<TabId>(S.tab);
   useEffect(() => {
     const url = readItem(window.location.search);
-    const step = syncStep(url, readMode(window.location.search), openItem, openMode, url !== null && pushed.current === url, new URLSearchParams(window.location.search).has("task"));
+    const urlMode = readMode(window.location.search);
+    const step = syncStep(url, urlMode, openItem, openMode, url !== null && pushed.current === url, new URLSearchParams(window.location.search).has("task"), overView.current);
     const href = withItem(window.location.href, openItem, openMode);
+    const modePush = step === "push" && url !== null && url === openItem;
+    // 목록 기록 위에 상세·편집을 쌓을 때, 그 목록 기록이 보여 주던 탭(보드 카드 → 상세 등) — 뒤로 가기로 돌아오면 그 탭으로
+    if (step === "push" && url === null) backTab.current = shownTab.current;
     if (step === "push") window.history.pushState(null, "", href);
     else if (step === "replace") window.history.replaceState(null, "", href);
     else if (step === "back") window.history.back();
-    if (step !== "none") pushed.current = step === "push" || (step === "replace" && pushed.current) ? openItem : null;
+    if (step === "none") return;
+    // 상세 위 편집 기록을 쌓거나 걷을 때는 아래 상세 기록의 pushed 를 그대로 둔다
+    if (!modePush && !(step === "back" && overView.current)) pushed.current = step === "push" || (step === "replace" && pushed.current) ? openItem : null;
+    overView.current = modePush;
   }, [openItem, openMode]);
+  // 위 동기화 effect 가 볼 "직전 렌더의 탭" — 동기화 뒤에 갱신한다
+  useEffect(() => {
+    shownTab.current = S.tab;
+  });
+  // 목록 화면(항목 없음)의 ?tab= 은 지금 탭을 따라간다 — 뒤로 가기로 돌아온 기록·새로고침이 다른 탭을 열지 않게
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (openItem !== null || readItem(window.location.search) !== null || (sp.get("tab") ?? "overview") === S.tab) return;
+    const u = new URL(window.location.href);
+    u.searchParams.set("tab", S.tab);
+    window.history.replaceState(null, "", `${u.pathname}?${u.searchParams.toString()}${u.hash}`);
+  }, [S.tab, openItem]);
   // 브라우저 뒤로·앞으로 → 주소의 항목을 연다/닫는다. 미저장 수정이 있으면 주소를 되돌려 놓고 먼저 묻는다 (조용히 버리지 않는다)
   const live = useRef({ S, tree, openItem, canEdit });
   useEffect(() => {
@@ -101,17 +124,21 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       if (url && !target.id) window.history.replaceState(null, "", withItem(window.location.href, null));
       if (target.id === open && (target.id === null || (target.mode === "edit") === (s.curMode === "edit"))) return;
       if (s.curMode === "edit" && open && isDirty(s.ov, s.editSel)) {
+        // 편집 기록을 되돌려 놓는다 — 뒤로 간 곳이 같은 항목 상세면 여전히 그 위에 쌓인 편집 기록
+        const backToView = target.id === open && target.mode === "view";
         window.history.pushState(null, "", withItem(window.location.href, open, "edit"));
-        pushed.current = open;
+        if (!backToView) pushed.current = open;
+        overView.current = backToView && overView.current;
         // 목록(편집 모드)·다른 편집 항목은 sel, 보기 상세는 mode 전환으로 보류
         update({ leave: target.id === null || target.mode === "edit" ? { sel: target.id } : { mode: "view" }, confirm: false });
         return;
       }
-      // 앞으로 가기로 연 기록은 목록 기록 위에 있다 → 닫을 때 back
-      pushed.current = target.id;
+      // 앞으로 가기로 연 기록은 목록 기록 위에 있다 → 닫을 때 back. 상세에서 앞으로 가기로 연 같은 항목 편집은 상세 위 기록
+      overView.current = target.id !== null && target.id === open && target.mode === "edit";
+      if (!overView.current) pushed.current = target.id;
       update(
         target.id === null
-          ? { editSel: null, viewSel: null, confirm: false, leave: null, saved: "" }
+          ? { ...(backTab.current ? { tab: backTab.current } : {}), editSel: null, viewSel: null, confirm: false, leave: null, saved: "" }
           : target.mode === "edit"
             ? { tab: "curriculum", curMode: "edit", editSel: target.id, viewSel: null, confirm: false, leave: null, saved: "" }
             : { tab: "curriculum", curMode: "view", viewSel: target.id, editSel: null, confirm: false, leave: null, saved: "" },

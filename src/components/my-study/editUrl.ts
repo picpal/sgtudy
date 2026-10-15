@@ -50,12 +50,20 @@ export function itemTarget(url: string | null, exists: (id: string) => boolean):
   return url && exists(url) ? url : null;
 }
 
-/** urlStep + "같은 항목인데 보기↔편집만 바뀜" = replace.
+/** urlStep + 같은 항목의 보기↔편집 전환.
+ *  보기 상세 → "편집": push — 뒤로 가기가 상세로 돌아온다 (보드 → 상세 → 편집 → 뒤로 = 상세).
+ *  editOverView(지금 편집 기록을 이 화면이 같은 항목의 상세 위에 쌓았음): 편집 → 보기는 back, 그 밖의 이동(닫기·다른 항목)은 replace —
+ *  back 하면 목록이 아니라 상세 기록으로 가기 때문이다. 그 밖의 같은 항목 모드 전환은 replace.
  *  fromLink(주소에 ?task=): 알림·일정 링크로 들어와 그 과제를 연 첫 화면 — 아래가 목록 기록이 아니므로 push 대신 replace (새로고침 진입과 같다) */
-export function syncStep(url: string | null, urlMode: CurMode, open: string | null, openMode: CurMode, pushedHere: boolean, fromLink = false): UrlStep {
+export function syncStep(url: string | null, urlMode: CurMode, open: string | null, openMode: CurMode, pushedHere: boolean, fromLink = false, editOverView = false): UrlStep {
   const s = urlStep(url, open, pushedHere);
+  if (s === "none" && open !== null && isUrlItem(open) && urlMode !== openMode) {
+    if (openMode === "edit") return "push";
+    return editOverView ? "back" : "replace";
+  }
+  if (editOverView && s !== "none") return "replace";
   if (s === "push" && fromLink) return "replace";
-  return s === "none" && open !== null && isUrlItem(open) && urlMode !== openMode ? "replace" : s;
+  return s;
 }
 
 /** 주소 → 열 화면. 편집은 권한자만(아니면 같은 항목의 보기 상세). 없는 항목은 목록 */

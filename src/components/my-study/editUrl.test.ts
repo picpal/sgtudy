@@ -49,8 +49,16 @@ describe("detail view URL (보기 ?item=)", () => {
     expect(readMode("?tab=curriculum&mode=edit&item=7")).toBe("edit");
     expect(readMode("?tab=curriculum&item=7")).toBe("view");
   });
-  it("same item, different mode → replace; otherwise urlStep", () => {
-    expect(syncStep("7", "view", "7", "edit", true)).toBe("replace");
+  it("보기 상세 → 편집은 push (뒤로 = 상세), 그 편집에서 보기로는 back, 닫기·다른 항목은 replace", () => {
+    expect(syncStep("7", "view", "7", "edit", true)).toBe("push");
+    expect(syncStep("7", "view", "7", "edit", false)).toBe("push");
+    expect(syncStep("7", "edit", "7", "view", true, false, true)).toBe("back");
+    expect(syncStep("7", "edit", null, "edit", true, false, true)).toBe("replace");
+    expect(syncStep("7", "edit", "8", "edit", true, false, true)).toBe("replace");
+    expect(syncStep("7", "edit", "7", "edit", true, false, true)).toBe("none");
+  });
+  it("same item, edit → view (not over a detail) → replace; otherwise urlStep", () => {
+    expect(syncStep("7", "edit", "7", "view", true)).toBe("replace");
     expect(syncStep("7", "edit", "7", "edit", true)).toBe("none");
     expect(syncStep(null, "view", "7", "view", false)).toBe("push");
     expect(syncStep("7", "view", null, "view", true)).toBe("back");
