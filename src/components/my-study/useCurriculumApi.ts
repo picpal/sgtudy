@@ -8,6 +8,7 @@ import type { Curriculum, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
 import { EMPTY_OVERRIDES, dropFieldOv, tempId, type Overrides, type TreeNode } from "./model";
+import type { DatePlan } from "./rounds";
 import type { Update } from "./state";
 
 export type CurriculumApi = {
@@ -20,8 +21,8 @@ export type CurriculumApi = {
   archive: (id: string, on: boolean, from?: "edit" | "list") => Promise<void>;
   /** 성공(또는 바뀐 것 없음)이면 true */
   save: (n: TreeNode, ov: Overrides) => Promise<boolean>;
-  /** node_move 후 period 가 있으면 node_update 로 기간을 맞춘다. okText = 성공 토스트. 옮겨졌으면 true */
-  move: (id: string, parentId: string, index?: number, period?: { s: string; e: string } | null, okText?: string) => Promise<boolean>;
+  /** node_move 후 dates(서브트리의 바뀌는 기간, movedPlan)를 노드마다 node_update 로 맞춘다. okText = 성공 토스트. 옮겨졌으면 true */
+  move: (id: string, parentId: string, index?: number, dates?: DatePlan, okText?: string) => Promise<boolean>;
 };
 
 const dropKey = <T,>(rec: Record<string, T>, key: string) => {
@@ -154,16 +155,17 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const move = useCallback(
-    async (id: string, parentId: string, index?: number, period?: { s: string; e: string } | null, okText?: string) => {
+    async (id: string, parentId: string, index?: number, dates: DatePlan = [], okText?: string) => {
       try {
         setCur(await nodeMove(slug, id, parentId, index));
       } catch (e) {
         fail(e);
         return false;
       }
-      if (period) {
+      // 묶음째 옮기면 하위 과제까지 노드마다 (마이그레이션 없이 node_update 를 여러 번). 하나라도 실패하면 토스트 하나 + 서버 값으로 새로 고침
+      for (const d of dates) {
         try {
-          setCur(await nodeUpdate(slug, id, { startDate: period.s, endDate: period.e }));
+          setCur(await nodeUpdate(slug, d.id, { startDate: d.s, endDate: d.e }));
         } catch (e) {
           // 이동은 됐다 — 기간만 옛 값 (마이그레이션 없이 두 번 부르는 대가)
           toast({ text: `옮겼지만 기간은 바꾸지 못했어요 · ${toApiError(e).message}`, tone: "bad" });

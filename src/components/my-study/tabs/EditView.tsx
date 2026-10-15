@@ -259,7 +259,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
                       const period = to.id === cur.id ? null : movedPeriod(n, cur, to);
                       setBusy(id);
                       void api
-                        .move(id, to.id, undefined, period, period ? `${to.label}로 옮겼어요 · 기간 ${md(period.s)} – ${md(period.e)}` : `${to.label}로 옮겼어요`)
+                        .move(id, to.id, undefined, period ? [{ id, ...period }] : [], period ? `${to.label}로 옮겼어요 · 기간 ${md(period.s)} – ${md(period.e)}` : `${to.label}로 옮겼어요`)
                         .then((ok) => ok && update({ saved: moveNote(n, period, false) }))
                         .finally(() => setBusy(null));
                     }}

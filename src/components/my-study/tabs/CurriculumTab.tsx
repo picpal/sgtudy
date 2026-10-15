@@ -6,7 +6,7 @@ import { addDays, md } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
 import { allParentsClosed, findNode, isDirty, overallPct, removePlan, unassignedCount, visibleNodes, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
-import { dropPlan, movedPeriod, roundOf, withAddRows } from "../rounds";
+import { dropPlan, movedPlan, roundOf, withAddRows } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { DetailView } from "./DetailView";
 import { EditView } from "./EditView";
@@ -61,7 +61,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
       document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(id)}"]`)?.focus();
     });
   };
-  // 목록 드래그 놓기 → 즉시 node_move (다른 회차로 가면 기간 규칙 movedPeriod 적용 + 토스트)
+  // 목록 드래그 놓기 → 즉시 node_move (다른 회차로 가면 기간 규칙 movedPlan — 묶음은 하위까지 — 적용 + 토스트)
   const onDrop = useCallback(
     (dragId: string, overId: string, half: "top" | "bottom") => {
       const plan = dropPlan(tree.nodes, dragId, overId, half);
@@ -71,9 +71,11 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
       const from = roundOf(tree.nodes, n);
       const to = roundOf(tree.nodes, target);
       const cross = !!from && !!to && from.id !== to.id;
-      const period = cross ? movedPeriod(n, from, to) : null;
+      // 묶음이면 하위 과제까지 같은 규칙으로 (finding 6) — 토스트 기간은 끌어 온 행 자신의 것
+      const dates = cross ? movedPlan(n, from, to) : [];
+      const period = dates.find((d) => d.id === dragId) ?? null;
       const label = to?.label ?? to?.title;
-      void api.move(dragId, plan.parentId, plan.index, period, cross ? (period ? `${label}로 옮겼어요 · 기간 ${md(period.s)} – ${md(period.e)}` : `${label}로 옮겼어요`) : undefined);
+      void api.move(dragId, plan.parentId, plan.index, dates, cross ? (period ? `${label}로 옮겼어요 · 기간 ${md(period.s)} – ${md(period.e)}` : `${label}로 옮겼어요`) : undefined);
     },
     [tree.nodes, api],
   );

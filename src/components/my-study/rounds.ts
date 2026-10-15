@@ -39,6 +39,26 @@ export function movedPeriod(task: { s: string; e: string; subAll: number }, from
   return { s, e };
 }
 
+export type DatePlan = { id: string; s: string; e: string }[];
+type PlanNode = { id: string; s: string; e: string; subAll: number; leaf: boolean; archived: boolean; kids?: PlanNode[] };
+
+/**
+ * 다른 회차로 옮길 때 서브트리 전체의 새 기간 — 노드마다 movedPeriod 규칙(옛 회차 시작 기준 offset·새 회차로 클램프).
+ * 묶음 자신은 제출이 없다(subAll 은 하위 합계) → 묶음은 늘 새 회차에 맞추고, 제출 있는 과제만 그대로 둔다.
+ * 보관된 노드는 뺀다(node_update 가 거부). 바뀌는 노드만, 위에서 아래(전위) 순서.
+ */
+export function movedPlan(n: PlanNode, from: { s: string; e: string }, to: { s: string; e: string }): DatePlan {
+  const out: DatePlan = [];
+  const walk = (x: PlanNode) => {
+    if (x.archived) return;
+    const p = movedPeriod({ s: x.s, e: x.e, subAll: x.leaf ? x.subAll : 0 }, from, to);
+    if (p) out.push({ id: x.id, ...p });
+    if (!x.leaf) x.kids?.forEach(walk);
+  };
+  walk(n);
+  return out;
+}
+
 export const siblingIndex = (parent: ParentNode, id: string): number => parent.kids.findIndex((k) => k.id === id);
 
 /** 위(-1)/아래(+1)로 한 칸 — node_move index. 끝이면 null */

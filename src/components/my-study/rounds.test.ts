@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, visibleNodes, type ParentNode } from "./model";
-import { currentRoundId, dropPlan, moveNote, movedPeriod, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows } from "./rounds";
+import { currentRoundId, dropPlan, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -44,6 +44,38 @@ describe("movedPeriod", () => {
     expect(movedPeriod({ s: "2026-10-06", e: "2026-10-07", subAll: 0 }, r1, { s: "2026-10-08", e: "2026-10-09" })).toEqual({ s: "2026-10-09", e: "2026-10-09" }));
   it("a task that started before its old round starts at the new round start", () =>
     expect(movedPeriod({ s: "2026-09-29", e: "2026-10-02", subAll: 0 }, r1, r2)).toEqual({ s: "2026-10-08", e: "2026-10-11" }));
+});
+
+describe("movedPlan (묶음째 다른 회차로 — 서브트리 기간)", () => {
+  const r3 = { s: "2026-10-15", e: "2026-10-21" };
+  const r4 = { s: "2026-10-22", e: "2026-10-28" };
+  const shortR = { s: "2026-10-22", e: "2026-10-24" };
+  const leafN = (id: string, s: string, e: string, subAll = 0, archived = false) => ({ id, s, e, subAll, archived, leaf: true as const });
+  const group = (kids: ReturnType<typeof leafN>[], s = "2026-10-15", e = "2026-10-21") => ({ id: "g", s, e, subAll: kids.reduce((a, k) => a + k.subAll, 0), archived: false, leaf: false as const, kids });
+  it("a single task = movedPeriod", () => {
+    expect(movedPlan(leafN("t", "2026-10-17", "2026-10-18"), r3, r4)).toEqual([{ id: "t", s: "2026-10-24", e: "2026-10-25" }]);
+    expect(movedPlan(leafN("t", "2026-10-17", "2026-10-18", 1), r3, r4)).toEqual([]);
+  });
+  it("fixture 묶음 31 → 4주차: the 묶음 and its task both shift (묶음 first)", () =>
+    expect(movedPlan(node("31"), root("3"), root("4"))).toEqual([
+      { id: "31", s: "2026-10-22", e: "2026-10-28" },
+      { id: "311", s: "2026-10-22", e: "2026-10-28" },
+    ]));
+  it("every descendant keeps its offset from the round start, clamped to the new round", () =>
+    expect(movedPlan(group([leafN("a", "2026-10-15", "2026-10-16"), leafN("b", "2026-10-19", "2026-10-21")]), r3, shortR)).toEqual([
+      { id: "g", s: "2026-10-22", e: "2026-10-24" },
+      { id: "a", s: "2026-10-22", e: "2026-10-23" },
+      { id: "b", s: "2026-10-24", e: "2026-10-24" },
+    ]));
+  it("a task with submissions keeps its dates; the 묶음 itself still moves (its own subAll is the kids')", () =>
+    expect(movedPlan(group([leafN("a", "2026-10-15", "2026-10-16", 2), leafN("b", "2026-10-17", "2026-10-18")]), r3, r4)).toEqual([
+      { id: "g", s: "2026-10-22", e: "2026-10-28" },
+      { id: "b", s: "2026-10-24", e: "2026-10-25" },
+    ]));
+  it("skips archived descendants (node_update refuses them) and nodes already inside the new round", () =>
+    expect(movedPlan(group([leafN("a", "2026-10-15", "2026-10-16", 0, true), leafN("b", "2026-10-23", "2026-10-24")], "2026-10-15", "2026-10-28"), r3, r4)).toEqual([
+      { id: "g", s: "2026-10-22", e: "2026-10-28" },
+    ]));
 });
 
 describe("siblingIndex / reorderIndex", () => {
