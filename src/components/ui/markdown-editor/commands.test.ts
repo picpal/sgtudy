@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeBlock, heading, insertRule, insertTable, link, linesIn, tableTemplate, toggleLines, wrapInline, type Edit } from "./commands";
+import { codeBlock, heading, insertRule, insertTable, link, linesIn, mergeListMarker, tableTemplate, toggleLines, wrapInline, type Edit } from "./commands";
 import { parseGfmTable } from "@/lib/markdown/gfmTable";
 
 /** 편집 결과 문서 (changes 는 원문 좌표 기준, 뒤에서부터 적용) */
@@ -141,5 +141,35 @@ describe("블록 삽입", () => {
     expect(apply("", e)).toBe("```\n\n```\n");
     expect(e.anchor).toBe(4);
     expect(apply("x = 1\ny = 2", codeBlock("x = 1\ny = 2", 0, 11))).toBe("```\nx = 1\ny = 2\n```");
+  });
+});
+
+describe("mergeListMarker — 자동으로 이어진 표식 뒤에 표식을 또 치면 하나로", () => {
+  it("같은 글머리는 자동 표식 하나만 남긴다", () => {
+    expect(mergeListMarker("- ", "- ")).toBe("- ");
+    expect(mergeListMarker("- ", "* ")).toBe("- ");
+    expect(mergeListMarker("  - ", "- ")).toBe("  - ");
+  });
+  it("번호 목록은 이어 매긴 번호를 지킨다", () => {
+    expect(mergeListMarker("2. ", "1. ")).toBe("2. ");
+    expect(mergeListMarker("3) ", "1. ")).toBe("3) ");
+  });
+  it("종류가 다르면 친 표식으로 바꾼다", () => {
+    expect(mergeListMarker("- ", "1. ")).toBe("1. ");
+    expect(mergeListMarker("  2. ", "- ")).toBe("  - ");
+  });
+  it("앞에 공백을 붙여 치면 한 단계 안쪽 항목", () => {
+    expect(mergeListMarker("- ", "  - ")).toBe("  - ");
+    expect(mergeListMarker("1. ", "  - ")).toBe("   - ");
+    expect(mergeListMarker("  - ", "  - ")).toBe("    - ");
+  });
+  it("체크리스트 뒤 글머리는 체크리스트 그대로", () => {
+    expect(mergeListMarker("- [ ] ", "- ")).toBe("- [ ] ");
+  });
+  it("표식이 아니면 합치지 않는다", () => {
+    expect(mergeListMarker("- ", "a ")).toBeNull();
+    expect(mergeListMarker("- ", "-")).toBeNull();
+    expect(mergeListMarker("> ", "- ")).toBeNull();
+    expect(mergeListMarker("", "- ")).toBeNull();
   });
 });

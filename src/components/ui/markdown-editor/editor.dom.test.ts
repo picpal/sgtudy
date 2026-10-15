@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { undo } from "@codemirror/commands";
-import type { EditorView } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import { create, setDoc } from "./cm";
 import { serializeFromDom } from "./tableWidget";
 import { parseGfmTable } from "@/lib/markdown/gfmTable";
@@ -176,5 +176,47 @@ describe("TableWidget", () => {
     const add = Array.from(v.dom.querySelectorAll<HTMLButtonElement>(".cm-table-menu button")).find((b) => b.textContent === "아래에 행 추가")!;
     add.click();
     expect(parseGfmTable(v.state.doc.toString().split("\n\n")[0])?.rows).toEqual([["1", "2"], ["", ""]]);
+  });
+});
+
+describe("목록 표식 합치기 (Enter 로 이어진 표식 뒤에 표식을 또 칠 때)", () => {
+  // 실제 입력 경로처럼 inputHandler 들을 거친 뒤, 아무도 안 받으면 그냥 넣는다
+  const type = (v: EditorView, text: string) => {
+    for (const ch of text) {
+      const { from, to } = v.state.selection.main;
+      const insert = () => v.state.update({ changes: { from, to, insert: ch }, selection: { anchor: from + ch.length }, userEvent: "input.type" });
+      if (!v.state.facet(EditorView.inputHandler).some((h) => h(v, from, to, ch, insert))) v.dispatch(insert());
+    }
+  };
+  const enter = (v: EditorView) => key(v.contentDOM, "Enter");
+  const atEnd = (doc: string) => { const v = mount(doc); v.dispatch({ selection: { anchor: doc.length } }); v.focus(); return v; };
+
+  it('"- a" Enter 뒤 "- b" → 글머리 하나', () => {
+    const v = atEnd("- a");
+    enter(v);
+    expect(v.state.doc.toString()).toBe("- a\n- ");
+    type(v, "- b");
+    expect(v.state.doc.toString()).toBe("- a\n- b");
+  });
+  it('"  - " 를 치면 한 단계 안쪽 항목', () => {
+    const v = atEnd("- a");
+    enter(v);
+    type(v, "  - b");
+    expect(v.state.doc.toString()).toBe("- a\n  - b");
+  });
+  it("번호 목록은 이어 매긴 번호를 지킨다", () => {
+    const v = atEnd("1. a");
+    enter(v);
+    type(v, "1. b");
+    expect(v.state.doc.toString()).toBe("1. a\n2. b");
+  });
+  it("자동 표식이 아닌 곳의 \"- - \" 는 그대로 둔다", () => {
+    const v = atEnd("- a");
+    enter(v);
+    type(v, "x - ");
+    expect(v.state.doc.toString()).toBe("- a\n- x - ");
+    const w = atEnd("");
+    type(w, "- - c");
+    expect(w.state.doc.toString()).toBe("- - c");
   });
 });

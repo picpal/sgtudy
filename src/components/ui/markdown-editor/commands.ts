@@ -197,3 +197,25 @@ export function tableTemplate(cols = 3, rows = 2): string {
 
 export const insertTable = (doc: string, pos: number): Edit => insertBlock(doc, pos, tableTemplate());
 export const insertRule = (doc: string, pos: number): Edit => insertBlock(doc, pos, "---");
+
+/**
+ * Enter 로 이어진 목록 표식 바로 뒤에 사용자가 표식을 또 쳤을 때("- " 뒤에 "- ") 하나로 합친 줄 머리.
+ * auto  = 자동으로 들어간 줄 머리(들여쓰기 + 표식 + 공백, 체크박스 포함) — "  - ", "2. ", "- [ ] "
+ * typed = 그 뒤에 친 글자, 방금 친 공백까지 — "- ", "1. ", "  - "
+ * - 같은 종류(글머리/번호) → 자동 표식 그대로 (번호는 이미 이어 매겨져 있다)
+ * - 다른 종류 → 친 표식으로 바꾼다
+ * - 앞에 공백을 붙여 쳤으면("  - ") → 한 단계 안쪽 항목 (자동 표식 폭만큼 들여 쓴다 — CommonMark 하위 목록 조건)
+ * 합칠 모양이 아니면 null.
+ */
+const AUTO_MARK = /^(\s*)([-*+]|\d+[.)])( \[[ xX]\])? $/;
+const TYPED_MARK = /^( *)([-*+]|\d+[.)]) $/;
+export function mergeListMarker(auto: string, typed: string): string | null {
+  const a = AUTO_MARK.exec(auto);
+  const t = TYPED_MARK.exec(typed);
+  if (!a || !t) return null;
+  const [, indent, aMark] = a;
+  const [, lead, tMark] = t;
+  if (lead) return `${indent}${" ".repeat(aMark.length + 1)}${tMark} `;
+  const bullet = (m: string) => /^[-*+]$/.test(m);
+  return bullet(aMark) === bullet(tMark) ? auto : `${indent}${tMark} `;
+}

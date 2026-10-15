@@ -163,6 +163,32 @@ const codeFenceInput = EditorView.inputHandler.of((view, from, to, text) => {
   return true;
 });
 
+// Enter 로 이어진 목록 표식("- ", "2. ") 바로 뒤에 표식을 또 치면("- ") 하나로 합친다 — 안 그러면 원문이 "- - b" 가 돼 글머리가 둘 보인다.
+// "  - " 처럼 공백을 앞에 붙여 치면 한 단계 안쪽 항목. 자동 표식 자리는 Enter 직후에만 기억하고, 캐럿이 그 줄을 떠나면 잊는다
+const autoMark = StateField.define<{ from: number; to: number } | null>({
+  create: () => null,
+  update(v, tr) {
+    const head = tr.state.selection.main.head;
+    const line = tr.state.doc.lineAt(head);
+    if (tr.docChanged && tr.annotation(Transaction.userEvent) === "input") {
+      let newline = false;
+      tr.changes.iterChanges((_a, _b, _c, _d, ins) => { if (ins.toString().includes("\n")) newline = true; });
+      if (newline) return /^\s*([-*+]|\d+[.)])( \[[ xX]\])? $/.test(tr.state.sliceDoc(line.from, head)) ? { from: line.from, to: head } : null;
+    }
+    if (!v) return null;
+    const next = tr.docChanged ? { from: tr.changes.mapPos(v.from, 1), to: tr.changes.mapPos(v.to, -1) } : v;
+    return line.from === next.from && head >= next.to ? next : null;
+  },
+});
+const listMarkerMerge = EditorView.inputHandler.of((view, from, to, text) => {
+  const mark = view.state.field(autoMark, false);
+  if (text !== " " || from !== to || !mark || from < mark.to || view.state.doc.lineAt(from).from !== mark.from) return false;
+  const merged = C.mergeListMarker(view.state.sliceDoc(mark.from, mark.to), view.state.sliceDoc(mark.to, from) + " ");
+  if (merged === null) return false;
+  view.dispatch({ changes: { from: mark.from, to, insert: merged }, selection: { anchor: mark.from + merged.length }, userEvent: "input.type" });
+  return true;
+});
+
 // 코드 블록 안에서 Tab 은 들여쓰기 (밖에서는 포커스 이동 — 키보드 사용자를 가두지 않는다)
 function inCodeBlock(state: EditorState, pos: number) {
   for (let n: ReturnType<ReturnType<typeof syntaxTree>["resolveInner"]> | null = syntaxTree(state).resolveInner(pos, -1); n; n = n.parent) if (n.name === "FencedCode") return true;
@@ -250,6 +276,8 @@ export function create(parent: Element, opts: CreateOpts): EditorView {
       EditorView.lineWrapping,
       EditorView.contentAttributes.of(attrs),
       codeFenceInput,
+      autoMark,
+      listMarkerMerge,
       focusField,
       decoField,
       atomicRanges,
