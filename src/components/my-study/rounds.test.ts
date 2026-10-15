@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, visibleNodes, type ParentNode } from "./model";
-import { currentRoundId, moveNote, movedPeriod, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows } from "./rounds";
+import { currentRoundId, dropPlan, moveNote, movedPeriod, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -97,4 +97,27 @@ describe("moveNote (회차 선택 미리보기)", () => {
   it("submissions keep dates", () => expect(moveNote({ s: "2026-10-01", e: "2026-10-03", subAll: 1 }, null, false)).toBe("제출이 있어 기간은 그대로예요"));
   it("inside the new round", () => expect(moveNote({ s: "2026-10-10", e: "2026-10-12", subAll: 0 }, null, false)).toBe("기간은 그대로예요"));
   it("shifted", () => expect(moveNote({ s: "2026-10-04", e: "2026-10-07", subAll: 0 }, { s: "2026-10-11", e: "2026-10-14" }, false)).toBe("옮기면 기간이 10.11 – 10.14 로 바뀌어요"));
+});
+
+describe("dropPlan (드래그 놓기 → node_move)", () => {
+  const ns = tree.nodes;
+  it("reorder inside a round", () => {
+    expect(dropPlan(ns, "12", "11", "top")).toEqual({ parentId: "1", index: 0 });
+    expect(dropPlan(ns, "11", "12", "bottom")).toEqual({ parentId: "1", index: 1 });
+  });
+  it("no-op drops return null", () => {
+    expect(dropPlan(ns, "11", "11", "top")).toBeNull();
+    expect(dropPlan(ns, "11", "12", "top")).toBeNull();
+  });
+  it("onto a task of another round → that position", () => expect(dropPlan(ns, "11", "21", "top")).toEqual({ parentId: "2", index: 0 }));
+  it("onto a round row → end of that round", () => expect(dropPlan(ns, "11", "4", "bottom")).toEqual({ parentId: "4", index: 1 }));
+  it("rounds are not draggable; a node never drops into itself", () => {
+    expect(dropPlan(ns, "1", "21", "top")).toBeNull();
+    expect(dropPlan(ns, "31", "311", "top")).toBeNull();
+  });
+  it("archived targets are refused", () => {
+    const t = buildTree({ ...AWS, nodes: AWS.nodes.map((n) => (n.id === "4" || n.parentId === "4" ? { ...n, archived: true } : n)) }, EMPTY_OVERRIDES, REF_DAY);
+    expect(dropPlan(t.nodes, "11", "4", "bottom")).toBeNull();
+    expect(dropPlan(t.nodes, "11", "41", "top")).toBeNull();
+  });
 });

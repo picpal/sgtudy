@@ -79,3 +79,29 @@ export function moveNote(task: { s: string; e: string; subAll: number }, period:
   if (period) return `옮기면 기간이 ${md(period.s)} – ${md(period.e)} 로 바뀌어요`;
   return task.subAll > 0 ? "제출이 있어 기간은 그대로예요" : "기간은 그대로예요";
 }
+
+/**
+ * 드래그로 놓은 자리 → node_move(parent, index). 회차 행 위 = 그 회차 끝, 과제·묶음 행 위 = 그 형제 사이(top 앞 / bottom 뒤).
+ * 회차는 끌 수 없고, 자기·자기 하위·보관 대상 위에는 놓을 수 없다. 제자리면 null.
+ */
+export function dropPlan(nodes: TreeNode[], dragId: string, overId: string, half: "top" | "bottom"): { parentId: string; index: number } | null {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const drag = byId.get(dragId);
+  const over = byId.get(overId);
+  if (!drag || !over || drag.d === 0 || drag.archived || over.archived || drag.temp || over.temp) return null;
+  for (let p: TreeNode | undefined = over; p; p = p.parentId ? byId.get(p.parentId) : undefined) if (p.id === drag.id) return null;
+  let parent: ParentNode;
+  let index: number;
+  if (!over.leaf && over.d === 0) {
+    parent = over;
+    index = over.kids.filter((k) => k.id !== drag.id).length;
+  } else {
+    const p = over.parentId ? byId.get(over.parentId) : undefined;
+    if (!p || p.leaf || p.archived) return null;
+    parent = p;
+    const sibs = p.kids.filter((k) => k.id !== drag.id);
+    index = sibs.findIndex((k) => k.id === over.id) + (half === "bottom" ? 1 : 0);
+  }
+  if (drag.parentId === parent.id && siblingIndex(parent, drag.id) === index) return null;
+  return { parentId: parent.id, index };
+}

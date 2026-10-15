@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PillButton, Seg } from "../bits";
-import { addDays } from "@/lib/date";
+import { addDays, md } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
 import { allParentsClosed, findNode, isDirty, overallPct, removePlan, unassignedCount, visibleNodes, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
-import { withAddRows } from "../rounds";
+import { dropPlan, movedPeriod, roundOf, withAddRows } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { DetailView } from "./DetailView";
 import { EditView } from "./EditView";
 import { InlineConfirm } from "./InlineConfirm";
 import { AddRow, QuickAdd } from "./QuickAdd";
 import { TreeRow } from "./TreeRow";
+import { useRowDrag } from "./useRowDrag";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; api: CurriculumApi; canEdit: boolean; isLeader: boolean; period: { start: string; end: string } };
 
@@ -60,6 +61,25 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
       document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(id)}"]`)?.focus();
     });
   };
+  // 목록 드래그 놓기 → 즉시 node_move (다른 회차로 가면 기간 규칙 movedPeriod 적용 + 토스트)
+  const onDrop = useCallback(
+    (dragId: string, overId: string, half: "top" | "bottom") => {
+      const plan = dropPlan(tree.nodes, dragId, overId, half);
+      const n = findNode(tree.nodes, dragId);
+      const target = plan ? findNode(tree.nodes, plan.parentId) : null;
+      if (!plan || !n || !target) return;
+      const from = roundOf(tree.nodes, n);
+      const to = roundOf(tree.nodes, target);
+      const cross = !!from && !!to && from.id !== to.id;
+      const period = cross ? movedPeriod(n, from, to) : null;
+      const label = to?.label ?? to?.title;
+      void api.move(dragId, plan.parentId, plan.index, period, cross ? (period ? `${label}로 옮겼어요 · 기간 ${md(period.s)} – ${md(period.e)}` : `${label}로 옮겼어요`) : undefined);
+    },
+    [tree.nodes, api],
+  );
+  const drag = useRowDrag(onDrop);
+  // 놓을 수 없는 자리(자기·하위·보관·제자리)에는 표시선을 그리지 않는다
+  const hint = isEdit && drag.dragging && drag.over && dropPlan(tree.nodes, drag.dragging, drag.over.id, drag.over.half) ? drag.over : null;
   const entries = isEdit ? withAddRows(rows, tree.roots, S.closed) : rows.map((n) => ({ kind: "node" as const, n }));
 
   // 편집·상세 화면에서 목록으로 돌아오면 열었던 행으로 포커스·스크롤을 돌려준다
@@ -175,6 +195,9 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
                 onRemove={!n.temp && plan.kind !== "none" ? () => (asking?.id === n.id ? cancelAsk() : setAsk(n.id)) : undefined}
                 removeOff={n.temp ? "서버에 만드는 중…" : plan.kind === "none" ? plan.reason : undefined}
                 asking={asking?.id === n.id}
+                dragHandle={isEdit && n.d > 0 ? drag.handleProps(n.id) : undefined}
+                dropHint={hint?.id === n.id ? hint.half : null}
+                dragging={drag.dragging === n.id}
               />
               {asking?.id === n.id && plan.kind !== "none" && (
                 <div className="border-b border-line-2 bg-surface px-3 py-2">

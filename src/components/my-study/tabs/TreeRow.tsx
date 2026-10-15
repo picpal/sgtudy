@@ -17,6 +17,12 @@ type Props = {
   removeOff?: string;
   /** 이 행의 삭제 확인이 열려 있다 */
   asking?: boolean;
+  /** 편집 목록 드래그 핸들 포인터 이벤트 (과제·묶음 행만 — 회차는 끌 수 없다) */
+  dragHandle?: React.HTMLAttributes<HTMLElement>;
+  /** 이 행 위/아래에 놓을 자리 표시선 */
+  dropHint?: "top" | "bottom" | null;
+  /** 이 행을 끌고 있다 */
+  dragging?: boolean;
 };
 
 const Trash = () => (
@@ -31,7 +37,7 @@ const Plus = () => (
   </svg>
 );
 
-export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemove, removeOff, asking = false }: Props) {
+export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemove, removeOff, asking = false, dragHandle, dropHint = null, dragging = false }: Props) {
   // "+" 는 회차에만 — 과제 아래 과제(묶음)는 만들지 않는다 (2단계: 회차 → 과제)
   const canAdd = isEdit && !n.leaf && n.d === 0 && !n.archived;
   const addTip = `${n.title}에 과제 추가`;
@@ -42,13 +48,17 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemo
       aria-expanded={n.leaf ? undefined : open}
       aria-selected={isEdit ? false : undefined}
       data-node={n.id}
-      className="flex min-h-[52px] items-center gap-2 border-b border-line-2 py-1 pl-2 pr-3"
+      className={`flex min-h-[52px] items-center gap-2 border-b border-line-2 py-1 pl-2 pr-3 ${dropHint === "top" ? "shadow-[inset_0_2px_0_#12A386]" : dropHint === "bottom" ? "shadow-[inset_0_-2px_0_#12A386]" : ""} ${dragging ? "opacity-50" : ""}`}
       style={{ background: n.d === 0 ? "#FAFCFB" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}
     >
       {/* 390 폭에서도 제목·기간이 보이게: 들여쓰기 축소, 드래그 핸들·진척 막대·아바타는 숨기고 제목은 줄바꿈 (Q3-03) */}
       <span className="w-[calc(var(--d)*22px)] shrink-0 max-sm:w-[calc(var(--d)*10px)]" style={{ "--d": n.d } as React.CSSProperties} />
       {isEdit && (
-        <span title="드래그해서 순서 변경" className="flex shrink-0 cursor-grab text-ghost max-sm:hidden">
+        // 회차 행은 끌 수 없다 — 자리만 남겨 제목 세로줄을 맞춘다
+        <span
+          {...(n.d === 0 ? { "aria-hidden": true } : { ...dragHandle, title: "드래그해서 순서 변경·회차 이동" })}
+          className={`flex shrink-0 text-ghost max-sm:hidden ${n.d === 0 ? "invisible" : "cursor-grab touch-none"}`}
+        >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" />
           </svg>
