@@ -170,47 +170,50 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
         </div>
       )}
 
-      {/* 모서리 행은 컨테이너 안쪽 반경(16-1px)을 따라가야 선택 링(inset)이 둥근 클립에 잘리지 않는다 */}
-      <div role="tree" aria-label="진행목표" className="min-w-0 overflow-hidden rounded-[16px] border border-line [&>div:first-child>[role=treeitem]]:rounded-t-[15px] [&>div:last-child>[role=treeitem]]:rounded-b-[15px]">
-        {entries.map((entry) => {
-          if (entry.kind === "add")
-            return S.quickAdd === entry.round.id ? (
-              <QuickAdd key={`qa-${entry.round.id}`} round={entry.round} indent={1} onAdd={(t) => api.create(entry.round.id, { title: t, open: false })} onClose={() => closeAdd(entry.round.id)} />
-            ) : (
-              <AddRow key={`add-${entry.round.id}`} round={entry.round} indent={1} onOpen={() => openAdd(entry.round.id)} />
+      {/* 모서리 행은 컨테이너 안쪽 반경(16-1px)을 따라가야 선택 링(inset)이 둥근 클립에 잘리지 않는다.
+          role="tree" 안에는 treeitem 만 — "회차 추가"·종료일 안내는 같은 테두리 상자 안, 트리 밖 (편집 모드에서는 그쪽이 맨 아래라 마지막 행을 둥글리지 않는다) */}
+      <div className="min-w-0 overflow-hidden rounded-[16px] border border-line">
+        <div role="tree" aria-label="진행목표" className={`[&>div:first-child>[role=treeitem]]:rounded-t-[15px] ${isEdit ? "" : "[&>div:last-child>[role=treeitem]]:rounded-b-[15px]"}`}>
+          {entries.map((entry) => {
+            if (entry.kind === "add")
+              return S.quickAdd === entry.round.id ? (
+                <QuickAdd key={`qa-${entry.round.id}`} round={entry.round} indent={1} onAdd={(t) => api.create(entry.round.id, { title: t, open: false })} onClose={() => closeAdd(entry.round.id)} inTree />
+              ) : (
+                <AddRow key={`add-${entry.round.id}`} round={entry.round} indent={1} onOpen={() => openAdd(entry.round.id)} inTree />
+              );
+            const n = entry.n;
+            const open = !S.closed[n.id];
+            const plan = removePlan(n);
+            return (
+              <div key={n.id}>
+                <TreeRow
+                  n={n}
+                  isEdit={isEdit}
+                  open={open}
+                  onToggle={() => toggle(n.id)}
+                  onClick={() => {
+                    if (isEdit) request({ sel: n.id });
+                    else update({ viewSel: n.id });
+                  }}
+                  onAddChild={!n.leaf && n.d === 0 ? () => openAdd(n.id) : undefined}
+                  onRemove={!n.temp && plan.kind !== "none" ? () => (asking?.id === n.id ? cancelAsk() : setAsk(n.id)) : undefined}
+                  removeOff={n.temp ? "서버에 만드는 중…" : plan.kind === "none" ? plan.reason : undefined}
+                  asking={asking?.id === n.id}
+                  dragHandle={isEdit && n.d > 0 ? drag.handleProps(n.id) : undefined}
+                  dropHint={hint?.id === n.id ? hint.half : null}
+                  dragging={drag.dragging === n.id}
+                />
+                {asking?.id === n.id && plan.kind !== "none" && (
+                  <div className="border-b border-line-2 bg-surface px-3 py-2">
+                    <InlineConfirm text={`‘${n.title || "제목 없는 항목"}’ — ${plan.text}`} onCancel={cancelAsk} actions={[{ label: plan.label, onClick: () => confirmRemove(n), tone: "danger" }]} />
+                  </div>
+                )}
+              </div>
             );
-          const n = entry.n;
-          const open = !S.closed[n.id];
-          const plan = removePlan(n);
-          return (
-            <div key={n.id}>
-              <TreeRow
-                n={n}
-                isEdit={isEdit}
-                open={open}
-                onToggle={() => toggle(n.id)}
-                onClick={() => {
-                  if (isEdit) request({ sel: n.id });
-                  else update({ viewSel: n.id });
-                }}
-                onAddChild={!n.leaf && n.d === 0 ? () => openAdd(n.id) : undefined}
-                onRemove={!n.temp && plan.kind !== "none" ? () => (asking?.id === n.id ? cancelAsk() : setAsk(n.id)) : undefined}
-                removeOff={n.temp ? "서버에 만드는 중…" : plan.kind === "none" ? plan.reason : undefined}
-                asking={asking?.id === n.id}
-                dragHandle={isEdit && n.d > 0 ? drag.handleProps(n.id) : undefined}
-                dropHint={hint?.id === n.id ? hint.half : null}
-                dragging={drag.dragging === n.id}
-              />
-              {asking?.id === n.id && plan.kind !== "none" && (
-                <div className="border-b border-line-2 bg-surface px-3 py-2">
-                  <InlineConfirm text={`‘${n.title || "제목 없는 항목"}’ — ${plan.text}`} onCancel={cancelAsk} actions={[{ label: plan.label, onClick: () => confirmRemove(n), tone: "danger" }]} />
-                </div>
-              )}
-            </div>
-          );
-        })}
+          })}
+        </div>
         {isEdit && (
-          <button type="button" data-add-round onClick={addRound} className="flex h-[50px] w-full items-center justify-center gap-[6px] bg-surface-3 text-[14px] font-semibold text-mint first:rounded-t-[15px] last:rounded-b-[15px] focus-visible:-outline-offset-2">
+          <button type="button" data-add-round onClick={addRound} className={`flex h-[50px] w-full items-center justify-center gap-[6px] bg-surface-3 text-[14px] font-semibold text-mint last:rounded-b-[15px] focus-visible:-outline-offset-2 ${entries.length === 0 ? "rounded-t-[15px]" : ""}`}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
               <path d="M12 5v14M5 12h14" />
             </svg>

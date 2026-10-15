@@ -6,10 +6,13 @@ import { normalizeTitle, shouldSubmitQuickAdd } from "../rounds";
 
 const indentCls = "w-[calc(var(--d)*22px)] shrink-0 max-sm:w-[calc(var(--d)*10px)]";
 
+/** inTree: role="tree" 의 직계 줄일 때 — 과제 행과 같은 aria-level 의 treeitem 으로 (펼침 상태 없음). `<li>` 안에서는 그냥 div */
+const treeItem = (inTree: boolean, indent: number, label: string) => (inTree ? { role: "treeitem", "aria-level": indent + 2, "aria-label": label } : {});
+
 /** 펼친 회차 끝의 "+ 과제 추가" 줄 */
-export function AddRow({ round, indent, onOpen }: { round: ParentNode; indent: number; onOpen: () => void }) {
+export function AddRow({ round, indent, onOpen, inTree = false }: { round: ParentNode; indent: number; onOpen: () => void; inTree?: boolean }) {
   return (
-    <div className="flex min-h-11 items-center border-b border-line-2 bg-surface pl-2 pr-3">
+    <div {...treeItem(inTree, indent, `${round.title}에 과제 추가`)} className="flex min-h-11 items-center border-b border-line-2 bg-surface pl-2 pr-3">
       <span className={indentCls} style={{ "--d": indent } as React.CSSProperties} />
       <button type="button" data-add-task={round.id} onClick={onOpen} aria-label={`${round.title}에 과제 추가`} className="inline-flex h-11 items-center gap-[6px] rounded-[10px] px-2 text-[13px] font-semibold text-mint">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
@@ -22,7 +25,7 @@ export function AddRow({ round, indent, onOpen }: { round: ParentNode; indent: n
 }
 
 /** 빠른 추가 — Enter 로 만들고 입력은 다음 과제를 위해 비운 채 열어 둔다. Esc·빈 입력에서 포커스가 나가면 닫힘 */
-export function QuickAdd({ round, indent, onAdd, onClose }: { round: ParentNode; indent: number; onAdd: (title: string) => Promise<boolean>; onClose: () => void }) {
+export function QuickAdd({ round, indent, onAdd, onClose, inTree = false }: { round: ParentNode; indent: number; onAdd: (title: string) => Promise<boolean>; onClose: () => void; inTree?: boolean }) {
   const input = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [last, setLast] = useState("");
@@ -36,7 +39,7 @@ export function QuickAdd({ round, indent, onAdd, onClose }: { round: ParentNode;
     else setText((cur) => cur || t); // 실패하면 쓴 글자를 되살린다 (그새 새로 쓴 게 있으면 그대로)
   };
   return (
-    <div className="flex min-h-11 flex-wrap items-center gap-x-2 border-b border-line-2 bg-surface-2 py-1 pl-2 pr-3">
+    <div {...treeItem(inTree, indent, `${round.title}에 과제 빠른 추가`)} className="flex min-h-11 flex-wrap items-center gap-x-2 border-b border-line-2 bg-surface-2 py-1 pl-2 pr-3">
       <span className={indentCls} style={{ "--d": indent } as React.CSSProperties} />
       <input
         ref={input}
