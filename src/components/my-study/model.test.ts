@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, REF_DAY } from "./fixtures";
-import { EMPTY_OVERRIDES, buildTree, descendantCount, dropFieldOv, ganttRange, isDirty, memberStats, overallPct, periodWarnings, removePlan, stripFieldOv, unassignedCount } from "./model";
+import { EMPTY_OVERRIDES, buildTree, descendantCount, dropFieldOv, ganttRange, isDirty, memberStats, overallPct, periodWarnings, removePlan, roundStatus, stripFieldOv, unassignedCount } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -148,4 +148,12 @@ describe("removePlan (편집 화면·목록 삭제 공통)", () => {
     const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "1" ? { ...n, archived: true } : n)) };
     expect(removePlan(buildTree(cur, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "1")!).kind).toBe("none");
   });
+});
+
+describe("roundStatus (보기 상세 기간 문구)", () => {
+  const r = { s: "2026-10-08", e: "2026-10-14" };
+  it("before start", () => expect(roundStatus(r, "2026-10-05")).toBe("시작 D-3"));
+  it("in progress", () => expect(roundStatus(r, "2026-10-12")).toBe("진행 중 · 마감 D-2"));
+  it("last day", () => expect(roundStatus(r, "2026-10-14")).toBe("진행 중 · 마감 D-DAY"));
+  it("ended", () => expect(roundStatus(r, "2026-10-15")).toBe("종료"));
 });

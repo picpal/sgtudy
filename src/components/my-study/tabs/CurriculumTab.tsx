@@ -7,6 +7,7 @@ import { mmdd } from "@/lib/api/format";
 import { allParentsClosed, findNode, isDirty, overallPct, removePlan, unassignedCount, visibleNodes, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
 import type { CurriculumApi } from "../useCurriculumApi";
+import { DetailView } from "./DetailView";
 import { EditView } from "./EditView";
 import { InlineConfirm } from "./InlineConfirm";
 import { TreeRow } from "./TreeRow";
@@ -21,6 +22,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
   // 담당자 배정 안내는 편집할 수 있는 사람에게만 (Q1-11/Q2-12 — 그룹장 + 편집 권한을 받은 팀원)
   const warn = canEdit ? unassignedCount(tree.leaves) : 0;
   const selNode = isEdit ? findNode(tree.nodes, S.editSel) : null;
+  const viewNode = !isEdit ? findNode(tree.nodes, S.viewSel) : null;
   const parentNode = selNode ? findNode(tree.nodes, selNode.parentId) : null;
   const lastRoot = tree.roots[tree.roots.length - 1];
   // 다음 회차는 마지막 회차 다음 날부터 7일 — 방 종료일을 넘기면 미리 알려 준다 (E4, Q2-21)
@@ -48,12 +50,13 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
   const addChild = (id: string) => request({ add: id });
   const addRound = () => request({ add: null });
 
-  // 편집 화면에서 목록으로 돌아오면 열었던 행으로 포커스·스크롤을 돌려준다
+  // 편집·상세 화면에서 목록으로 돌아오면 열었던 행으로 포커스·스크롤을 돌려준다
   // (삭제해서 행이 없으면 상위 행, 그것도 없으면 "회차 추가")
+  const openNode = selNode ?? viewNode;
   const lastOpen = useRef<string[] | null>(null);
   useEffect(() => {
-    if (selNode) {
-      lastOpen.current = [selNode.id, selNode.parentId ?? ""];
+    if (openNode) {
+      lastOpen.current = [openNode.id, openNode.parentId ?? ""];
       return;
     }
     const ids = lastOpen.current;
@@ -63,7 +66,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
     const btn = row(ids[0]) ?? row(ids[1]) ?? document.querySelector<HTMLButtonElement>("[data-add-round]");
     btn?.focus({ preventScroll: true });
     btn?.scrollIntoView({ block: "center" });
-  }, [selNode]);
+  }, [openNode]);
 
   // 목록에서 바로 삭제 — 행 아래 확인 상자(편집 화면과 같은 문구) → 즉시 RPC(낙관적 + 실패 시 되돌림·토스트)
   const asking = isEdit && !selNode ? (rows.find((n) => n.id === ask) ?? null) : null;
@@ -97,6 +100,13 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
         <EditView key={selNode.id} n={selNode} parent={parentNode} period={period} members={tree.members} S={S} update={update} api={api} go={go} request={request} />
       </div>
     );
+  // 보기 모드에서 항목을 누르면 목록 대신 읽기 전용 상세 화면 (?item=, mode 없음)
+  if (viewNode)
+    return (
+      <div className="mt-[18px] @container">
+        <DetailView key={viewNode.id} n={viewNode} nodes={tree.nodes} canEdit={canEdit} onOpen={(id) => update({ viewSel: id })} onBack={() => update({ viewSel: null })} onEdit={() => update(modeSwitchPatch(S, "edit"))} />
+      </div>
+    );
 
   return (
     <div className="mt-[18px] flex flex-col gap-[14px] @container">
@@ -127,7 +137,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
       )}
 
       {/* 모서리 행은 컨테이너 안쪽 반경(16-1px)을 따라가야 선택 링(inset)이 둥근 클립에 잘리지 않는다 */}
-      <div role="tree" aria-label="커리큘럼" className="min-w-0 overflow-hidden rounded-[16px] border border-line [&>div:first-child>[role=treeitem]]:rounded-t-[15px] [&>div:last-child>[role=treeitem]]:rounded-b-[15px]">
+      <div role="tree" aria-label="진행목표" className="min-w-0 overflow-hidden rounded-[16px] border border-line [&>div:first-child>[role=treeitem]]:rounded-t-[15px] [&>div:last-child>[role=treeitem]]:rounded-b-[15px]">
         {rows.map((n) => {
           const open = !S.closed[n.id];
           const plan = removePlan(n);
@@ -140,8 +150,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
                 onToggle={() => toggle(n.id)}
                 onClick={() => {
                   if (isEdit) request({ sel: n.id });
-                  else if (n.leaf) update({ viewSel: n.id });
-                  else toggle(n.id);
+                  else update({ viewSel: n.id });
                 }}
                 onAddChild={!n.leaf ? () => addChild(n.id) : undefined}
                 onRemove={!n.temp && plan.kind !== "none" ? () => (asking?.id === n.id ? cancelAsk() : setAsk(n.id)) : undefined}

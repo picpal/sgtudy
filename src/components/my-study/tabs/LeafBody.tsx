@@ -1,22 +1,16 @@
 "use client";
 
 import { Avatar } from "@/components/ui/Avatar";
-import { md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
-import { useToday } from "@/lib/today";
 import { MarkdownView } from "../MarkdownView";
-import { CODE_COLOR, CODE_LABEL, ddayLabel, type LeafNode } from "../model";
+import { CODE_COLOR, CODE_LABEL, type LeafNode } from "../model";
 
-/** 참가자 보기에서 리프 행 아래 펼쳐지는 상세 */
-export function LeafDetail({ n }: { n: LeafNode }) {
-  const today = useToday();
+/** 보기 상세 화면의 과제 본문 — 설명 + 담당자별 상태 */
+export function LeafBody({ n }: { n: LeafNode }) {
   const meId = useMe()?.id;
   return (
-    <div className="flex flex-col gap-[10px] border-b border-line-2 bg-surface-2 py-3 pb-4 pl-[60px] pr-4 max-[390px]:pl-4">
-      <div className="text-[12px] text-muted">
-        {n.crumb} · {md(n.s)}({weekdayKo(n.s)}) – {md(n.e)}({weekdayKo(n.e)}) · {n.state === "complete" ? "전원 제출" : ddayLabel(today, n.e)}
-      </div>
-      {n.desc.trim() && <MarkdownView src={n.desc} className="text-[13px] leading-[1.7]" />}
+    <div className="flex flex-col gap-3">
+      {n.desc.trim() ? <MarkdownView src={n.desc} className="text-[14px] leading-[1.75]" /> : <p className="m-0 text-[13px] text-muted">과제 설명이 아직 없어요</p>}
       <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
         {n.people.map((p) => {
           const me = p.userId === meId;

@@ -243,6 +243,13 @@ export const findNode = (nodes: TreeNode[], id: string | null) => (id ? (nodes.f
 
 export const ddayLabel = (today: string, e: string) => dday(today, e);
 
+/** 보기 상세의 기간 상태 문구 — 시작 전 / 진행 중(마감 D-n) / 종료 */
+export function roundStatus(n: { s: string; e: string }, today: string): string {
+  if (today < n.s) return `시작 ${dday(today, n.s)}`;
+  if (today > n.e) return "종료";
+  return `진행 중 · 마감 ${dday(today, n.e)}`;
+}
+
 /** 보관된 것까지 모든 하위 항목 수 — 삭제하면 함께 지워진다 */
 export const descendantCount = (n: TreeNode): number => (n.leaf ? 0 : n.kids.reduce((a, k) => a + 1 + descendantCount(k), 0));
 
