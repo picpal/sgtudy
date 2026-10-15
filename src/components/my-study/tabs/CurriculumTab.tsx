@@ -5,11 +5,10 @@ import { PillButton, Seg } from "../bits";
 import { addDays } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
 import { allParentsClosed, findNode, isDirty, overallPct, removePlan, unassignedCount, visibleNodes, type Tree, type TreeNode } from "../model";
-import type { CurMode, Leave, ScreenState, Update } from "../state";
+import { modeSwitchPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { EditView } from "./EditView";
 import { InlineConfirm } from "./InlineConfirm";
-import { LeafDetail } from "./LeafDetail";
 import { TreeRow } from "./TreeRow";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; api: CurriculumApi; canEdit: boolean; isLeader: boolean; period: { start: string; end: string } };
@@ -33,7 +32,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
   // 목적지로 바로 이동 — 미저장 수정 확인(leave)을 거친 뒤에도 여기로 온다
   const go = (to: Leave) => {
     setAsk(null);
-    if ("mode" in to) update({ curMode: to.mode, editSel: null, openLeaf: null, confirm: false, leave: null, saved: "" });
+    if ("mode" in to) update({ ...modeSwitchPatch(S, to.mode) });
     else if ("add" in to) {
       update({ leave: null });
       // 구조 변경은 즉시 RPC (낙관적 임시 노드 → 응답 Curriculum 으로 교체)
@@ -141,7 +140,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
                 onToggle={() => toggle(n.id)}
                 onClick={() => {
                   if (isEdit) request({ sel: n.id });
-                  else if (n.leaf) update((p) => ({ openLeaf: p.openLeaf === n.id ? null : n.id }));
+                  else if (n.leaf) update({ viewSel: n.id });
                   else toggle(n.id);
                 }}
                 onAddChild={!n.leaf ? () => addChild(n.id) : undefined}
@@ -149,7 +148,6 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
                 removeOff={n.temp ? "서버에 만드는 중…" : plan.kind === "none" ? plan.reason : undefined}
                 asking={asking?.id === n.id}
               />
-              {!isEdit && n.leaf && S.openLeaf === n.id && <LeafDetail n={n} />}
               {asking?.id === n.id && plan.kind !== "none" && (
                 <div className="border-b border-line-2 bg-surface px-3 py-2">
                   <InlineConfirm text={`‘${n.title || "제목 없는 항목"}’ — ${plan.text}`} onCancel={cancelAsk} actions={[{ label: plan.label, onClick: () => confirmRemove(n), tone: "danger" }]} />

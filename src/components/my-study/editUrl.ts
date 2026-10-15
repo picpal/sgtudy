@@ -1,8 +1,9 @@
 /**
- * 커리큘럼 편집 화면의 열린 항목 ↔ URL(?item=) 동기화 규칙.
+ * 커리큘럼 편집·보기 상세 화면의 열린 항목 ↔ URL(?item=) 동기화 규칙.
  * 브라우저 뒤로 가기가 목록으로 돌아가고, 새로고침하면 같은 편집 화면이 다시 열리게 한다.
  * 화면 상태가 원본이고 URL 은 따라간다 — 실제 history 호출은 MyStudyScreen 이 한다.
  */
+import type { CurMode } from "./state";
 
 /** 서버 노드 id 만 URL 에 싣는다 (낙관적 임시 노드 "root.new0" 등은 제외) */
 export const isUrlItem = (id: string | null | undefined): id is string => !!id && /^\d+$/.test(id);
@@ -12,17 +13,20 @@ export function readItem(search: string): string | null {
   return isUrlItem(v) ? v : null;
 }
 
-/** 현재 주소에서 item 만 바꾼 주소. 항목이 있으면 커리큘럼 탭·편집 모드도 같이 싣는다 (새로고침으로 다시 열리게) */
-export function withItem(href: string, item: string | null): string {
+/** 현재 주소에서 item(·mode)만 바꾼 주소. 항목이 있으면 진행목표 탭도 싣는다. 보기 상세는 mode 를 빼고, 편집은 mode=edit */
+export function withItem(href: string, item: string | null, mode: CurMode = "edit"): string {
   const u = new URL(href, "http://x");
   if (item) {
     u.searchParams.set("tab", "curriculum");
-    u.searchParams.set("mode", "edit");
+    if (mode === "edit") u.searchParams.set("mode", "edit");
+    else u.searchParams.delete("mode");
     u.searchParams.set("item", item);
   } else u.searchParams.delete("item");
   const q = u.searchParams.toString();
   return `${u.pathname}${q ? `?${q}` : ""}${u.hash}`;
 }
+
+export const readMode = (search: string): CurMode => (new URLSearchParams(search).get("mode") === "edit" ? "edit" : "view");
 
 export type UrlStep = "none" | "push" | "replace" | "back";
 
@@ -42,4 +46,16 @@ export function urlStep(url: string | null, open: string | null, pushedHere: boo
 /** 주소의 항목이 트리에 있으면 그 id, 없거나(삭제됨·잘못된 값) 비었으면 null = 목록 */
 export function itemTarget(url: string | null, exists: (id: string) => boolean): string | null {
   return url && exists(url) ? url : null;
+}
+
+/** urlStep + "같은 항목인데 보기↔편집만 바뀜" = replace */
+export function syncStep(url: string | null, urlMode: CurMode, open: string | null, openMode: CurMode, pushedHere: boolean): UrlStep {
+  const s = urlStep(url, open, pushedHere);
+  return s === "none" && open !== null && isUrlItem(open) && urlMode !== openMode ? "replace" : s;
+}
+
+/** 주소 → 열 화면. 편집은 권한자만(아니면 같은 항목의 보기 상세). 없는 항목은 목록 */
+export function itemFromUrl(search: string, exists: (id: string) => boolean, canEdit: boolean): { id: string | null; mode: CurMode } {
+  const id = itemTarget(readItem(search), exists);
+  return { id, mode: id && canEdit && readMode(search) === "edit" ? "edit" : "view" };
 }

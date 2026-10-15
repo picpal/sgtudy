@@ -14,7 +14,7 @@ import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { TodayProvider } from "@/lib/today";
-import { itemTarget, readItem, urlStep, withItem } from "./editUrl";
+import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
 import { buildTree, findNode, isDirty, stripFieldOv } from "./model";
 import { INITIAL_STATE, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
@@ -39,13 +39,19 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const canEdit = canEditCurriculumOf({ myPermissions: cur.myPermissions, me: detail.me });
   // 알림 링크 ?task={nodeId}(D8): 그 리프가 이 방 커리큘럼에 있으면 커리큘럼 탭 + 리프 열림으로 시작(goLeafPatch 가 tab 을 curriculum 으로 바꾼다)
   const focusLeaf = initialLeaf && curriculum.nodes.some((n) => n.id === initialLeaf && n.task) ? initialLeaf : null;
+  // ?item=: 새로고침하면 같은 화면 — 편집 권한 + mode=edit 이면 편집 화면, 아니면 보기 상세. 없는 id 면 목록 — 아래 URL 동기화가 주소에서 지운다
+  const itemInit: Partial<ScreenState> =
+    !focusLeaf && initialItem && curriculum.nodes.some((n) => n.id === initialItem)
+      ? canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) && initialMode === "edit"
+        ? { tab: "curriculum", curMode: "edit", editSel: initialItem }
+        : { tab: "curriculum", curMode: "view", viewSel: initialItem }
+      : {};
   const [S, setS] = useState<ScreenState>({
     ...INITIAL_STATE,
     tab: initialTab,
     curMode: canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) ? initialMode : "view",
     ...(focusLeaf ? goLeafPatch(focusLeaf) : {}),
-    // ?item=: 편집 화면을 그 항목으로 다시 연다 (새로고침). 없는 id 면 목록 — 아래 URL 동기화가 주소에서 지운다
-    ...(canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) && !focusLeaf && initialItem && curriculum.nodes.some((n) => n.id === initialItem) ? { tab: "curriculum" as const, curMode: "edit" as const, editSel: initialItem } : {}),
+    ...itemInit,
   });
   const [toast, setToast] = useState<ToastMsg>(null);
   const update = useCallback((patch: Patch) => setS((prev) => ({ ...prev, ...(typeof patch === "function" ? patch(prev) : patch) })), []);
@@ -60,42 +66,53 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const api = useCurriculumApi(detail.slug, setCur, update, setToast);
   const closeToast = useCallback(() => setToast(null), []);
 
-  // 편집 화면(?item=) ↔ 주소 동기화 — 열면 push(뒤로 가기 = 목록), 닫으면 쌓았던 기록을 back. 새로고침하면 다시 열린다
-  const openItem = canEdit && S.tab === "curriculum" && S.curMode === "edit" && findNode(tree.nodes, S.editSel) ? S.editSel : null;
+  // 편집 화면·보기 상세(?item=) ↔ 주소 동기화 — 열면 push(뒤로 가기 = 목록), 닫으면 쌓았던 기록을 back. 새로고침하면 다시 열린다.
+  // 같은 항목의 보기↔편집 전환은 replace (주소의 mode 가 화면과 어긋나지 않게)
+  const editOpen = canEdit && S.tab === "curriculum" && S.curMode === "edit" && findNode(tree.nodes, S.editSel) ? S.editSel : null;
+  const viewOpen = S.tab === "curriculum" && !(canEdit && S.curMode === "edit") && findNode(tree.nodes, S.viewSel) ? S.viewSel : null;
+  const openItem = editOpen ?? viewOpen;
+  const openMode: CurMode = editOpen ? "edit" : "view";
   // pushed: 지금 주소의 편집 기록을 이 화면이 목록 기록 위에 쌓았는지 — history.state 는 Next 라우터가 갈아 끼우므로 메모리에 둔다.
   // 새로고침으로 바로 열린 편집 화면은 아래가 목록이라는 보장이 없어 back 대신 replace 로 닫는다
   const pushed = useRef<string | null>(null);
   useEffect(() => {
     const url = readItem(window.location.search);
-    const step = urlStep(url, openItem, url !== null && pushed.current === url);
-    const href = withItem(window.location.href, openItem);
+    const step = syncStep(url, readMode(window.location.search), openItem, openMode, url !== null && pushed.current === url);
+    const href = withItem(window.location.href, openItem, openMode);
     if (step === "push") window.history.pushState(null, "", href);
     else if (step === "replace") window.history.replaceState(null, "", href);
     else if (step === "back") window.history.back();
     if (step !== "none") pushed.current = step === "push" || (step === "replace" && pushed.current) ? openItem : null;
-  }, [openItem]);
+  }, [openItem, openMode]);
   // 브라우저 뒤로·앞으로 → 주소의 항목을 연다/닫는다. 미저장 수정이 있으면 주소를 되돌려 놓고 먼저 묻는다 (조용히 버리지 않는다)
-  const live = useRef({ S, tree, openItem });
+  const live = useRef({ S, tree, openItem, canEdit });
   useEffect(() => {
-    live.current = { S, tree, openItem };
+    live.current = { S, tree, openItem, canEdit };
   });
   useEffect(() => {
     const onPop = () => {
-      const { S: s, tree: t, openItem: open } = live.current;
+      const { S: s, tree: t, openItem: open, canEdit: ce } = live.current;
       const url = readItem(window.location.search);
-      const target = itemTarget(url, (id) => !!findNode(t.nodes, id));
+      const target = itemFromUrl(window.location.search, (id) => !!findNode(t.nodes, id), ce);
       // 앞으로 가기로 돌아온 기록의 항목이 그새 삭제됐으면 주소에서도 지운다
-      if (url && !target) window.history.replaceState(null, "", withItem(window.location.href, null));
-      if (target === open) return;
-      if (open && isDirty(s.ov, s.editSel)) {
-        window.history.pushState(null, "", withItem(window.location.href, open));
+      if (url && !target.id) window.history.replaceState(null, "", withItem(window.location.href, null));
+      if (target.id === open && (target.id === null || (target.mode === "edit") === (s.curMode === "edit"))) return;
+      if (s.curMode === "edit" && open && isDirty(s.ov, s.editSel)) {
+        window.history.pushState(null, "", withItem(window.location.href, open, "edit"));
         pushed.current = open;
-        update({ leave: { sel: target }, confirm: false });
+        // 목록(편집 모드)·다른 편집 항목은 sel, 보기 상세는 mode 전환으로 보류
+        update({ leave: target.id === null || target.mode === "edit" ? { sel: target.id } : { mode: "view" }, confirm: false });
         return;
       }
-      // 앞으로 가기로 연 편집 기록은 목록 기록 위에 있다 → 닫을 때 back
-      pushed.current = target;
-      update(target ? { tab: "curriculum", curMode: "edit", editSel: target, confirm: false, leave: null, saved: "" } : { editSel: null, confirm: false, leave: null, saved: "" });
+      // 앞으로 가기로 연 기록은 목록 기록 위에 있다 → 닫을 때 back
+      pushed.current = target.id;
+      update(
+        target.id === null
+          ? { editSel: null, viewSel: null, confirm: false, leave: null, saved: "" }
+          : target.mode === "edit"
+            ? { tab: "curriculum", curMode: "edit", editSel: target.id, viewSel: null, confirm: false, leave: null, saved: "" }
+            : { tab: "curriculum", curMode: "view", viewSel: target.id, editSel: null, confirm: false, leave: null, saved: "" },
+      );
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);

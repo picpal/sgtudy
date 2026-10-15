@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isUrlItem, itemTarget, readItem, urlStep, withItem } from "./editUrl";
+import { isUrlItem, itemFromUrl, itemTarget, readItem, readMode, syncStep, urlStep, withItem } from "./editUrl";
 
 describe("edit view URL (?item=)", () => {
   it("reads only numeric server ids", () => {
@@ -36,5 +36,31 @@ describe("edit view URL (?item=)", () => {
     expect(itemTarget("7", has)).toBe("7");
     expect(itemTarget("99", has)).toBeNull();
     expect(itemTarget(null, has)).toBeNull();
+  });
+});
+
+describe("detail view URL (보기 ?item=)", () => {
+  it("view items drop mode; edit items pin mode=edit", () => {
+    expect(withItem("/my-study/aws?tab=board", "7", "view")).toBe("/my-study/aws?tab=curriculum&item=7");
+    expect(withItem("/my-study/aws?tab=curriculum&mode=edit&item=7", "7", "view")).toBe("/my-study/aws?tab=curriculum&item=7");
+    expect(withItem("/my-study/aws?tab=curriculum&item=7", "7", "edit")).toBe("/my-study/aws?tab=curriculum&item=7&mode=edit");
+  });
+  it("readMode", () => {
+    expect(readMode("?tab=curriculum&mode=edit&item=7")).toBe("edit");
+    expect(readMode("?tab=curriculum&item=7")).toBe("view");
+  });
+  it("same item, different mode → replace; otherwise urlStep", () => {
+    expect(syncStep("7", "view", "7", "edit", true)).toBe("replace");
+    expect(syncStep("7", "edit", "7", "edit", true)).toBe("none");
+    expect(syncStep(null, "view", "7", "view", false)).toBe("push");
+    expect(syncStep("7", "view", null, "view", true)).toBe("back");
+    expect(syncStep("7", "view", "8", "view", true)).toBe("replace");
+  });
+  it("itemFromUrl: edit only for editors, missing ids → list", () => {
+    const has = (id: string) => id === "7";
+    expect(itemFromUrl("?item=7&mode=edit", has, true)).toEqual({ id: "7", mode: "edit" });
+    expect(itemFromUrl("?item=7&mode=edit", has, false)).toEqual({ id: "7", mode: "view" });
+    expect(itemFromUrl("?item=7", has, true)).toEqual({ id: "7", mode: "view" });
+    expect(itemFromUrl("?item=9", has, true)).toEqual({ id: null, mode: "view" });
   });
 });
