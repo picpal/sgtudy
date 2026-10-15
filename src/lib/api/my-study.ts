@@ -7,7 +7,11 @@ import type { Overrides, Tree, TreeNode } from "@/components/my-study/model";
 
 export const fetchCurriculum = (slug: string, client?: Db) => rpc<Curriculum>("curriculum_get", { p_slug: slug, p_include_archived: true }, client);
 export const fetchMyStudies = (client?: Db) => rpc<MeStudies>("me_studies", {}, client);
-export const nodeCreate = (slug: string, parentId: string | null) => rpc<Curriculum>("node_create", { p_slug: slug, p_parent_id: parentId });
+export const nodeCreate = (slug: string, parentId: string | null, title?: string, client?: Db) =>
+  rpc<Curriculum>("node_create", { p_slug: slug, p_parent_id: parentId, ...(title ? { p_title: title } : {}) }, client);
+/** 다른 부모(회차)로 옮기기 · 같은 부모 안 순서. index = 자기를 뺀 새 형제 기준, 없으면 끝 */
+export const nodeMove = (slug: string, nodeId: string, parentId: string, index?: number, client?: Db) =>
+  rpc<Curriculum>("node_move", { p_slug: slug, p_node_id: nodeId, p_parent_id: parentId, p_index: index ?? null }, client);
 export const nodeUpdate = (slug: string, nodeId: string, patch: NodePatch) => rpc<Curriculum>("node_update", { p_slug: slug, p_node_id: nodeId, p_patch: patch });
 export const nodeDelete = (slug: string, nodeId: string) => rpc<Curriculum>("node_delete", { p_slug: slug, p_node_id: nodeId });
 export const nodeArchive = (slug: string, nodeId: string, archived: boolean) => rpc<Curriculum>(archived ? "node_archive" : "node_unarchive", { p_slug: slug, p_node_id: nodeId });

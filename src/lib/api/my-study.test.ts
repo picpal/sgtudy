@@ -3,7 +3,7 @@ import { AWS } from "@/components/my-study/fixtures";
 import { EMPTY_OVERRIDES, buildTree } from "@/components/my-study/model";
 import type { MeStudies, RoomDetail } from "./types";
 import type { Db } from "./errors";
-import { canEditCurriculumOf, filterSidebarGroups, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
+import { canEditCurriculumOf, filterSidebarGroups, nodeCreate, nodeMove, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
 
 const TODAY = "2026-10-12";
 const P = (userId: string, nickname: string, tone: RoomDetail["leader"]["tone"]) => ({ userId, nickname, tone });
@@ -168,5 +168,32 @@ describe("curriculum editors (0011)", () => {
     const client = { rpc: (name: string, args: Record<string, unknown>) => { calls.push([name, args]); return Promise.resolve({ data: row, error: null }); } } as unknown as Db;
     await expect(setCurriculumEditor("aws", "u1", true, client)).resolves.toEqual(row);
     expect(calls).toEqual([["member_set_curriculum_editor", { p_slug: "aws", p_user: "u1", p_allow: true }]]);
+  });
+});
+
+const fakeDb = () => {
+  const calls: [string, Record<string, unknown>][] = [];
+  const client = { rpc: (name: string, args: Record<string, unknown>) => { calls.push([name, args]); return Promise.resolve({ data: { nodes: [] }, error: null }); } } as unknown as Db;
+  return { calls, client };
+};
+
+describe("node RPC wrappers (goal subtasks)", () => {
+  it("nodeCreate sends p_title only when given", async () => {
+    const f = fakeDb();
+    await nodeCreate("aws", "1", "VPC 실습", f.client);
+    await nodeCreate("aws", null, undefined, f.client);
+    expect(f.calls).toEqual([
+      ["node_create", { p_slug: "aws", p_parent_id: "1", p_title: "VPC 실습" }],
+      ["node_create", { p_slug: "aws", p_parent_id: null }],
+    ]);
+  });
+  it("nodeMove sends parent and index (null = append)", async () => {
+    const f = fakeDb();
+    await nodeMove("aws", "11", "2", 0, f.client);
+    await nodeMove("aws", "11", "2", undefined, f.client);
+    expect(f.calls).toEqual([
+      ["node_move", { p_slug: "aws", p_node_id: "11", p_parent_id: "2", p_index: 0 }],
+      ["node_move", { p_slug: "aws", p_node_id: "11", p_parent_id: "2", p_index: null }],
+    ]);
   });
 });
