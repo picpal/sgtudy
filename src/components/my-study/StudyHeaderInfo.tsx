@@ -10,7 +10,7 @@ import { RoundIconButton, toneOfName } from "./bits";
 export type TabId = "overview" | "curriculum" | "board" | "calendar" | "gantt";
 export const TABS: [TabId, string][] = [
   ["overview", "개요"],
-  ["curriculum", "커리큘럼"],
+  ["curriculum", "진행목표"],
   ["board", "보드"],
   ["calendar", "캘린더"],
   ["gantt", "간트"],

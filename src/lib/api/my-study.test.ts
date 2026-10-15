@@ -51,7 +51,7 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
   });
   it("rounds window with roundId for tree lookup", () => {
     expect(r.rounds.map((x) => [x.label, x.state, x.roundId, !!x.current])).toEqual([["1주차", "기간 종료", "1", false], ["2주차", "진행중", "2", true], ["3주차", "예정", "3", false]]);
-    expect(r.moreRounds).toBe("이후 2개 회차가 더 있어요 · 커리큘럼 탭에서 전체 보기");
+    expect(r.moreRounds).toBe("이후 2개 회차가 더 있어요 · 진행목표 탭에서 전체 보기");
   });
   it("sqld pending: minText 2명 더 필요, action pending, recruit rounds use alt", () => {
     const sqld: RoomDetail = { ...aws, slug: "sqld", status: "recruit", joinMode: "approval", startDate: "2026-10-26", endDate: "2026-11-22", maxMembers: 5, minMembers: 3, memberCount: 1, leader: P("u9", "가은", "amber"), leaderDoesTasks: false,

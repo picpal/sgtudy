@@ -85,7 +85,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
                     )}
                     {m.me && <span className="rounded-[6px] bg-blue-soft px-[6px] py-px text-[11px] font-semibold text-blue-text">나</span>}
                     {m.editor && (
-                      <span title="커리큘럼 편집 권한" className="rounded-[6px] bg-mint-soft px-[6px] py-px text-[11px] font-semibold text-mint-dark">
+                      <span title="진행목표 편집 권한" className="rounded-[6px] bg-mint-soft px-[6px] py-px text-[11px] font-semibold text-mint-dark">
                         편집
                       </span>
                     )}

@@ -29,7 +29,7 @@ export function MemberAdminCard({ slug, members, meId, toast }: Props) {
     setOv((p) => ({ ...p, [userId]: next }));
     try {
       await setCurriculumEditor(slug, userId, next);
-      toast({ text: next ? `${name} 님이 커리큘럼을 편집할 수 있어요` : `${name} 님의 편집 권한을 거뒀어요`, tone: "ok" });
+      toast({ text: next ? `${name} 님이 진행목표를 편집할 수 있어요` : `${name} 님의 편집 권한을 거뒀어요`, tone: "ok" });
       router.refresh(); // 참가자 목록의 "편집" 표시
     } catch (e) {
       setOv(({ [userId]: _omit, ...rest }) => rest); // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -46,7 +46,7 @@ export function MemberAdminCard({ slug, members, meId, toast }: Props) {
         <h3 id="member-admin-title" className="m-0 text-[14px] font-bold">
           멤버 관리
         </h3>
-        <p className="m-0 mt-1 text-[12px] text-muted">커리큘럼 편집은 기본으로 그룹장만 할 수 있어요 · 켜 두면 그 팀원도 회차·과제를 추가하고 고칠 수 있어요</p>
+        <p className="m-0 mt-1 text-[12px] text-muted">진행목표 편집은 기본으로 그룹장만 할 수 있어요 · 켜 두면 그 팀원도 회차·과제를 추가하고 고칠 수 있어요</p>
       </div>
       <ul className="m-0 flex list-none flex-col p-0">
         {rows.map((r) => (
@@ -62,12 +62,12 @@ export function MemberAdminCard({ slug, members, meId, toast }: Props) {
                 type="button"
                 role="switch"
                 aria-checked={r.on}
-                aria-label={`${r.name} 커리큘럼 편집`}
+                aria-label={`${r.name} 진행목표 편집`}
                 disabled={!!busy[r.userId]}
                 onClick={() => void toggle(r.userId, r.name, !r.on)}
                 className="group inline-flex min-h-11 items-center gap-2 rounded-[10px] px-1 text-[12px] font-medium text-ink-2 disabled:opacity-60"
               >
-                커리큘럼 편집
+                진행목표 편집
                 <span aria-hidden="true" className={`relative inline-block h-6 w-10 shrink-0 rounded-full transition-colors ${r.on ? "bg-mint" : "bg-faint"}`}>
                   <span className={`absolute top-[3px] size-[18px] rounded-full bg-white shadow-[0_1px_3px_rgba(27,34,48,.25)] transition-[left] ${r.on ? "left-[19px]" : "left-[3px]"}`} />
                 </span>

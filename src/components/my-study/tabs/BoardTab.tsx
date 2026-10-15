@@ -41,7 +41,7 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
         </div>
       </div>
       <p className="m-0 text-[12px] text-muted">
-        {mine ? "내가 담당한 과제만 보여요. 제출 상태에 따라 칸이 자동으로 바뀌어요 · 카드를 누르면 커리큘럼에서 상세를 볼 수 있어요." : "모든 과제의 팀 진행 상황이에요. 담당자 전원이 제출하면 ‘전원 제출’로 이동해요."}
+        {mine ? "내가 담당한 과제만 보여요. 제출 상태에 따라 칸이 자동으로 바뀌어요 · 카드를 누르면 진행목표에서 상세를 볼 수 있어요." : "모든 과제의 팀 진행 상황이에요. 담당자 전원이 제출하면 ‘전원 제출’로 이동해요."}
       </p>
       {noMine && <div className="rounded-[14px] border border-dashed border-line-dash p-5 text-center text-[13px] text-muted">아직 내게 배정된 과제가 없어요. 참가가 확정되면 여기에 보여요.</div>}
 

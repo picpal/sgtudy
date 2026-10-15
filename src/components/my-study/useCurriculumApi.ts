@@ -47,7 +47,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       const err = toApiError(e);
       if (err.code === "NOT_CURRICULUM_EDITOR") {
         // 편집하는 사이 그룹장이 권한을 거뒀다 — 편집 모드를 닫고(편집 스위치도 사라짐) 커리큘럼을 다시 받는다
-        toast({ text: "커리큘럼 편집 권한이 없어요", tone: "bad" });
+        toast({ text: "진행목표 편집 권한이 없어요", tone: "bad" });
         setCur((c) => ({ ...c, myPermissions: { canEditCurriculum: false } }));
         update({ curMode: "view", editSel: null, confirm: false, leave: null, saved: "", ov: EMPTY_OVERRIDES });
         fetchCurriculum(slug).then(setCur, () => {});

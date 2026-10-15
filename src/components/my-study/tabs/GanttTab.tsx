@@ -161,12 +161,12 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
             <span className="rounded-[10px] bg-surface px-3 py-2 text-center text-[13px] leading-[1.6] text-muted shadow-[0_0_0_1px_var(--color-line-2)]">
               아직 등록된 회차·과제가 없어요.
               <br />
-              커리큘럼 탭에서 추가하면 여기에 일정이 그려져요.
+              진행목표 탭에서 추가하면 여기에 일정이 그려져요.
             </span>
           </p>
         )}
       </div>
-      <p className="m-0 text-[12px] text-muted">읽기 전용이에요. 일정 변경은 커리큘럼 탭의 편집 모드(그룹장)에서 할 수 있어요. 과제 이름을 누르면 커리큘럼에서 상세를 볼 수 있어요.</p>
+      <p className="m-0 text-[12px] text-muted">읽기 전용이에요. 일정 변경은 진행목표 탭의 편집 모드(그룹장)에서 할 수 있어요. 과제 이름을 누르면 진행목표에서 상세를 볼 수 있어요.</p>
     </div>
   );
 }

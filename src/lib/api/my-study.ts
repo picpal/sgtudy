@@ -80,7 +80,7 @@ export function toStudyRoom(d: RoomDetail, tree: Tree, today: string, meId: stri
     capCur: d.memberCount, capMax: d.maxMembers, ...minTextOf(d), members,
     cur: { pill: cur.pill, title: cur.title, meta: cur.meta, tasks: cur.tasks.map((t) => ({ title: t.title, type: t.type, dates: t.dates, people: t.people.map((p) => [p.name, p.status] as [string, typeof p.status]), tones: Object.fromEntries(t.people.map((p) => [p.name, p.tone])) })) },
     about: d.descriptionMd, rules: rulesOf(d.rulesMd), rounds,
-    moreRounds: win.more ? `${win.more} · 커리큘럼 탭에서 전체 보기` : "",
+    moreRounds: win.more ? `${win.more} · 진행목표 탭에서 전체 보기` : "",
     action: studyActionOf(d), next: nextOf(d, tree, today),
   };
 }

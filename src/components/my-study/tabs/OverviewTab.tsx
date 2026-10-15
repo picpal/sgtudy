@@ -46,7 +46,7 @@ export function OverviewTab({ room, tree, onGoCurriculum }: { room: StudyRoom; t
           </span>
           {hasTasks && (
             <button type="button" onClick={onGoCurriculum} className="inline-flex h-9 items-center rounded-[18px] border border-line bg-surface px-[14px] text-[13px] font-medium text-ink">
-              커리큘럼 전체 보기
+              진행목표 전체 보기
             </button>
           )}
         </div>

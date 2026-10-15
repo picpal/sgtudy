@@ -186,7 +186,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
             </ul>
             {pick.people.length === 0 && <span className="text-[13px] text-amber-text">아직 담당자가 없어요</span>}
             <button type="button" onClick={() => goLeaf(pick.id)} className="h-[42px] rounded-[21px] bg-navy text-[14px] font-semibold text-white">
-              커리큘럼에서 보기
+              진행목표에서 보기
             </button>
           </div>
         )}

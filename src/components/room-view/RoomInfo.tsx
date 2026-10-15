@@ -7,7 +7,7 @@ import { StatusBadge } from "./StatusBadge";
 import { CurrentRoundCard } from "./CurrentRoundCard";
 import { ScheduleList } from "./ScheduleList";
 
-const TABS = ["개요", "커리큘럼", "보드", "캘린더", "간트"];
+const TABS = ["개요", "진행목표", "보드", "캘린더", "간트"];
 
 const dtIcon = (d: ReactNode, extra?: ReactNode) => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

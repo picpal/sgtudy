@@ -110,7 +110,7 @@ export function NewRoomForm() {
       <AppHeader variant="card" bell={<NotificationBell />} />
       <main className="mx-auto w-full max-w-[640px] rounded-[20px] bg-surface p-7 max-sm:p-5">
         <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 만들기</h1>
-        <p className="mb-6 mt-[6px] text-[14px] text-muted">채팅방 만들듯 30초면 충분해요. 커리큘럼은 만든 뒤 천천히 채워요.</p>
+        <p className="mb-6 mt-[6px] text-[14px] text-muted">채팅방 만들듯 30초면 충분해요. 진행목표는 만든 뒤 천천히 채워요.</p>
         <form ref={formRef} onSubmit={submit} className="flex flex-col gap-4" noValidate>
           {/* 한도는 서버와 같은 코드 포인트(60/100)로 자른다 — maxLength 는 UTF-16 단위라 이모지에서 어긋난다(Q2-16) */}
           <Field label="제목 (= 최상위 목표)" error={errors.title}><input name="title" className={field} value={v.title} onChange={(e) => set("title", clampCp(e.target.value, 60))} placeholder="예) AWS SAA 자격증 3개월 완주" autoFocus aria-invalid={!!errors.title} /></Field>
