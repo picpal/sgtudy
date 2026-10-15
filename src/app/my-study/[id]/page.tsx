@@ -4,8 +4,8 @@ import { isUrlItem } from "@/components/my-study/editUrl";
 import { MyStudyScreen } from "@/components/my-study/MyStudyScreen";
 import type { TabId } from "@/components/my-study/StudyHeaderInfo";
 import { toApiError } from "@/lib/api/errors";
-import { getServerClient, requireMe } from "@/lib/api/me.server";
-import { fetchCurriculum, fetchMyStudies } from "@/lib/api/my-study";
+import { getMyStudies, getServerClient, requireMe } from "@/lib/api/me.server";
+import { fetchCurriculum } from "@/lib/api/my-study";
 import { getRoomDetail, roomMetadata } from "@/lib/api/room-meta.server";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
@@ -21,7 +21,7 @@ export default async function MyStudyPage({ params, searchParams }: { params: Pr
   // 데이터 RPC 는 로그인·온보딩 확인(me_get)을 기다리지 않고 함께 출발한다 — 거절은 아래 try 에서 받으므로 미리 삼켜 둔다.
   // room_get 은 generateMetadata 와 같은 요청 메모(getRoomDetail)를 쓴다.
   const pending = getServerClient().then((client) =>
-    Promise.all([getRoomDetail(id), fetchCurriculum(id, client), fetchMyStudies(client)]),
+    Promise.all([getRoomDetail(id), fetchCurriculum(id, client), getMyStudies()]),
   );
   pending.catch(() => {});
   await requireMe(routes.myStudy(id));

@@ -3,7 +3,7 @@ import { AWS } from "@/components/my-study/fixtures";
 import { EMPTY_OVERRIDES, buildTree } from "@/components/my-study/model";
 import type { MeStudies, RoomDetail } from "./types";
 import type { Db } from "./errors";
-import { canEditCurriculumOf, filterSidebarGroups, nodeCreate, nodeMove, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
+import { canEditCurriculumOf, filterSidebarGroups, firstStudySlug, myStudyHrefOf, nodeCreate, nodeMove, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
 
 const TODAY = "2026-10-12";
 const P = (userId: string, nickname: string, tone: RoomDetail["leader"]["tone"]) => ({ userId, nickname, tone });
@@ -195,5 +195,19 @@ describe("node RPC wrappers (goal subtasks)", () => {
       ["node_move", { p_slug: "aws", p_node_id: "11", p_parent_id: "2", p_index: 0 }],
       ["node_move", { p_slug: "aws", p_node_id: "11", p_parent_id: "2", p_index: null }],
     ]);
+  });
+});
+
+describe("myStudyHrefOf — /my-study 진입 규칙(그룹 순서대로 첫 항목)", () => {
+  const item = (slug: string) => ({ slug, title: slug, intro: "", membership: "joined", when: { kind: "end", date: "2026-12-31" } }) as MeStudies["groups"][number]["items"][number];
+  it("첫 그룹이 비어 있으면 다음 그룹의 첫 스터디로 바로 간다", () => {
+    const s: MeStudies = { today: TODAY, groups: [{ kind: "active", items: [] }, { kind: "recruit", items: [item("b"), item("c")] }, { kind: "ended", items: [item("a")] }] };
+    expect(myStudyHrefOf(s)).toBe("/my-study/b");
+    expect(firstStudySlug(s)).toBe("b");
+  });
+  it("스터디가 하나도 없으면 /my-study (빈 화면) 그대로", () => {
+    const s: MeStudies = { today: TODAY, groups: [{ kind: "active", items: [] }, { kind: "recruit", items: [] }, { kind: "ended", items: [] }] };
+    expect(myStudyHrefOf(s)).toBe("/my-study");
+    expect(firstStudySlug(s)).toBeNull();
   });
 });

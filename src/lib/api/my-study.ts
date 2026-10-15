@@ -2,11 +2,16 @@ import { rpc, type Db } from "@/lib/api/errors";
 import { curIndexOf, curOf, ddayOf, mmdd, periodLong, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
 import type { Curriculum, MeState, MeStudies, MyPermissions, NodePatch, RoomDetail, RoomMemberAdminDto } from "@/lib/api/types";
 import { dday, diffDays, weekdayKo } from "@/lib/date";
+import { routes } from "@/lib/routes";
 import type { MemberInfo, NextDue, Room, RoundRow, SidebarGroup } from "@/data/my-study";
 import type { Overrides, Tree, TreeNode } from "@/components/my-study/model";
 
 export const fetchCurriculum = (slug: string, client?: Db) => rpc<Curriculum>("curriculum_get", { p_slug: slug, p_include_archived: true }, client);
 export const fetchMyStudies = (client?: Db) => rpc<MeStudies>("me_studies", {}, client);
+/** /my-study 진입 규칙의 단일 출처: me_studies 그룹 순서(진행 → 모집 → 종료)대로 첫 스터디. 없으면 null */
+export const firstStudySlug = (studies: MeStudies): string | null => studies.groups.flatMap((g) => g.items)[0]?.slug ?? null;
+/** 헤더 "내 스터디" 링크 — 첫 스터디로 바로(리다이렉트 왕복 없이). 없으면 /my-study(빈 화면) */
+export const myStudyHrefOf = (studies: MeStudies): string => routes.myStudy(firstStudySlug(studies) ?? undefined);
 export const nodeCreate = (slug: string, parentId: string | null, title?: string, client?: Db) =>
   rpc<Curriculum>("node_create", { p_slug: slug, p_parent_id: parentId, ...(title ? { p_title: title } : {}) }, client);
 /** 다른 부모(회차)로 옮기기 · 같은 부모 안 순서. index = 자기를 뺀 새 형제 기준, 없으면 끝 */

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Logo } from "./Logo";
 import { signOut } from "@/lib/api/me";
-import { useMe } from "@/lib/me";
+import { useMe, useMyStudyHref } from "@/lib/me";
 import { AVATAR_PAL } from "@/lib/palette";
 import { routes, safeReturnTo } from "@/lib/routes";
 
@@ -75,6 +75,7 @@ type Props = {
 
 export function AppHeader({ active, variant = "card", children, bell }: Props) {
   const me = useMe();
+  const myStudyHref = useMyStudyHref();
   const pathname = usePathname();
   const router = useRouter();
   const search = useSyncExternalStore(subscribeLocation, getSearch, getServerSearch);
@@ -154,7 +155,7 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
           return (
             <Link
               key={n.key}
-              href={n.href}
+              href={n.key === "myStudy" ? myStudyHref : n.href}
               aria-current={on ? "page" : undefined}
               className={`flex items-center gap-[7px] whitespace-nowrap rounded-[12px] px-[14px] py-[9px] text-[14px] ${
                 on ? "bg-bg font-semibold text-ink" : "font-medium text-ink-3 hover:text-ink"

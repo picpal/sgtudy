@@ -2,7 +2,8 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { rpc } from "@/lib/api/errors";
-import type { Me, MetaDto } from "@/lib/api/types";
+import { fetchMyStudies } from "@/lib/api/my-study";
+import type { Me, MeStudies, MetaDto } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/server";
 
@@ -41,6 +42,9 @@ export const getMe = cache(async (): Promise<Me | null> => {
   if (!(await getAuthClaims())) return null;
   return rpc<Me>("me_get", {}, await getServerClient());
 });
+
+/** me_studies 요청 단위 메모 — 루트 layout(헤더 "내 스터디" 링크)과 /my-study 페이지가 한 요청에서 같이 불러도 한 번만 나간다. 실패 시 throw */
+export const getMyStudies = cache(async (): Promise<MeStudies> => fetchMyStudies(await getServerClient()));
 
 /** 서버 KST 오늘(meta_get). 실패 시 throw — 폴백 여부는 호출자가 정한다 */
 export const getToday = cache(async (): Promise<string> => (await rpc<MetaDto>("meta_get", {}, await getServerClient())).today);
