@@ -11,7 +11,8 @@ import { EMPTY_OVERRIDES, dropFieldOv, tempId, type Overrides, type TreeNode } f
 import type { Update } from "./state";
 
 export type CurriculumApi = {
-  create: (parentId: string | null) => Promise<void>;
+  /** open: 만든 항목의 편집 화면을 연다(기본). false = 목록에 머문다(빠른 추가 — 토스트 없음). 성공하면 true */
+  create: (parentId: string | null, opts?: { title?: string; open?: boolean }) => Promise<boolean>;
   /** from: "list" — 진행목표 목록에서 지웠다. 실패해도 편집 화면을 열지 않는다 */
   remove: (id: string, from?: "edit" | "list") => Promise<void>;
   /** from: "list" — 결과를 편집 화면 문구 대신 토스트로 */
@@ -25,10 +26,14 @@ const dropKey = <T,>(rec: Record<string, T>, key: string) => {
   return rest;
 };
 
-/** 임시 행 하나만 뺀다 — 빠르게 두 번 추가하면 먼저 끝난 응답이 다른 요청의 임시 행까지 지우지 않게 */
-const popOne = (rec: Record<string, string[]>, key: string) => {
+/** 임시 행 하나만 뺀다 — 빠르게 두 번 추가하면 먼저 끝난 응답이 다른 요청의 임시 행까지 지우지 않게.
+ *  label: 그 제목의 임시 행을 뺀다 (빠른 추가는 제목이 제각각이라 끝 행을 빼면 엉뚱한 제목이 남는다) */
+const popOne = (rec: Record<string, string[]>, key: string, label?: string) => {
   const list = rec[key] ?? [];
-  return list.length > 1 ? { ...rec, [key]: list.slice(0, -1) } : dropKey(rec, key);
+  if (list.length <= 1) return dropKey(rec, key);
+  const at = label === undefined ? -1 : list.lastIndexOf(label);
+  const i = at < 0 ? list.length - 1 : at;
+  return { ...rec, [key]: [...list.slice(0, i), ...list.slice(i + 1)] };
 };
 
 export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<Curriculum>>, update: Update, toast: (m: ToastMsg) => void): CurriculumApi {
@@ -53,24 +58,32 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const create = useCallback(
-    async (parentId: string | null) => {
+    async (parentId: string | null, opts: { title?: string; open?: boolean } = {}) => {
       const key = parentId ?? "root";
-      // 응답을 기다리지 않고 임시 노드의 편집 화면을 바로 연다 — 서버 id 가 오면 그 항목으로 바꿔 연다
+      const open = opts.open ?? true;
+      const label = opts.title ?? (parentId ? "새 과제" : "새 회차");
+      // open: 응답을 기다리지 않고 임시 노드의 편집 화면을 연다(서버 id 가 오면 그 항목으로). 빠른 추가(open:false)는 목록에 임시 행만
       update((p) => {
         const list = p.ov.added[key] ?? [];
-        return { ov: { ...p.ov, added: { ...p.ov.added, [key]: [...list, parentId ? "새 과제" : "새 회차"] } }, closed: parentId ? { ...p.closed, [parentId]: false } : p.closed, editSel: tempId(key, list.length), confirm: false, saved: "" };
+        return {
+          ov: { ...p.ov, added: { ...p.ov.added, [key]: [...list, label] } },
+          closed: parentId ? { ...p.closed, [parentId]: false } : p.closed,
+          ...(open ? { editSel: tempId(key, list.length), confirm: false, saved: "" } : {}),
+        };
       });
       try {
-        const cur = await nodeCreate(slug, parentId);
+        const cur = await nodeCreate(slug, parentId, opts.title);
         const created = cur.nodes.filter((n) => n.parentId === parentId).sort((a, b) => b.sortOrder - a.sortOrder)[0];
         setCur(cur);
-        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) }, editSel: created?.id ?? null, justAdded: created?.id ?? null }));
-        toast({ text: parentId ? "새 과제를 추가했어요" : "새 회차를 추가했어요", tone: "ok" }); // Q3-14
+        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key, label) }, ...(open ? { editSel: created?.id ?? null, justAdded: created?.id ?? null } : {}) }));
+        if (open) toast({ text: parentId ? "새 과제를 추가했어요" : "새 회차를 추가했어요", tone: "ok" }); // Q3-14 — 빠른 추가는 행이 나타나는 것으로 충분
         router.refresh(); // 개요의 회차 창·현재 회차는 room_get(detail) 에서 온다
+        return true;
       } catch (e) {
         // 만들지 못한 임시 노드의 편집 화면은 닫는다 (목록으로)
-        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key) }, editSel: p.editSel && !isUrlItem(p.editSel) ? null : p.editSel }));
+        update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key, label) }, ...(open ? { editSel: p.editSel && !isUrlItem(p.editSel) ? null : p.editSel } : {}) }));
         fail(e);
+        return false;
       }
     },
     [slug, setCur, update, fail, router, toast],

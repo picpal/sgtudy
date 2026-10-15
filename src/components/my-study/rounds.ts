@@ -68,3 +68,7 @@ export const normalizeTitle = (raw: string): string | null => {
   const t = raw.trim();
   return t ? t.slice(0, 80) : null;
 };
+
+/** 빠른 추가 Enter — 한글 조합을 확정하는 Enter(isComposing, Safari keyCode 229)는 제출이 아니다 */
+export const shouldSubmitQuickAdd = (e: { key: string; isComposing: boolean; keyCode?: number }): boolean =>
+  e.key === "Enter" && !e.isComposing && e.keyCode !== 229;

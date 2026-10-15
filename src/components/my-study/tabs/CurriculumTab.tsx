@@ -6,10 +6,12 @@ import { addDays } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
 import { allParentsClosed, findNode, isDirty, overallPct, removePlan, unassignedCount, visibleNodes, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
+import { withAddRows } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { DetailView } from "./DetailView";
 import { EditView } from "./EditView";
 import { InlineConfirm } from "./InlineConfirm";
+import { AddRow, QuickAdd } from "./QuickAdd";
 import { TreeRow } from "./TreeRow";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; api: CurriculumApi; canEdit: boolean; isLeader: boolean; period: { start: string; end: string } };
@@ -39,7 +41,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
       update({ leave: null });
       // 구조 변경은 즉시 RPC (낙관적 임시 노드 → 응답 Curriculum 으로 교체)
       void api.create(to.add);
-    } else update({ editSel: to.sel, confirm: false, leave: null, saved: "" });
+    } else update({ editSel: to.sel, quickAdd: null, confirm: false, leave: null, saved: "" });
   };
   // 저장하지 않은 수정이 있으면 먼저 묻는다 (Q2-05)
   const request = (to: Leave) => {
@@ -47,8 +49,18 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
     else go(to);
   };
   const setMode = (m: CurMode) => request({ mode: m });
-  const addChild = (id: string) => request({ add: id });
   const addRound = () => request({ add: null });
+  // 회차 "+"·"과제 추가" 줄 → 목록에 머문 채 그 회차를 펼치고 끝에 빠른 추가 입력 (한 번에 하나)
+  const openAdd = (id: string) => update((p) => ({ quickAdd: id, closed: { ...p.closed, [id]: false } }));
+  const closeAdd = (id: string) => {
+    update((p) => (p.quickAdd === id ? { quickAdd: null } : {}));
+    // Esc 로 닫았을 때만(포커스가 갈 곳이 없을 때) "과제 추가" 줄로 — 다른 회차 "+" 를 눌러 닫힌 거면 그쪽 입력을 뺏지 않는다
+    requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return;
+      document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(id)}"]`)?.focus();
+    });
+  };
+  const entries = isEdit ? withAddRows(rows, tree.roots, S.closed) : rows.map((n) => ({ kind: "node" as const, n }));
 
   // 편집·상세 화면에서 목록으로 돌아오면 열었던 행으로 포커스·스크롤을 돌려준다
   // (삭제해서 행이 없으면 상위 행, 그것도 없으면 "회차 추가")
@@ -121,7 +133,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
       </div>
       {isEdit && (
         <p className="m-0 text-[12px] text-muted">
-          회차나 과제를 누르면 편집 화면이 열려요 · 추가하면 바로 편집 화면으로 이동해요.
+          회차는 기간·대주제, 과제는 회차 안의 할 일이에요 · 회차나 과제를 누르면 편집 화면이 열려요.
           {isLeader ? " 개요 탭 멤버 관리에서 팀원에게 편집 권한을 줄 수 있어요." : " 그룹장이 준 편집 권한으로 고치고 있어요."}
         </p>
       )}
@@ -138,7 +150,14 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
 
       {/* 모서리 행은 컨테이너 안쪽 반경(16-1px)을 따라가야 선택 링(inset)이 둥근 클립에 잘리지 않는다 */}
       <div role="tree" aria-label="진행목표" className="min-w-0 overflow-hidden rounded-[16px] border border-line [&>div:first-child>[role=treeitem]]:rounded-t-[15px] [&>div:last-child>[role=treeitem]]:rounded-b-[15px]">
-        {rows.map((n) => {
+        {entries.map((entry) => {
+          if (entry.kind === "add")
+            return S.quickAdd === entry.round.id ? (
+              <QuickAdd key={`qa-${entry.round.id}`} round={entry.round} indent={1} onAdd={(t) => api.create(entry.round.id, { title: t, open: false })} onClose={() => closeAdd(entry.round.id)} />
+            ) : (
+              <AddRow key={`add-${entry.round.id}`} round={entry.round} indent={1} onOpen={() => openAdd(entry.round.id)} />
+            );
+          const n = entry.n;
           const open = !S.closed[n.id];
           const plan = removePlan(n);
           return (
@@ -152,7 +171,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
                   if (isEdit) request({ sel: n.id });
                   else update({ viewSel: n.id });
                 }}
-                onAddChild={!n.leaf ? () => addChild(n.id) : undefined}
+                onAddChild={!n.leaf && n.d === 0 ? () => openAdd(n.id) : undefined}
                 onRemove={!n.temp && plan.kind !== "none" ? () => (asking?.id === n.id ? cancelAsk() : setAsk(n.id)) : undefined}
                 removeOff={n.temp ? "서버에 만드는 중…" : plan.kind === "none" ? plan.reason : undefined}
                 asking={asking?.id === n.id}

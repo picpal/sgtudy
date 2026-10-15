@@ -32,9 +32,9 @@ const Plus = () => (
 );
 
 export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemove, removeOff, asking = false }: Props) {
-  const canAdd = isEdit && !n.leaf && n.d <= 2;
-  const cantAdd = isEdit && !n.leaf && n.d > 2;
-  const addTip = n.d <= 2 ? `${n.title}에 하위 과제 추가` : "최대 5단계까지만 만들 수 있어요";
+  // "+" 는 회차에만 — 과제 아래 과제(묶음)는 만들지 않는다 (2단계: 회차 → 과제)
+  const canAdd = isEdit && !n.leaf && n.d === 0 && !n.archived;
+  const addTip = `${n.title}에 과제 추가`;
   return (
     <div
       role="treeitem"
@@ -101,13 +101,8 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemo
           </span>
         </button>
       )}
-      {cantAdd && (
-        <button type="button" disabled title={addTip} aria-label={addTip} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-line bg-[#F4F6F7] text-ghost">
-          <Plus />
-        </button>
-      )}
-      {/* 과제 행엔 "+" 가 없다 — 같은 자리를 비워 두어 삭제 버튼이 회차 행과 같은 세로줄에 선다 */}
-      {isEdit && n.leaf && <span aria-hidden="true" className="w-8 shrink-0" />}
+      {/* "+" 가 없는 행(과제·묶음·보관된 회차)은 같은 자리를 비워 두어 삭제 버튼이 회차 행과 같은 세로줄에 선다 */}
+      {isEdit && !canAdd && <span aria-hidden="true" className="w-8 shrink-0" />}
       {isEdit && (
         // 누르는 자리는 44px(행 높이 52 안), 보이는 상자는 32px — "+" 와 같은 모양
         <button

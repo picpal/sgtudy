@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, visibleNodes, type ParentNode } from "./model";
-import { currentRoundId, movedPeriod, normalizeTitle, reorderIndex, roundOf, roundOptions, siblingIndex, withAddRows } from "./rounds";
+import { currentRoundId, movedPeriod, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -84,3 +84,10 @@ describe("normalizeTitle", () => {
 // 타입 확인용 — ParentNode 를 실제로 쓴다
 const _r: ParentNode = root("1");
 void _r;
+
+describe("shouldSubmitQuickAdd (IME)", () => {
+  it("plain Enter submits", () => expect(shouldSubmitQuickAdd({ key: "Enter", isComposing: false })).toBe(true));
+  it("Enter that confirms a Hangul composition does not", () => expect(shouldSubmitQuickAdd({ key: "Enter", isComposing: true })).toBe(false));
+  it("Safari reports composition Enter as keyCode 229", () => expect(shouldSubmitQuickAdd({ key: "Enter", isComposing: false, keyCode: 229 })).toBe(false));
+  it("other keys never submit", () => expect(shouldSubmitQuickAdd({ key: "a", isComposing: false })).toBe(false));
+});
