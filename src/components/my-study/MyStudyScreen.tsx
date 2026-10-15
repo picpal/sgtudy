@@ -15,7 +15,8 @@ import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
-import { buildTree, findNode, isDirty, stripFieldOv } from "./model";
+import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, stripFieldOv } from "./model";
+import { currentRoundId } from "./rounds";
 import { INITIAL_STATE, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
@@ -49,6 +50,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const [S, setS] = useState<ScreenState>({
     ...INITIAL_STATE,
     tab: initialTab,
+    // 보드는 스프린트 보드처럼 현재 회차로 시작 (칩으로 "전체" 선택 가능)
+    bRound: currentRoundId(buildTree(curriculum, EMPTY_OVERRIDES, curriculum.today).roots, curriculum.today),
     curMode: canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) ? initialMode : "view",
     ...(focusLeaf ? goLeafPatch(focusLeaf) : {}),
     ...itemInit,
