@@ -74,7 +74,9 @@ const GROUPS: Tool[][] = [
   ],
 ];
 
-const BTN = "flex h-8 w-[28px] shrink-0 items-center justify-center rounded-[7px] text-ink-3 hover:bg-line-2 hover:text-ink";
+// 보이는 버튼은 28×32 로 조밀하게, 누르는 자리는 ::before 로 44×44 (툴바가 isolate 라 음수 z 의 ::before 는 툴바 배경 위·모든 버튼 아래 —
+// 버튼 자체를 누르면 늘 그 버튼, 사이 틈만 이웃과 나눈다)
+const BTN = "relative flex h-8 w-[28px] shrink-0 items-center justify-center rounded-[7px] text-ink-3 before:absolute before:-inset-x-2 before:-inset-y-[6px] before:-z-10 before:content-[''] hover:bg-line-2 hover:text-ink";
 
 function Icon({ name }: { name: string }) {
   return (
@@ -105,7 +107,7 @@ function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Too
       role="toolbar"
       aria-label="서식 도구"
       onKeyDown={onKey}
-      className={`flex flex-wrap items-center gap-x-[6px] gap-y-[2px] border-b border-line-2 bg-surface-3 py-1 ${stickyTop !== undefined ? "sticky z-[1]" : ""}`}
+      className={`isolate flex flex-wrap items-center gap-x-[6px] gap-y-[2px] border-b border-line-2 bg-surface-3 py-[6px] ${stickyTop !== undefined ? "sticky z-[1]" : ""}`}
       // 본문 줄 폭 상한(--md-content-max)이 있으면 도구 줄도 같은 세로줄에서 시작한다 — 넓은 편집 면에서 툴바만 왼쪽 끝에 떨어져 보이지 않게
       style={{ paddingInline: "max(6px, calc((100% - var(--md-content-max, 100%)) / 2 + 6px))", ...(stickyTop !== undefined ? { top: stickyTop } : {}) }}
     >

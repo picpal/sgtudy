@@ -113,7 +113,7 @@ export function StudyHeaderInfo({ room, tab, onTab }: { room: StudyRoom; tab: Ta
         </dl>
       )}
 
-      <div id="my-study-tabs" role="tablist" aria-label="방 상세 탭" className="mt-[26px] scroll-mt-4 flex gap-1 overflow-x-auto border-y border-line-2 py-2">
+      <div id="my-study-tabs" role="tablist" aria-label="방 상세 탭" className="mt-[26px] scroll-mt-4 flex gap-1 overflow-x-auto border-y border-line-2 py-[5px]">
         {TABS.map(([id, label]) => {
           const on = tab === id;
           return (
@@ -123,7 +123,7 @@ export function StudyHeaderInfo({ room, tab, onTab }: { room: StudyRoom; tab: Ta
               role="tab"
               aria-selected={on}
               onClick={() => onTab(id)}
-              className={`h-[38px] shrink-0 rounded-[10px] px-[14px] text-[14px] ${on ? "bg-bg font-semibold text-ink" : "bg-transparent font-medium text-ink-3"}`}
+              className={`h-11 shrink-0 rounded-[10px] px-[14px] text-[14px] ${on ? "bg-bg font-semibold text-ink" : "bg-transparent font-medium text-ink-3"}`}
             >
               {label}
             </button>
