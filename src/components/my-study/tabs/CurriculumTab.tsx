@@ -202,12 +202,14 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
                   dragHandle={isEdit && n.d > 0 ? drag.handleProps(n.id) : undefined}
                   dropHint={hint?.id === n.id ? hint.half : null}
                   dragging={drag.dragging === n.id}
+                  below={
+                    asking?.id === n.id && plan.kind !== "none" ? (
+                      <div className="border-t border-line-2 bg-surface px-3 py-2">
+                        <InlineConfirm text={`‘${n.title || "제목 없는 항목"}’ — ${plan.text}`} onCancel={cancelAsk} actions={[{ label: plan.label, onClick: () => confirmRemove(n), tone: "danger" }]} />
+                      </div>
+                    ) : undefined
+                  }
                 />
-                {asking?.id === n.id && plan.kind !== "none" && (
-                  <div className="border-b border-line-2 bg-surface px-3 py-2">
-                    <InlineConfirm text={`‘${n.title || "제목 없는 항목"}’ — ${plan.text}`} onCancel={cancelAsk} actions={[{ label: plan.label, onClick: () => confirmRemove(n), tone: "danger" }]} />
-                  </div>
-                )}
               </div>
             );
           })}
