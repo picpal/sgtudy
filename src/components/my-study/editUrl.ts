@@ -13,9 +13,11 @@ export function readItem(search: string): string | null {
   return isUrlItem(v) ? v : null;
 }
 
-/** 현재 주소에서 item(·mode)만 바꾼 주소. 항목이 있으면 진행목표 탭도 싣는다. 보기 상세는 mode 를 빼고, 편집은 mode=edit */
+/** 현재 주소에서 item(·mode)만 바꾼 주소. 항목이 있으면 진행목표 탭도 싣는다. 보기 상세는 mode 를 빼고, 편집은 mode=edit.
+ *  알림·일정 링크의 ?task= 는 첫 화면을 여는 데만 쓰고 지운다 — 남으면 새로고침 때 지금 항목 대신 그 과제가 열린다 */
 export function withItem(href: string, item: string | null, mode: CurMode = "edit"): string {
   const u = new URL(href, "http://x");
+  u.searchParams.delete("task");
   if (item) {
     u.searchParams.set("tab", "curriculum");
     if (mode === "edit") u.searchParams.set("mode", "edit");
@@ -48,9 +50,11 @@ export function itemTarget(url: string | null, exists: (id: string) => boolean):
   return url && exists(url) ? url : null;
 }
 
-/** urlStep + "같은 항목인데 보기↔편집만 바뀜" = replace */
-export function syncStep(url: string | null, urlMode: CurMode, open: string | null, openMode: CurMode, pushedHere: boolean): UrlStep {
+/** urlStep + "같은 항목인데 보기↔편집만 바뀜" = replace.
+ *  fromLink(주소에 ?task=): 알림·일정 링크로 들어와 그 과제를 연 첫 화면 — 아래가 목록 기록이 아니므로 push 대신 replace (새로고침 진입과 같다) */
+export function syncStep(url: string | null, urlMode: CurMode, open: string | null, openMode: CurMode, pushedHere: boolean, fromLink = false): UrlStep {
   const s = urlStep(url, open, pushedHere);
+  if (s === "push" && fromLink) return "replace";
   return s === "none" && open !== null && isUrlItem(open) && urlMode !== openMode ? "replace" : s;
 }
 

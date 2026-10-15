@@ -80,7 +80,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const pushed = useRef<string | null>(null);
   useEffect(() => {
     const url = readItem(window.location.search);
-    const step = syncStep(url, readMode(window.location.search), openItem, openMode, url !== null && pushed.current === url);
+    const step = syncStep(url, readMode(window.location.search), openItem, openMode, url !== null && pushed.current === url, new URLSearchParams(window.location.search).has("task"));
     const href = withItem(window.location.href, openItem, openMode);
     if (step === "push") window.history.pushState(null, "", href);
     else if (step === "replace") window.history.replaceState(null, "", href);

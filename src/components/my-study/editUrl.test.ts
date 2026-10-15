@@ -56,6 +56,13 @@ describe("detail view URL (보기 ?item=)", () => {
     expect(syncStep("7", "view", null, "view", true)).toBe("back");
     expect(syncStep("7", "view", "8", "view", true)).toBe("replace");
   });
+  it("알림·일정 링크(?task=) 진입: task 는 지우고, 첫 열기는 push 가 아니라 replace (외부 링크 진입과 같다)", () => {
+    expect(withItem("/my-study/aws?task=21", "21", "view")).toBe("/my-study/aws?tab=curriculum&item=21");
+    expect(withItem("/my-study/aws?task=21&tab=curriculum&item=21", null)).toBe("/my-study/aws?tab=curriculum");
+    expect(syncStep(null, "view", "21", "view", false, true)).toBe("replace");
+    expect(syncStep("7", "view", "8", "view", true, true)).toBe("replace");
+    expect(syncStep(null, "view", null, "view", false, true)).toBe("none");
+  });
   it("itemFromUrl: edit only for editors, missing ids → list", () => {
     const has = (id: string) => id === "7";
     expect(itemFromUrl("?item=7&mode=edit", has, true)).toEqual({ id: "7", mode: "edit" });
