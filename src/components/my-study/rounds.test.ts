@@ -92,11 +92,11 @@ describe("shouldSubmitQuickAdd (IME)", () => {
   it("other keys never submit", () => expect(shouldSubmitQuickAdd({ key: "a", isComposing: false })).toBe(false));
 });
 
-describe("moveNote (회차 선택 미리보기)", () => {
+describe("moveNote (회차 이동 뒤 안내)", () => {
   it("same round", () => expect(moveNote({ s: "2026-10-01", e: "2026-10-03", subAll: 0 }, null, true)).toBe(""));
   it("submissions keep dates", () => expect(moveNote({ s: "2026-10-01", e: "2026-10-03", subAll: 1 }, null, false)).toBe("제출이 있어 기간은 그대로예요"));
   it("inside the new round", () => expect(moveNote({ s: "2026-10-10", e: "2026-10-12", subAll: 0 }, null, false)).toBe("기간은 그대로예요"));
-  it("shifted", () => expect(moveNote({ s: "2026-10-04", e: "2026-10-07", subAll: 0 }, { s: "2026-10-11", e: "2026-10-14" }, false)).toBe("옮기면 기간이 10.11 – 10.14 로 바뀌어요"));
+  it("shifted", () => expect(moveNote({ s: "2026-10-04", e: "2026-10-07", subAll: 0 }, { s: "2026-10-11", e: "2026-10-14" }, false)).toBe("기간이 10.11 – 10.14 로 바뀌었어요"));
 });
 
 describe("dropPlan (드래그 놓기 → node_move)", () => {
