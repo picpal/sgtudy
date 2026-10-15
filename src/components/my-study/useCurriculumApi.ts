@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { toApiError } from "@/lib/api/errors";
-import { fetchCurriculum, nodeArchive, nodeCreate, nodeDelete, nodeUpdate, patchOf } from "@/lib/api/my-study";
+import { fetchCurriculum, nodeArchive, nodeCreate, nodeDelete, nodeMove, nodeUpdate, patchOf } from "@/lib/api/my-study";
 import type { Curriculum, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
@@ -13,12 +13,15 @@ import type { Update } from "./state";
 export type CurriculumApi = {
   /** open: 만든 항목의 편집 화면을 연다(기본). false = 목록에 머문다(빠른 추가 — 토스트 없음). 성공하면 true */
   create: (parentId: string | null, opts?: { title?: string; open?: boolean }) => Promise<boolean>;
-  /** from: "list" — 진행목표 목록에서 지웠다. 실패해도 편집 화면을 열지 않는다 */
-  remove: (id: string, from?: "edit" | "list") => Promise<void>;
+  /** from: "list" — 진행목표 목록에서 지웠다. 실패해도 편집 화면을 열지 않는다.
+   *  "child" — 회차 편집 화면의 과제 섹션에서 지웠다. 열린 편집 화면(editSel)을 그대로 둔다 */
+  remove: (id: string, from?: "edit" | "list" | "child") => Promise<void>;
   /** from: "list" — 결과를 편집 화면 문구 대신 토스트로 */
   archive: (id: string, on: boolean, from?: "edit" | "list") => Promise<void>;
   /** 성공(또는 바뀐 것 없음)이면 true */
   save: (n: TreeNode, ov: Overrides) => Promise<boolean>;
+  /** node_move 후 period 가 있으면 node_update 로 기간을 맞춘다. okText = 성공 토스트. 옮겨졌으면 true */
+  move: (id: string, parentId: string, index?: number, period?: { s: string; e: string } | null, okText?: string) => Promise<boolean>;
 };
 
 const dropKey = <T,>(rec: Record<string, T>, key: string) => {
@@ -90,8 +93,8 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const remove = useCallback(
-    async (id: string, from: "edit" | "list" = "edit") => {
-      update((p) => ({ ov: { ...p.ov, removed: { ...p.ov.removed, [id]: true } }, editSel: null, confirm: false }));
+    async (id: string, from: "edit" | "list" | "child" = "edit") => {
+      update((p) => ({ ov: { ...p.ov, removed: { ...p.ov.removed, [id]: true } }, ...(from === "child" ? {} : { editSel: null, confirm: false }) }));
       try {
         setCur(await nodeDelete(slug, id));
         update((p) => ({ ov: { ...p.ov, removed: dropKey(p.ov.removed, id) } }));
@@ -128,7 +131,8 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
     async (n: TreeNode, ov: Overrides) => {
       const patch: NodePatch = patchOf(n, ov);
       if (Object.keys(patch).length === 0) {
-        update({ saved: "바뀐 내용이 없어요" });
+        // 고쳤다가 원래 값으로 되돌린 오버라이드도 지운다 — 남으면 계속 "미저장"(회차 선택 비활성·이동 확인)
+        update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: "바뀐 내용이 없어요" }));
         return true;
       }
       try {
@@ -149,5 +153,30 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
     [slug, setCur, update, fail, router, toast],
   );
 
-  return { create, remove, archive, save };
+  const move = useCallback(
+    async (id: string, parentId: string, index?: number, period?: { s: string; e: string } | null, okText?: string) => {
+      try {
+        setCur(await nodeMove(slug, id, parentId, index));
+      } catch (e) {
+        fail(e);
+        return false;
+      }
+      if (period) {
+        try {
+          setCur(await nodeUpdate(slug, id, { startDate: period.s, endDate: period.e }));
+        } catch (e) {
+          // 이동은 됐다 — 기간만 옛 값 (마이그레이션 없이 두 번 부르는 대가)
+          toast({ text: `옮겼지만 기간은 바꾸지 못했어요 · ${toApiError(e).message}`, tone: "bad" });
+          router.refresh();
+          return true;
+        }
+      }
+      if (okText) toast({ text: okText, tone: "ok" });
+      router.refresh();
+      return true;
+    },
+    [slug, setCur, fail, router, toast],
+  );
+
+  return { create, remove, archive, save, move };
 }

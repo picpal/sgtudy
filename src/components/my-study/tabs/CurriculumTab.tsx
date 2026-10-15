@@ -109,7 +109,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
   if (selNode)
     return (
       <div className="mt-[18px] @container">
-        <EditView key={selNode.id} n={selNode} parent={parentNode} period={period} members={tree.members} S={S} update={update} api={api} go={go} request={request} />
+        <EditView key={selNode.id} n={selNode} parent={parentNode} nodes={tree.nodes} roots={tree.roots} period={period} members={tree.members} S={S} update={update} api={api} go={go} request={request} />
       </div>
     );
   // 보기 모드에서 항목을 누르면 목록 대신 읽기 전용 상세 화면 (?item=, mode 없음)

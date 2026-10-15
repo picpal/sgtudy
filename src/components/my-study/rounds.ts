@@ -72,3 +72,10 @@ export const normalizeTitle = (raw: string): string | null => {
 /** 빠른 추가 Enter — 한글 조합을 확정하는 Enter(isComposing, Safari keyCode 229)는 제출이 아니다 */
 export const shouldSubmitQuickAdd = (e: { key: string; isComposing: boolean; keyCode?: number }): boolean =>
   e.key === "Enter" && !e.isComposing && e.keyCode !== 229;
+
+/** 과제 편집 화면 회차 선택 아래 미리보기 */
+export function moveNote(task: { s: string; e: string; subAll: number }, period: { s: string; e: string } | null, sameRound: boolean): string {
+  if (sameRound) return "";
+  if (period) return `옮기면 기간이 ${md(period.s)} – ${md(period.e)} 로 바뀌어요`;
+  return task.subAll > 0 ? "제출이 있어 기간은 그대로예요" : "기간은 그대로예요";
+}
