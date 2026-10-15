@@ -76,7 +76,8 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemo
         </button>
       )}
 
-      <button type="button" data-row-main onClick={onClick} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px] bg-transparent px-1 py-2 text-left text-ink">
+      {/* 행 본문 = 상세·편집 화면 열기(주 동작) — 누르는 자리 44px 이상. -my-1 로 행 py 를 덮어 52px 행 높이는 그대로 */}
+      <button type="button" data-row-main onClick={onClick} className="-my-1 flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px] self-stretch bg-transparent px-1 py-3 text-left text-ink">
         {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[7px] bg-navy px-2 py-[3px] text-[12px] font-bold text-white">{n.label}</span>}
         {n.leaf && <TypeBadge type={n.type} />}
         <span className="min-w-0 max-w-full [overflow-wrap:anywhere]" style={{ fontSize: n.d === 0 ? 15 : 14, fontWeight: n.d === 0 ? 700 : n.leaf ? 500 : 600 }}>

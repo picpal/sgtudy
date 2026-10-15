@@ -33,6 +33,14 @@ export function ChildList({ parent, onOpen, edit }: Props) {
   const meId = useMe()?.id ?? null;
   const [ask, setAsk] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // Esc 로 닫으면(포커스 갈 곳이 없으면) "과제 추가" 버튼으로 — 다른 곳을 눌러 닫힌 거면 그 포커스를 뺏지 않는다
+  const closeAdd = () => {
+    setAdding(false);
+    requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return;
+      document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(parent.id)}"]`)?.focus();
+    });
+  };
   return (
     <section aria-labelledby={`kids-${parent.id}`} className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
@@ -44,66 +52,69 @@ export function ChildList({ parent, onOpen, edit }: Props) {
       {parent.kids.length === 0 && !edit?.canAdd ? (
         <p className="m-0 rounded-[12px] border border-dashed border-line-3 px-4 py-3 text-[13px] text-muted">아직 과제가 없어요</p>
       ) : (
-        <ul className="m-0 flex list-none flex-col overflow-hidden rounded-[12px] border border-line p-0">
-          {parent.kids.map((k, i) => {
-            const mine = k.leaf ? myCode(k, meId) : null;
-            const plan = ask === k.id ? removePlan(k) : null;
-            return (
-              <li key={k.id} aria-busy={edit?.busy === k.id} className="border-b border-line-2 last:border-b-0" style={{ opacity: k.archived ? 0.55 : 1 }}>
-                <div className="flex items-center bg-surface">
-                  <button type="button" onClick={() => onOpen(k.id)} className="flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px] bg-surface px-3 py-2 text-left text-ink">
-                    {k.leaf ? <TypeBadge type={k.type} /> : <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">묶음</span>}
-                    <span className="min-w-[min(100%,8rem)] flex-1 text-[14px] font-medium [overflow-wrap:anywhere]">{k.title}</span>
-                    <span className="shrink-0 whitespace-nowrap text-[12px] text-muted">
-                      {md(k.s)} – {md(k.e)}
-                    </span>
-                    {mine && (
-                      <span className="shrink-0 text-[12px] font-semibold" style={{ color: CODE_COLOR[mine] }}>
-                        나 · {CODE_LABEL[mine]}
+        <>
+          {parent.kids.length === 0 && <p className="m-0 text-[13px] text-muted">아직 과제가 없어요 · 아래에서 바로 추가해 보세요</p>}
+          <ul className="m-0 flex list-none flex-col overflow-hidden rounded-[12px] border border-line p-0">
+            {parent.kids.map((k, i) => {
+              const mine = k.leaf ? myCode(k, meId) : null;
+              const plan = ask === k.id ? removePlan(k) : null;
+              return (
+                <li key={k.id} aria-busy={edit?.busy === k.id} className="border-b border-line-2 last:border-b-0" style={{ opacity: k.archived ? 0.55 : 1 }}>
+                  <div className="flex items-center bg-surface">
+                    <button type="button" onClick={() => onOpen(k.id)} className="flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px] bg-surface px-3 py-2 text-left text-ink">
+                      {k.leaf ? <TypeBadge type={k.type} /> : <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">묶음</span>}
+                      <span className="min-w-[min(100%,8rem)] flex-1 text-[14px] font-medium [overflow-wrap:anywhere]">{k.title}</span>
+                      <span className="shrink-0 whitespace-nowrap text-[12px] text-muted">
+                        {md(k.s)} – {md(k.e)}
+                      </span>
+                      {mine && (
+                        <span className="shrink-0 text-[12px] font-semibold" style={{ color: CODE_COLOR[mine] }}>
+                          나 · {CODE_LABEL[mine]}
+                        </span>
+                      )}
+                      <span className="w-9 shrink-0 text-right text-[12px] font-semibold text-ink-2">{k.asg ? `${k.sub}/${k.asg}` : ""}</span>
+                      {k.archived && <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">보관됨</span>}
+                    </button>
+                    {edit && (
+                      <span className="flex shrink-0 items-center pr-1">
+                        <IconBtn label={`${k.title} 위로`} disabled={i === 0 || k.archived || k.temp || edit.busy !== null} onClick={() => edit.onMove(k.id, -1)} d="m6 15 6-6 6 6" />
+                        <IconBtn label={`${k.title} 아래로`} disabled={i === parent.kids.length - 1 || k.archived || k.temp || edit.busy !== null} onClick={() => edit.onMove(k.id, 1)} d="m6 9 6 6 6-6" />
+                        <IconBtn label={`${k.title} 삭제`} tone="warn" disabled={k.temp || edit.busy !== null} onClick={() => setAsk(k.id)} d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
                       </span>
                     )}
-                    <span className="w-9 shrink-0 text-right text-[12px] font-semibold text-ink-2">{k.asg ? `${k.sub}/${k.asg}` : ""}</span>
-                    {k.archived && <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">보관됨</span>}
-                  </button>
-                  {edit && (
-                    <span className="flex shrink-0 items-center pr-1">
-                      <IconBtn label={`${k.title} 위로`} disabled={i === 0 || k.archived || k.temp || edit.busy !== null} onClick={() => edit.onMove(k.id, -1)} d="m6 15 6-6 6 6" />
-                      <IconBtn label={`${k.title} 아래로`} disabled={i === parent.kids.length - 1 || k.archived || k.temp || edit.busy !== null} onClick={() => edit.onMove(k.id, 1)} d="m6 9 6 6 6-6" />
-                      <IconBtn label={`${k.title} 삭제`} tone="warn" disabled={k.temp || edit.busy !== null} onClick={() => setAsk(k.id)} d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
-                    </span>
-                  )}
-                </div>
-                {edit && plan && (
-                  <div className="border-t border-line-2 bg-surface-2 p-2">
-                    <InlineConfirm
-                      text={plan.kind === "none" ? plan.reason : plan.text}
-                      onCancel={() => setAsk(null)}
-                      actions={
-                        plan.kind === "none"
-                          ? []
-                          : [
-                              {
-                                label: plan.label,
-                                tone: "danger",
-                                onClick: () => {
-                                  setAsk(null);
-                                  edit.onRemove(k.id);
-                                },
-                              },
-                            ]
-                      }
-                    />
                   </div>
-                )}
+                  {edit && plan && (
+                    <div className="border-t border-line-2 bg-surface-2 p-2">
+                      <InlineConfirm
+                        text={plan.kind === "none" ? plan.reason : plan.text}
+                        onCancel={() => setAsk(null)}
+                        actions={
+                          plan.kind === "none"
+                            ? []
+                            : [
+                                {
+                                  label: plan.label,
+                                  tone: "danger",
+                                  onClick: () => {
+                                    setAsk(null);
+                                    edit.onRemove(k.id);
+                                  },
+                                },
+                              ]
+                        }
+                      />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+            {edit?.canAdd && (
+              <li className="[&>div]:border-b-0">
+                {adding ? <QuickAdd round={parent} indent={0} onAdd={edit.onAdd} onClose={closeAdd} /> : <AddRow round={parent} indent={0} onOpen={() => setAdding(true)} />}
               </li>
-            );
-          })}
-          {edit?.canAdd && (
-            <li className="[&>div]:border-b-0">
-              {adding ? <QuickAdd round={parent} indent={0} onAdd={edit.onAdd} onClose={() => setAdding(false)} /> : <AddRow round={parent} indent={0} onOpen={() => setAdding(true)} />}
-            </li>
-          )}
-        </ul>
+            )}
+          </ul>
+        </>
       )}
     </section>
   );
