@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, REF_DAY } from "./fixtures";
-import { EMPTY_OVERRIDES, buildTree, dropFieldOv, ganttRange, isDirty, memberStats, overallPct, periodWarnings, stripFieldOv, unassignedCount } from "./model";
+import { EMPTY_OVERRIDES, buildTree, descendantCount, dropFieldOv, ganttRange, isDirty, memberStats, overallPct, periodWarnings, removePlan, stripFieldOv, unassignedCount } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -129,5 +129,23 @@ describe("ganttRange", () => {
     expect(new Date(start + "T00:00:00Z").getUTCDay()).toBe(0);
     expect(nDays % 7).toBe(0);
     expect(start <= roots[0].s).toBe(true);
+  });
+});
+
+describe("removePlan (편집 화면·목록 삭제 공통)", () => {
+  const t = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
+  const node = (id: string) => t.nodes.find((n) => n.id === id)!;
+  it("counts every descendant, nested ones included", () => {
+    expect(descendantCount(node("3"))).toBe(2); // 31 + 311
+    expect(descendantCount(node("311"))).toBe(0);
+  });
+  it("no submissions → delete, saying how many children go with it", () => {
+    expect(removePlan(node("3"))).toEqual({ kind: "delete", label: "삭제", text: "이 항목과 하위 항목 2개를 함께 삭제할까요? 되돌릴 수 없어요." });
+    expect(removePlan(node("41"))).toMatchObject({ kind: "delete", text: "이 항목을 삭제할까요? 되돌릴 수 없어요." });
+  });
+  it("submissions anywhere below → archive instead; already archived → nothing to do", () => {
+    expect(removePlan(node("1"))).toMatchObject({ kind: "archive", label: "보관" });
+    const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "1" ? { ...n, archived: true } : n)) };
+    expect(removePlan(buildTree(cur, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "1")!).kind).toBe("none");
   });
 });

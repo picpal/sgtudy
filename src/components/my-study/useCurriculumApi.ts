@@ -12,8 +12,10 @@ import type { Update } from "./state";
 
 export type CurriculumApi = {
   create: (parentId: string | null) => Promise<void>;
-  remove: (id: string) => Promise<void>;
-  archive: (id: string, on: boolean) => Promise<void>;
+  /** from: "list" — 진행목표 목록에서 지웠다. 실패해도 편집 화면을 열지 않는다 */
+  remove: (id: string, from?: "edit" | "list") => Promise<void>;
+  /** from: "list" — 결과를 편집 화면 문구 대신 토스트로 */
+  archive: (id: string, on: boolean, from?: "edit" | "list") => Promise<void>;
   /** 성공(또는 바뀐 것 없음)이면 true */
   save: (n: TreeNode, ov: Overrides) => Promise<boolean>;
 };
@@ -75,7 +77,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const remove = useCallback(
-    async (id: string) => {
+    async (id: string, from: "edit" | "list" = "edit") => {
       update((p) => ({ ov: { ...p.ov, removed: { ...p.ov.removed, [id]: true } }, editSel: null, confirm: false }));
       try {
         setCur(await nodeDelete(slug, id));
@@ -83,7 +85,8 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         toast({ text: "삭제했어요", tone: "ok" }); // Q3-14
         router.refresh();
       } catch (e) {
-        update((p) => ({ ov: { ...p.ov, removed: dropKey(p.ov.removed, id) }, editSel: id }));
+        // 되돌림 — 편집 화면에서 지웠으면 그 화면을 다시 연다, 목록에서 지웠으면 행만 돌아온다
+        update((p) => ({ ov: { ...p.ov, removed: dropKey(p.ov.removed, id) }, ...(from === "edit" ? { editSel: id } : {}) }));
         fail(e);
       }
     },
@@ -91,11 +94,13 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const archive = useCallback(
-    async (id: string, on: boolean) => {
+    async (id: string, on: boolean, from: "edit" | "list" = "edit") => {
       update((p) => ({ ov: { ...p.ov, archived: { ...p.ov.archived, [id]: on } }, confirm: false, saved: "" }));
       try {
         setCur(await nodeArchive(slug, id, on));
-        update({ saved: on ? "보관했어요 · 제출물은 그대로 남아요" : "보관을 해제했어요" }); // 성공한 뒤에만
+        const text = on ? "보관했어요 · 제출물은 그대로 남아요" : "보관을 해제했어요";
+        if (from === "list") toast({ text, tone: "ok" });
+        else update({ saved: text }); // 성공한 뒤에만
         router.refresh();
       } catch (e) {
         fail(e);
@@ -103,7 +108,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         update((p) => ({ ov: { ...p.ov, archived: dropKey(p.ov.archived, id) } }));
       }
     },
-    [slug, setCur, update, fail, router],
+    [slug, setCur, update, fail, router, toast],
   );
 
   const save = useCallback(

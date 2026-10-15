@@ -5,7 +5,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { TaskType } from "@/data/my-study";
 import { Seg } from "../bits";
-import { dropFieldOv, periodWarnings, type TreeMember, type TreeNode } from "../model";
+import { dropFieldOv, isDirty, periodWarnings, removePlan, type TreeMember, type TreeNode } from "../model";
 import { patchOv, type Leave, type ScreenState, type Update } from "../state";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { InlineConfirm } from "./InlineConfirm";
@@ -61,12 +61,26 @@ export function EditView({ n, parent, period, members, S, update, api, go, reque
     return () => ro.disconnect();
   }, []);
 
+  // 저장하지 않은 수정이 있는 채로 새로고침·탭 닫기·다른 문서로 이동(전체 다시 불러오기가 되는 뒤로 가기 포함) → 브라우저 확인.
+  // 앱 안 이동은 아래 "저장하지 않은 수정이 있어요" 확인이 맡는다
+  const dirty = isDirty(S.ov, id);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ""; // 옛 Safari·Chrome 은 returnValue 가 있어야 묻는다
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
   const warns = periodWarnings(n, parent, period);
   const ids = n.leaf ? n.people.map((p) => p.userId) : [];
   // 보관된 하위의 제출도 센다 — 서버는 하위 어디에든 제출이 있으면 삭제를 막는다
   const hasSub = n.subAll > 0;
   const isGong = n.leaf && n.type === "공통";
   const removeLabel = n.archived ? "보관 해제" : hasSub ? "보관" : "삭제";
+  const plan = removePlan(n);
   // 내부 depth("2단계")는 보여 주지 않는다 (Q1-17) — "1주차 · 회차", "1주차 IAM·VPC › 과제"
   const kind = n.leaf ? "과제" : n.d === 0 ? "회차" : "묶음";
   const crumb = !n.leaf && n.d === 0 ? `${n.label ?? ""} · ${kind}` : `${n.crumb ? n.crumb + " › " : ""}${kind}`;
@@ -171,7 +185,7 @@ export function EditView({ n, parent, period, members, S, update, api, go, reque
         )}
         {S.confirm && (
           <InlineConfirm
-            text={hasSub ? "제출물이 있어 삭제할 수 없어요. 대신 보관하면 참가자 화면에서 숨겨지고 제출물은 그대로 남아요. 보관할까요?" : "이 항목과 하위 항목을 삭제할까요? 되돌릴 수 없어요."}
+            text={plan.kind === "none" ? plan.reason : plan.text}
             onCancel={cancelConfirm}
             actions={[{ label: removeLabel, onClick: confirmYes, tone: "danger" }]}
           />

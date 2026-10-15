@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PillButton, Seg } from "../bits";
 import { addDays } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
-import { allParentsClosed, findNode, isDirty, overallPct, unassignedCount, visibleNodes, type Tree } from "../model";
+import { allParentsClosed, findNode, isDirty, overallPct, removePlan, unassignedCount, visibleNodes, type Tree, type TreeNode } from "../model";
 import type { CurMode, Leave, ScreenState, Update } from "../state";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { EditView } from "./EditView";
+import { InlineConfirm } from "./InlineConfirm";
 import { LeafDetail } from "./LeafDetail";
 import { TreeRow } from "./TreeRow";
 
@@ -26,9 +27,12 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
   // 다음 회차는 마지막 회차 다음 날부터 7일 — 방 종료일을 넘기면 미리 알려 준다 (E4, Q2-21)
   const nextRoundOut = !!lastRoot && addDays(lastRoot.e, 7) > period.end;
 
+  // 목록 행의 삭제 확인이 열린 항목 (아래 목록 삭제)
+  const [ask, setAsk] = useState<string | null>(null);
   const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !p.closed[id] } }));
   // 목적지로 바로 이동 — 미저장 수정 확인(leave)을 거친 뒤에도 여기로 온다
   const go = (to: Leave) => {
+    setAsk(null);
     if ("mode" in to) update({ curMode: to.mode, editSel: null, openLeaf: null, confirm: false, leave: null, saved: "" });
     else if ("add" in to) {
       update({ leave: null });
@@ -61,6 +65,31 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
     btn?.focus({ preventScroll: true });
     btn?.scrollIntoView({ block: "center" });
   }, [selNode]);
+
+  // 목록에서 바로 삭제 — 행 아래 확인 상자(편집 화면과 같은 문구) → 즉시 RPC(낙관적 + 실패 시 되돌림·토스트)
+  const asking = isEdit && !selNode ? (rows.find((n) => n.id === ask) ?? null) : null;
+  const rowBtn = (id: string | undefined, sel: string) => (id ? document.querySelector<HTMLButtonElement>(`[data-node="${CSS.escape(id)}"] ${sel}`) : null);
+  const cancelAsk = () => {
+    const id = ask;
+    setAsk(null);
+    // 확인 상자가 사라지면 누른 삭제 버튼으로 포커스를 돌린다
+    requestAnimationFrame(() => rowBtn(id ?? undefined, "[data-row-del]")?.focus());
+  };
+  const confirmRemove = (n: TreeNode) => {
+    const plan = removePlan(n);
+    setAsk(null);
+    if (plan.kind === "archive") {
+      void api.archive(n.id, true, "list");
+      requestAnimationFrame(() => rowBtn(n.id, "[data-row-del]")?.focus());
+      return;
+    }
+    if (plan.kind !== "delete") return;
+    // 지운 행(과 하위 행)이 사라지므로 포커스는 다음 행 → 이전 행 → "회차 추가"
+    const i = rows.indexOf(n);
+    const next = rows.slice(i + 1).find((r) => r.d <= n.d) ?? rows[i - 1];
+    void api.remove(n.id, "list");
+    requestAnimationFrame(() => (rowBtn(next?.id, "[data-row-main]") ?? document.querySelector<HTMLButtonElement>("[data-add-round]"))?.focus());
+  };
 
   // 편집할 항목이 열리면 목록 대신 전용 편집 화면 (?item=)
   if (selNode)
@@ -102,6 +131,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
       <div role="tree" aria-label="커리큘럼" className="min-w-0 overflow-hidden rounded-[16px] border border-line [&>div:first-child>[role=treeitem]]:rounded-t-[15px] [&>div:last-child>[role=treeitem]]:rounded-b-[15px]">
         {rows.map((n) => {
           const open = !S.closed[n.id];
+          const plan = removePlan(n);
           return (
             <div key={n.id}>
               <TreeRow
@@ -115,8 +145,16 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
                   else toggle(n.id);
                 }}
                 onAddChild={!n.leaf ? () => addChild(n.id) : undefined}
+                onRemove={!n.temp && plan.kind !== "none" ? () => (asking?.id === n.id ? cancelAsk() : setAsk(n.id)) : undefined}
+                removeOff={n.temp ? "서버에 만드는 중…" : plan.kind === "none" ? plan.reason : undefined}
+                asking={asking?.id === n.id}
               />
               {!isEdit && n.leaf && S.openLeaf === n.id && <LeafDetail n={n} />}
+              {asking?.id === n.id && plan.kind !== "none" && (
+                <div className="border-b border-line-2 bg-surface px-3 py-2">
+                  <InlineConfirm text={`‘${n.title || "제목 없는 항목"}’ — ${plan.text}`} onCancel={cancelAsk} actions={[{ label: plan.label, onClick: () => confirmRemove(n), tone: "danger" }]} />
+                </div>
+              )}
             </div>
           );
         })}

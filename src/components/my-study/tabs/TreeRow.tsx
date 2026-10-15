@@ -12,7 +12,18 @@ type Props = {
   onToggle: () => void;
   onClick: () => void;
   onAddChild?: () => void;
+  /** 편집 모드 삭제 — 없으면 버튼을 비활성으로 두고 removeOff 를 안내한다 */
+  onRemove?: () => void;
+  removeOff?: string;
+  /** 이 행의 삭제 확인이 열려 있다 */
+  asking?: boolean;
 };
+
+const Trash = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />
+  </svg>
+);
 
 const Plus = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
@@ -20,7 +31,7 @@ const Plus = () => (
   </svg>
 );
 
-export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild }: Props) {
+export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemove, removeOff, asking = false }: Props) {
   const canAdd = isEdit && !n.leaf && n.d <= 2;
   const cantAdd = isEdit && !n.leaf && n.d > 2;
   const addTip = n.d <= 2 ? `${n.title}에 하위 과제 추가` : "최대 5단계까지만 만들 수 있어요";
@@ -93,6 +104,25 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild }: Prop
       {cantAdd && (
         <button type="button" disabled title={addTip} aria-label={addTip} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] border border-line bg-[#F4F6F7] text-ghost">
           <Plus />
+        </button>
+      )}
+      {/* 과제 행엔 "+" 가 없다 — 같은 자리를 비워 두어 삭제 버튼이 회차 행과 같은 세로줄에 선다 */}
+      {isEdit && n.leaf && <span aria-hidden="true" className="w-8 shrink-0" />}
+      {isEdit && (
+        // 누르는 자리는 44px(행 높이 52 안), 보이는 상자는 32px — "+" 와 같은 모양
+        <button
+          type="button"
+          data-row-del
+          disabled={!onRemove}
+          title={onRemove ? `${n.title || "제목 없는 항목"} 삭제` : removeOff}
+          aria-label={`${n.title || "제목 없는 항목"} 삭제`}
+          aria-expanded={onRemove ? asking : undefined}
+          onClick={onRemove}
+          className="group -mx-[6px] flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] bg-transparent text-warn disabled:text-ghost"
+        >
+          <span className={`flex h-8 w-8 items-center justify-center rounded-[9px] border group-disabled:border-line group-disabled:bg-[#F4F6F7] ${asking ? "border-warn bg-[#FFF7F6]" : "border-line-3 bg-surface group-hover:border-warn"}`}>
+            <Trash />
+          </span>
         </button>
       )}
     </div>
