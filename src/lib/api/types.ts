@@ -200,8 +200,8 @@ export type NodeDto = {
   startDate: string;
   endDate: string;
   archived: boolean;
-  /** 개인 목표의 소유자 userId (팀 노드는 없음) */
-  ownerId?: string;
+  /** 개인 목표의 소유자 userId — 서버는 항상 보내고 팀 노드는 null (옛 픽스처만 생략) */
+  ownerId?: string | null;
   task: {
     type: TaskTypeDto;
     people: (Person & { status: TaskStatus })[];
