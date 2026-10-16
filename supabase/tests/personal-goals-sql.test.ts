@@ -253,3 +253,41 @@ cases("personal goals · read", db, [
     assertEquals(await tagsOf(), before);
   } },
 ]);
+
+cases("personal goals · me", db, [
+  { name: "me_tasks: 내 배정 팀 리프 + 내 개인 목표, 남의 것 없음, 방·회차·현재 회차", run: async (q) => {
+    const jieun = await uidOf(q, "지은");
+    await asUser(q, await uidOf(q, "철수"));
+    await create(q, await roundOf(q, "2주차"), "철수 것");
+    await asUser(q, jieun);
+    const id = (await create(q, await roundOf(q, "2주차"), "지은 것")).createdId as string;
+    const m = (await one(q, "select public.me_tasks() as m")).m;
+    const titles = (m.items as Row[]).map((i) => i.title);
+    assert(titles.includes("지은 것") && !titles.includes("철수 것"));
+    assert(titles.includes("EC2 인스턴스 유형 정리"));            // 지은 지정 배정(시드 '-DO-')
+    const aws = (m.studies as Row[]).find((s) => s.slug === "aws")!;
+    assertEquals([aws.membership, aws.canAddPersonal, aws.currentRoundId], ["joined", true, await roundOf(q, "2주차")]);
+    assertEquals((m.items as Row[]).find((i) => i.id === id)!.type, "personal");
+    assertEquals(m.personalPerRound, 20);
+    assert((m.rounds as Row[]).some((r) => r.slug === "aws" && r.label === "3주차" && r.canAdd === true));
+  } },
+  { name: "me_schedule: 내 개인 목표 포함(personal true), 대기자 미리보기·과제 안 하는 그룹장 화면에 남의 개인 목표 없음", run: async (q) => {
+    await asUser(q, await uidOf(q, "지은"));
+    await create(q, await roundOf(q, "2주차"), "지은 일정");
+    const s = (await one(q, "select public.me_schedule('2026-10-01', '2026-10-31') as s")).s;
+    assertEquals((s.tasks as Row[]).find((t) => t.title === "지은 일정")!.personal, true);
+    assertEquals((s.tasks as Row[]).find((t) => t.title === "EC2 인스턴스 유형 정리")!.personal, false);
+    // 과제 안 하는 그룹장: 시드 sqld 그룹장(leader_does_tasks=false)이 aws 멤버가 아니므로, aws 를 임시로 false 로 둔다
+    await q("update public.rooms set leader_does_tasks = false where slug = 'aws'");
+    await asUser(q, await uidOf(q, "민수"));
+    const l = (await one(q, "select public.me_schedule('2026-10-01', '2026-10-31') as s")).s;
+    assertEquals((l.tasks as Row[]).some((t) => t.title === "지은 일정"), false);
+    // 승인 대기자 미리보기(전체 팀 리프)에도 남의 개인 목표는 없다
+    const hana = await uidOf(q, "하나");
+    await q("update public.room_members set status = 'PENDING', joined_at = null where user_id = $1::uuid and room_id = (select id from public.rooms where slug = 'aws')", [hana]);
+    await asUser(q, hana);
+    const p = (await one(q, "select public.me_schedule('2026-10-01', '2026-10-31') as s")).s;
+    assert((p.tasks as Row[]).some((t) => t.title === "EC2 인스턴스 유형 정리"));
+    assertEquals((p.tasks as Row[]).some((t) => t.title === "지은 일정"), false);
+  } },
+]);

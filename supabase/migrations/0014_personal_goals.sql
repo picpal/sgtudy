@@ -618,3 +618,156 @@ begin
       where m.room_id = p_room and m.user_id = a.user_id and m.status = 'ACTIVE'
         and (a.source = 'DESIGNATED' or m.role = 'MEMBER' or v_ldt));
 end $$;
+
+-- ───────── 7. 내 일정·내 과제 ─────────
+-- 7a. me_schedule_leaves (0006 판 + 개인). 반환 열이 늘어 create or replace 불가 → drop 후 create (내부 함수, GRANT 없음, me_schedule 만 부른다)
+drop function public.me_schedule_leaves(uuid, date);
+create function public.me_schedule_leaves(p_uid uuid, p_today date)
+returns table (node_id bigint, room_id bigint, slug text, title text, s date, e date, st text, round text, personal boolean)
+language sql stable security definer set search_path = '' as $$
+  select n.id, r.id, r.slug::text, n.title::text, n.start_date, n.end_date,
+         case when m.status = 'PENDING' or a.id is not null
+              then public.task_code(n.start_date, n.end_date, sub.first_submitted_at, sub.is_late, p_today)
+              else null end,
+         coalesce(rn.label::text, (rn.sort_order + 1) || '주차'),
+         false
+  from public.rooms r
+  join public.room_members m on m.room_id = r.id and m.user_id = p_uid and m.status in ('ACTIVE', 'PENDING')
+  join public.goal_nodes n on n.room_id = r.id and n.task_type in ('COMMON', 'DESIGNATED') and n.archived_at is null
+  join public.goal_nodes rn on rn.id = n.round_id
+  left join public.task_assignments a on a.node_id = n.id and a.user_id = p_uid and a.released_at is null
+  left join public.submissions sub on sub.node_id = n.id and sub.user_id = p_uid
+  where r.archived_at is null
+    and (a.id is not null or m.status = 'PENDING' or (r.leader_id = p_uid and not r.leader_does_tasks))
+  union all
+  -- 0014: 내 개인 목표(보관 아님 — 자격을 잃으면 resync 가 보관한다)
+  select n.id, r.id, r.slug::text, n.title::text, n.start_date, n.end_date,
+         public.task_code(n.start_date, n.end_date, sub.first_submitted_at, sub.is_late, p_today),
+         coalesce(rn.label::text, (rn.sort_order + 1) || '주차'),
+         true
+  from public.goal_nodes n
+  join public.rooms r on r.id = n.room_id and r.archived_at is null
+  join public.goal_nodes rn on rn.id = n.round_id
+  left join public.submissions sub on sub.node_id = n.id and sub.user_id = p_uid
+  where n.task_type = 'PERSONAL' and n.owner_id = p_uid and n.archived_at is null
+$$;
+
+-- 7b. me_schedule (0006 판 + tasks[]·upcoming[] 의 personal). create or replace 라 0006 의 GRANT 유지
+create or replace function public.me_schedule(p_from date, p_to date) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid      uuid := public.require_user();
+  v_today    date := public.kst_today();
+  v_studies  jsonb;
+  v_tasks    jsonb;
+  v_markers  jsonb;
+  v_upcoming jsonb;
+begin
+  if p_from is null or p_to is null or p_from > p_to or p_to - p_from > 62 then
+    perform public.fail('SCHEDULE_RANGE_INVALID', '조회 기간은 62일 이내여야 해요', jsonb_build_object('from', to_char(p_from, 'YYYY-MM-DD'), 'to', to_char(p_to, 'YYYY-MM-DD')));
+  end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'slug', r.slug, 'title', r.title,
+           'membership', case when r.leader_id = v_uid then 'leader' when m.status = 'PENDING' then 'pending' else 'joined' end,
+           'tone', (array['mint', 'blue', 'peach', 'lav', 'amber', 'slate'])[1 + (r.id % 6)],
+           'status', lower(r.status),
+           'startDate', to_char(r.start_date, 'YYYY-MM-DD'), 'endDate', to_char(r.end_date, 'YYYY-MM-DD'))
+           order by r.id), '[]'::jsonb)
+  into v_studies
+  from public.rooms r
+  join public.room_members m on m.room_id = r.id and m.user_id = v_uid
+  where r.archived_at is null and (r.leader_id = v_uid or m.status in ('ACTIVE', 'PENDING'));
+
+  -- 리프 집합은 한 번만 평가하고 tasks(창 겹침)·upcoming(오늘~+7, 미제출) 이 같은 JSON 을 공유한다(E6)
+  with l as materialized (select * from public.me_schedule_leaves(v_uid, v_today)),
+       o as (select l.*, jsonb_build_object(
+               'id', l.node_id::text, 'slug', l.slug, 'title', l.title,
+               's', to_char(l.s, 'YYYY-MM-DD'), 'e', to_char(l.e, 'YYYY-MM-DD'), 'st', l.st, 'round', l.round,
+               'personal', l.personal) as j
+             from l)
+  select (select coalesce(jsonb_agg(o.j order by o.s, o.e, o.slug, o.node_id), '[]'::jsonb)
+            from o where o.s <= p_to and o.e >= p_from),
+         (select coalesce(jsonb_agg(o.j order by o.e, o.slug, o.s, o.node_id), '[]'::jsonb)
+            from o where o.st in ('open', 'planned') and o.e between v_today and v_today + 7)
+  into v_tasks, v_upcoming;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'date', to_char(n.start_date, 'YYYY-MM-DD'), 'slug', r.slug,
+           'round', coalesce(n.label::text, (n.sort_order + 1) || '주차'))
+           order by n.start_date, r.slug, n.sort_order), '[]'::jsonb)
+  into v_markers
+  from public.rooms r
+  join public.room_members m on m.room_id = r.id and m.user_id = v_uid and m.status in ('ACTIVE', 'PENDING')
+  join public.goal_nodes n on n.room_id = r.id and n.parent_id is null and n.archived_at is null
+  where r.archived_at is null and n.start_date between p_from and p_to;
+
+  return jsonb_build_object(
+    'today', to_char(v_today, 'YYYY-MM-DD'),
+    'studies', v_studies, 'tasks', v_tasks, 'markers', v_markers, 'upcoming', v_upcoming);
+end $$;
+
+-- 내 과제(스펙 §4.1·§5.6): 내가 그룹장이거나 ACTIVE 멤버인 미보관 방(DRAFT 는 그룹장만) — 내 유효 배정 팀 리프 + 내 개인 목표(보관 제외)
+create or replace function public.me_tasks() returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); v_today date := public.kst_today(); v_out jsonb;
+begin
+  with rm as materialized (
+    select r.id, r.slug, r.title, r.status, r.leader_id = v_uid as is_leader
+    from public.rooms r
+    where r.archived_at is null
+      and (r.leader_id = v_uid or exists (select 1 from public.room_members m where m.room_id = r.id and m.user_id = v_uid and m.status = 'ACTIVE'))
+      and (r.status <> 'DRAFT' or r.leader_id = v_uid)),
+  rounds as (
+    select n.id, n.room_id, n.label, n.title, n.start_date, n.end_date, n.sort_order, n.task_type
+    from public.goal_nodes n join rm on rm.id = n.room_id
+    where n.parent_id is null and n.archived_at is null),
+  cur as (
+    select rm.id as room_id, coalesce(public.room_current_round_id(rm.id, v_today),
+             (select x.id from rounds x where x.room_id = rm.id order by x.start_date, x.sort_order, x.id limit 1)) as round_id
+    from rm),
+  items as (
+    select n.id, n.room_id, n.round_id, n.parent_id, n.depth, n.title, n.task_type, n.start_date, n.end_date, s.first_submitted_at, s.is_late
+    from public.goal_nodes n
+    join rm on rm.id = n.room_id
+    join public.task_assignments a on a.node_id = n.id and a.user_id = v_uid and a.released_at is null
+    left join public.submissions s on s.node_id = n.id and s.user_id = v_uid
+    where n.task_type in ('COMMON', 'DESIGNATED') and n.archived_at is null
+    union all
+    select n.id, n.room_id, n.round_id, n.parent_id, n.depth, n.title, n.task_type, n.start_date, n.end_date, s.first_submitted_at, s.is_late
+    from public.goal_nodes n
+    join rm on rm.id = n.room_id
+    left join public.submissions s on s.node_id = n.id and s.user_id = v_uid
+    where n.task_type = 'PERSONAL' and n.owner_id = v_uid and n.archived_at is null)
+  select jsonb_build_object(
+    'today', to_char(v_today, 'YYYY-MM-DD'),
+    'personalPerRound', public.personal_limit(),
+    'studies', (select coalesce(jsonb_agg(jsonb_build_object(
+                  'slug', r.slug, 'title', r.title,
+                  'tone', (array['mint', 'blue', 'peach', 'lav', 'amber', 'slate'])[1 + (r.id % 6)],
+                  'status', lower(r.status),
+                  'membership', case when r.is_leader then 'leader' else 'joined' end,
+                  'currentRoundId', c.round_id::text,
+                  'canAddPersonal', r.status in ('RECRUIT', 'ACTIVE'))
+                  order by r.id), '[]'::jsonb)
+                from rm r left join cur c on c.room_id = r.id),
+    'rounds', (select coalesce(jsonb_agg(jsonb_build_object(
+                 'id', x.id::text, 'slug', r.slug, 'label', x.label, 'title', x.title,
+                 'startDate', to_char(x.start_date, 'YYYY-MM-DD'), 'endDate', to_char(x.end_date, 'YYYY-MM-DD'),
+                 'canAdd', x.task_type is null and r.status in ('RECRUIT', 'ACTIVE'))
+                 order by r.id, x.sort_order, x.id), '[]'::jsonb)
+               from rounds x join rm r on r.id = x.room_id),
+    'items', (select coalesce(jsonb_agg(jsonb_build_object(
+                'id', i.id::text, 'slug', r.slug, 'roundId', i.round_id::text,
+                'groupTitle', case when i.depth > 3 then (select g.title from public.goal_nodes g where g.id = i.parent_id) end,
+                'title', i.title, 'type', lower(i.task_type),
+                'startDate', to_char(i.start_date, 'YYYY-MM-DD'), 'endDate', to_char(i.end_date, 'YYYY-MM-DD'),
+                'st', public.task_code(i.start_date, i.end_date, i.first_submitted_at, i.is_late, v_today),
+                'submittedAt', public.iso(i.first_submitted_at))
+                order by i.end_date, i.start_date, i.id), '[]'::jsonb)
+              from items i join rm r on r.id = i.room_id))
+  into v_out;
+  return v_out;
+end $$;
+
+grant execute on function public.me_tasks() to authenticated;
