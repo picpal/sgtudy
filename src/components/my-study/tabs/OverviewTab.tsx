@@ -31,9 +31,6 @@ const LEGEND: [TaskStatus, string][] = [
   ["planned", "예정"],
 ];
 
-/** 지금 회차(오늘을 포함하는 회차 — 전체 일정의 강조 행) id. 공백 구간·모집 중이면 null */
-export const currentRoundIdOf = (room: StudyRoom): string | null => room.rounds.find((r) => r.current)?.roundId ?? null;
-
 /** 참가자 내 카드 줄 — "개인 목표 이번 회차 d/t 완료 · 내 과제에서 보기 →" (팀 수치와 따로) */
 export function MyPersonalLine({ tree, userId, roundId, slug }: { tree: Tree; userId: string; roundId: string; slug: string }) {
   const { done, total } = personalStats(tree.personal, userId, roundId);
@@ -56,12 +53,12 @@ export function MyPersonalLine({ tree, userId, roundId, slug }: { tree: Tree; us
   );
 }
 
-export function OverviewTab({ room, tree, onGoCurriculum }: { room: StudyRoom; tree: Tree; onGoCurriculum: () => void }) {
+/** roundId = 개인 목표 "이번 회차"(thisRoundId — /tasks 와 같은 규칙). 모집·진행 중이 아닌 방이면 null → 내 개인 목표 줄 없음 */
+export function OverviewTab({ room, tree, roundId, onGoCurriculum }: { room: StudyRoom; tree: Tree; roundId: string | null; onGoCurriculum: () => void }) {
   const cur = room.cur;
   const hasTasks = cur.tasks.length > 0;
-  // 참가 중인 나(그룹장 포함) + 지금 회차가 있을 때만 내 개인 목표 줄
+  // 참가 중인 나(그룹장 포함) + 이번 회차가 있을 때만 내 개인 목표 줄
   const meRow = room.members.find((m) => m.me && !m.left && !m.pending);
-  const roundId = currentRoundIdOf(room);
   return (
     <>
       {/* 이번 회차 */}

@@ -52,6 +52,7 @@ describe("GanttTab 개인 목표", () => {
   });
   it("회차 pct 는 팀만 (개인 제외)", () => {
     const doc = render({ othersPersonal: true });
-    expect(doc.querySelector('[data-gantt-row="3"]')!.textContent).toContain("0%");
+    expect(doc.querySelector('[data-gantt-row="3"] [data-pct]')!.textContent).toBe("0%");
+    expect(doc.querySelector('[data-gantt-row="1"] [data-pct]')!.textContent).toBe(`${tree.roots[0].pct}%`);
   });
 });

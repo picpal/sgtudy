@@ -315,6 +315,23 @@ export function memberStats(leaves: LeafNode[], userId: string): { done: number;
   return { done, total };
 }
 
+/**
+ * "이번 회차" — 서버 me_tasks 의 cur 규칙과 같다(/tasks 와 같은 회차): 보관·임시 제외 회차 중
+ * 시작한 회차에서 오늘을 포함하는 것 우선 → 시작일 늦은 순 → 순서 뒤쪽(room_current_round_id), 시작한 회차가 없으면 첫 회차. 회차가 없으면 null
+ */
+export function thisRoundId(roots: ParentNode[], today: string): string | null {
+  const live = roots.map((r, i) => ({ r, i })).filter(({ r }) => !r.archived && !r.temp);
+  if (live.length === 0) return null;
+  const started = live.filter(({ r }) => r.s <= today);
+  if (started.length === 0) return [...live].sort((a, b) => (a.r.s < b.r.s ? -1 : a.r.s > b.r.s ? 1 : a.i - b.i))[0].r.id;
+  const key = ({ r, i }: { r: ParentNode; i: number }) => [r.e >= today ? 1 : 0, r.s, i] as const;
+  return started.reduce((best, x) => {
+    const [a1, a2, a3] = key(x);
+    const [b1, b2, b3] = key(best);
+    return a1 !== b1 ? (a1 > b1 ? x : best) : a2 !== b2 ? (a2 > b2 ? x : best) : a3 > b3 ? x : best;
+  }).r.id;
+}
+
 /** 한 사람의 개인 목표 완료/전체 (보관 제외 — Tree.personal 을 넘긴다). roundId 가 있으면 그 회차만 */
 export function personalStats(personal: LeafNode[], userId: string, roundId?: string): { done: number; total: number } {
   let done = 0;

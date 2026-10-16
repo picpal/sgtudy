@@ -9,13 +9,17 @@ import { setCurriculumEditor } from "@/lib/api/my-study";
 import type { RoomMemberDto } from "@/lib/api/types";
 import { editorErrorText, editorRows } from "../editors";
 import { personalStats, type Tree } from "../model";
+import type { ScreenState } from "../state";
+
+/** "팀원 개인 목표 보기 →" — 열려 있던 상세·편집 항목을 닫고 진행목표 보기 목록 + 팀원 목표 칩 (두 칩은 서로 끈다) */
+export const SHOW_OTHERS_PATCH: Partial<ScreenState> = { tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, viewSel: null, editSel: null, viewFocus: null, calPick: null };
 
 type Props = {
   slug: string;
   members: RoomMemberDto[];
   meId: string;
   toast: (m: ToastMsg) => void;
-  /** 개인 목표 열 — 저장된 트리(Tree.personal = 보관 제외)와 지금 회차(오늘을 포함하는 회차, 없으면 null) */
+  /** 개인 목표 열 — 저장된 트리(Tree.personal = 보관 제외)와 이번 회차(thisRoundId — /tasks 와 같은 규칙, 모집·진행 중이 아니면 null) */
   tree: Tree;
   roundId: string | null;
   /** "팀원 개인 목표 보기 →" — 진행목표 보기 + 팀원 목표 칩 켜기 */

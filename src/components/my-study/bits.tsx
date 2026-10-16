@@ -50,6 +50,9 @@ export function Chip({ on, onClick, children, withAvatar }: { on: boolean; onCli
   );
 }
 
+/** 개인 목표 막대 [bg, 글자, border] — slate 톤 + 점선 (캘린더·간트 공용) */
+export const PERSONAL_BAR: [string, string, string] = [PAL.slate.bg, PAL.slate.fg, "1.5px dashed #8C97A4"];
+
 /** 과제 유형 배지: 공통 = mint, 지정 = lav, 개인 = slate */
 export function TypeBadge({ type }: { type: TaskType }) {
   const c = type === "공통" ? PAL.mint : type === "개인" ? PAL.slate : PAL.lav;

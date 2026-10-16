@@ -4,7 +4,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { addDays, md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
-import { Chip, CodeIcons, Seg, TypeBadge } from "../bits";
+import { Chip, CodeIcons, PERSONAL_BAR, Seg, TypeBadge } from "../bits";
 import {
   CODE_COLOR,
   CODE_STATE,
@@ -35,8 +35,6 @@ const BAR: Record<LeafState, [string, string, string]> = {
   unassigned: ["#FFFFFF", "#7A4F00", "1px dashed #C98A00"],
 };
 
-/** 개인 목표 막대 — slate 톤 + 점선 */
-const PERSONAL_BAR: [string, string, string] = ["#E9EEF0", "#4A5563", "1.5px dashed #8C97A4"];
 
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const dowColor = (c: number) => (c === 0 ? "#C0453A" : c === 6 ? "#2F5BC2" : "#4A5563");

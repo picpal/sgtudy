@@ -17,17 +17,17 @@ import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
-import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, stripFieldOv } from "./model";
+import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId } from "./rounds";
 import { INITIAL_STATE, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
-import { OverviewTab, currentRoundIdOf } from "./tabs/OverviewTab";
+import { OverviewTab } from "./tabs/OverviewTab";
 import { JoinInfoCard } from "./tabs/JoinInfoCard";
 import { CurriculumTab } from "./tabs/CurriculumTab";
 import { BoardTab } from "./tabs/BoardTab";
 import { CalendarTab } from "./tabs/CalendarTab";
-import { MemberAdminCard } from "./tabs/MemberAdminCard";
+import { MemberAdminCard, SHOW_OTHERS_PATCH } from "./tabs/MemberAdminCard";
 import { GanttTab } from "./tabs/GanttTab";
 import { useCurriculumApi } from "./useCurriculumApi";
 
@@ -192,11 +192,13 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   useEffect(() => {
     if (tabJump) document.getElementById("my-study-tabs")?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [tabJump]);
-  // 개요 멤버 관리 "팀원 개인 목표 보기 →" — 진행목표 보기 + 팀원 목표 칩 켜기 (두 칩은 서로 끈다)
+  // 개요 멤버 관리 "팀원 개인 목표 보기 →" — 열린 상세를 닫고 진행목표 보기 목록 + 팀원 목표 칩
   const showOthers = () => {
-    update({ tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, calPick: null });
+    update(SHOW_OTHERS_PATCH);
     setTabJump((n) => n + 1);
   };
+  // 개인 목표 "이번 회차" — /tasks(me_tasks cur)와 같은 규칙. /tasks 처럼 모집·진행 중인 방만
+  const personalRoundId = !detail.archived && (detail.status === "recruit" || detail.status === "active") ? thisRoundId(savedTree.roots, today) : null;
 
   return (
     <TodayProvider today={today}>
@@ -212,7 +214,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
             <div className="flex flex-wrap items-start gap-7 @container">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                 <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} onShare={share} more={more} />
-                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} onGoCurriculum={() => update({ tab: "curriculum" })} />}
+                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} onGoCurriculum={() => update({ tab: "curriculum" })} />}
                 {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} />}
                 {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
@@ -229,7 +231,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                   goLeaf={goLeaf}
                   onCancel={setConfirm}
                   busy={busy}
-                  admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} tree={savedTree} roundId={currentRoundIdOf(room)} onShowOthers={showOthers} /></> : undefined}
+                  admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} tree={savedTree} roundId={personalRoundId} onShowOthers={showOthers} /></> : undefined}
                 />
               )}
             </div>

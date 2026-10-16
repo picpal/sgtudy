@@ -5,7 +5,7 @@ import { addDays, diffDays, md } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { Avatar } from "@/components/ui/Avatar";
-import { Chip, CodeIcons, Seg, TypeBadge } from "../bits";
+import { Chip, CodeIcons, PERSONAL_BAR, Seg, TypeBadge } from "../bits";
 import { ganttRange, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
 import { toggleMinePatch, toggleOthersPatch, type ScreenState, type Update, type Zoom } from "../state";
 
@@ -19,9 +19,8 @@ const GBAR: Record<LeafState, [string, string, string]> = {
   planned: ["#FFFFFF", "#4A5563", "1px dashed #8C97A4"],
   unassigned: ["#FFFFFF", "#7A4F00", "1px dashed #C98A00"],
 };
-/** 개인 목표 막대 — slate 톤 + 점선 (캘린더와 같은 값). 완료면 테두리를 진하게 */
-const PERSONAL_BAR: [string, string, string] = ["#E9EEF0", "#4A5563", "1.5px dashed #8C97A4"];
-const PERSONAL_DONE: [string, string, string] = ["#E9EEF0", "#3D4F6B", "1.5px dashed #4F6382"];
+/** 개인 목표 막대 = 공용 PERSONAL_BAR(slate 점선). 완료면 글자·테두리만 진하게 */
+const PERSONAL_DONE: [string, string, string] = [PERSONAL_BAR[0], "#3D4F6B", "1.5px dashed #4F6382"];
 
 /** 개인 목표 소유자(서버 people = [소유자]) */
 const ownerOf = (n: LeafNode) => n.people.find((p) => p.userId === n.ownerId) ?? n.people[0] ?? null;
@@ -174,7 +173,7 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
                       ) : n.leaf ? (
                         <CodeIcons codes={n.people.map((p) => p.c)} size={13} max={4} />
                       ) : (
-                        <span className="text-[12px] font-bold">{n.pct}%</span>
+                        <span data-pct className="text-[12px] font-bold">{n.pct}%</span>
                       )}
                     </span>
                   </div>

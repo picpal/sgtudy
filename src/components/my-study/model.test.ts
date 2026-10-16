@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, codeLabel, descendantCount, dropFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope } from "./model";
+import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, codeLabel, descendantCount, dropFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -257,6 +257,25 @@ describe("개인 목표", () => {
     expect(personalStats(t.personal, CHULSU)).toEqual({ done: 0, total: 1 });
     expect(personalStats(t.personal, JIEUN, "2")).toEqual({ done: 0, total: 0 });
     expect(personalStats(t.personal, JIEUN, "3")).toEqual({ done: 1, total: 1 });
+  });
+  it("thisRoundId = me_tasks cur 규칙: 오늘 포함 → 직전 시작 회차 → 아직 시작 전이면 첫 회차 · 보관 회차 제외", () => {
+    const roots = t.roots; // 1: 10.01–10.07, 2: 10.08–10.14, 3: 10.15–10.21, 4, 5
+    expect(thisRoundId(roots, "2026-10-03")).toBe("1");
+    expect(thisRoundId(roots, "2026-10-08")).toBe("2");
+    expect(thisRoundId(roots, "2026-01-01")).toBe("1");
+    expect(thisRoundId(roots, "2027-12-31")).toBe("5");
+    // 공백 구간 → 직전에 시작한 회차
+    const gap = roots.map((r) => (r.id === "2" ? { ...r, s: "2026-10-10" } : r));
+    expect(thisRoundId(gap, "2026-10-09")).toBe("1");
+    // 오늘을 포함하는 회차가 우선 (더 늦게 시작한 회차가 이미 끝났어도)
+    const overlap = roots.filter((r) => r.id === "1" || r.id === "2").map((r) => (r.id === "1" ? { ...r, e: "2026-10-30" } : r));
+    expect(thisRoundId(overlap, "2026-10-20")).toBe("1");
+    // 시작일이 같으면 뒤 순서(sort_order desc)
+    const same = roots.filter((r) => r.id === "1" || r.id === "2").map((r) => ({ ...r, s: "2026-10-01", e: "2026-10-30" }));
+    expect(thisRoundId(same, "2026-10-05")).toBe("2");
+    // 보관 회차 제외 · 회차 없음 null
+    expect(thisRoundId(roots.map((r) => (r.id === "2" ? { ...r, archived: true } : r)), "2026-10-10")).toBe("1");
+    expect(thisRoundId([], "2026-10-14")).toBeNull();
   });
   it("personalStats(roundId): 개요 멤버 열 — 그 회차의 그 사람 것만, 늦게 완료도 완료, 보관 제외", () => {
     const p33 = AWS.nodes.find((n) => n.id === "33")!;
