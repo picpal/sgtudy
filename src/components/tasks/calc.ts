@@ -42,12 +42,16 @@ export const isDone = (st: TaskStatus) => st === "done" || st === "late";
 
 const isLive = (s: MeTaskStudy) => s.status === "recruit" || s.status === "active";
 
+/** m.studies 에 없는 slug 는 "all" 로 취급 */
+const effStudy = (m: MeTasks, f: TasksFilter): string => (m.studies.some((s) => s.slug === f.study) ? f.study : "all");
+
 export function applyFilter(m: MeTasks, f: TasksFilter): MeTaskItem[] {
   const studies = new Map(m.studies.map((s) => [s.slug, s]));
+  const only = effStudy(m, f);
   return m.items.filter((it) => {
     const s = studies.get(it.slug);
     if (!s) return false;
-    if (f.study !== "all" && it.slug !== f.study) return false;
+    if (only !== "all" && it.slug !== only) return false;
     if (f.scope === "current" && !(it.roundId === s.currentRoundId && isLive(s))) return false;
     if (f.type === "team" && it.type === "personal") return false;
     if (f.type === "personal" && it.type !== "personal") return false;
@@ -68,12 +72,11 @@ export type RoundGroup = { study: MeTaskStudy; round: MeTaskRound | null; items:
 export function groupByRound(m: MeTasks, items: MeTaskItem[], f: TasksFilter): RoundGroup[] {
   const out: RoundGroup[] = [];
   const studies = m.studies; // 서버가 방 id 순으로 준다(me_tasks order by r.id)
+  const only = effStudy(m, f);
   for (const study of studies) {
-    if (f.study !== "all" && study.slug !== f.study) continue;
+    if (only !== "all" && study.slug !== only) continue;
     const mine = items.filter((it) => it.slug === study.slug);
-    const rounds = m.rounds
-      .filter((r) => r.slug === study.slug)
-      .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate));
+    const rounds = m.rounds.filter((r) => r.slug === study.slug); // 서버 순서(r.id, sort_order, id) 유지
     const known = new Set(rounds.map((r) => r.id));
     const make = (round: MeTaskRound | null, its: MeTaskItem[]): RoundGroup => {
       const personal = round ? m.items.filter((it) => it.roundId === round.id && it.type === "personal").length : 0;
@@ -87,7 +90,7 @@ export function groupByRound(m: MeTasks, items: MeTaskItem[], f: TasksFilter): R
     };
     for (const round of rounds) {
       const its = mine.filter((it) => it.roundId === round.id);
-      const emptyCurrent = f.scope === "current" && isLive(study) && round.id === study.currentRoundId;
+      const emptyCurrent = f.scope === "current" && f.type !== "team" && isLive(study) && round.id === study.currentRoundId;
       if (its.length || emptyCurrent) out.push(make(round, its));
     }
     const orphan = mine.filter((it) => !known.has(it.roundId));
@@ -127,8 +130,8 @@ export function groupByDue(items: MeTaskItem[], today: string): { key: DueSectio
 }
 
 export function summary(m: MeTasks, items: MeTaskItem[]): { left: number; dueToday: number; personalDone: number; personalTotal: number } {
-  const open = items.filter((it) => !isDone(it.st));
   const live = new Map(m.studies.filter(isLive).map((s) => [s.slug, s.currentRoundId]));
+  const open = items.filter((it) => !isDone(it.st) && live.has(it.slug));
   const cur = m.items.filter((it) => it.type === "personal" && live.get(it.slug) === it.roundId);
   return {
     left: open.length,

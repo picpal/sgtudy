@@ -1,3 +1,4 @@
+import { STUDY_TONE } from "@/lib/api/schedule";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import { STATUS_LABEL, type TaskStatus } from "@/lib/types";
 
@@ -20,7 +21,7 @@ export function Legend() {
         시작 전 과제
       </span>
       <span className="inline-flex items-center gap-[5px]">
-        <span className="h-3 w-[26px] rounded-[4px] border border-dashed border-[#7A8594] bg-[#E9EEF0]" />
+        <span className="h-3 w-[26px] rounded-[4px] border border-dashed bg-slate-soft" style={{ borderColor: STUDY_TONE.slate.dot }} />
         개인 목표
       </span>
       <span className="inline-flex items-center gap-[5px]">

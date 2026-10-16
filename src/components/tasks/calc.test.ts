@@ -10,8 +10,8 @@ const fx = (): MeTasks => ({
   today: "2026-10-16",
   personalPerRound: 20,
   studies: [
-    { slug: "aws", title: "AWS", tone: "mint" as never, status: "active", membership: "joined", currentRoundId: "a3", canAddPersonal: true },
-    { slug: "old", title: "Old", tone: "mint" as never, status: "ended", membership: "joined", currentRoundId: "o1", canAddPersonal: false },
+    { slug: "aws", title: "AWS", tone: "mint", status: "active", membership: "joined", currentRoundId: "a3", canAddPersonal: true },
+    { slug: "old", title: "Old", tone: "mint", status: "ended", membership: "joined", currentRoundId: "o1", canAddPersonal: false },
   ],
   rounds: [
     { id: "a2", slug: "aws", label: "2주차", title: "r2", startDate: "2026-10-08", endDate: "2026-10-14", canAdd: true },
@@ -82,6 +82,48 @@ describe("groupByRound", () => {
   });
 });
 
+describe("minor 보강", () => {
+  it("없는 study slug 는 all 로 취급 (applyFilter·groupByRound)", () => {
+    const m = fx();
+    const f: TasksFilter = { ...DEFAULT_FILTER, study: "nope" };
+    expect(applyFilter(m, f)).toHaveLength(4);
+    expect(groupByRound(m, applyFilter(m, f), f)).toHaveLength(1);
+  });
+  it("회차는 시작일이 아니라 서버 배열 순서", () => {
+    const m = fx();
+    m.rounds = [m.rounds[1], m.rounds[0], m.rounds[2]]; // a3(10-15), a2(10-08)
+    m.items.push(item({ id: "r2-item", roundId: "a2" }));
+    const f: TasksFilter = { ...DEFAULT_FILTER, scope: "all" };
+    expect(groupByRound(m, applyFilter(m, f), f).map((x) => x.round?.id)).toEqual(["a3", "a2", "o1"]);
+  });
+  it("type=team 이면 빈 현재 회차 그룹을 만들지 않는다", () => {
+    const m = fx();
+    m.items = m.items.filter((i) => i.slug === "old");
+    const f: TasksFilter = { ...DEFAULT_FILTER, type: "team" };
+    expect(groupByRound(m, applyFilter(m, f), f)).toEqual([]);
+  });
+  it("summary.left 는 종료된 방의 미완료를 세지 않는다", () => {
+    const m = fx();
+    const all = applyFilter(m, { ...DEFAULT_FILTER, scope: "all" });
+    expect(summary(m, all).left).toBe(3);
+  });
+  it("round 를 못 찾은 항목은 round:null 그룹", () => {
+    const m = fx();
+    m.items.push(item({ id: "orph", roundId: "zz" }));
+    const f: TasksFilter = { ...DEFAULT_FILTER, scope: "all" };
+    const g = groupByRound(m, applyFilter(m, f), f);
+    const o = g.find((x) => x.round === null)!;
+    expect(ids(o.items)).toEqual(["orph"]);
+    expect(o.canAdd).toBe(false);
+  });
+  it("스터디 순서는 slug 순이 아니라 서버 배열 순서", () => {
+    const m = fx();
+    m.studies = [m.studies[1], m.studies[0]]; // old, aws
+    const f: TasksFilter = { ...DEFAULT_FILTER, scope: "all" };
+    expect(groupByRound(m, applyFilter(m, f), f).map((x) => x.study.slug)).toEqual(["old", "aws", ]);
+  });
+});
+
 describe("groupByDue", () => {
   const today = "2026-10-16";
   const mk = (id: string, endDate: string, st: MeTaskItem["st"] = "open") => item({ id, endDate, st });
@@ -93,6 +135,14 @@ describe("groupByDue", () => {
     const by = Object.fromEntries(secs.map((s) => [s.key, ids(s.items)]));
     expect(by).toEqual({ overdue: ["od"], today: ["td"], week: ["sat"], next: ["sun", "nsat"], later: ["later"], done: ["dn", "ln"] });
     expect(secs.map((s) => s.key)).toEqual(["overdue", "today", "week", "next", "later", "done"]);
+  });
+  it("오늘이 토요일: week 는 비고 next = 다음 일~토", () => {
+    const secs = groupByDue([mk("t", "2026-10-17"), mk("sun", "2026-10-18"), mk("nsat", "2026-10-24"), mk("later", "2026-10-25")], "2026-10-17");
+    expect(Object.fromEntries(secs.map((s) => [s.key, ids(s.items)]))).toEqual({ today: ["t"], next: ["sun", "nsat"], later: ["later"] });
+  });
+  it("오늘이 일요일: week = 월~토", () => {
+    const secs = groupByDue([mk("t", "2026-10-18"), mk("mon", "2026-10-19"), mk("sat", "2026-10-24"), mk("nsun", "2026-10-25"), mk("later", "2026-11-02")], "2026-10-18");
+    expect(Object.fromEntries(secs.map((s) => [s.key, ids(s.items)]))).toEqual({ today: ["t"], week: ["mon", "sat"], next: ["nsun"], later: ["later"] });
   });
   it("빈 섹션은 뺀다", () => {
     expect(groupByDue([mk("a", "2026-10-16")], today).map((s) => s.key)).toEqual(["today"]);
