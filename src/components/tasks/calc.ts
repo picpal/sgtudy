@@ -67,7 +67,7 @@ export type RoundGroup = { study: MeTaskStudy; round: MeTaskRound | null; items:
 
 export function groupByRound(m: MeTasks, items: MeTaskItem[], f: TasksFilter): RoundGroup[] {
   const out: RoundGroup[] = [];
-  const studies = [...m.studies].sort((a, b) => a.slug.localeCompare(b.slug));
+  const studies = m.studies; // 서버가 방 id 순으로 준다(me_tasks order by r.id)
   for (const study of studies) {
     if (f.study !== "all" && study.slug !== f.study) continue;
     const mine = items.filter((it) => it.slug === study.slug);
