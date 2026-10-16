@@ -69,6 +69,12 @@ from goal_nodes;
 ```
 Expected: `odd_types = 0` (아니면 새 CHECK 가 실패한다 → 멈춤).
 
+> **Task 0 기록 (2026-10-16)**
+> - 사용자 결정: 스펙 §11 D1~D7 **권장 기본값 전부 확정** — D1 같은 방 그룹장·참가자 공개(기본 화면 숨김, 칩으로 열기) · D2 체크 = 빈 제출, 내용 없는 완료만 취소 · D3 헤더 `/tasks` · D4 팀 진척률 제외 · D5 회차당 1인 20개 · D6 마감 알림 v1 없음 · D7 그룹장은 보관·삭제(제출 없을 때)만, 내용 수정 불가.
+> - 0013 커밋됨(`729720c`). 0013 은 재정의 대상 함수·정책을 건드리지 않는다(grep 결과 없음). 최신 판: `node_get`·`room_leaf_stats`·`me_schedule_leaves`·`me_schedule` = 0006, `is_task_assignee`·`goal_nodes_select` = 0003, `curriculum_json` = 0011, `task_node_json`·`task_get` = 0007, `tag_autoselect` = 0009, `assignment_resync` = 0005.
+> - 로컬에 제출 기능의 `0015_file_discard.sql`(미커밋, 로컬 적용됨)이 있다 — `file_discard` 만 정의, 0014 대상과 겹치지 않는다. 로컬 supabase 적용은 `supabase migration up --include-all`.
+> - DB 테스트 기준선: 240 passed / 0 failed. 호스티드 조회(Step 4)는 사용자 몫 — 미수행.
+
 ---
 
 ### Task 1: 0014 — 스키마·가드·노출 헬퍼·RLS (judgment · opus)
