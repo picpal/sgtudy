@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "./errors";
-import { discardFile, fetchTask, fileUrl, registerFile, roomIdOfNode, upsertSubmission } from "./submission";
+import { discardFile, discardUnattached, fetchTask, fileUrl, registerFile, roomIdOfNode, upsertSubmission } from "./submission";
 
 type Call = [string, unknown];
 const fake = (opts: { rpc?: unknown; row?: unknown; signed?: string } = {}) => {
@@ -49,4 +49,13 @@ describe("submission adapter", () => {
     expect(await fileUrl({ id: "f1", name: "노트.png" }, f.client)).toBe("https://signed");
     expect(f.calls.at(-1)).toEqual(["sign", ["attachments", "1/21/u/x.png", 300, { download: "노트.png" }]]);
   });
+});
+
+describe("discardUnattached — D1 미정: 0015 가 없으면 목록에서만 빼기로 낮춘다", () => {
+  const withRpc = (error: unknown) => ({ rpc: () => Promise.resolve({ data: error ? null : { id: "f1", status: "deleted" }, error }) }) as unknown as Db;
+  it("true when file_discard succeeds", async () => expect(await discardUnattached("f1", withRpc(null))).toBe(true));
+  it("false (no throw) when the RPC is absent (PGRST202)", async () =>
+    expect(await discardUnattached("f1", withRpc({ code: "PGRST202", message: "Could not find the function public.file_discard(p_file) in the schema cache", details: null, hint: null }))).toBe(false));
+  it("false (no throw) on any other failure — best effort, server cleans unattached files after 24h", async () =>
+    expect(await discardUnattached("f1", withRpc({ code: "P0001", message: "FILE_ATTACHED", details: "m", hint: "{}" }))).toBe(false));
 });

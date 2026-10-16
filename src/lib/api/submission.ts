@@ -12,6 +12,18 @@ export const registerFile = (nodeId: string, f: { path: string; name: string; mi
   rpc<FileMeta>("file_register", { p_node: num(nodeId), p_path: f.path, p_name: f.name, p_mime: f.mime, p_size: f.size }, client);
 /** 0015 — 제출에 연결되지 않은 내 첨부를 정리(업로드 한도에서 뺀다). 연결된 파일은 FILE_ATTACHED */
 export const discardFile = (fileId: string, client?: Db) => rpc<{ id: string; status: "deleted" }>("file_discard", { p_file: fileId }, client);
+/**
+ * 빼기 = "discard" 일 때 컴포넌트가 부르는 것. 실패해도 throw 하지 않는다(목록에서 빼는 건 그대로).
+ * D1 미정 — 0015 가 없으면(PGRST202) false 로 "목록에서만 빼기" 와 같아진다. 미연결 파일은 서버가 24시간 뒤 정리(0008:503-504).
+ */
+export async function discardUnattached(fileId: string, client?: Db): Promise<boolean> {
+  try {
+    await discardFile(fileId, client);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function single<T>(p: PromiseLike<{ data: unknown; error: unknown }>): Promise<T> {
   const { data, error } = await p;
