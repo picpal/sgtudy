@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { routes } from "@/lib/routes";
+import { MEMBERSHIP_LABEL } from "@/lib/types";
 import { type Action, type Room, type RoomMember } from "@/data/room-view";
 import { StatusBadge } from "./StatusBadge";
 
@@ -68,7 +69,7 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
                 <path d="M12 7v5l3 2" />
               </svg>
             )}
-            {leave ? "참가 완료" : "승인 대기중"}
+            {leave ? MEMBERSHIP_LABEL.joined : MEMBERSHIP_LABEL.pending}
           </div>
           <button type="button" onClick={onCancel} disabled={busy} className={SECONDARY}>
             {leave ? "참가 취소" : "신청 취소"}
@@ -81,7 +82,7 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
       return (
         <div className="flex flex-col gap-[6px]">
           <Link href={routes.myStudy(room.id)} className={`${PRIMARY} bg-mint text-[15px]`}>
-            참가중 · 내 스터디에서 보기
+            {MEMBERSHIP_LABEL.joined} · 내 스터디에서 보기
           </Link>
           <span className={NOTE}>과제 제출과 진척 확인은 내 스터디에서 해요</span>
         </div>
@@ -110,7 +111,7 @@ function MemberRow({ mb }: { mb: RoomMember }) {
           </svg>
         )}
         {mb.me && <span className="rounded-md bg-blue-soft px-[6px] py-[1px] text-[11px] font-semibold text-blue-text">나</span>}
-        {mb.pending && <span className="rounded-md bg-slate-soft px-[6px] py-[1px] text-[11px] font-semibold text-ink-3">승인 대기</span>}
+        {mb.pending && <span className="rounded-md bg-slate-soft px-[6px] py-[1px] text-[11px] font-semibold text-ink-3">{MEMBERSHIP_LABEL.pending}</span>}
       </span>
       <span className="text-[12px] text-muted">{mb.leader ? "그룹장" : mb.pending ? "" : "참가자"}</span>
     </li>

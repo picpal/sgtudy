@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Inline, MarkdownView } from "@/components/my-study/MarkdownView";
 import { PAL } from "@/lib/palette";
+import { JOIN_MODE_LABEL } from "@/lib/types";
 import { type Room } from "@/data/room-view";
 import { StatusBadge } from "./StatusBadge";
 import { CurrentRoundCard } from "./CurrentRoundCard";
@@ -82,7 +83,7 @@ export function RoomInfo({ room, onShare }: { room: Room; onShare: () => void })
         </dd>
 
         <Dt icon={dtIcon(<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" />, <path d="m9 12 2 2 4-4" />)}>참가 방식</Dt>
-        <dd className="font-medium">{room.approval ? "승인제" : "바로 참가"}</dd>
+        <dd className="font-medium">{JOIN_MODE_LABEL[room.approval ? "approval" : "direct"]}</dd>
 
         <Dt icon={dtIcon(<circle cx="12" cy="12" r="9" />, <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />)}>공개 범위</Dt>
         <dd className="font-medium">{room.pub === false ? "비공개 · 초대 링크로만 참가" : "공개"}</dd>

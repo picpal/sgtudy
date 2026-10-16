@@ -18,7 +18,7 @@ export type Study = {
 export const STUDIES: Study[] = [
   { id: "aws", name: "AWS SAA", bg: "#DDF4EE", fg: "#0B6553", dot: "#12A386" },
   { id: "spring", name: "Spring 로드맵", bg: "#EEE7FB", fg: "#5B3AA0", dot: "#7C5BD0" },
-  { id: "sqld", name: "SQLD · 승인 대기", bg: "#FBEFD3", fg: "#7A4F00", dot: "#C98A00", pending: true },
+  { id: "sqld", name: "SQLD · 승인 대기중", bg: "#FBEFD3", fg: "#7A4F00", dot: "#C98A00", pending: true },
 ];
 
 export const STUDY = Object.fromEntries(STUDIES.map((s) => [s.id, s])) as Record<StudyId, Study>;

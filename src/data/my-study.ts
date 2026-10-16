@@ -100,7 +100,7 @@ export const ROOMS: Record<RoomId, Room> = {
     period: "2026.10.01(목) – 12.31(목)",
     dday: "D-80",
     ddayLong: "종료까지 D-80",
-    joinMode: "그룹장 승인 후 참가",
+    joinMode: "승인제",
     visibility: "공개",
     leader: "민수",
     tags: [
@@ -152,7 +152,7 @@ export const ROOMS: Record<RoomId, Room> = {
     period: "2026.10.05(월) – 2027.01.31(일)",
     dday: "D-111",
     ddayLong: "종료까지 D-111",
-    joinMode: "그룹장 승인 후 참가",
+    joinMode: "승인제",
     visibility: "비공개 · 초대 링크로만 참가",
     leader: "지훈",
     tags: [
@@ -214,7 +214,7 @@ export const ROOMS: Record<RoomId, Room> = {
     period: "2026.10.26(월) – 11.22(일)",
     dday: "D-14",
     ddayLong: "시작까지 D-14",
-    joinMode: "그룹장 승인 후 참가",
+    joinMode: "승인제",
     visibility: "공개",
     leader: "가은",
     tags: [

@@ -23,7 +23,17 @@ const CODE_RE = /^[A-Z][A-Z0-9_]*$/;
 const isPostgrest = (e: unknown): e is PostgrestError =>
   typeof e === "object" && e !== null && "message" in e && "code" in e && "hint" in e;
 
+/** 화면 용어는 "진행목표" — 서버 문구에 남은 옛 용어 "커리큘럼" 을 조사까지 맞춰 바꾼다 (받침 없는 말이라 을/이/은/과 → 를/가/는/와) */
+const TERM_RE = /커리큘럼(이에요|을|이|은|과)?/g;
+const JOSA: Record<string, string> = { 이에요: "예요", 을: "를", 이: "가", 은: "는", 과: "와" };
+const term = (s: string) => s.replace(TERM_RE, (_, j?: string) => `진행목표${j ? JOSA[j] : ""}`);
+
 export function toApiError(e: unknown): ApiError {
+  const r = toApiErrorRaw(e);
+  return r.message.includes("커리큘럼") ? { ...r, message: term(r.message) } : r;
+}
+
+function toApiErrorRaw(e: unknown): ApiError {
   if (e instanceof ApiException) return { code: e.code, message: e.message, details: e.details };
   if (isPostgrest(e)) {
     const isCode = CODE_RE.test(e.message);

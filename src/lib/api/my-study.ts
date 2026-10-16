@@ -3,6 +3,7 @@ import { curIndexOf, curOf, ddayOf, mmdd, periodLong, roundRow, roundsWindow, ru
 import type { Curriculum, MeState, MeStudies, MyPermissions, NodePatch, RoomDetail, RoomMemberAdminDto } from "@/lib/api/types";
 import { dday, diffDays, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
+import { JOIN_MODE_LABEL } from "@/lib/types";
 import type { MemberInfo, NextDue, Room, RoundRow, SidebarGroup } from "@/data/my-study";
 import type { Overrides, Tree, TreeNode } from "@/components/my-study/model";
 
@@ -79,7 +80,7 @@ export function toStudyRoom(d: RoomDetail, tree: Tree, today: string, meId: stri
   return {
     id: d.slug, title: d.title, intro: d.intro, status: uiStatus(d.status), draft,
     period: periodLong(d.startDate, d.endDate), dday: dd.short, ddayLong: draft ? `모집 전 · ${dd.long}` : dd.long,
-    joinMode: d.joinMode === "approval" ? "그룹장 승인 후 참가" : "바로 참가",
+    joinMode: JOIN_MODE_LABEL[d.joinMode],
     visibility: d.isPublic ? "공개" : "비공개 · 초대 링크로만 참가",
     leader: d.leader.nickname, leaderTone: d.leader.tone, leaderId: d.leader.userId, tags: d.tags.map((t) => ({ label: t.label, tone: t.tone, auto: t.auto })),
     capCur: d.memberCount, capMax: d.maxMembers, ...minTextOf(d), members,

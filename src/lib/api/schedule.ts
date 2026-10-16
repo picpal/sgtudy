@@ -44,7 +44,7 @@ export const sortUpcoming = (tasks: Task[]): Task[] => [...tasks].sort((a, b) =>
 export function toScheduleData(r: ScheduleResponse): ScheduleData {
   const studies: Study[] = r.studies.map((s) => ({
     id: s.slug,
-    name: s.membership === "pending" ? `${s.title} · 승인 대기` : s.title,
+    name: s.membership === "pending" ? `${s.title} · 승인 대기중` : s.title,
     ...STUDY_TONE[s.tone],
     pending: s.membership === "pending" ? true : undefined,
     membership: s.membership,

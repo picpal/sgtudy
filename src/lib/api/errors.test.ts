@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { ApiException, rpc, toApiError, type Db } from "./errors";
 
 describe("toApiError", () => {
+  it("서버 문구의 옛 용어 '커리큘럼' 을 화면 용어 '진행목표' 로 (조사 포함)", () => {
+    const a = { code: "P0001", message: "NOT_CURRICULUM_EDITOR", details: "커리큘럼 편집 권한이 없어요", hint: "{}", name: "PostgrestError" };
+    const b = { code: "P0001", message: "NOT_LEADER", details: "그룹장만 커리큘럼을 편집할 수 있어요", hint: "{}", name: "PostgrestError" };
+    expect(toApiError(a).message).toBe("진행목표 편집 권한이 없어요");
+    expect(toApiError(b).message).toBe("그룹장만 진행목표를 편집할 수 있어요");
+    expect(toApiError(new ApiException({ code: "X", message: "커리큘럼이 없어요" })).message).toBe("진행목표가 없어요");
+    expect(toApiError(new Error("빈 커리큘럼이에요")).message).toBe("빈 진행목표예요");
+  });
+
   it("maps a PostgREST P0001 error: message→code, details→message, hint→details", () => {
     const e = { code: "P0001", message: "ROOM_FULL", details: "정원이 찼어요", hint: '{"field":"maxMembers"}', name: "PostgrestError" };
     expect(toApiError(e)).toEqual({ code: "ROOM_FULL", message: "정원이 찼어요", details: { field: "maxMembers" } });

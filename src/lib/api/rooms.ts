@@ -1,6 +1,7 @@
 import { rpc, type Db } from "@/lib/api/errors";
 import { mmdd, periodCard, periodWeeks } from "@/lib/api/format";
 import type { RoomCardDto, RoomListResponse } from "@/lib/api/types";
+import { MEMBERSHIP_LABEL } from "@/lib/types";
 import type { StatusFilter, Tab } from "@/components/main/FilterBar";
 import { dday, weekdayKo } from "@/lib/date";
 import type { Room, Slot } from "@/data/rooms";
@@ -20,7 +21,7 @@ const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
 /** main §3-2 모집 현황 꼬리 우선순위: 승인 대기중 > 정원 마감 > 첫 참가자 > N자리 남음 */
 function recruitTail(d: RoomCardDto): string {
   if (d.status === "draft") return "모집 전";
-  if (d.membership?.status === "pending") return "승인 대기중";
+  if (d.membership?.status === "pending") return MEMBERSHIP_LABEL.pending;
   if (d.memberCount >= d.maxMembers) return "정원 마감";
   if (d.memberCount <= 1) return "첫 참가자를 기다려요";
   return `${d.maxMembers - d.memberCount}자리 남음`;

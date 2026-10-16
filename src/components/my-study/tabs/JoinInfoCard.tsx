@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { StudyRoom } from "@/lib/api/my-study";
+import { MEMBERSHIP_LABEL } from "@/lib/types";
 import { toneOfName } from "../bits";
 import { memberStats, overallPct, type Tree } from "../model";
 import { StatusBadge } from "../StudyHeaderInfo";
@@ -89,7 +90,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
                         편집
                       </span>
                     )}
-                    {dim && <span className="rounded-[6px] bg-slate-soft px-[6px] py-px text-[11px] font-semibold text-ink-3">{m.left ? "이탈" : "승인 대기"}</span>}
+                    {dim && <span className="rounded-[6px] bg-slate-soft px-[6px] py-px text-[11px] font-semibold text-ink-3">{m.left ? MEMBERSHIP_LABEL.left : MEMBERSHIP_LABEL.pending}</span>}
                   </span>
                   {hasBar && <ProgressBar pct={pct} height={5} fill={pct === 100 ? "#1E9E6A" : pct === 0 ? "#D64545" : "#12A386"} className="w-14! shrink-0" />}
                   <span className="w-[34px] text-right text-[12px] font-semibold text-ink-2">{dim || m.noBar ? "–" : `${done}/${total}`}</span>
@@ -122,7 +123,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
                 <circle cx="12" cy="12" r="9" />
                 <path d="M12 7v5l3 2" />
               </svg>
-              승인 대기중
+              {MEMBERSHIP_LABEL.pending}
             </div>
             <button type="button" onClick={() => onCancel("cancel")} disabled={busy} className="h-11 rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink disabled:opacity-60">
               신청 취소

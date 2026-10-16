@@ -1,5 +1,5 @@
 import type { Tone } from "@/lib/palette";
-import type { RoomStatus, TaskStatus } from "@/lib/types";
+import { MEMBERSHIP_LABEL, type RoomStatus, type TaskStatus } from "@/lib/types";
 
 /** RoomView.dc.html ROOMS 객체를 그대로 옮긴 목업. 문구·숫자는 원본과 동일. */
 
@@ -272,9 +272,9 @@ export const actionOf = (room: Room, join: JoinState | undefined): Action => {
 
 /** 좌측 목록 상태 마크 */
 export const MARK: Partial<Record<Action, { label: string; fg: string; bg: string }>> = {
-  leave: { label: "참가함", fg: "#0B6553", bg: "#DDF4EE" },
-  pending: { label: "승인 대기", fg: "#7A4F00", bg: "#FBEFD3" },
-  joined: { label: "참가중", fg: "#0B6553", bg: "#DDF4EE" },
+  leave: { label: MEMBERSHIP_LABEL.joined, fg: "#0B6553", bg: "#DDF4EE" },
+  pending: { label: MEMBERSHIP_LABEL.pending, fg: "#7A4F00", bg: "#FBEFD3" },
+  joined: { label: MEMBERSHIP_LABEL.joined, fg: "#0B6553", bg: "#DDF4EE" },
   owner: { label: "내 방", fg: "#2F5BC2", bg: "#E3ECFD" },
 };
 

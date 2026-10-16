@@ -18,7 +18,7 @@ export function DayPanel({ sel, today, studies, tasks, markers, ref }: Props) {
       study: mk.study,
       href: studies[mk.study].pending ? routes.room(mk.study) : routes.myStudy(mk.study),
       title: `${mk.round} 회차 시작`,
-      sub: studies[mk.study].pending ? "승인되면 참여할 수 있어요" : "새 과제가 열렸어요",
+      sub: studies[mk.study].pending ? "승인되면 참가할 수 있어요" : "새 과제가 열렸어요",
       badge: "시작",
     }));
   const due: Item[] = tasks

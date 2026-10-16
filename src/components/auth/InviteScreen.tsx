@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { toApiError } from "@/lib/api/errors";
 import { inviteActionOf, joinByInvite, type InviteAction } from "@/lib/api/invite";
 import type { InvitePreview } from "@/lib/api/types";
+import { JOIN_MODE_LABEL } from "@/lib/types";
 import { periodLong } from "@/lib/api/format";
 import { PAL } from "@/lib/palette";
 import { routes } from "@/lib/routes";
@@ -78,7 +79,7 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
           <dt className="text-muted">기간</dt>
           <dd className="m-0 font-medium">{periodLong(r.startDate, r.endDate)}</dd>
           <dt className="text-muted">인원</dt>
-          <dd className="m-0 font-medium">{r.memberCount} / {r.maxMembers}명 · {r.joinMode === "approval" ? "승인제" : "바로 참가"}{r.isPublic ? "" : " · 비공개"}</dd>
+          <dd className="m-0 font-medium">{r.memberCount} / {r.maxMembers}명 · {JOIN_MODE_LABEL[r.joinMode]}{r.isPublic ? "" : " · 비공개"}</dd>
           <dt className="text-muted">그룹장</dt>
           <dd className="m-0 flex items-center gap-2 font-medium"><Avatar name={p.leader.nickname} tone={p.leader.tone} id={p.leader.userId} size={22} />{p.leader.nickname}</dd>
         </dl>

@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/Switch";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { rpc, toApiError } from "@/lib/api/errors";
 import type { RoomDetail } from "@/lib/api/types";
+import { JOIN_MODE_LABEL } from "@/lib/types";
 import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
 import { EMPTY_VALUES, clampCp, firstErrorKey, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
@@ -16,7 +17,7 @@ import { EMPTY_VALUES, clampCp, firstErrorKey, revalidateOnChange, serverFieldEr
 const RULE_TOOLS = ["bold", "italic", "strike", "code", "link", "bullet"] as const;
 
 const field = "h-12 w-full rounded-[12px] border border-line-3 px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE]";
-const JOIN_MODES = [["direct", "바로 참가", "누구나 바로 들어와요"], ["approval", "승인제", "그룹장이 승인해야 참가돼요"]] as const;
+const JOIN_MODES = [["direct", JOIN_MODE_LABEL.direct, "누구나 바로 들어와요"], ["approval", JOIN_MODE_LABEL.approval, "그룹장이 승인해야 참가돼요"]] as const;
 
 function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
   return (

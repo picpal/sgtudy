@@ -36,7 +36,7 @@ const tree = buildTree(AWS, EMPTY_OVERRIDES, TODAY);
 describe("toStudyRoom (mystudy §1.2–1.4)", () => {
   const r = toStudyRoom(aws, tree, TODAY, "u1");
   it("header fields", () => {
-    expect(r).toMatchObject({ id: "aws", status: "active", period: "2026.10.01(목) – 12.31(목)", dday: "D-80", ddayLong: "종료까지 D-80", joinMode: "그룹장 승인 후 참가", visibility: "공개", leader: "민수", leaderTone: "mint", capCur: 4, capMax: 6, minText: "최소 3명 · 충족", minOk: true, action: "joined" });
+    expect(r).toMatchObject({ id: "aws", status: "active", period: "2026.10.01(목) – 12.31(목)", dday: "D-80", ddayLong: "종료까지 D-80", joinMode: "승인제", visibility: "공개", leader: "민수", leaderTone: "mint", capCur: 4, capMax: 6, minText: "최소 3명 · 충족", minOk: true, action: "joined" });
     expect(r.rules).toEqual(["마감은 23:59", "2회 연속 미제출"]);
   });
   it("members incl. 이탈·me flags by userId", () => {

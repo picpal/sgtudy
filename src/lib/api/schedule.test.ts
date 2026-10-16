@@ -42,7 +42,7 @@ describe("toScheduleData (schedule §6)", () => {
   const d = toScheduleData(res);
   it("studies: tone → palette, pending suffix", () => {
     expect(d.studies[0]).toEqual({ id: "aws", name: "AWS SAA 자격증 3개월 완주", bg: "#DDF4EE", fg: "#0B6553", dot: "#12A386", pending: undefined, membership: "joined" });
-    expect(d.studies[2]).toMatchObject({ id: "sqld", name: "SQLD 4주 벼락치기 · 승인 대기", pending: true, bg: "#FBEFD3", fg: "#7A4F00", dot: "#C98A00" });
+    expect(d.studies[2]).toMatchObject({ id: "sqld", name: "SQLD 4주 벼락치기 · 승인 대기중", pending: true, bg: "#FBEFD3", fg: "#7A4F00", dot: "#C98A00" });
     expect(d.studyMap.spring.dot).toBe("#7C5BD0");
     expect(d.today).toBe(TODAY);
   });
