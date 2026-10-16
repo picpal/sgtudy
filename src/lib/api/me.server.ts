@@ -50,7 +50,7 @@ export const getMyStudies = cache(async (): Promise<MeStudies> => fetchMyStudies
 export const getToday = cache(async (): Promise<string> => (await rpc<MetaDto>("meta_get", {}, await getServerClient())).today);
 
 /**
- * 로그인+온보딩이 필요한 서버 페이지(/me, /rooms/new, /my-study, /schedule)에서 호출.
+ * 로그인+온보딩이 필요한 서버 페이지(/me, /rooms/new, /my-study, /schedule, /tasks)에서 호출.
  * proxy 가 비로그인은 이미 /login 으로 보내지만, 온보딩 미완료는 여기서 잡는다(D7).
  */
 export async function requireMe(returnTo: string): Promise<Me> {

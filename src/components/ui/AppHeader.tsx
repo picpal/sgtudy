@@ -20,7 +20,7 @@ const getSearch = () => window.location.search;
 const getServerSearch = () => "";
 const menuItems = (menu: HTMLElement | null) => Array.from(menu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
 
-export type NavKey = "home" | "myStudy" | "schedule";
+export type NavKey = "home" | "myStudy" | "tasks" | "schedule";
 
 const NAV: { key: NavKey; label: string; href: string; authOnly: boolean; icon: ReactNode }[] = [
   {
@@ -46,6 +46,18 @@ const NAV: { key: NavKey; label: string; href: string; authOnly: boolean; icon: 
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M3 3.5h10v9H3z" />
         <path d="M5.5 6.5h5M5.5 9.5h3" />
+      </svg>
+    ),
+  },
+  {
+    key: "tasks",
+    label: "내 과제",
+    href: routes.tasks(),
+    authOnly: true,
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M2.5 4.2l1.2 1.2 2-2.2M2.5 9.2l1.2 1.2 2-2.2" />
+        <path d="M8 4.5h5.5M8 9.5h5.5M3 13h10.5" />
       </svg>
     ),
   },
@@ -156,10 +168,11 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
   const inner = (
     <>
       <Logo />
-      <nav aria-label="주 메뉴" className="flex gap-1 max-sm:order-last max-sm:w-full max-sm:overflow-x-auto">
+      <nav aria-label="주 메뉴" className="flex gap-1 max-sm:order-last max-sm:w-full max-sm:gap-[2px] max-sm:overflow-x-auto">
         {NAV.filter((n) => me || !n.authOnly).map((n) => {
           const on = n.key === active;
-          const cls = `flex items-center gap-[7px] whitespace-nowrap rounded-[12px] px-[14px] py-[9px] text-[14px] ${
+          // ≤640: 메뉴 4개가 한 줄(358px)에 들어가게 아이콘을 빼고 좌우 여백을 줄인다 — 높이는 44px 터치 영역
+          const cls = `flex shrink-0 items-center gap-[7px] whitespace-nowrap rounded-[12px] px-[14px] py-[9px] text-[14px] max-sm:min-h-11 max-sm:px-[10px] max-sm:py-0 max-sm:[&>svg]:hidden ${
             on ? "bg-bg font-semibold text-ink" : "font-medium text-ink-3 hover:text-ink"
           }`;
           // 홈은 뷰포트 프리페치 없이 — 홈을 떠날 때마다 /?_rsc 가 더 나가지 않게 (HomeLink 주석)
@@ -217,7 +230,7 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
           </div>
         </>
       ) : (
-        // returnTo 는 허용 접두사(/rooms/·/my-study·/schedule·/invite/)만 남긴다 — /zzz 같은 없는 최상위 주소의 404 는 일부러 / 로,
+        // returnTo 는 허용 접두사(/rooms/·/my-study·/schedule·/tasks·/invite/)만 남긴다 — /zzz 같은 없는 최상위 주소의 404 는 일부러 / 로,
         // /rooms/nope 처럼 접두사 안의 404 는 그 주소 그대로 간다(로그인 뒤 비공개 방이 열릴 수 있다). pathname 문제가 아니다 (V1-03)
         <Link href={routes.login(safeReturnTo(pathname + search))} className={`flex h-11 items-center ${round} bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white`}>
           로그인

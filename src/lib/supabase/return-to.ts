@@ -1,8 +1,8 @@
 /** 로그인 필요 라우트(D6). `/rooms/[slug]` 는 공개라 `/rooms/new` 만 정확히 잡는다. */
-export const PROTECTED_PREFIXES = ["/my-study", "/schedule", "/me", "/rooms/new"] as const;
+export const PROTECTED_PREFIXES = ["/my-study", "/schedule", "/tasks", "/me", "/rooms/new"] as const;
 
 /** returnTo 로 허용하는 접두사(03-api §1). 그 외는 전부 "/". */
-const RETURN_TO_PREFIXES = ["/rooms/", "/my-study", "/schedule", "/invite/"] as const;
+const RETURN_TO_PREFIXES = ["/rooms/", "/my-study", "/schedule", "/tasks", "/invite/"] as const;
 
 export function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));

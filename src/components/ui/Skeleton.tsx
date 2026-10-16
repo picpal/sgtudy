@@ -162,6 +162,42 @@ export function ScheduleSkeleton() {
   );
 }
 
+/** /tasks — 제목·요약 + 필터 + 회차 묶음 카드 */
+export function TasksSkeleton() {
+  return (
+    <Shell active="tasks">
+      <main aria-hidden="true" className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 rounded-[20px] bg-surface px-7 pb-[30px] pt-[26px] max-sm:px-4 max-sm:pt-5">
+        <span className="flex items-start gap-3">
+          <span className="flex flex-1 flex-col gap-2">
+            <Bar className="h-8 w-28" />
+            <Bar className="h-4 w-64 max-w-full" />
+          </span>
+          <Bar className="h-11 w-32 rounded-[12px] max-sm:w-20" />
+        </span>
+        <Bar className="h-[92px] w-full rounded-[16px]" />
+        {Array.from({ length: 2 }, (_, i) => (
+          <span key={i} className="flex flex-col gap-2">
+            <Bar className="h-5 w-48" />
+            <span className="flex flex-col overflow-clip rounded-[16px] border border-line">
+              <span className="flex items-center gap-3 bg-surface-3 px-[18px] py-3">
+                <Bar className="h-6 w-14 rounded-[7px]" />
+                <Bar className="h-5 w-40" />
+              </span>
+              {Array.from({ length: 3 }, (_, j) => (
+                <span key={j} className="flex min-h-14 items-center gap-3 border-t border-line-2 px-4">
+                  <Bar className="h-[22px] w-[22px] rounded-full" />
+                  <Bar className="h-4 flex-1" />
+                  <Bar className="h-6 w-16 rounded-[8px] max-sm:hidden" />
+                </span>
+              ))}
+            </span>
+          </span>
+        ))}
+      </main>
+    </Shell>
+  );
+}
+
 /** /me — 프로필 카드 */
 export function ProfileSkeleton() {
   return (
