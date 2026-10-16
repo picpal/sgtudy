@@ -254,6 +254,22 @@ cases("personal goals · read", db, [
   } },
 ]);
 
+cases("personal goals · dto", db, [
+  { name: "노드 DTO: 팀 노드는 ownerId null(키는 있음), 개인 목표는 소유자 uid — curriculum·task_get 같은 값", run: async (q) => {
+    const chulsu = await uidOf(q, "철수");
+    await asUser(q, chulsu);
+    const id = (await create(q, await roundOf(q, "2주차"), "DTO")).createdId as string;
+    const c = await cur(q);
+    const team = (c.nodes as Row[]).filter((n) => n.id !== id);
+    assert(team.length > 0 && team.every((n) => "ownerId" in n && n.ownerId === null));
+    assertEquals(nodeOf(c, id).ownerId, chulsu);
+    const ec2 = await nodeByTitle(q, await roomId(q, "aws"), "EC2 인스턴스 유형 정리");
+    const t = (await one(q, "select public.task_get('aws', $1) as t", [ec2])).t;
+    assertEquals(["ownerId" in t.node, t.node.ownerId], [true, null]);
+    assertEquals((await one(q, "select public.task_get('aws', $1) as t", [id])).t.node.ownerId, chulsu);
+  } },
+]);
+
 cases("personal goals · me", db, [
   { name: "me_tasks: 내 배정 팀 리프 + 내 개인 목표, 남의 것 없음, 방·회차·현재 회차", run: async (q) => {
     const jieun = await uidOf(q, "지은");
