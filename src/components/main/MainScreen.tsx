@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { toApiError } from "@/lib/api/errors";
@@ -9,24 +9,41 @@ import { DEFAULT_PARAMS, fetchRooms, toRoomCard } from "@/lib/api/rooms";
 import type { RoomListResponse } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
-import { useDebounced } from "@/lib/useDebounced";
 import { EmptyState } from "./EmptyState";
 import { FilterBar, type StatusFilter, type Tab } from "./FilterBar";
+import { homeHref, parseHomeFilters, urlStep, type HomeFilters } from "./homeUrl";
 import { RoomCard } from "./RoomCard";
 
-export function MainScreen({ initial }: { initial: RoomListResponse }) {
+/** 지금 주소의 필터 — 비로그인은 공개 방 탭만 */
+const urlFilters = (anonymous: boolean): HomeFilters => {
+  const f = parseHomeFilters(new URLSearchParams(window.location.search));
+  return anonymous ? { ...f, scope: "public" } : f;
+};
+
+/** filters: 서버가 주소에서 읽어 initial 을 조회한 조건 */
+export function MainScreen({ initial, filters }: { initial: RoomListResponse; filters: HomeFilters }) {
   const me = useMe();
-  const [tab, setTab] = useState<Tab>("public");
-  const [status, setStatus] = useState<StatusFilter>("all");
-  const [q, setQ] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
-  const dq = useDebounced(q.trim(), 250);
+  // 처음 값은 주소에서 — 서버 렌더·하이드레이션 때는 서버가 같은 주소로 읽은 값과 같고,
+  // 다른 화면에서 뒤로 가기로 돌아와 라우터 캐시가 옛 initial 을 줄 때도 주소의 필터로 시작한다(다르면 아래 조회가 돈다)
+  const [start] = useState<HomeFilters>(() => (typeof window === "undefined" ? filters : urlFilters(!me)));
+  const [tab, setTab] = useState<Tab>(start.scope);
+  const [status, setStatus] = useState<StatusFilter>(start.status);
+  const [q, setQ] = useState(start.q);
+  const [tags, setTags] = useState<string[]>(start.tags);
+  // 검색어 250ms 디바운스 — 뒤로·앞으로 가기는 기다리지 않고 바로 맞춘다(setDq)
+  const [dq, setDq] = useState(start.q);
+  useEffect(() => {
+    const t = q.trim();
+    if (t === dq) return;
+    const id = setTimeout(() => setDq(t), 250);
+    return () => clearTimeout(id);
+  }, [q, dq]);
   // attempt: "다시 시도" 를 누르면 올라가 같은 조건으로 재조회한다
   const [attempt, setAttempt] = useState(0);
   const key = JSON.stringify([tab, status, dq, tags, attempt]);
   // 마지막으로 끝난 조회. 첫 화면은 서버가 준 initial(DEFAULT_PARAMS) — 같은 key 면 재조회하지 않는다.
   const [done, setDone] = useState<{ key: string; res: RoomListResponse; error: string }>(() => ({
-    key: JSON.stringify([DEFAULT_PARAMS.scope, DEFAULT_PARAMS.status, DEFAULT_PARAMS.q, DEFAULT_PARAMS.tags, 0]),
+    key: JSON.stringify([filters.scope, filters.status, filters.q, filters.tags, 0]),
     res: initial,
     error: "",
   }));
@@ -47,6 +64,33 @@ export function MainScreen({ initial }: { initial: RoomListResponse }) {
     };
   }, [key, done.key, tab, status, dq, tags]);
 
+  // 필터 → 주소 (history API — 서버 컴포넌트를 다시 부르지 않는다). 탭·상태·태그는 push, 검색어만 바뀌면 replace.
+  // 첫 실행(주소 정리: 비로그인 ?tab=mine 등)은 replace
+  const firstSync = useRef(true);
+  useEffect(() => {
+    const next: HomeFilters = { scope: tab, status, q: dq, tags };
+    const step = urlStep(parseHomeFilters(new URLSearchParams(window.location.search)), next);
+    const first = firstSync.current;
+    firstSync.current = false;
+    if (step === "none") return;
+    const href = `${homeHref(next)}${window.location.hash}`;
+    if (step === "push" && !first) window.history.pushState(null, "", href);
+    else window.history.replaceState(null, "", href);
+  }, [tab, status, dq, tags]);
+  // 뒤로·앞으로 가기 → 그 기록의 필터로
+  useEffect(() => {
+    const onPop = () => {
+      const f = urlFilters(!me);
+      setTab(f.scope);
+      setStatus(f.status);
+      setQ(f.q);
+      setDq(f.q);
+      setTags(f.tags);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [me]);
+
   const rooms = useMemo(() => res.items.map((d) => toRoomCard(d, res.today)), [res]);
   const tagCounts = useMemo(() => res.tagFacets.map((f) => ({ slug: f.slug, tag: f.label, count: f.count })), [res.tagFacets]);
   // 결과가 0건이면 facet 에 선택 태그가 빠질 수 있다 — 그땐 slug 를 그대로 보여 준다(빈 상태 문구용)
@@ -63,7 +107,7 @@ export function MainScreen({ initial }: { initial: RoomListResponse }) {
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" />
           </svg>
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="스터디 제목, 태그 검색" className="w-full min-w-0 border-0 bg-transparent text-[14px] outline-none placeholder:text-faint" />
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} maxLength={50} placeholder="스터디 제목, 태그 검색" className="w-full min-w-0 border-0 bg-transparent text-[14px] outline-none placeholder:text-faint" />
         </label>
       </AppHeader>
 
