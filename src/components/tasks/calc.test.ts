@@ -1,0 +1,113 @@
+import { describe, expect, it } from "vitest";
+import type { MeTaskItem, MeTasks } from "@/lib/api/types";
+import { DEFAULT_FILTER, applyFilter, filterQuery, groupByDue, groupByRound, parseFilter, statusText, summary, type TasksFilter } from "./calc";
+
+const item = (o: Partial<MeTaskItem> & { id: string }): MeTaskItem => ({
+  slug: "aws", roundId: "a3", groupTitle: null, title: o.id, type: "common", startDate: "2026-10-15", endDate: "2026-10-21", st: "open", submittedAt: null, ...o,
+});
+
+const fx = (): MeTasks => ({
+  today: "2026-10-16",
+  personalPerRound: 20,
+  studies: [
+    { slug: "aws", title: "AWS", tone: "mint" as never, status: "active", membership: "joined", currentRoundId: "a3", canAddPersonal: true },
+    { slug: "old", title: "Old", tone: "mint" as never, status: "ended", membership: "joined", currentRoundId: "o1", canAddPersonal: false },
+  ],
+  rounds: [
+    { id: "a2", slug: "aws", label: "2주차", title: "r2", startDate: "2026-10-08", endDate: "2026-10-14", canAdd: true },
+    { id: "a3", slug: "aws", label: "3주차", title: "r3", startDate: "2026-10-15", endDate: "2026-10-21", canAdd: true },
+    { id: "o1", slug: "old", label: "1주차", title: "o1", startDate: "2026-09-01", endDate: "2026-09-07", canAdd: false },
+  ],
+  items: [
+    item({ id: "t-late", title: "나", endDate: "2026-10-18" }),
+    item({ id: "t-early", title: "다", endDate: "2026-10-17", type: "designated" }),
+    item({ id: "p-open", title: "가", type: "personal", endDate: "2026-10-17" }),
+    item({ id: "p-done", title: "라", type: "personal", endDate: "2026-10-16", st: "done" }),
+    item({ id: "old-1", slug: "old", roundId: "o1", endDate: "2026-09-07", st: "missed" }),
+  ],
+});
+const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
+
+describe("filter", () => {
+  it("parse/query 왕복, 기본값은 키 없음", () => {
+    expect(filterQuery(DEFAULT_FILTER)).toEqual({});
+    const f: TasksFilter = { scope: "all", group: "due", type: "personal", hideDone: true, study: "aws" };
+    const q = filterQuery(f);
+    expect(q).toEqual({ scope: "all", group: "due", type: "personal", done: "hide", study: "aws" });
+    expect(parseFilter(new URLSearchParams(q))).toEqual(f);
+    expect(parseFilter(new URLSearchParams("scope=x&group=y&type=z&done=q"))).toEqual(DEFAULT_FILTER);
+  });
+  it("scope current 는 종료 방을 뺀다", () => {
+    const m = fx();
+    expect(ids(applyFilter(m, DEFAULT_FILTER)).sort()).toEqual(["p-done", "p-open", "t-early", "t-late"]);
+    expect(applyFilter(m, { ...DEFAULT_FILTER, scope: "all" })).toHaveLength(5);
+  });
+  it("hideDone / type / study", () => {
+    const m = fx();
+    expect(ids(applyFilter(m, { ...DEFAULT_FILTER, hideDone: true }))).not.toContain("p-done");
+    expect(ids(applyFilter(m, { ...DEFAULT_FILTER, type: "personal" })).sort()).toEqual(["p-done", "p-open"]);
+    expect(ids(applyFilter(m, { ...DEFAULT_FILTER, type: "team" })).sort()).toEqual(["t-early", "t-late"]);
+    expect(ids(applyFilter(m, { ...DEFAULT_FILTER, scope: "all", study: "old" }))).toEqual(["old-1"]);
+  });
+});
+
+describe("groupByRound", () => {
+  it("정렬: 미완료 → 마감 → 팀 → 제목", () => {
+    const m = fx();
+    const g = groupByRound(m, applyFilter(m, DEFAULT_FILTER), DEFAULT_FILTER);
+    expect(g).toHaveLength(1); // a3 만 (a2 는 현재 아님)
+    expect(ids(g[0].items)).toEqual(["t-early", "p-open", "t-late", "p-done"]);
+    expect(g[0].done).toBe(1);
+    expect(g[0].canAdd).toBe(true);
+  });
+  it("빈 현재 회차도 그룹으로", () => {
+    const m = fx();
+    m.items = m.items.filter((i) => i.slug === "old");
+    const g = groupByRound(m, applyFilter(m, DEFAULT_FILTER), DEFAULT_FILTER);
+    expect(g.map((x) => x.round?.id)).toEqual(["a3"]);
+    expect(g[0].items).toEqual([]);
+  });
+  it("scope all 은 회차 순, 종료 방은 canAdd false", () => {
+    const m = fx();
+    const f: TasksFilter = { ...DEFAULT_FILTER, scope: "all" };
+    const g = groupByRound(m, applyFilter(m, f), f);
+    expect(g.map((x) => x.round?.id)).toEqual(["a3", "o1"]);
+    expect(g[1].canAdd).toBe(false);
+  });
+  it("개인 목표 한도 도달 시 canAdd false", () => {
+    const m = fx();
+    m.personalPerRound = 2;
+    const g = groupByRound(m, applyFilter(m, DEFAULT_FILTER), DEFAULT_FILTER);
+    expect(g[0].canAdd).toBe(false);
+  });
+});
+
+describe("groupByDue", () => {
+  const today = "2026-10-16";
+  const mk = (id: string, endDate: string, st: MeTaskItem["st"] = "open") => item({ id, endDate, st });
+  it("경계", () => {
+    const secs = groupByDue(
+      [mk("od", "2026-10-15"), mk("td", "2026-10-16"), mk("sat", "2026-10-17"), mk("sun", "2026-10-18"), mk("nsat", "2026-10-24"), mk("later", "2026-10-25"), mk("dn", "2026-10-10", "done"), mk("ln", "2026-10-10", "late")],
+      today,
+    );
+    const by = Object.fromEntries(secs.map((s) => [s.key, ids(s.items)]));
+    expect(by).toEqual({ overdue: ["od"], today: ["td"], week: ["sat"], next: ["sun", "nsat"], later: ["later"], done: ["dn", "ln"] });
+    expect(secs.map((s) => s.key)).toEqual(["overdue", "today", "week", "next", "later", "done"]);
+  });
+  it("빈 섹션은 뺀다", () => {
+    expect(groupByDue([mk("a", "2026-10-16")], today).map((s) => s.key)).toEqual(["today"]);
+  });
+});
+
+describe("summary / statusText", () => {
+  it("집계", () => {
+    const m = fx();
+    expect(summary(m, applyFilter(m, DEFAULT_FILTER))).toEqual({ left: 3, dueToday: 0, personalDone: 1, personalTotal: 2 });
+  });
+  it("상태 문구", () => {
+    expect(statusText(item({ id: "a", type: "personal", st: "done" }))).toBe("기한내 완료");
+    expect(statusText(item({ id: "a", type: "personal", st: "late" }))).toBe("늦게 완료");
+    expect(statusText(item({ id: "a", st: "late" }))).toBe("지각 제출");
+    expect(statusText(item({ id: "a", st: "open" }))).toBe("진행중");
+  });
+});
