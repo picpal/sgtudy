@@ -1,0 +1,335 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import type { ToastMsg } from "@/components/ui/Toast";
+import { toApiError } from "@/lib/api/errors";
+import { discardUnattached, registerFile, roomIdOfNode, upsertSubmission } from "@/lib/api/submission";
+import type { Submission, TaskDetail } from "@/lib/api/types";
+import { uploadAttachment, uploadErrorText, type UploadFailure } from "@/lib/api/upload";
+import { routes } from "@/lib/routes";
+import { addLink as addLinkRule, checkFile, objectKey, submitBlocker, submitErrorAction, submitLabel } from "./submission";
+import { clearDraft, draftDiffers, draftKey, readDraft, writeDraft, type Draft } from "./submissionDraft";
+import { fromSaved, readyIds, removePlanOf, slotsLeft, uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
+
+/* 작성 상태 · 업로드 큐 · 이 기기 임시 저장 · 제출 (스펙 §2.3·§2.7·§2.8).
+   서버 저장은 주 버튼(submit)에서만 — 임시 저장은 localStorage 만 쓴다 (Review Focus 1) */
+
+type Args = {
+  nodeId: string;
+  userId: string;
+  detail: TaskDetail;
+  /** 서버가 돌려준 Submission — 응답으로만 화면을 바꾼다 (R4) */
+  onSaved: (s: Submission) => void;
+  onRefetch: () => void;
+  toast: (m: ToastMsg) => void;
+};
+
+type Act = UploadAction | { type: "reset"; rows: UploadRow[] };
+const reducer = (rows: UploadRow[], a: Act) => (a.type === "reset" ? a.rows : uploadsReducer(rows, a));
+
+const CONCURRENCY = 2;
+const store = () => {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+};
+const subscribeOnline = (cb: () => void) => {
+  window.addEventListener("online", cb);
+  window.addEventListener("offline", cb);
+  return () => {
+    window.removeEventListener("online", cb);
+    window.removeEventListener("offline", cb);
+  };
+};
+const isFailure = (e: unknown): e is UploadFailure => typeof e === "object" && e !== null && "status" in e && typeof (e as UploadFailure).status === "number";
+
+export type Composer = ReturnType<typeof useSubmissionComposer>;
+
+export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefetch, toast }: Args) {
+  const router = useRouter();
+  const mine = detail.mySubmission;
+  const key = draftKey(nodeId, userId);
+
+  const [body, setBodyRaw] = useState(mine?.bodyMd ?? "");
+  const [links, setLinks] = useState<string[]>(mine?.links ?? []);
+  const [linkInput, setLinkInput] = useState("");
+  const [linkError, setLinkError] = useState<{ index: number | null; text: string } | null>(null);
+  const [rows, dispatch] = useReducer(reducer, mine?.files ?? [], fromSaved);
+  const [busy, setBusy] = useState(false);
+  // 서버 값과 다른 이 기기 임시본 — 고를 때까지 안내를 띄운다
+  // 카드는 task_get 응답 뒤(클라이언트)에만 그려져 첫 렌더에서 localStorage 를 읽어도 된다
+  const [pending, setPending] = useState<Draft | null>(() => {
+    const d = readDraft(store(), draftKey(nodeId, userId));
+    const saved = mine ? { bodyMd: mine.bodyMd, links: mine.links, files: mine.files } : null;
+    return d && draftDiffers(d, saved) ? d : null;
+  });
+  // 사용자가 손댄 뒤에만 임시본을 쓴다 (열자마자 남은 임시본을 덮어쓰지 않게)
+  const [dirty, setDirty] = useState(false);
+  const [writePending, setWritePending] = useState(false);
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
+
+  const rowsRef = useRef(rows);
+  useEffect(() => {
+    rowsRef.current = rows;
+  });
+  const busyRef = useRef(false);
+  const savedIds = useMemo(() => new Set((mine?.files ?? []).map((f) => f.id)), [mine]);
+
+  const touch = () => {
+    setDirty(true);
+    setWritePending(true);
+    setPending(null);
+  };
+  const setBody = (v: string) => {
+    setBodyRaw(v);
+    touch();
+  };
+
+  /* ---------- 업로드 큐 ---------- */
+  const files = useRef(new Map<string, { file: File; mime: string }>());
+  const aborts = useRef(new Map<string, AbortController>());
+  const queue = useRef<string[]>([]);
+  const running = useRef(0);
+  const roomId = useRef<Promise<string> | null>(null);
+  const alive = useRef(true);
+
+  const pump = () => {
+    while (running.current < CONCURRENCY && queue.current.length > 0) {
+      const k = queue.current.shift()!;
+      const item = files.current.get(k);
+      if (!item) continue;
+      running.current += 1;
+      const ac = new AbortController();
+      aborts.current.set(k, ac);
+      void (async () => {
+        try {
+          roomId.current ??= roomIdOfNode(nodeId);
+          const room = await roomId.current;
+          const path = objectKey(room, nodeId, userId, k, item.file.name);
+          await uploadAttachment(path, item.file, item.mime, (pct) => dispatch({ type: "progress", key: k, progress: pct }), ac.signal);
+          const meta = await registerFile(nodeId, { path, name: item.file.name, mime: item.mime, size: item.file.size });
+          if (ac.signal.aborted || !alive.current) {
+            // 등록 사이에 빼거나 화면을 떠났다 — 미연결 파일을 한도에서 뺀다(best effort)
+            void discardUnattached(meta.id);
+            return;
+          }
+          dispatch({ type: "ready", key: k, meta });
+        } catch (e) {
+          if (ac.signal.aborted || !alive.current) return;
+          if (isFailure(e)) dispatch({ type: "fail", key: k, error: uploadErrorText(e.status) });
+          else {
+            roomId.current = null; // room id 조회 실패면 다음 시도에 다시
+            dispatch({ type: "fail", key: k, error: toApiError(e).message });
+          }
+        } finally {
+          aborts.current.delete(k);
+          running.current -= 1;
+          if (alive.current) pump();
+        }
+      })();
+    }
+  };
+
+  useEffect(() => {
+    alive.current = true;
+    const ab = aborts.current;
+    return () => {
+      alive.current = false;
+      queue.current = [];
+      for (const ac of ab.values()) ac.abort();
+    };
+  }, []);
+
+  const pick = (list: Iterable<File>) => {
+    const added: UploadRow[] = [];
+    for (const f of list) {
+      const k = crypto.randomUUID();
+      // 실패 줄도 자리를 차지한다 (slotsLeft 와 같은 셈)
+      const check = checkFile(f, slotsLeft([...rowsRef.current, ...added]));
+      if (!check.ok) {
+        added.push({ key: k, fileId: "", name: f.name, size: f.size, status: "error", progress: 0, error: check.error });
+        continue;
+      }
+      files.current.set(k, { file: f, mime: check.mime });
+      added.push({ key: k, fileId: k, name: f.name, size: f.size, status: "uploading", progress: 0 });
+      queue.current.push(k);
+    }
+    for (const row of added) dispatch({ type: "add", row });
+    // 다시 그려지기 전에 또 고를 수 있어 바로 맞춰 둔다
+    rowsRef.current = [...rowsRef.current, ...added];
+    touch();
+    pump();
+  };
+
+  const remove = (row: UploadRow) => {
+    const plan = removePlanOf(row, savedIds);
+    if (plan === "abort") {
+      queue.current = queue.current.filter((k) => k !== row.key);
+      aborts.current.get(row.key)?.abort();
+    }
+    if (plan === "discard") void discardUnattached(row.fileId); // D1 미정 — 0015 가 없으면 목록에서만 빠진다
+    files.current.delete(row.key);
+    dispatch({ type: "remove", key: row.key });
+    rowsRef.current = rowsRef.current.filter((r) => r.key !== row.key);
+    touch();
+  };
+
+  const canRetry = (row: UploadRow) => row.status === "error" && files.current.has(row.key);
+  const retry = (row: UploadRow) => {
+    const item = files.current.get(row.key);
+    if (!item) return;
+    files.current.delete(row.key);
+    dispatch({ type: "remove", key: row.key });
+    rowsRef.current = rowsRef.current.filter((r) => r.key !== row.key);
+    pick([item.file]);
+  };
+
+  /* ---------- 링크 ---------- */
+  const addLink = () => {
+    const r = addLinkRule(linkInput, links);
+    if (!r.ok) {
+      setLinkError(r.error ? { index: null, text: r.error } : null);
+      return;
+    }
+    setLinks(r.links);
+    setLinkInput("");
+    setLinkError(null);
+    touch();
+  };
+  const removeLink = (i: number) => {
+    setLinks((l) => l.filter((_, j) => j !== i));
+    setLinkError(null);
+    touch();
+  };
+  const typeLink = (v: string) => {
+    setLinkInput(v);
+    if (linkError?.index === null) setLinkError(null);
+  };
+
+  /* ---------- 이 기기 임시 저장 (500ms 디바운스) ---------- */
+  const readyFiles = useMemo(() => rows.filter((r) => r.status === "ready" && r.meta).map((r) => r.meta!), [rows]);
+  useEffect(() => {
+    if (!dirty) return;
+    const t = setTimeout(() => {
+      writeDraft(store(), key, { body, links, files: readyFiles, at: new Date().toISOString() });
+      setWritePending(false);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [dirty, body, links, readyFiles, key]);
+
+  const uploading = rows.some((r) => r.status === "uploading");
+  // 올리는 중이거나 임시본이 아직 안 써졌을 때만 새로고침·닫기를 묻는다
+  useEffect(() => {
+    if (!uploading && !writePending) return;
+    const h = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [uploading, writePending]);
+
+  /** 서버 값(또는 임시본)으로 작성 화면을 채운다 — [수정하기]·[이어 쓰기]·[취소] */
+  const load = (src: { body: string; links: string[]; files: Draft["files"] }) => {
+    queue.current = [];
+    for (const ac of aborts.current.values()) ac.abort();
+    files.current.clear();
+    setBodyRaw(src.body);
+    setLinks(src.links);
+    setLinkInput("");
+    setLinkError(null);
+    dispatch({ type: "reset", rows: fromSaved(src.files) });
+    rowsRef.current = fromSaved(src.files);
+  };
+  const fromMine = () => ({ body: mine?.bodyMd ?? "", links: mine?.links ?? [], files: mine?.files ?? [] });
+
+  const resume = () => {
+    if (!pending) return;
+    load(pending);
+    setPending(null);
+    setDirty(true);
+    setWritePending(true);
+  };
+  const dropDraft = () => {
+    clearDraft(store(), key);
+    setPending(null);
+  };
+  /** 수정 취소 — 임시본을 지우고, 올렸지만 저장하지 않은 파일은 한도에서 뺀다 */
+  const cancel = () => {
+    for (const r of rowsRef.current) if (r.status === "ready" && !savedIds.has(r.fileId)) void discardUnattached(r.fileId);
+    load(fromMine());
+    clearDraft(store(), key);
+    setDirty(false);
+    setWritePending(false);
+  };
+  const reset = () => {
+    load(fromMine());
+    setDirty(false);
+    setWritePending(false);
+  };
+
+  /* ---------- 제출 ---------- */
+  const blocker = submitBlocker({ body, links, files: rows }, online);
+  const label = submitLabel(mine, detail.today, detail.node.endDate);
+  const submit = async () => {
+    if (busyRef.current || blocker) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const sub = await upsertSubmission(nodeId, { body, links, fileIds: readyIds(rowsRef.current) });
+      clearDraft(store(), key);
+      setDirty(false);
+      setWritePending(false);
+      toast({ text: mine ? "수정했어요" : sub.isLate ? "지각 제출했어요" : "제출했어요", tone: "ok" });
+      onSaved(sub);
+    } catch (e) {
+      const a = submitErrorAction(toApiError(e));
+      if (a.kind === "refetch") {
+        toast({ text: a.text, tone: "bad" });
+        onRefetch();
+      } else if (a.kind === "file") {
+        dispatch({ type: "markError", fileId: a.fileId, error: a.text });
+        toast({ text: "다시 올려야 하는 파일이 있어요", tone: "bad" });
+      } else if (a.kind === "link") {
+        setLinkError({ index: a.index, text: a.text });
+      } else if (a.kind === "login") {
+        toast({ text: a.text, tone: "bad" });
+        router.push(routes.login(window.location.pathname + window.location.search));
+      } else toast({ text: a.text, tone: "bad" });
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+
+  return {
+    mine,
+    body,
+    setBody,
+    links,
+    linkInput,
+    typeLink,
+    addLink,
+    removeLink,
+    linkError,
+    rows,
+    pick,
+    remove,
+    retry,
+    canRetry,
+    uploading,
+    pending,
+    resume,
+    dropDraft,
+    cancel,
+    reset,
+    online,
+    busy,
+    blocker,
+    label,
+    submit,
+  };
+}
