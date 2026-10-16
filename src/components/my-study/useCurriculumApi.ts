@@ -9,6 +9,7 @@ import type { Curriculum, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
 import { EMPTY_OVERRIDES, dropFieldOv, tempId, type Overrides, type TreeNode } from "./model";
+import { PERSONAL_ERROR_TEXT } from "./personal";
 import type { DatePlan } from "./rounds";
 import type { Update } from "./state";
 
@@ -67,7 +68,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         router.refresh();
         return;
       }
-      toast({ text: err.message, tone: "bad" });
+      toast({ text: PERSONAL_ERROR_TEXT[err.code] ?? err.message, tone: "bad" });
       if (err.code === "ROOM_NOT_EDITABLE" || err.code === "NOT_LEADER") update({ curMode: "view", editSel: null });
     },
     [toast, update, setCur, slug, router],

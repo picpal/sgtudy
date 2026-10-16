@@ -212,6 +212,10 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
           isLeader={isLeader}
           // 과제를 하지 않는 그룹장에게는 "담당 과제가 아니에요" 를 보이지 않는다
           quietNotAssigned={isLeader && !tree.members.some((m) => m.userId === meId && m.doesTasks)}
+          roots={tree.roots}
+          period={period}
+          personal={personal}
+          api={api}
         />
       </div>
     );
