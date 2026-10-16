@@ -22,7 +22,7 @@ import { currentRoundId } from "./rounds";
 import { INITIAL_STATE, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
-import { OverviewTab } from "./tabs/OverviewTab";
+import { OverviewTab, currentRoundIdOf } from "./tabs/OverviewTab";
 import { JoinInfoCard } from "./tabs/JoinInfoCard";
 import { CurriculumTab } from "./tabs/CurriculumTab";
 import { BoardTab } from "./tabs/BoardTab";
@@ -192,6 +192,11 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   useEffect(() => {
     if (tabJump) document.getElementById("my-study-tabs")?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [tabJump]);
+  // 개요 멤버 관리 "팀원 개인 목표 보기 →" — 진행목표 보기 + 팀원 목표 칩 켜기 (두 칩은 서로 끈다)
+  const showOthers = () => {
+    update({ tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, calPick: null });
+    setTabJump((n) => n + 1);
+  };
 
   return (
     <TodayProvider today={today}>
@@ -211,7 +216,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                 {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} />}
                 {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
-                {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
+                {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
               </section>
               {S.tab === "overview" && (
                 <JoinInfoCard
@@ -224,7 +229,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                   goLeaf={goLeaf}
                   onCancel={setConfirm}
                   busy={busy}
-                  admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} /></> : undefined}
+                  admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} tree={savedTree} roundId={currentRoundIdOf(room)} onShowOthers={showOthers} /></> : undefined}
                 />
               )}
             </div>

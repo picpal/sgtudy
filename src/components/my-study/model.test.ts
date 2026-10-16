@@ -243,6 +243,18 @@ describe("개인 목표", () => {
     expect(personalStats(t.personal, JIEUN, "2")).toEqual({ done: 0, total: 0 });
     expect(personalStats(t.personal, JIEUN, "3")).toEqual({ done: 1, total: 1 });
   });
+  it("personalStats(roundId): 개요 멤버 열 — 그 회차의 그 사람 것만, 늦게 완료도 완료, 보관 제외", () => {
+    const p33 = AWS.nodes.find((n) => n.id === "33")!;
+    const late = { ...p33, id: "36", sortOrder: 5, task: { ...p33.task!, people: [{ ...p33.task!.people[0], status: "late" as const }] } };
+    const open = { ...p33, id: "37", sortOrder: 6, task: { ...p33.task!, people: [{ ...p33.task!.people[0], status: "open" as const }] } };
+    const arch = { ...p33, id: "38", sortOrder: 7, archived: true };
+    const elsewhere = { ...p33, id: "39", roundId: "2", parentId: "2", sortOrder: 9 };
+    const tp = buildTree({ ...AWS, nodes: [...AWS.nodes, late, open, arch, elsewhere] }, EMPTY_OVERRIDES, REF_DAY);
+    expect(personalStats(tp.personal, JIEUN, "3")).toEqual({ done: 2, total: 3 });
+    expect(personalStats(tp.personal, JIEUN, "2")).toEqual({ done: 1, total: 1 });
+    expect(personalStats(tp.personal, JIEUN)).toEqual({ done: 3, total: 4 });
+    expect(personalStats(tp.personal, CHULSU, "3")).toEqual({ done: 0, total: 1 });
+  });
   it("개인 리프는 유형/담당 오버라이드로 다시 계산하지 않는다(편집 대상 아님)", () => {
     const ov = { ...EMPTY_OVERRIDES, typeOv: { "32": "공통" as const }, assignOv: { "32": ["u2", "u3"] } };
     const p = buildTree(AWS, ov, REF_DAY).personal.find((l) => l.id === "32")!;

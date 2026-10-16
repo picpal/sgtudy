@@ -2,12 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { addDays, diffDays, md } from "@/lib/date";
+import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
-import { CodeIcons, Seg } from "../bits";
-import { ganttRange, visibleNodes, type LeafState, type Tree } from "../model";
+import { Avatar } from "@/components/ui/Avatar";
+import { Chip, CodeIcons, Seg, TypeBadge } from "../bits";
+import { ganttRange, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
 import type { ScreenState, Update, Zoom } from "../state";
 
-type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
+type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void; isLeader: boolean };
 
 /** 리프 막대 색 [bg, 글자, border] */
 const GBAR: Record<LeafState, [string, string, string]> = {
@@ -17,14 +19,29 @@ const GBAR: Record<LeafState, [string, string, string]> = {
   planned: ["#FFFFFF", "#4A5563", "1px dashed #8C97A4"],
   unassigned: ["#FFFFFF", "#7A4F00", "1px dashed #C98A00"],
 };
+/** 개인 목표 막대 — slate 톤 + 점선 (캘린더와 같은 값). 완료면 테두리를 진하게 */
+const PERSONAL_BAR: [string, string, string] = ["#E9EEF0", "#4A5563", "1.5px dashed #8C97A4"];
+const PERSONAL_DONE: [string, string, string] = ["#E9EEF0", "#3D4F6B", "1.5px dashed #4F6382"];
 
-export function GanttTab({ tree, S, update, goLeaf }: Props) {
+/** 개인 목표 소유자(서버 people = [소유자]) */
+const ownerOf = (n: LeafNode) => n.people.find((p) => p.userId === n.ownerId) ?? n.people[0] ?? null;
+const personalDone = (n: LeafNode) => {
+  const c = ownerOf(n)?.c;
+  return c === "D" || c === "L";
+};
+
+export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
   const dayZoom = S.zoom !== "week";
   const dw = dayZoom ? 28 : 10;
   const today = useToday();
   const { start, nDays } = ganttRange(tree.roots, today);
   const W = nDays * dw;
-  const rows = visibleNodes(tree.roots, S.closed);
+  const meId = useMe()?.id ?? null;
+  // 진행목표와 같은 두 칩·같은 state ("내 것만"·"팀원 목표"; 둘은 서로 끈다). 간트는 읽기 전용 — 편집 범위 없음
+  const scope: ItemScope = { meId, mineOnly: S.mineOnly, others: S.othersPersonal && !S.mineOnly, isEdit: false, isLeader };
+  const rows = visibleNodes(tree.roots, S.closed, scope);
+  const toggleMine = () => update((p) => ({ mineOnly: !p.mineOnly, othersPersonal: p.mineOnly ? p.othersPersonal : false }));
+  const toggleOthers = () => update((p) => ({ othersPersonal: !p.othersPersonal, mineOnly: p.othersPersonal ? p.mineOnly : false }));
 
   const months: { i: number; label: string; end: number }[] = [];
   for (let i = 0; i < nDays; i++) {
@@ -52,11 +69,20 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
     <div className="mt-[18px] flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
         <Seg<Zoom> label="확대 단위" value={S.zoom} onChange={(z) => update({ zoom: z })} options={[["day", "일 단위"], ["week", "주 단위"]]} />
+        <div role="group" aria-label="보기 필터" className="flex gap-[6px]">
+          <Chip on={S.mineOnly} onClick={toggleMine}>
+            내 것만
+          </Chip>
+          <Chip on={S.othersPersonal} onClick={toggleOthers}>
+            팀원 목표
+          </Chip>
+        </div>
         <span className="flex-[1_1_20px]" />
         <Legend style={{ background: "#1E9E6A" }}>완료</Legend>
         <Legend style={{ background: "#BDE9DC", border: "1.5px solid #12A386" }}>진행</Legend>
         <Legend style={{ background: "#F7D4D0", border: "1.5px solid #D64545" }}>지연</Legend>
         <Legend style={{ background: "#FFFFFF", border: "1px dashed #8C97A4" }}>예정</Legend>
+        <Legend style={{ background: PERSONAL_BAR[0], border: PERSONAL_BAR[2] }}>개인 목표</Legend>
         <span className="inline-flex items-center gap-[5px] text-[12px] text-ink-3">
           <span className="h-[14px] w-[2px] bg-danger" />오늘
         </span>
@@ -103,10 +129,18 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
               const open = !S.closed[n.id];
               const x = diffDays(start, n.s) * dw;
               const w = (diffDays(n.s, n.e) + 1) * dw;
-              const tip = `${n.title} · ${md(n.s)}–${md(n.e)} · ${n.leaf ? (n.asg ? `${n.sub}/${n.asg} 제출` : "담당자 미정") : `${n.pct}%`}`;
+              const personal = n.leaf && n.personal;
+              const done = personal && personalDone(n);
+              const owner = personal ? ownerOf(n) : null;
+              // 남의 개인 목표에만 소유자 표시 (결정 5 — 내 것에는 "나" 칩·아바타 없음)
+              const other = personal && owner && owner.userId !== meId ? owner : null;
+              const what = personal ? `개인 목표${other ? ` · ${other.name}` : ""} · ${done ? "완료" : "미완료"}` : n.leaf ? (n.asg ? `${n.sub}/${n.asg} 제출` : "담당자 미정") : `${n.pct}%`;
+              const tip = `${n.title} · ${md(n.s)}–${md(n.e)} · ${what}`;
+              // 리프 막대 색 (회차·묶음은 아래 진척 막대 — 팀만)
+              const bar = personal ? (done ? PERSONAL_DONE : PERSONAL_BAR) : n.leaf ? GBAR[n.state] : GBAR.planned;
               return (
-                <div key={n.id} className="flex h-11 border-b border-line-2">
-                  <div className="sticky left-0 z-[2] flex w-[var(--gantt-left)] shrink-0 items-center gap-[6px] border-r border-line pl-2 pr-3 max-sm:gap-[2px] max-sm:pl-1 max-sm:pr-1" style={{ background: n.d === 0 ? "#FAFCFB" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}>
+                <div key={n.id} data-gantt-row={n.id} className="flex h-11 border-b border-line-2">
+                  <div className="sticky left-0 z-[2] flex w-[var(--gantt-left)] shrink-0 items-center gap-[6px] border-r border-line pl-2 pr-3 max-sm:gap-[2px] max-sm:pl-1 max-sm:pr-1" style={{ background: n.d === 0 ? "#FAFCFB" : personal ? "#F7F9FC" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}>
                     <span className="w-[calc(var(--d)*16px)] shrink-0 max-sm:w-[calc(var(--d)*4px)]" style={{ "--d": n.d } as React.CSSProperties} />
                     {n.leaf ? (
                       <span className="w-[26px] shrink-0 max-sm:w-0" />
@@ -119,21 +153,42 @@ export function GanttTab({ tree, S, update, goLeaf }: Props) {
                     )}
                     <button type="button" onClick={() => (n.leaf ? goLeaf(n.id) : toggle(n.id))} title={tip} className="flex h-9 min-w-0 flex-1 items-center gap-[6px] bg-transparent p-0 text-left text-ink">
                       {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[6px] bg-navy px-[6px] py-[2px] text-[11px] font-bold text-white max-sm:hidden">{n.label}</span>}
+                      {personal && (
+                        <span className="flex shrink-0 max-sm:hidden">
+                          <TypeBadge type="개인" />
+                        </span>
+                      )}
+                      {other && (
+                        <span data-owner={other.userId} className="flex shrink-0">
+                          <Avatar name={other.name} size={20} tone={other.tone} id={other.userId} />
+                          <span className="sr-only">{other.name}</span>
+                        </span>
+                      )}
                       <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[13px] max-sm:text-[12px]" style={{ fontWeight: n.d === 0 ? 700 : n.leaf ? 500 : 600 }}>
                         {n.title}
                       </span>
                     </button>
-                    <span className="flex shrink-0 max-sm:hidden">{n.leaf ? <CodeIcons codes={n.people.map((p) => p.c)} size={13} max={4} /> : <span className="text-[12px] font-bold">{n.pct}%</span>}</span>
+                    <span className="flex shrink-0 max-sm:hidden">
+                      {personal ? (
+                        other && <span aria-hidden="true" className="max-w-[56px] truncate text-[12px] font-medium text-ink-3">{other.name}</span>
+                      ) : n.leaf ? (
+                        <CodeIcons codes={n.people.map((p) => p.c)} size={13} max={4} />
+                      ) : (
+                        <span className="text-[12px] font-bold">{n.pct}%</span>
+                      )}
+                    </span>
                   </div>
                   <div className="relative flex-1" style={{ minWidth: W, backgroundImage: `repeating-linear-gradient(to right, #EEF2F1 0 1px, transparent 1px ${7 * dw}px)` }}>
                     {hasToday && <span className="absolute bottom-0 top-0 z-[1] w-[2px] bg-danger opacity-55" style={{ left: todayX - 1 }} />}
                     {n.leaf ? (
                       <span
                         title={tip}
+                        data-bar
+                        data-personal={personal || undefined}
                         className="absolute top-[10px] flex h-6 items-center justify-center overflow-hidden whitespace-nowrap rounded-[6px] text-[11px] font-bold"
-                        style={{ left: x + 2, width: w - 4, background: GBAR[n.state][0], color: GBAR[n.state][1], border: GBAR[n.state][2], opacity: n.archived ? 0.5 : 1 }}
+                        style={{ left: x + 2, width: w - 4, background: bar[0], color: bar[1], border: bar[2], opacity: n.archived ? 0.5 : 1 }}
                       >
-                        {w >= 44 ? (n.asg ? `${n.sub}/${n.asg}` : "미정") : ""}
+                        {w >= 44 ? (personal ? (done ? "✓ 완료" : "") : n.asg ? `${n.sub}/${n.asg}` : "미정") : ""}
                       </span>
                     ) : (
                       <span title={tip} className="absolute top-[17px] block h-[10px] overflow-hidden rounded-[5px] bg-[#DCE5E2]" style={{ left: x + 2, width: w - 4 }}>

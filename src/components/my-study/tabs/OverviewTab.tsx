@@ -1,12 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import { STATUS_LABEL, type TaskStatus } from "@/lib/types";
 import type { StudyRoom } from "@/lib/api/my-study";
+import { routes } from "@/lib/routes";
 import { RingedStatus, TypeBadge, toneOfName } from "../bits";
-import type { Tree } from "../model";
+import { personalStats, type Tree } from "../model";
 import { Inline, MarkdownView } from "../MarkdownView";
 
 const MAX_PEOPLE = 4;
@@ -29,9 +31,37 @@ const LEGEND: [TaskStatus, string][] = [
   ["planned", "예정"],
 ];
 
+/** 지금 회차(오늘을 포함하는 회차 — 전체 일정의 강조 행) id. 공백 구간·모집 중이면 null */
+export const currentRoundIdOf = (room: StudyRoom): string | null => room.rounds.find((r) => r.current)?.roundId ?? null;
+
+/** 참가자 내 카드 줄 — "개인 목표 이번 회차 d/t 완료 · 내 과제에서 보기 →" (팀 수치와 따로) */
+export function MyPersonalLine({ tree, userId, roundId, slug }: { tree: Tree; userId: string; roundId: string; slug: string }) {
+  const { done, total } = personalStats(tree.personal, userId, roundId);
+  return (
+    <div data-my-personal className="flex flex-wrap items-center gap-x-2 rounded-[12px] bg-[#F7F9FC] px-[14px] text-[13px] text-ink-2">
+      <TypeBadge type="개인" />
+      <span>
+        {total === 0 ? (
+          "이번 회차 개인 목표가 아직 없어요"
+        ) : (
+          <>
+            개인 목표 이번 회차 <b className="font-bold text-ink">{done}/{total}</b> 완료
+          </>
+        )}
+      </span>
+      <Link href={routes.tasks({ study: slug })} className="inline-flex min-h-11 items-center font-semibold text-mint hover:text-mint-dark">
+        내 과제에서 보기 →
+      </Link>
+    </div>
+  );
+}
+
 export function OverviewTab({ room, tree, onGoCurriculum }: { room: StudyRoom; tree: Tree; onGoCurriculum: () => void }) {
   const cur = room.cur;
   const hasTasks = cur.tasks.length > 0;
+  // 참가 중인 나(그룹장 포함) + 지금 회차가 있을 때만 내 개인 목표 줄
+  const meRow = room.members.find((m) => m.me && !m.left && !m.pending);
+  const roundId = currentRoundIdOf(room);
   return (
     <>
       {/* 이번 회차 */}
@@ -107,6 +137,7 @@ export function OverviewTab({ room, tree, onGoCurriculum }: { room: StudyRoom; t
             </div>
           </>
         )}
+        {meRow?.userId && roundId && <MyPersonalLine tree={tree} userId={meRow.userId} roundId={roundId} slug={room.id} />}
       </div>
 
       <H3 mt={30} icon={<><path d="M12 11v6" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.4" fill="#FFFFFF" /></>}>스터디 소개</H3>
