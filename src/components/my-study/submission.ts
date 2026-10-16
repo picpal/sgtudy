@@ -99,7 +99,8 @@ export function myCardStateOf(d: TaskDetail, room: RoomStatus): MyCardState {
   if (room === "ended") return mine ? { kind: "readonly", note: "종료된 스터디라 더 고칠 수 없어요" } : { kind: "blocked", note: "종료된 스터디라 제출할 수 없어요" };
   if (room !== "active") return { kind: "blocked", note: "스터디가 시작되면 제출할 수 있어요" };
   if (d.node.archived) return mine ? { kind: "readonly", note: ARCHIVED_NOTE } : { kind: "blocked", note: ARCHIVED_NOTE };
-  if (d.today < d.node.startDate) return { kind: "blocked", note: `${md(d.node.startDate)}(${weekdayKo(d.node.startDate)})부터 제출할 수 있어요` };
+  // 개인 목표는 본인이 기간을 정하므로 시작일 전에도 제출할 수 있다 (서버 0017 submission_upsert 와 같은 규칙)
+  if (d.today < d.node.startDate && d.node.task?.type !== "personal") return { kind: "blocked", note: `${md(d.node.startDate)}(${weekdayKo(d.node.startDate)})부터 제출할 수 있어요` };
   return mine ? { kind: "submitted" } : { kind: "compose" };
 }
 

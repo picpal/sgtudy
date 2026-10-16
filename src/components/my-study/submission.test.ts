@@ -167,8 +167,12 @@ describe("emptyDescText — 빈 설명 문구", () => {
   });
 });
 
-describe("myCardStateOf — 개인 목표 시작일 (서버 submission_upsert 0007:108-111 이 PERSONAL 도 막음 → 문구 유지)", () => {
-  it("personal before start stays blocked", () =>
-    expect(myCardStateOf(detail({}, { startDate: "2026-10-15", task: { type: "personal", people: [], assigned: 1, submitted: 0, state: "progress" } }), "active"))
-      .toEqual({ kind: "blocked", note: "10.15(목)부터 제출할 수 있어요" }));
+describe("myCardStateOf — 개인 목표 시작일 (0017: 서버 submission_upsert 가 PERSONAL 은 시작일 검사를 건너뜀)", () => {
+  const personal = { startDate: "2026-10-15", task: { type: "personal" as const, people: [], assigned: 1, submitted: 0, state: "progress" as const } };
+  it("personal before start → compose (no blocking)", () =>
+    expect(myCardStateOf(detail({}, personal), "active")).toEqual({ kind: "compose" }));
+  it("personal before start, already completed → submitted (memo editable)", () =>
+    expect(myCardStateOf(detail({ mySubmission: sub() }, personal), "active")).toEqual({ kind: "submitted" }));
+  it("team task before start stays blocked", () =>
+    expect(myCardStateOf(detail({}, { startDate: "2026-10-15" }), "active")).toEqual({ kind: "blocked", note: "10.15(목)부터 제출할 수 있어요" }));
 });
