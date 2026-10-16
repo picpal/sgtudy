@@ -27,6 +27,17 @@ export function serverFieldError(details: Record<string, string> | undefined, me
   return f && (FIELD_KEYS as readonly string[]).includes(f) ? { [f]: message } : null;
 }
 
+/** 서버 PERIOD_TOO_LONG 과 같은 상한 — 시작일 + 1년 - 1일 (Postgres interval: 2/29 + 1년 = 2/28). YYYY-MM-DD, 시작일 없으면 "" */
+export function maxEndDate(start: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(start);
+  if (!m) return "";
+  const [y, mo, d] = [Number(m[1]) + 1, Number(m[2]), Number(m[3])];
+  const last = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  const t = new Date(Date.UTC(y, mo - 1, Math.min(d, last) - 1));
+  return t.toISOString().slice(0, 10);
+}
+export const PERIOD_TOO_LONG = "기간은 최대 1년이에요";
+
 export function validateNewRoom(v: NewRoomValues, today: string): Partial<Record<keyof NewRoomValues, string>> {
   const e: Partial<Record<keyof NewRoomValues, string>> = {};
   const title = v.title.trim();
@@ -39,6 +50,7 @@ export function validateNewRoom(v: NewRoomValues, today: string): Partial<Record
   else if (v.startDate < today) e.startDate = "시작일은 오늘 이후여야 해요";
   if (!v.endDate) e.endDate = "종료일을 선택해 주세요";
   else if (v.startDate && v.endDate < v.startDate) e.endDate = "종료일은 시작일 이후여야 해요";
+  else if (v.startDate && v.endDate > maxEndDate(v.startDate)) e.endDate = PERIOD_TOO_LONG;
   const max = int(v.maxMembers);
   if (!(max >= 2 && max <= 100)) e.maxMembers = "최대 인원은 2~100명이에요";
   if (v.minMembers.trim()) {

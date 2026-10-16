@@ -11,7 +11,7 @@ import type { RoomDetail } from "@/lib/api/types";
 import { JOIN_MODE_LABEL } from "@/lib/types";
 import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
-import { EMPTY_VALUES, clampCp, firstErrorKey, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
+import { EMPTY_VALUES, clampCp, firstErrorKey, maxEndDate, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
 // 운영 규칙은 읽기 화면에서 줄마다 한 항목(rulesOf)으로 보인다 — 표·코드 블록·제목처럼 줄을 넘는 모양은 주지 않는다
 const RULE_TOOLS = ["bold", "italic", "strike", "code", "link", "bullet"] as const;
@@ -118,7 +118,7 @@ export function NewRoomForm() {
           <Field label="한 줄 소개" error={errors.intro}><input name="intro" className={field} value={v.intro} onChange={(e) => set("intro", clampCp(e.target.value, 100))} aria-invalid={!!errors.intro} /></Field>
           <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
             <Field label="시작일" error={errors.startDate}><input name="startDate" aria-invalid={!!errors.startDate} type="date" className={field} min={today} value={v.startDate} onChange={(e) => set("startDate", e.target.value)} /></Field>
-            <Field label="종료일" error={errors.endDate}><input name="endDate" aria-invalid={!!errors.endDate} type="date" className={field} min={v.startDate || today} value={v.endDate} onChange={(e) => set("endDate", e.target.value)} /></Field>
+            <Field label="종료일" error={errors.endDate}><input name="endDate" aria-invalid={!!errors.endDate} type="date" className={field} min={v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} onChange={(e) => set("endDate", e.target.value)} /></Field>
           </div>
           <Field label="최대 인원" error={errors.maxMembers}><input name="maxMembers" aria-invalid={!!errors.maxMembers} type="number" inputMode="numeric" min={2} max={100} className={field} value={v.maxMembers} onChange={(e) => set("maxMembers", e.target.value)} /></Field>
           <div className="flex items-center justify-between rounded-[12px] border border-line px-4 py-3">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_VALUES, clampCp, cpLength, firstErrorKey, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
+import { EMPTY_VALUES, clampCp, maxEndDate, cpLength, firstErrorKey, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
 const TODAY = "2026-10-12";
 const ok: NewRoomValues = { title: "Docker·K8s 입문 6주", intro: "컨테이너 기초부터", startDate: "2026-11-09", endDate: "2026-12-20", maxMembers: "6", isPublic: true, joinMode: "direct", descriptionMd: "", rulesMd: "", minMembers: "", leaderDoesTasks: true };
@@ -31,6 +31,21 @@ describe("validateNewRoom (main §2-2 검증 규칙)", () => {
     expect(validateNewRoom({ ...ok, maxMembers: "2.5" }, TODAY).maxMembers).toBe("최대 인원은 2~100명이에요");
     expect(validateNewRoom({ ...ok, minMembers: "7" }, TODAY).minMembers).toBe("최소 인원은 최대 인원 이하여야 해요");
     expect(validateNewRoom({ ...ok, minMembers: "0" }, TODAY).minMembers).toBe("최소 인원은 1명 이상이에요");
+  });
+});
+
+describe("기간 상한 1년 (서버 PERIOD_TOO_LONG 과 같은 규칙: 시작일 + 1년 - 1일)", () => {
+  it("maxEndDate", () => {
+    expect(maxEndDate("2026-11-01")).toBe("2027-10-31");
+    expect(maxEndDate("2027-01-01")).toBe("2027-12-31");
+    // Postgres: 2028-02-29 + 1 year = 2029-02-28 → -1일
+    expect(maxEndDate("2028-02-29")).toBe("2029-02-27");
+    expect(maxEndDate("2027-03-01")).toBe("2028-02-29");
+    expect(maxEndDate("")).toBe("");
+  });
+  it("1년 꽉 채우면 통과, 하루라도 넘으면 서버와 같은 문구", () => {
+    expect(validateNewRoom({ ...ok, startDate: "2026-11-01", endDate: "2027-10-31" }, TODAY).endDate).toBeUndefined();
+    expect(validateNewRoom({ ...ok, startDate: "2026-11-01", endDate: "2027-11-01" }, TODAY).endDate).toBe("기간은 최대 1년이에요");
   });
 });
 
