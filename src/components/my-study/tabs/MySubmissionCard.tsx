@@ -38,7 +38,7 @@ export function MySubmissionCardView({ state, badge, mine, composer, notice, onE
   const saved = mine && (
     <div className="flex flex-col gap-3">
       <p className="m-0 text-[12px] text-muted">
-        {metaLine(mine)}
+        {metaLine(mine, personal)}
         {mine.isLate && <span className="block text-amber-text">{lateNote(personal)}</span>}
       </p>
       <SubmissionView s={mine} onOpenFile={onOpenFile} />

@@ -33,5 +33,7 @@ describe("MySubmissionCardView", () => {
     const mine = html({ state: { kind: "submitted" }, badge: { status: "late", text: "늦게 완료" }, mine: late, composer: null, personal: true, onEdit: () => {}, onOpenFile: () => {} });
     expect(mine.textContent).toContain("마감 뒤에 완료해 늦게 완료로 기록됐어요");
     expect(mine.textContent).not.toContain("지각");
+    expect(mine.textContent).toContain("완료 10.12(월) 12:00");
+    expect(mine.textContent).not.toContain("처음 제출");
   });
 });

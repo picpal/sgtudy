@@ -3,7 +3,7 @@ import type { Submission, TaskDetail } from "@/lib/api/types";
 import {
   SUB_LIMITS, addLink, checkFile, extOf, focusTargetOf, metaLine, mimeOf, myBadgeOf, myCardStateOf, emptyDescText, objectKey,
   sizeText, stampKst, statusRows, submitBlocker, submitErrorAction, submitLabel,
-  composerHint, lateNote, notAssignedText, rowStatusText, showAllSubmitted, statusHeadOf,
+  composerHint, lateNote, savedToast, notAssignedText, rowStatusText, showAllSubmitted, statusHeadOf,
 } from "./submission";
 
 const sub = (o: Partial<Submission> = {}): Submission =>
@@ -232,5 +232,26 @@ describe("composerHint — 빈 상태는 처음엔 중립색 (Ruling)", () => {
     expect(composerHint({ ...base, blocker: null, editing: true })).toEqual({ text: "마감 뒤에 고쳐도 지각 여부는 처음 제출 시각으로 정해져요", warn: false });
     expect(composerHint({ ...base, personal: true, blocker: null, late: true })).toEqual({ text: "마감이 지나 늦게 완료로 기록돼요", warn: false });
     expect(composerHint({ ...base, personal: true, blocker: null, editing: true })).toEqual({ text: "마감 뒤에 고쳐도 늦게 완료 여부는 처음 완료 시각으로 정해져요", warn: false });
+  });
+});
+
+describe("개인 목표 카드 남은 문구 (시안 A-6·A-7) — 팀 과제는 그대로", () => {
+  it("submitLabel: 개인은 마감 뒤·수정도 '저장'", () => {
+    expect(submitLabel(null, "2026-10-12", "2026-10-14", true)).toBe("저장");
+    expect(submitLabel(null, "2026-10-15", "2026-10-14", true)).toBe("저장");
+    expect(submitLabel(sub(), "2026-10-15", "2026-10-14", true)).toBe("저장");
+    expect(submitLabel(null, "2026-10-15", "2026-10-14")).toBe("지각 제출하기");
+  });
+  it("metaLine: 개인은 '완료 {시각}'", () => {
+    expect(metaLine(sub(), true)).toBe("완료 10.12(월) 12:00");
+    expect(metaLine(sub({ updatedAt: "2026-10-13T00:10:00.000Z" }), true)).toBe("완료 10.12(월) 12:00 · 마지막 수정 10.13(화) 09:10");
+    expect(metaLine(sub())).toBe("처음 제출 10.12(월) 12:00");
+  });
+  it("savedToast: 개인은 늘 '저장했어요', 팀은 제출했어요/지각 제출했어요/수정했어요", () => {
+    expect(savedToast(false, true, true)).toBe("저장했어요");
+    expect(savedToast(true, false, true)).toBe("저장했어요");
+    expect(savedToast(false, false, false)).toBe("제출했어요");
+    expect(savedToast(false, true, false)).toBe("지각 제출했어요");
+    expect(savedToast(true, true, false)).toBe("수정했어요");
   });
 });

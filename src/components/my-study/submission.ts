@@ -110,9 +110,13 @@ export function myCardStateOf(d: TaskDetail, room: RoomStatus): MyCardState {
 /** 리프 설명이 비었을 때 안내 — 개인 목표는 "과제" 라 부르지 않는다 */
 export const emptyDescText = (personal: boolean) => (personal ? "설명이 아직 없어요" : "과제 설명이 아직 없어요");
 
-/** 주 버튼 문구 — 마감 = end 다음날 00:00 KST, 날짜 비교로 충분 */
-export const submitLabel = (mine: Submission | null, today: string, end: string) =>
-  mine ? "수정 저장" : today > end ? "지각 제출하기" : "제출하기";
+/** 주 버튼 문구 — 마감 = end 다음날 00:00 KST, 날짜 비교로 충분. 개인 목표는 늘 "저장" (시안 A-7) */
+export const submitLabel = (mine: Submission | null, today: string, end: string, personal = false) =>
+  personal ? "저장" : mine ? "수정 저장" : today > end ? "지각 제출하기" : "제출하기";
+
+/** 저장 성공 토스트 — 개인 목표는 늘 "저장했어요" (시안 A-7) */
+export const savedToast = (edited: boolean, isLate: boolean, personal: boolean): string =>
+  personal ? "저장했어요" : edited ? "수정했어요" : isLate ? "지각 제출했어요" : "제출했어요";
 
 /** 개인 목표 상세인가 — 제출 카드 문구를 완료 문구로 (스펙 §6) */
 export const isPersonalDetail = (d: TaskDetail): boolean => d.node.task?.type === "personal";
@@ -173,9 +177,9 @@ export function stampKst(iso: string): string {
   return `${md(ymd)}(${weekdayKo(ymd)}) ${p.hour}:${p.minute}`;
 }
 
-/** "처음 제출 … · 마지막 수정 …" — 수정이 처음 제출보다 60초 넘게 뒤일 때만 뒤 조각 */
-export function metaLine(s: Pick<Submission, "firstSubmittedAt" | "updatedAt">): string {
-  const head = `처음 제출 ${stampKst(s.firstSubmittedAt)}`;
+/** "처음 제출 … · 마지막 수정 …" (개인 목표는 "완료 …") — 수정이 처음 제출보다 60초 넘게 뒤일 때만 뒤 조각 */
+export function metaLine(s: Pick<Submission, "firstSubmittedAt" | "updatedAt">, personal = false): string {
+  const head = `${personal ? "완료" : "처음 제출"} ${stampKst(s.firstSubmittedAt)}`;
   const edited = Date.parse(s.updatedAt) - Date.parse(s.firstSubmittedAt) > 60_000;
   return edited ? `${head} · 마지막 수정 ${stampKst(s.updatedAt)}` : head;
 }

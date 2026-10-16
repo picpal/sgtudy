@@ -8,7 +8,7 @@ import { discardUnattached, registerFile, roomIdOfNode, upsertSubmission } from 
 import type { Submission, TaskDetail } from "@/lib/api/types";
 import { uploadAttachment, uploadErrorText, type UploadFailure } from "@/lib/api/upload";
 import { routes } from "@/lib/routes";
-import { addLink as addLinkRule, checkFile, objectKey, submitBlocker, submitErrorAction, submitLabel } from "./submission";
+import { addLink as addLinkRule, checkFile, objectKey, isPersonalDetail, savedToast, submitBlocker, submitErrorAction, submitLabel } from "./submission";
 import { clearDraft, draftDiffers, draftKey, readDraft, writeDraft, type Draft } from "./submissionDraft";
 import { fromSaved, readyIds, removePlanOf, slotsLeft, uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
 
@@ -274,7 +274,8 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
 
   /* ---------- 제출 ---------- */
   const blocker = submitBlocker({ body, links, files: rows }, online);
-  const label = submitLabel(mine, detail.today, detail.node.endDate);
+  const personal = isPersonalDetail(detail);
+  const label = submitLabel(mine, detail.today, detail.node.endDate, personal);
   const submit = async () => {
     if (busyRef.current || blocker) return;
     busyRef.current = true;
@@ -285,7 +286,7 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
       setPending(null);
       setDirty(false);
       setWritePending(false);
-      toast({ text: mine ? "수정했어요" : sub.isLate ? "지각 제출했어요" : "제출했어요", tone: "ok" });
+      toast({ text: savedToast(!!mine, sub.isLate, personal), tone: "ok" });
       onSaved(sub);
     } catch (e) {
       const a = submitErrorAction(toApiError(e));
