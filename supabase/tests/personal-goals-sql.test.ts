@@ -2,7 +2,7 @@
 import { assert, assertEquals } from "@std/assert";
 import { applySeed, asAnon, asUser, expectFail, openDb } from "./_harness.ts";
 import { nodeByTitle, roomId } from "./_curriculum-helpers.ts";
-import { cases, one, type Q, type Row, uidOf } from "./_fixtures.ts";
+import { cases, one, type Q, type Row, setNow, uidOf } from "./_fixtures.ts";
 
 const db = await openDb();
 await applySeed(db);
@@ -109,9 +109,9 @@ cases("personal goals · write", db, [
     const c = await create(q, r3, "  Udemy 7강 듣기  ");
     const n = nodeOf(c, c.createdId);
     assertEquals([n.title, n.startDate, n.endDate, n.parentId, n.depth], ["Udemy 7강 듣기", "2026-10-15", "2026-10-21", r3, 3]);
-    // Task 3: assertEquals([n.task.type, n.task.assigned, n.task.submitted], ["personal", 1, 0]);
+    assertEquals([n.task.type, n.task.assigned, n.task.submitted], ["personal", 1, 0]);
     assertEquals(n.sortOrder, Math.max(...(c.nodes as Row[]).filter((x) => x.parentId === r3).map((x) => x.sortOrder)));
-    // Task 3: assertEquals(c.stats, before.stats);
+    assertEquals(c.stats, before.stats);
     assertEquals(nodeOf(c, r3).pct, nodeOf(before, r3).pct);
     assertEquals(c.warnings, []);
   } },
@@ -151,13 +151,17 @@ cases("personal goals · write", db, [
   } },
   { name: "complete: 빈 제출로 완료·지각 판정, 내용 없는 완료만 취소", run: async (q) => {
     const r2 = await roundOf(q, "2주차");                                      // 10.08–10.14, 오늘 10.12
+    await setNow(q, "2026-10-12T03:00:00Z");                                   // app_now 고정(실제 시각과 무관하게)
     await asUser(q, await uidOf(q, "철수"));
+    const late = (await create(q, await roundOf(q, "1주차"), "지난 목표")).createdId as string;   // 10.01–10.07 → 마감 지남
+    const cl = (await one(q, "select public.personal_complete('aws', $1, true) as c", [late])).c;
+    assertEquals(nodeOf(cl, late).task.people[0].status, "late");
     const id = (await create(q, r2, "B")).createdId as string;
     let c = (await one(q, "select public.personal_complete('aws', $1, true) as c", [id])).c;
-    // Task 3: assertEquals([nodeOf(c, id).task.submitted, nodeOf(c, id).task.people[0].status], [1, "done"]);
+    assertEquals([nodeOf(c, id).task.submitted, nodeOf(c, id).task.people[0].status], [1, "done"]);
     await one(q, "select public.personal_complete('aws', $1, true) as c", [id]);   // 멱등
     c = (await one(q, "select public.personal_complete('aws', $1, false) as c", [id])).c;
-    // Task 3: assertEquals(nodeOf(c, id).task.submitted, 0);
+    assertEquals(nodeOf(c, id).task.submitted, 0);
     await q("select public.submission_upsert($1, '메모', '{}', '{}')", [id]);      // 제출 카드 경로도 소유자에게 열린다
     await expectFail(q("select public.personal_complete('aws', $1, false)", [id]), "SUBMISSION_HAS_CONTENT");
     await asUser(q, await uidOf(q, "지은"));
@@ -181,5 +185,71 @@ cases("personal goals · write", db, [
     c = (await one(q, "select public.personal_delete('aws', $1) as c", [id])).c;
     assertEquals((c.nodes as Row[]).some((n) => n.id === id), false);
     assertEquals((await one(q, "select count(*)::int as n from public.submissions where node_id = $1", [id])).n, 0);
+  } },
+]);
+
+const cur = (q: Q) => one(q, "select public.curriculum_get('aws', true) as c").then((r) => r.c as Row);
+const hasTitle = (c: Row, t: string) => (c.nodes as Row[]).some((n) => n.title === t);
+
+cases("personal goals · read", db, [
+  { name: "노출: 소유자·그룹장·ACTIVE·INACTIVE 는 보고, 외부인·비로그인·대기자는 못 본다", run: async (q) => {
+    await asUser(q, await uidOf(q, "철수"));
+    const id = (await create(q, await roundOf(q, "3주차"), "철수 목표")).createdId as string;
+    for (const nick of ["철수", "민수", "지은", "도윤"]) { await asUser(q, await uidOf(q, nick)); assert(hasTitle(await cur(q), "철수 목표"), nick); }
+    await asUser(q, await uidOf(q, "서연")); assertEquals(hasTitle(await cur(q), "철수 목표"), false);
+    await asAnon(q);                          assertEquals(hasTitle(await cur(q), "철수 목표"), false);
+    await asAnon(q);
+    await expectFail(q("select public.task_get('aws', $1)", [id]), "NODE_NOT_FOUND");
+    await asUser(q, await uidOf(q, "지은"));
+    const t = (await one(q, "select public.task_get('aws', $1) as t", [id])).t;
+    assertEquals([t.node.task.type, t.node.ownerId, t.node.task.people.length, t.isAssignee], ["personal", await uidOf(q, "철수"), 1, false]);
+  } },
+  { name: "팀 수치 불변: 완료해도 stats·회차 pct·room_get stats/myProgress 그대로", run: async (q) => {
+    await asUser(q, await uidOf(q, "철수"));
+    const r2 = await roundOf(q, "2주차");
+    const c0 = await cur(q);
+    const d0 = (await one(q, "select public.room_get('aws') as d")).d;
+    const id = (await create(q, r2, "D")).createdId as string;
+    await q("select public.personal_complete('aws', $1, true)", [id]);
+    const c1 = await cur(q);
+    const d1 = (await one(q, "select public.room_get('aws') as d")).d;
+    assertEquals([c1.stats, nodeOf(c1, r2).assigned, nodeOf(c1, r2).submitted], [c0.stats, nodeOf(c0, r2).assigned, nodeOf(c0, r2).submitted]);
+    assertEquals([d1.stats, d1.rounds, d1.myProgress, d1.currentRound], [d0.stats, d0.rounds, d0.myProgress, d0.currentRound]);
+    assertEquals([nodeOf(c1, id).assigned, nodeOf(c1, id).submitted, nodeOf(c1, id).task.state], [1, 1, "complete"]);
+  } },
+  { name: "curriculum.personal: canAdd(ACTIVE·그룹장·RECRUIT/ACTIVE), perRound 20, myPermissions 모양 그대로", run: async (q) => {
+    await asUser(q, await uidOf(q, "지은"));
+    let c = await cur(q);
+    assertEquals([c.personal, c.myPermissions], [{ canAdd: true, perRound: 20 }, { canEditCurriculum: false }]);
+    await asUser(q, await uidOf(q, "도윤"));
+    assertEquals((await cur(q)).personal, { canAdd: false, perRound: 20 });
+    await asAnon(q);
+    assertEquals((await cur(q)).personal, { canAdd: false, perRound: 20 });
+  } },
+  { name: "자격 상실(INACTIVE) → resync 가 그 사람 개인 목표를 보관, 제출 보존, 재ACTIVE 후 본인 해제", run: async (q) => {
+    const hana = await uidOf(q, "하나");
+    await asUser(q, hana);
+    const id = (await create(q, await roundOf(q, "2주차"), "하나 목표")).createdId as string;
+    await q("select public.personal_complete('aws', $1, true)", [id]);
+    // member_deactivate 는 하나의 단독 지정 과제(S3) 재지정 결정이 필요하다 — 여기선 resync 단계만 검증한다(이탈 RPC 끝은 resync)
+    await q("update public.room_members set status = 'INACTIVE', left_at = now() where user_id = $1::uuid and room_id = (select id from public.rooms where slug = 'aws')", [hana]);
+    await q("select public.assignment_resync((select id from public.rooms where slug = 'aws'))");
+    await asUser(q, await uidOf(q, "민수"));
+    assertEquals(nodeOf(await cur(q), id).archived, true);
+    assertEquals((await one(q, "select count(*)::int as n from public.submissions where node_id = $1", [id])).n, 1);
+    await expectFail(q("select public.personal_archive('aws', $1, false)", [id]), "OWNER_NOT_ACTIVE");
+    await q("update public.room_members set status = 'ACTIVE', left_at = null where user_id = $1::uuid and room_id = (select id from public.rooms where slug = 'aws')", [hana]);
+    await asUser(q, hana);
+    assertEquals(nodeOf((await one(q, "select public.personal_archive('aws', $1, false) as c", [id])).c, id).archived, false);
+  } },
+  { name: "자동 태그는 개인 목표 제목을 보지 않는다", run: async (q) => {
+    const tagsOf = async () => (await q(`select rt.tag_slug as slug from public.room_tags rt
+                                         join public.rooms r on r.id = rt.room_id where r.slug = 'aws' order by 1`)).map((t) => t.slug);
+    await q("select public.tag_autoselect((select id from public.rooms where slug = 'aws'))");
+    const before = await tagsOf();
+    await asUser(q, await uidOf(q, "철수"));
+    await create(q, await roundOf(q, "3주차"), "Kubernetes Docker React Java Spring 정리");   // 시드 CURATED 용어 여러 개
+    await q("select public.tag_autoselect((select id from public.rooms where slug = 'aws'))");
+    assertEquals(await tagsOf(), before);
   } },
 ]);
