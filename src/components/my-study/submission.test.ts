@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Submission, TaskDetail } from "@/lib/api/types";
 import {
-  SUB_LIMITS, addLink, checkFile, extOf, focusTargetOf, metaLine, mimeOf, myBadgeOf, myCardStateOf, objectKey,
+  SUB_LIMITS, addLink, checkFile, extOf, focusTargetOf, metaLine, mimeOf, myBadgeOf, myCardStateOf, emptyDescText, objectKey,
   sizeText, stampKst, statusRows, submitBlocker, submitErrorAction, submitLabel,
 } from "./submission";
 
@@ -158,4 +158,17 @@ describe("submitErrorAction", () => {
     expect(submitErrorAction({ code: "UNKNOWN", message: "Failed to fetch" })).toEqual({ kind: "toast", text: "제출하지 못했어요 · 연결을 확인하고 다시 눌러 주세요" });
     expect(submitErrorAction({ code: "VALIDATION_FAILED", message: "본문은 50,000자까지예요" })).toEqual({ kind: "toast", text: "본문은 50,000자까지예요" });
   });
+});
+
+describe("emptyDescText — 빈 설명 문구", () => {
+  it("personal vs team", () => {
+    expect(emptyDescText(true)).toBe("설명이 아직 없어요");
+    expect(emptyDescText(false)).toBe("과제 설명이 아직 없어요");
+  });
+});
+
+describe("myCardStateOf — 개인 목표 시작일 (서버 submission_upsert 0007:108-111 이 PERSONAL 도 막음 → 문구 유지)", () => {
+  it("personal before start stays blocked", () =>
+    expect(myCardStateOf(detail({}, { startDate: "2026-10-15", task: { type: "personal", people: [], assigned: 1, submitted: 0, state: "progress" } }), "active"))
+      .toEqual({ kind: "blocked", note: "10.15(목)부터 제출할 수 있어요" }));
 });

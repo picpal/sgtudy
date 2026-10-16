@@ -103,6 +103,9 @@ export function myCardStateOf(d: TaskDetail, room: RoomStatus): MyCardState {
   return mine ? { kind: "submitted" } : { kind: "compose" };
 }
 
+/** 리프 설명이 비었을 때 안내 — 개인 목표는 "과제" 라 부르지 않는다 */
+export const emptyDescText = (personal: boolean) => (personal ? "설명이 아직 없어요" : "과제 설명이 아직 없어요");
+
 /** 주 버튼 문구 — 마감 = end 다음날 00:00 KST, 날짜 비교로 충분 */
 export const submitLabel = (mine: Submission | null, today: string, end: string) =>
   mine ? "수정 저장" : today > end ? "지각 제출하기" : "제출하기";
