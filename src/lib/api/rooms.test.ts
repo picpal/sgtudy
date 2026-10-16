@@ -22,6 +22,10 @@ describe("toRoomCard (main §3)", () => {
     expect(r.created).toBe(false);
     expect(r.leaderTone).toBe("mint");
   });
+  it("recruit card: start date passed but not started → 시작일 지남, start today → D-DAY", () => {
+    expect(toRoomCard(dto({ startDate: "2026-10-11" }), TODAY).slot.em).toBe("시작일 지남");
+    expect(toRoomCard(dto({ startDate: "2026-10-12" }), TODAY).slot.em).toBe("D-DAY");
+  });
   it("aws mine 33% (철수 2/6, 전체 트리 — D5) with next OPEN task D-2", () => {
     // 목업 카드의 50%(2/4)는 폐기 — 시드·rooms_list 의 mine 분모는 전체 트리 기준 6 (D5, D14)
     const r = toRoomCard(dto({ slug: "aws", status: "active", joinMode: "approval", memberCount: 4, maxMembers: 6, leader: leader("민수"),

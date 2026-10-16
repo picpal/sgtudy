@@ -32,7 +32,7 @@ function slotOf(d: RoomCardDto, today: string): Slot {
   switch (p.kind) {
     case "recruit": {
       const start = `${mmdd(d.startDate)}(${weekdayKo(d.startDate)}) 시작${d.status === "draft" ? " 예정" : ""}`;
-      return { label: "모집 현황", value: `${d.memberCount}/${d.maxMembers}명`, pct: pct(d.memberCount, d.maxMembers), note: `${start} · ${recruitTail(d)}`, em: dday(today, d.startDate) };
+      return { label: "모집 현황", value: `${d.memberCount}/${d.maxMembers}명`, pct: pct(d.memberCount, d.maxMembers), note: `${start} · ${recruitTail(d)}`, em: d.startDate < today ? "시작일 지남" : dday(today, d.startDate) };
     }
     case "mine": {
       const v = pct(p.submitted, p.assigned);
