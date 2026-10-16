@@ -43,6 +43,8 @@ export type Room = {
   title: string;
   intro: string;
   status: RoomStatus;
+  /** 모집 시작 전(DRAFT) — status 는 recruit 로 접히므로 배지는 이것으로 "준비중" */
+  draft?: boolean;
   base: BaseAction;
   approval: boolean;
   /** 비공개면 false */

@@ -2,7 +2,7 @@ import { rpc, type Db } from "@/lib/api/errors";
 import { curIndexOf, curOf, ddayOf, glanceOf, periodLong, periodShort, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
 import type { MembershipResult, RoomCardDto, RoomDetail, RoomTagDto } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
-import type { RoomStatus } from "@/lib/types";
+import { roomStatusLabel, type RoomStatus } from "@/lib/types";
 import type { Action, BaseAction, Room, RoomMember } from "@/data/room-view";
 
 export const fetchRoomDetail = (slug: string, client?: Db, inviteToken?: string) =>
@@ -62,6 +62,7 @@ export function toRoom(d: RoomDetail, today: string, meId: string | null): Room 
     title: d.title,
     intro: d.intro,
     status: uiStatus(d.status),
+    draft: d.status === "draft",
     base: baseOf(actionOf(d)),
     approval: d.joinMode === "approval",
     pub: d.isPublic,
@@ -89,7 +90,7 @@ export function toRoom(d: RoomDetail, today: string, meId: string | null): Room 
 /** 쓰기 RPC 응답(MembershipResult)으로 교체 — 프론트가 +1 하지 않는다(roomview §3.5) */
 export const applyMembership = (d: RoomDetail, r: MembershipResult): RoomDetail => ({ ...d, me: r.me, memberCount: r.memberCount, members: r.members, pendingCount: r.pendingCount });
 
-export type SidebarRoom = { id: string; title: string; status: RoomStatus; when: string; period: string; tags: RoomTagDto[]; capCur: number; capMax: number; mark?: "leave" | "pending" | "joined" | "owner" };
+export type SidebarRoom = { id: string; title: string; status: RoomStatus; draft: boolean; when: string; period: string; tags: RoomTagDto[]; capCur: number; capMax: number; mark?: "leave" | "pending" | "joined" | "owner" };
 
 function markOf(d: RoomCardDto): SidebarRoom["mark"] {
   const m = d.membership;
@@ -105,6 +106,7 @@ export function toSidebarRoom(d: RoomCardDto, today: string): SidebarRoom {
     id: d.slug,
     title: d.title,
     status: uiStatus(d.status),
+    draft: d.status === "draft",
     when: ddayOf(d.status, today, d.startDate, d.endDate).short,
     period: periodShort(d.startDate, d.endDate),
     tags: d.tags,
@@ -114,7 +116,15 @@ export function toSidebarRoom(d: RoomCardDto, today: string): SidebarRoom {
   };
 }
 
-const GROUP_ORDER: { key: RoomStatus; label: string }[] = [{ key: "recruit", label: "모집중" }, { key: "active", label: "진행중" }, { key: "ended", label: "종료" }];
+export type SidebarGroupKey = "draft" | RoomStatus;
+/** 준비중(DRAFT) → 모집중 → 진행중 → 종료. 준비중은 그룹장에게만 보이고, "모집중" 칩으로 거르면 함께 남는다(시작 전 방) */
+const GROUP_ORDER: { key: SidebarGroupKey; label: string }[] = [
+  { key: "draft", label: roomStatusLabel("recruit", true) },
+  { key: "recruit", label: roomStatusLabel("recruit") },
+  { key: "active", label: roomStatusLabel("active") },
+  { key: "ended", label: roomStatusLabel("ended") },
+];
+const groupKeyOf = (i: SidebarRoom): SidebarGroupKey => (i.draft ? "draft" : i.status);
 
 export const groupSidebar = (items: SidebarRoom[]) =>
-  GROUP_ORDER.map((g) => ({ ...g, items: items.filter((i) => i.status === g.key) })).filter((g) => g.items.length > 0);
+  GROUP_ORDER.map((g) => ({ ...g, status: g.key === "draft" ? ("recruit" as const) : g.key, items: items.filter((i) => groupKeyOf(i) === g.key) })).filter((g) => g.items.length > 0);

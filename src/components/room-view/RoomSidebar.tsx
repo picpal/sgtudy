@@ -31,7 +31,7 @@ export function RoomSidebar({ selected, items, total }: Props) {
 
   const heading = items.length < total ? "공개 스터디" : "전체 스터디";
   const count = items.length < total ? items.length : total;
-  const groups = groupSidebar(items.filter((r) => !query || `${r.title} ${r.tags.map((t) => t.label).join(" ")}`.toLowerCase().includes(query))).filter((g) => st === "all" || st === g.key);
+  const groups = groupSidebar(items.filter((r) => !query || `${r.title} ${r.tags.map((t) => t.label).join(" ")}`.toLowerCase().includes(query))).filter((g) => st === "all" || st === g.status);
 
   return (
     <aside

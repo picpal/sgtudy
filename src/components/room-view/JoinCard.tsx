@@ -131,7 +131,7 @@ export function JoinCard(props: Props) {
   return (
     <div className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
       <div className="flex items-center justify-between">
-        <StatusBadge status={room.status} />
+        <StatusBadge status={room.status} draft={room.draft} />
         <span className="text-[13px] font-semibold text-ink">{room.ddayLong}</span>
       </div>
 

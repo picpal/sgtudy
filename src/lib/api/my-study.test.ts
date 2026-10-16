@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS } from "@/components/my-study/fixtures";
 import { EMPTY_OVERRIDES, buildTree } from "@/components/my-study/model";
+import { roomStatusLabel } from "@/lib/types";
 import type { MeStudies, RoomDetail } from "./types";
 import type { Db } from "./errors";
 import { canEditCurriculumOf, filterSidebarGroups, firstStudySlug, myStudyHrefOf, nodeCreate, nodeMove, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
@@ -73,6 +74,12 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
     const d = toStudyRoom({ ...aws, status: "draft", startDate: "2026-11-01", endDate: "2026-11-30", me: { state: "leader" } }, tree, TODAY, "u2");
     expect(d).toMatchObject({ status: "recruit", draft: true, dday: "D-20", ddayLong: "모집 전 · 시작까지 D-20" });
     expect(toStudyRoom({ ...aws, status: "recruit" }, tree, TODAY, "u1").draft).toBe(false);
+    // 배지 문구: DRAFT=준비중 · RECRUIT=모집중 · ACTIVE=진행중 · ENDED=종료 (방 상세·홈 카드와 같은 매핑)
+    const label = (status: "draft" | "recruit" | "active" | "ended") => {
+      const r = toStudyRoom({ ...aws, status }, tree, TODAY, "u1");
+      return roomStatusLabel(r.status, r.draft);
+    };
+    expect([label("draft"), label("recruit"), label("active"), label("ended")]).toEqual(["준비중", "모집중", "진행중", "종료"]);
   });
   it("ended + member → closed; no minMembers → empty minText", () => {
     expect(toStudyRoom({ ...aws, status: "ended", minMembers: null }, tree, TODAY, "u1")).toMatchObject({ action: "closed", minText: "", minOk: true });

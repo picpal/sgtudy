@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addDays } from "@/lib/date";
 import { safeReturnTo } from "@/lib/routes";
+import { roomStatusLabel } from "@/lib/types";
 import { actionOf, applyMembership, firstParam, groupSidebar, roomReturnTo, toRoom, toSidebarRoom } from "./room-view";
 import type { RoomCardDto, RoomDetail, RoundSummary } from "./types";
 
@@ -72,6 +73,12 @@ describe("actionOf (03-api §3 결정 순서, roomview §3.5 목업 대응)", ()
 });
 
 describe("toRoom", () => {
+  it("DRAFT → draft badge (준비중), RECRUIT → 모집중 — same as the home card and 내 스터디", () => {
+    const d = toRoom(detail({ status: "draft" }), TODAY, null);
+    expect([d.status, d.draft, roomStatusLabel(d.status, d.draft)]).toEqual(["recruit", true, "준비중"]);
+    const r = toRoom(detail(), TODAY, null);
+    expect([r.status, r.draft, roomStatusLabel(r.status, r.draft)]).toEqual(["recruit", false, "모집중"]);
+  });
   it("toeic recruit: period/dday/members/glance/rounds window", () => {
     const r = toRoom(detail(), TODAY, null);
     expect(r.id).toBe("toeic");
@@ -137,15 +144,15 @@ describe("applyMembership", () => {
 describe("sidebar", () => {
   const card = (o: Partial<RoomCardDto>): RoomCardDto => ({ id: "1", slug: "toeic", title: "토익", intro: "", status: "recruit", isFull: false, isPublic: true, joinMode: "direct", memberCount: 2, maxMembers: 8, leader: P("u", "서연"), tags: [{ slug: "english", label: "영어", tone: "blue", auto: true }], startDate: "2026-11-02", endDate: "2026-12-27", membership: null, progress: { kind: "recruit" }, ...o });
   it("toSidebarRoom", () => {
-    expect(toSidebarRoom(card({}), TODAY)).toEqual({ id: "toeic", title: "토익", status: "recruit", when: "D-21", period: "2026.11.02 – 12.27", tags: [{ slug: "english", label: "영어", tone: "blue", auto: true }], capCur: 2, capMax: 8, mark: undefined });
+    expect(toSidebarRoom(card({}), TODAY)).toEqual({ id: "toeic", title: "토익", status: "recruit", draft: false, when: "D-21", period: "2026.11.02 – 12.27", tags: [{ slug: "english", label: "영어", tone: "blue", auto: true }], capCur: 2, capMax: 8, mark: undefined });
     expect(toSidebarRoom(card({ membership: { role: "member", status: "pending" } }), TODAY).mark).toBe("pending");
     expect(toSidebarRoom(card({ membership: { role: "leader", status: "active" } }), TODAY).mark).toBe("owner");
     expect(toSidebarRoom(card({ membership: { role: "member", status: "active" } }), TODAY).mark).toBe("leave");
     expect(toSidebarRoom(card({ status: "active", membership: { role: "member", status: "active" } }), TODAY).mark).toBe("joined");
     expect(toSidebarRoom(card({ status: "ended", startDate: "2026-07-01", endDate: "2026-09-30" }), TODAY).when).toBe("종료");
   });
-  it("groupSidebar orders recruit → active → ended and drops empty groups", () => {
+  it("groupSidebar orders 준비중 → 모집중 → 진행중 → 종료 and drops empty groups (DRAFT is not 모집중)", () => {
     const g = groupSidebar([toSidebarRoom(card({ status: "ended", slug: "algo" }), TODAY), toSidebarRoom(card({}), TODAY), toSidebarRoom(card({ status: "draft", slug: "d" }), TODAY)]);
-    expect(g.map((x) => [x.key, x.items.map((i) => i.id)])).toEqual([["recruit", ["toeic", "d"]], ["ended", ["algo"]]]);
+    expect(g.map((x) => [x.key, x.label, x.status, x.items.map((i) => i.id)])).toEqual([["draft", "준비중", "recruit", ["d"]], ["recruit", "모집중", "recruit", ["toeic"]], ["ended", "종료", "ended", ["algo"]]]);
   });
 });

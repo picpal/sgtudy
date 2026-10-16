@@ -4,7 +4,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { MoreMenu, type MoreMenuItem } from "@/components/ui/MoreMenu";
 import { PAL } from "@/lib/palette";
-import { ROOM_STATUS_LABEL, type RoomStatus } from "@/lib/types";
+import { roomStatusLabel, type RoomStatus } from "@/lib/types";
 import type { StudyRoom } from "@/lib/api/my-study";
 import { RoundIconButton, toneOfName } from "./bits";
 
@@ -24,12 +24,12 @@ export function StatusBadge({ status, draft }: { status: RoomStatus; draft?: boo
   if (draft)
     return (
       <Badge bg="#E9EEF0" fg="#4A5563" height={26} px={10} radius={8} fontSize={12} weight={600}>
-        준비중
+        {roomStatusLabel(status, true)}
       </Badge>
     );
   return (
     <Badge bg={STATUS_BG[status]} fg="#FFFFFF" height={26} px={10} radius={8} fontSize={12} weight={600}>
-      {ROOM_STATUS_LABEL[status]}
+      {roomStatusLabel(status)}
     </Badge>
   );
 }

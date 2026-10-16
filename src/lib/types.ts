@@ -22,3 +22,7 @@ export const ROOM_STATUS_LABEL: Record<RoomStatus, string> = {
   active: "진행중",
   ended: "종료",
 };
+
+/** 방 상태 배지 문구의 단일 출처 — DRAFT=준비중 · RECRUIT=모집중 · ACTIVE=진행중 · ENDED=종료 (홈 카드·방 상세·내 스터디 공통).
+ *  RoomStatus 는 draft 를 recruit 로 접으므로(uiStatus) 화면은 draft 플래그를 함께 넘긴다 */
+export const roomStatusLabel = (status: RoomStatus, draft?: boolean): string => (draft ? "준비중" : ROOM_STATUS_LABEL[status]);
