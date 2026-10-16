@@ -1481,6 +1481,10 @@ export type Database = {
         Returns: Json
       }
       room_open_recruit: { Args: { p_slug: string }; Returns: Json }
+      room_period_check: {
+        Args: { p_end: string; p_start: string }
+        Returns: undefined
+      }
       room_progress: {
         Args: { p_room: number }
         Returns: {
@@ -1598,6 +1602,7 @@ export type Database = {
         Args: { p_term: string; p_text: string }
         Returns: boolean
       }
+      tag_text_relevant: { Args: { p_text: string }; Returns: boolean }
       tags_search: { Args: { p_q?: string }; Returns: Json }
       task_code: {
         Args: {

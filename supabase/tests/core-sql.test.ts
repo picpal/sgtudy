@@ -73,10 +73,10 @@ sqlTest("iso: UTC with milliseconds and Z", withCase(db, async (q) => {
   assertEquals((await q("select public.iso('2026-10-12 09:30:15.25+09'::timestamptz) as t"))[0].t, "2026-10-12T00:30:15.250Z");
 }));
 
-sqlTest("slugify: ascii words, hangul-only falls back to r-<base36 id>", withCase(db, async (q) => {
-  assertEquals((await q("select public.slugify('AWS SAA 자격증 3개월 완주', 7) as s"))[0].s, "aws-saa-3");
-  assertEquals((await q("select public.slugify('토익 900 8주 챌린지', 2) as s"))[0].s, "900-8");
-  assertEquals((await q("select public.slugify('스프링 핵심 원리', 36) as s"))[0].s, "r-10");
+sqlTest("slugify: ascii words, hangul romanized (0013), no letters falls back to r-<base36 id>", withCase(db, async (q) => {
+  assertEquals((await q("select public.slugify('AWS SAA 자격증 3개월 완주', 7) as s"))[0].s, "aws-saa-jagyeokjeung-3gaewol-wanju");
+  assertEquals((await q("select public.slugify('토익 900 8주 챌린지', 2) as s"))[0].s, "toik-900-8ju-chaelrinji");
+  assertEquals((await q("select public.slugify('🚀 !!', 36) as s"))[0].s, "r-10");
   assertEquals((await q("select public.slugify('  Docker---Compose!! ', 1) as s"))[0].s, "docker-compose");
   const long = (await q("select public.slugify(repeat('abcde ', 20), 1) as s"))[0].s as string;
   assertEquals(long.length <= 50, true);

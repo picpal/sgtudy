@@ -102,7 +102,8 @@ cases("notifications", db, [
       ["ROUND_STARTED", "AWS SAA 자격증 3개월 완주의 3주차가 시작됐어요", "/my-study/aws"],
       ["MEMBER_DEACTIVATED", "AWS SAA 자격증 3개월 완주 스터디에서 이탈 처리됐어요", "/my-study/aws"],
     ]);
-    assertEquals(c[0].body, "AWS SAA 자격증 3개월 완주");                      // 과제 이벤트는 body 에 방 제목
+    assertEquals(c[0].body, null);                                             // 0013: 본문에 방 제목을 되풀이하지 않는다(제목이 과제를 말한다)
+    assertEquals(c[1].body, "고가용성 아키텍처");                               // 회차 시작 본문 = 회차 제목
     const m = await rowsOf(q, minsu);
     assertEquals(m.map((r) => [r.kind, r.title, r.link]), [
       ["JOIN_REQUESTED", "가은님이 AWS SAA 자격증 3개월 완주 참가를 신청했어요", "/my-study/aws"],

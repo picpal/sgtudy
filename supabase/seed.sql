@@ -455,7 +455,7 @@ begin
   -- created_at 이 오래된 것부터 INSERT 한다 → id 순서 = 시간 순서(목록은 id DESC 라 드롭다운이 최신순으로 보인다).
   -- 모두 기준일 10/12(KST) 이전 시각: D-3 리마인더 10/11 09:00 KST → spring 2주차 시작 10/12 00:00 KST → aws 일정 변경 10/12 10:30 KST
   insert into public.notifications (user_id, kind, title, body, room_id, node_id, actor_user_id, link, dedupe_key, created_at)
-  select p.id, 'DEADLINE_REMINDER', '"EC2 인스턴스 유형 정리" 마감 3일 전이에요', r.title, r.id, n.id, null,
+  select p.id, 'DEADLINE_REMINDER', '"EC2 인스턴스 유형 정리" 마감 3일 전이에요', null, r.id, n.id, null,   -- 본문 없음(0013 notify_render)
          '/my-study/aws?task=' || n.id, 'seed:DEADLINE_REMINDER:cheolsu', '2026-10-11 00:00:00+00'
   from public.profiles p, public.rooms r
   join public.goal_nodes n on n.room_id = r.id and n.title = 'EC2 인스턴스 유형 정리'
@@ -469,7 +469,7 @@ begin
 
   -- job_round_started 의 자연 키(ROUND_STARTED:<room>:<node>:<user>)로 넣어, 로컬 pg_cron 이 00:01 KST 에 돌아도 중복 행이 생기지 않는다.
   insert into public.notifications (user_id, kind, title, body, room_id, node_id, actor_user_id, link, dedupe_key, created_at)
-  select p.id, 'ROUND_STARTED', r.title || '의 2주차가 시작됐어요', r.title, r.id, n.id, null,
+  select p.id, 'ROUND_STARTED', r.title || '의 2주차가 시작됐어요', nullif(n.title, n.label), r.id, n.id, null,   -- 본문 = 회차 제목(0013)
          '/my-study/spring', 'ROUND_STARTED:' || r.id || ':' || n.id || ':' || p.id, '2026-10-11 15:00:00+00'
   from public.profiles p, public.rooms r
   join public.goal_nodes n on n.room_id = r.id and n.depth = 2 and n.label = '2주차'
