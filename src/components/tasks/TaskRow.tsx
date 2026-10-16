@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { TypeBadge } from "@/components/my-study/bits";
+import { CODE_CHIP } from "@/components/my-study/model";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import { TASK_TYPE_KO } from "@/lib/api/format";
 import type { MeTaskItem, MeTaskRound, MeTaskStudy } from "@/lib/api/types";
@@ -12,10 +13,11 @@ import { studyTone } from "./tone";
 
 export const period = (s: string, e: string) => (s === e ? md(e) : `${md(s)} – ${md(e)}`);
 
+// 완료·늦게·기한 지남 색은 진행목표·보드와 같은 출처(CODE_CHIP)
 const TONE_CLS: Record<RowTone, string> = {
-  done: "bg-mint-soft text-mint-deep",
-  late: "bg-amber-soft text-amber-text",
-  missed: "bg-warn-soft text-warn",
+  done: CODE_CHIP.D,
+  late: CODE_CHIP.L,
+  missed: CODE_CHIP.M,
   hot: "bg-warn text-white",
   plain: "bg-line-2 text-ink-2",
 };

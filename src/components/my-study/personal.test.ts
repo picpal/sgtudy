@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_OVERRIDES, buildTree, type LeafNode, type ParentNode } from "./model";
+import { CODE_COLOR, EMPTY_OVERRIDES, buildTree, type LeafNode, type ParentNode } from "./model";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { cardSync, groupOthers, othersHeading, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusText } from "./personal";
+import { cardSync, groupOthers, isDone, othersHeading, ownerOf, personalErrorText, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusColor, statusText } from "./personal";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const leaf = (id: string) => tree.nodes.find((n) => n.id === id) as LeafNode;
@@ -80,6 +80,30 @@ describe("ownerCode / statusText (문구 출처 = model.codeLabel)", () => {
   });
 });
 
+describe("ownerOf / isDone / statusColor (공용 — 최종 리뷰 Minor 5·7)", () => {
+  it("ownerOf = 소유자 줄, 없으면 첫 줄, 비면 null", () => {
+    expect(ownerOf(jieun)?.userId).toBe(JIEUN);
+    expect(ownerOf({ ...mine, ownerId: "nobody" })?.userId).toBe(mine.people[0].userId);
+    expect(ownerOf({ ...mine, people: [] })).toBeNull();
+  });
+  it("isDone = D·L", () => {
+    expect(["D", "L", "M", "O", "P"].map((c) => isDone(c as "D"))).toEqual([true, true, false, false, false]);
+  });
+  it("상태 색은 CODE_COLOR 하나 — 늦게 완료 호박, 기한 지남 빨강", () => {
+    expect(statusColor("D")).toBe(CODE_COLOR.D);
+    expect(statusColor("L")).toBe(CODE_COLOR.L);
+    expect(statusColor("M")).toBe(CODE_COLOR.M);
+    expect(statusColor("O")).toBeUndefined();
+  });
+});
+
+describe("personalErrorText (my-study · /tasks 공용)", () => {
+  it("스펙 §6 매핑이 있으면 그 문구, 없으면 서버 문구", () => {
+    expect(personalErrorText({ code: "SUBMISSION_HAS_CONTENT", message: "x" })).toBe("제출 내용이 있는 목표는 완료를 취소할 수 없어요 · 상세에서 확인해 주세요");
+    expect(personalErrorText({ code: "ROOM_NOT_ACTIVE", message: "서버 문구" })).toBe("서버 문구");
+  });
+});
+
 describe("removeText", () => {
   it("no submissions", () => expect(removeText(mine)).toBe("이 목표를 삭제할까요? 되돌릴 수 없어요."));
   it("owner with submissions", () => expect(removeText(jieun)).toBe("완료 기록과 제출 내용까지 함께 지워져요. 삭제할까요?"));
@@ -100,6 +124,7 @@ describe("personalPatch", () => {
 describe("movePreview", () => {
   it("same round → nothing", () => expect(movePreview("3주차", null, true)).toBe(""));
   it("moved with new period", () => expect(movePreview("4주차", { s: "2026-10-22", e: "2026-10-28" }, false)).toBe("4주차로 옮기면 기간이 10.22 – 10.28 로 바뀌어요"));
+  it("날짜는 팀 경고와 같은 mm.dd (07.01)", () => expect(movePreview("1주차", { s: "2026-07-01", e: "2026-07-07" }, false)).toBe("1주차로 옮기면 기간이 07.01 – 07.07 로 바뀌어요"));
   it("moved, period kept", () => expect(movePreview("4주차", null, false)).toBe("4주차로 옮겨도 기간은 그대로예요"));
 });
 
@@ -108,6 +133,7 @@ describe("roundWarning", () => {
   it("inside → null", () => expect(roundWarning(mine, r3)).toBeNull());
   it("outside → warning with the round period", () => expect(roundWarning({ s: "2026-10-14", e: "2026-10-21" }, r3)).toBe("회차 기간(10.15 – 10.21)을 벗어났어요"));
   it("no round → null", () => expect(roundWarning(mine, null)).toBeNull());
+  it("1~9월도 팀 경고와 같은 07.01 형식", () => expect(roundWarning({ s: "2026-06-30", e: "2026-07-03" }, { s: "2026-07-01", e: "2026-07-07" })).toBe("회차 기간(07.01 – 07.07)을 벗어났어요"));
 });
 
 describe("groupOthers", () => {

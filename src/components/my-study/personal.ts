@@ -3,8 +3,8 @@
  */
 import type { PersonalPatch } from "@/lib/api/personal";
 import type { Tone } from "@/lib/palette";
-import { md } from "@/lib/date";
-import { codeLabel, isPersonal, roundStatus, type Code, type LeafNode, type ParentNode } from "./model";
+import { mmdd } from "@/lib/api/format";
+import { CODE_COLOR, codeLabel, isDoneCode, isPersonal, roundStatus, type Code, type LeafNode, type ParentNode, type Person } from "./model";
 import { movedPeriod } from "./rounds";
 import type { RoomStatus } from "./submission";
 
@@ -42,10 +42,13 @@ export function personalActions(n: LeafNode, meId: string | null, isLeader: bool
   return { edit: false, complete: false, archive: canArchive && !(n.archived && n.ownerLeft), remove: !hasSub, ...(hasSub ? { removeOff: "완료 기록이 있어 보관만 할 수 있어요" } : {}), note: LEADER_NOTE };
 }
 
-export const isDone = (c: Code) => c === "D" || c === "L";
+export const isDone = isDoneCode;
 
-/** 소유자의 코드 — people = [소유자] (서버 task_node_json) */
-export const ownerCode = (n: LeafNode): Code => (n.people.find((p) => p.userId === n.ownerId) ?? n.people[0])?.c ?? "P";
+/** 개인 목표 소유자 — people = [소유자] (서버 task_node_json). 진행목표·간트·상세·회차 섹션 공용 */
+export const ownerOf = (n: LeafNode): Person | null => n.people.find((p) => p.userId === n.ownerId) ?? n.people[0] ?? null;
+
+/** 소유자의 코드 */
+export const ownerCode = (n: LeafNode): Code => ownerOf(n)?.c ?? "P";
 
 /** 상세 기간 줄 끝의 상태 — 완료·미완료는 코드로, 그 밖에는 기간 상태(시작 전 / 진행 중 · 마감 D-n) */
 export function statusText(n: LeafNode, today: string): string {
@@ -53,8 +56,8 @@ export function statusText(n: LeafNode, today: string): string {
   return isDone(c) || c === "M" ? codeLabel(n, c) : roundStatus(n, today);
 }
 
-/** 상태 글자색 — 완료 초록, 미완료 호박 */
-export const statusColor = (c: Code): string | undefined => (isDone(c) ? "#1A7F55" : c === "M" ? "#7A4F00" : undefined);
+/** 상태 글자색 — CODE_COLOR(보드·/tasks 와 같은 색): 기한내 초록 · 늦게 완료 호박 · 기한 지남 빨강. 진행·예정은 기본색 */
+export const statusColor = (c: Code): string | undefined => (isDone(c) || c === "M" ? CODE_COLOR[c] : undefined);
 
 /** 삭제 확인 문구 (스펙 §4.6) — 그룹장·제출 있음은 삭제 자체가 없다(보관만) */
 export const removeText = (n: LeafNode): string => (n.subAll > 0 ? "완료 기록과 제출 내용까지 함께 지워져요. 삭제할까요?" : "이 목표를 삭제할까요? 되돌릴 수 없어요.");
@@ -78,7 +81,7 @@ export function personalPatch(n: LeafNode, d: PersonalDraft): PersonalPatch {
 /** 편집 폼 회차 이동 미리보기 (시안 B-2) */
 export function movePreview(label: string, period: { s: string; e: string } | null, sameRound: boolean): string {
   if (sameRound) return "";
-  return period ? `${label}로 옮기면 기간이 ${md(period.s)} – ${md(period.e)} 로 바뀌어요` : `${label}로 옮겨도 기간은 그대로예요`;
+  return period ? `${label}로 옮기면 기간이 ${mmdd(period.s)} – ${mmdd(period.e)} 로 바뀌어요` : `${label}로 옮겨도 기간은 그대로예요`;
 }
 
 /**
@@ -99,7 +102,7 @@ export function pickRound(n: LeafNode, d: PersonalDraft, roots: ParentNode[], id
 /** 회차 기간 밖 경고 (서버 PERIOD_OUTSIDE_PARENT 와 같은 판정) — 소유자 상세·폼 위 */
 export function roundWarning(n: { s: string; e: string }, round: { s: string; e: string } | null): string | null {
   if (!round || (n.s >= round.s && n.e <= round.e)) return null;
-  return `회차 기간(${md(round.s)} – ${md(round.e)})을 벗어났어요`;
+  return `회차 기간(${mmdd(round.s)} – ${mmdd(round.e)})을 벗어났어요`;
 }
 
 /** items = 보이는 줄(그룹장에게는 보관 포함), count·done = 보관 제외 (personalStats 와 같은 기준) */
@@ -110,7 +113,7 @@ export function groupOthers(round: ParentNode, meId: string | null, isLeader: bo
   const by = new Map<string, OwnerGroup & { rank: number }>();
   round.kids.forEach((k) => {
     if (!isPersonal(k) || !k.ownerId || k.ownerId === meId || (k.archived && !isLeader)) return;
-    const owner = k.people.find((p) => p.userId === k.ownerId) ?? k.people[0];
+    const owner = ownerOf(k);
     let g = by.get(k.ownerId);
     if (!g) {
       g = { ownerId: k.ownerId, name: owner?.name ?? "", tone: owner?.tone ?? "slate", items: [], count: 0, done: 0, rank: k.ownerRank };
@@ -157,3 +160,5 @@ export function cardSync(seen: Code | null, code: Code | null, skip: CardSkip, n
 export const PERSONAL_ERROR_TEXT: Record<string, string> = {
   SUBMISSION_HAS_CONTENT: "제출 내용이 있는 목표는 완료를 취소할 수 없어요 · 상세에서 확인해 주세요",
 };
+/** 개인 목표 RPC 실패 문구 — my-study·/tasks 공용 (같은 오류는 같은 문구) */
+export const personalErrorText = (e: { code: string; message: string }): string => PERSONAL_ERROR_TEXT[e.code] ?? e.message;

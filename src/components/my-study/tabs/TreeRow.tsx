@@ -4,7 +4,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ArchivedBadge, AvatarStack, TypeBadge } from "../bits";
 import { md } from "@/lib/date";
-import { codeLabel, type LeafNode, type TreeNode } from "../model";
+import { CODE_CHIP, codeLabel, type TreeNode } from "../model";
+import { isDone, ownerOf } from "../personal";
 
 type Props = {
   n: TreeNode;
@@ -42,8 +43,6 @@ const Plus = () => (
   </svg>
 );
 
-/** 개인 목표 소유자(서버 people = [소유자]) */
-const ownerOf = (n: LeafNode) => n.people.find((p) => p.userId === n.ownerId) ?? n.people[0] ?? null;
 
 export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, onClick, onAddChild, onRemove, removeOff, asking = false, dragHandle, dropHint = null, dragging = false, below }: Props) {
   const personal = n.leaf && n.personal;
@@ -52,7 +51,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
   const owner = personal ? ownerOf(n) : null;
   // 남의 개인 목표에만 소유자 표시 (결정 5 — 내 것에는 "나" 칩·아바타 없음)
   const other = personal && owner && owner.userId !== meId ? owner : null;
-  const done = !!owner && (owner.c === "D" || owner.c === "L");
+  const done = !!owner && isDone(owner.c);
   // "+" 는 회차에만 — 과제 아래 과제(묶음)는 만들지 않는다 (2단계: 회차 → 과제)
   const canAdd = isEdit && !n.leaf && n.d === 0 && !n.archived;
   const addTip = `${n.title}에 과제 추가`;
@@ -124,7 +123,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
               </span>
             )}
             {owner && (
-              <span data-personal-status className={`shrink-0 whitespace-nowrap rounded-[8px] px-[10px] py-1 text-[12px] font-semibold ${done ? "bg-[#E2F3EA] text-[#14724D]" : "bg-[#EEF2F1] text-ink-2"}`}>
+              <span data-personal-status className={`shrink-0 whitespace-nowrap rounded-[8px] px-[10px] py-1 text-[12px] font-semibold ${CODE_CHIP[owner.c]}`}>
                 {done && <span aria-hidden="true">✓ </span>}
                 {codeLabel(n, owner.c)}
               </span>

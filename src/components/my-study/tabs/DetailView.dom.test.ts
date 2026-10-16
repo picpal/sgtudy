@@ -38,6 +38,8 @@ describe("DetailView 개인 목표 머리 버튼 (스펙 §4.6)", () => {
     const btn = root.querySelector<HTMLButtonElement>("button[aria-pressed]")!;
     expect(btn.disabled).toBe(true);
     expect(root.querySelector(`#${btn.getAttribute("aria-describedby")}`)?.textContent).toBe("스터디가 진행 중일 때 완료할 수 있어요");
+    // 이유는 버튼 밖 — 접근 가능한 이름에 섞여 두 번 읽히지 않게 (최종 리뷰 Minor 6)
+    expect(btn.textContent?.trim()).toBe("완료로 표시");
   });
   it("그룹장·남의 것: ⋯ 만 (완료·편집 없음)", () => {
     const l = labels(render(leaf("32"), LEADER, true));

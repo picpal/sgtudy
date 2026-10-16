@@ -13,6 +13,7 @@ import { md, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
 import { AddPersonalForm } from "./AddPersonalForm";
 import { focusFirst, latestApplied } from "./requests";
+import { personalErrorText } from "@/components/my-study/personal";
 import { addableStudies, applyFilter, atLimit, DEFAULT_FILTER, defaultCollapsed, emptyKind, filterQuery, groupByDue, groupByRound, isDone, normalizeFilter, parseFilter, summary, type RoundGroup, type TasksFilter } from "./calc";
 import { RoundGroupCard } from "./RoundGroupCard";
 import { TaskRow } from "./TaskRow";
@@ -105,7 +106,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
       try {
         await personalComplete(it.slug, it.id, done);
       } catch (e) {
-        setToast({ text: toApiError(e).message, tone: "bad" });
+        setToast({ text: personalErrorText(toApiError(e)), tone: "bad" });
         return;
       }
       const text = done ? "완료했어요" : "완료를 취소했어요";
@@ -130,7 +131,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
       try {
         await personalCreate(slug, roundId, title);
       } catch (e) {
-        setToast({ text: toApiError(e).message, tone: "bad" });
+        setToast({ text: personalErrorText(toApiError(e)), tone: "bad" });
         return false;
       }
       try {

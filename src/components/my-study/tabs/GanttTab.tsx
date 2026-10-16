@@ -6,6 +6,7 @@ import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, CodeIcons, PERSONAL_BAR, Seg, TypeBadge } from "../bits";
+import { isDone, ownerCode, ownerOf } from "../personal";
 import { codeLabel, ganttRange, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
 import { toggleMinePatch, toggleOthersPatch, type ScreenState, type Update, type Zoom } from "../state";
 
@@ -22,12 +23,7 @@ const GBAR: Record<LeafState, [string, string, string]> = {
 /** 개인 목표 막대 = 공용 PERSONAL_BAR(흰 바탕 + slate 점선). 완료면 slate 바탕을 채운다 */
 const PERSONAL_DONE: [string, string, string] = ["var(--slate-soft)", PERSONAL_BAR[1], PERSONAL_BAR[2]];
 
-/** 개인 목표 소유자(서버 people = [소유자]) */
-const ownerOf = (n: LeafNode) => n.people.find((p) => p.userId === n.ownerId) ?? n.people[0] ?? null;
-const personalDone = (n: LeafNode) => {
-  const c = ownerOf(n)?.c;
-  return c === "D" || c === "L";
-};
+const personalDone = (n: LeafNode) => isDone(ownerCode(n));
 
 export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
   const dayZoom = S.zoom !== "week";

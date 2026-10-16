@@ -21,7 +21,12 @@ export const CODE_LABEL: Record<Code, string> = { D: "기한내 제출", L: "지
 export const PERSONAL_LABEL: Record<Code, string> = { D: "기한내 완료", L: "늦게 완료", M: "기한 지남", O: "진행중", P: "예정" };
 /** 리프의 사람별 상태 문구 단일 출처 — 개인 목표면 PERSONAL_LABEL, 팀 과제면 CODE_LABEL */
 export const codeLabel = (l: { personal: boolean }, c: Code): string => (l.personal ? PERSONAL_LABEL[c] : CODE_LABEL[c]);
+/** 상태 색 단일 출처 — 기한내 초록 · 늦게/지각 호박 · 기한 지남/미제출 빨강 (보드·상세·회차 섹션·진행목표·/tasks 공용) */
 export const CODE_COLOR: Record<Code, string> = { D: "#1A7F55", L: "#8A5A00", M: "#C0392B", O: "#3A4452", P: "#5B6675" };
+/** 상태 칩(바탕 + 글자) — CODE_COLOR 와 같은 계열. 진행목표 행·/tasks 행 공용 */
+export const CODE_CHIP: Record<Code, string> = { D: "bg-mint-soft text-mint-deep", L: "bg-amber-soft text-amber-text", M: "bg-warn-soft text-warn", O: "bg-line-2 text-ink-2", P: "bg-line-2 text-ink-2" };
+/** 완료(기한내·늦게) 판정 단일 출처 */
+export const isDoneCode = (c: Code | null | undefined): boolean => c === "D" || c === "L";
 export const CODE_STATUS: Record<Code, TaskStatus> = { D: "done", L: "late", M: "missed", O: "open", P: "planned" };
 export const STATUS_CODE: Record<TaskStatus, Code> = { done: "D", late: "L", missed: "M", open: "O", planned: "P" };
 export const CODE_STATE: Record<Code, LeafState> = { D: "complete", L: "complete", M: "delayed", O: "progress", P: "planned" };
@@ -183,7 +188,7 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
         people = chosen.map((m) => ({ userId: m.userId, name: m.name, tone: m.tone, c: known.get(m.userId) ?? fresh(s) }));
       }
       const asg = people.length;
-      const sub = people.filter((p) => p.c === "D" || p.c === "L").length;
+      const sub = people.filter((p) => isDoneCode(p.c)).length;
       const ownerId = personal ? (n.ownerId ?? null) : null;
       const ownerRank = ownerId ? (rank.get(ownerId) ?? rank.size) : -1;
       const ownerLeft = !!ownerId && !activeIds.has(ownerId);
@@ -314,7 +319,7 @@ export function memberStats(leaves: LeafNode[], userId: string): { done: number;
     const p = l.people.find((x) => x.userId === userId);
     if (!p) return;
     total += 1;
-    if (p.c === "D" || p.c === "L") done += 1;
+    if (isDoneCode(p.c)) done += 1;
   });
   return { done, total };
 }
@@ -344,7 +349,7 @@ export function personalStats(personal: LeafNode[], userId: string, roundId?: st
     if (l.ownerId !== userId || (roundId !== undefined && l.roundId !== roundId)) return;
     total += 1;
     const c = myCode(l, userId);
-    if (c === "D" || c === "L") done += 1;
+    if (isDoneCode(c)) done += 1;
   });
   return { done, total };
 }
@@ -400,7 +405,7 @@ export const myCode = (l: LeafNode, meId: string | null): Code | null => (meId ?
 export function boardColumn(l: LeafNode, mine: boolean, meId: string | null): BoardCol {
   if (mine) {
     const c = myCode(l, meId);
-    return c === "P" ? "todo" : c === "D" || c === "L" ? "done" : "doing";
+    return c === "P" ? "todo" : isDoneCode(c) ? "done" : "doing";
   }
   return l.state === "planned" || l.state === "unassigned" ? "todo" : l.state === "complete" ? "done" : "doing";
 }

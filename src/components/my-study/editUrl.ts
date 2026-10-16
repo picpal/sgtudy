@@ -66,8 +66,9 @@ export function syncStep(url: string | null, urlMode: CurMode, open: string | nu
   return s;
 }
 
-/** 주소 → 열 화면. 편집은 권한자만(아니면 같은 항목의 보기 상세). 없는 항목은 목록 */
-export function itemFromUrl(search: string, exists: (id: string) => boolean, canEdit: boolean): { id: string | null; mode: CurMode } {
+/** 주소 → 열 화면. 편집은 권한자만(아니면 같은 항목의 보기 상세). 없는 항목은 목록.
+ *  개인 목표(personal)는 편집 화면 대상이 아니다 — mode=edit 이어도 보기 상세 (서버도 PERSONAL_NODE 로 막는다) */
+export function itemFromUrl(search: string, exists: (id: string) => boolean, canEdit: boolean, personal: (id: string) => boolean = () => false): { id: string | null; mode: CurMode } {
   const id = itemTarget(readItem(search), exists);
-  return { id, mode: id && canEdit && readMode(search) === "edit" ? "edit" : "view" };
+  return { id, mode: id && canEdit && readMode(search) === "edit" && !personal(id) ? "edit" : "view" };
 }

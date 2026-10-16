@@ -78,4 +78,10 @@ describe("detail view URL (보기 ?item=)", () => {
     expect(itemFromUrl("?item=7", has, true)).toEqual({ id: "7", mode: "view" });
     expect(itemFromUrl("?item=9", has, true)).toEqual({ id: null, mode: "view" });
   });
+
+  it("개인 목표는 편집 URL 로 와도 보기 상세 (최종 리뷰 Minor 3)", () => {
+    const personal = (id: string) => id === "32";
+    expect(itemFromUrl("?mode=edit&item=32", () => true, true, personal)).toEqual({ id: "32", mode: "view" });
+    expect(itemFromUrl("?mode=edit&item=21", () => true, true, personal)).toEqual({ id: "21", mode: "edit" });
+  });
 });

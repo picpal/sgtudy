@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { Avatar } from "@/components/ui/Avatar";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -10,7 +11,7 @@ import { useToday } from "@/lib/today";
 import { MarkdownView } from "../MarkdownView";
 import { ArchivedBadge, TypeBadge } from "../bits";
 import { roundStatus, type LeafNode, type ParentNode, type TreeNode } from "../model";
-import { cardSync, isDone, ownerCode, personalActions, removeText, roundWarning, statusColor, statusText, type CardSkip, type PersonalActions } from "../personal";
+import { cardSync, isDone, ownerCode, ownerOf, personalActions, removeText, roundWarning, statusColor, statusText, type CardSkip, type PersonalActions } from "../personal";
 import type { RoomStatus } from "../submission";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { ChildList } from "./ChildList";
@@ -180,10 +181,12 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
     } else if (t.closest("input, textarea, [contenteditable=true]")) return; // 제출 작성 칸 안의 Esc 는 나가기가 아니다
     guard(onBack);
   };
+  // 편집 폼을 닫으면 제목으로 — 제목이 다시 그려진 뒤(effect, 빠른 추가와 같은 훅)
+  const refocusForm = useRefocusOnClose(editing);
   const closeForm = () => {
+    refocusForm(() => heading.current);
     setEditing(false);
     setFormDirty(false);
-    requestAnimationFrame(() => heading.current?.focus({ preventScroll: true }));
   };
   const complete = async () => {
     if (!pn || busy) return;
@@ -201,7 +204,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   };
   const round = pn ? (nodes.find((x) => x.id === pn.parentId) ?? null) : null;
   const warn = pn && isOwner ? roundWarning(pn, round) : null;
-  const owner = pn && !isOwner ? (pn.people.find((p) => p.userId === pn.ownerId) ?? pn.people[0]) : null;
+  const owner = pn && !isOwner ? ownerOf(pn) : null;
   return (
     <section aria-labelledby={pn && editing ? `pf-${pn.id}` : "detail-title"} onKeyDown={onKey} className="flex flex-col">
       <div className="sticky top-0 z-[2] -mx-1 flex flex-wrap items-center gap-2 border-b border-line-2 bg-surface px-1 py-3">
@@ -242,12 +245,13 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
                   </svg>
                 )}
                 {done ? "완료 취소" : "완료로 표시"}
-                {!acts.complete && (
-                  <span id="complete-why" className="sr-only">
-                    {NOT_ACTIVE}
-                  </span>
-                )}
               </button>
+            )}
+            {/* 비활성 이유는 버튼 밖 — 안에 두면 접근 가능한 이름에 섞여 describedby 와 두 번 읽힌다 */}
+            {isOwner && !pn.archived && acts.edit && !acts.complete && (
+              <span id="complete-why" className="sr-only">
+                {NOT_ACTIVE}
+              </span>
             )}
             {acts.edit && (
               <button type="button" onClick={() => guard(() => setEditing(true))} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink">

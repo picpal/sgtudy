@@ -17,7 +17,7 @@ import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
-import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, stripFieldOv, thisRoundId } from "./model";
+import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, isPersonal, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId } from "./rounds";
 import { INITIAL_STATE, SHOW_OTHERS_PATCH, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
@@ -33,6 +33,9 @@ import { useCurriculumApi } from "./useCurriculumApi";
 
 type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string; initialItem?: string };
 
+/** 개인 목표 id 인가 — 편집 화면 대상이 아니다(편집 URL 로 와도 보기 상세) */
+const isPersonalId = (nodes: Curriculum["nodes"], id: string) => nodes.some((n) => n.id === id && n.task?.type === "personal");
+
 export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf, initialItem }: Props) {
   const me = useMe();
   const router = useRouter();
@@ -45,7 +48,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // ?item=: 새로고침하면 같은 화면 — 편집 권한 + mode=edit 이면 편집 화면, 아니면 보기 상세. 없는 id 면 목록 — 아래 URL 동기화가 주소에서 지운다
   const itemInit: Partial<ScreenState> =
     !focusLeaf && initialItem && curriculum.nodes.some((n) => n.id === initialItem)
-      ? canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) && initialMode === "edit"
+      ? canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) && initialMode === "edit" && !isPersonalId(curriculum.nodes, initialItem)
         ? { tab: "curriculum", curMode: "edit", editSel: initialItem }
         : { tab: "curriculum", curMode: "view", viewSel: initialItem }
       : {};
@@ -121,7 +124,10 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     const onPop = () => {
       const { S: s, tree: t, openItem: open, canEdit: ce } = live.current;
       const url = readItem(window.location.search);
-      const target = itemFromUrl(window.location.search, (id) => !!findNode(t.nodes, id), ce);
+      const target = itemFromUrl(window.location.search, (id) => !!findNode(t.nodes, id), ce, (id) => {
+        const n = findNode(t.nodes, id);
+        return !!n && isPersonal(n);
+      });
       // 앞으로 가기로 돌아온 기록의 항목이 그새 삭제됐으면 주소에서도 지운다
       if (url && !target.id) window.history.replaceState(null, "", withItem(window.location.href, null));
       if (target.id === open && (target.id === null || (target.mode === "edit") === (s.curMode === "edit"))) return;
