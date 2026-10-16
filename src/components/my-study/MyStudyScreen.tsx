@@ -19,7 +19,7 @@ import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
 import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId } from "./rounds";
-import { INITIAL_STATE, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
 import { OverviewTab } from "./tabs/OverviewTab";
@@ -27,7 +27,7 @@ import { JoinInfoCard } from "./tabs/JoinInfoCard";
 import { CurriculumTab } from "./tabs/CurriculumTab";
 import { BoardTab } from "./tabs/BoardTab";
 import { CalendarTab } from "./tabs/CalendarTab";
-import { MemberAdminCard, SHOW_OTHERS_PATCH } from "./tabs/MemberAdminCard";
+import { MemberAdminCard } from "./tabs/MemberAdminCard";
 import { GanttTab } from "./tabs/GanttTab";
 import { useCurriculumApi } from "./useCurriculumApi";
 

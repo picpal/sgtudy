@@ -11,6 +11,7 @@ import type { CurriculumApi } from "../useCurriculumApi";
 import type { RoomStatus } from "../submission";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { useMe } from "@/lib/me";
+import { othersHeading } from "../personal";
 import { DetailView } from "./DetailView";
 import { EditView } from "./EditView";
 import { InlineConfirm } from "./InlineConfirm";
@@ -294,7 +295,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
             if (entry.kind === "others")
               return (
                 <InfoRow key={`others-${entry.round.id}`} tone="heading">
-                  팀원 개인 목표 {entry.count}
+                  {othersHeading(entry.count, entry.archived)}
                 </InfoRow>
               );
             const n = entry.n;

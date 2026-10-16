@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { md } from "@/lib/date";
-import { TypeBadge } from "../bits";
+import { ArchivedBadge, TypeBadge } from "../bits";
 import { codeLabel, isPersonal, type LeafNode, type ParentNode } from "../model";
-import { groupOthers, isDone, ownerCode, personalActions, sectionCounts, statusColor } from "../personal";
+import { groupOthers, isDone, othersHeading, ownerCode, personalActions, sectionCounts, statusColor } from "../personal";
 import type { RoomStatus } from "../submission";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { AddRow, QuickAdd } from "./QuickAdd";
@@ -23,14 +23,16 @@ type Props = {
 
 const NOT_ACTIVE = "스터디가 진행 중일 때 완료할 수 있어요";
 
-/** 완료 체크 — 44px 버튼, 보이는 원은 22px. 완료면 초록 채움 + 체크 */
+/** 완료 체크 — 44px 버튼, 보이는 원은 22px. 완료면 초록 채움 + 체크. 비활성 이유(title)는 툴팁이 안 뜨는 환경을 위해 aria-describedby 로도 */
 function CheckButton({ n, done, disabled, busy, title, onClick }: { n: LeafNode; done: boolean; disabled: boolean; busy: boolean; title?: string; onClick: () => void }) {
+  const whyId = `why-${n.id}`;
   return (
     <button
       type="button"
       aria-pressed={done}
       aria-label={`${n.title} ${done ? "완료 취소" : "완료로 표시"}`}
       aria-busy={busy || undefined}
+      aria-describedby={disabled && title ? whyId : undefined}
       disabled={disabled || busy}
       title={title}
       onClick={onClick}
@@ -46,6 +48,11 @@ function CheckButton({ n, done, disabled, busy, title, onClick }: { n: LeafNode;
           </svg>
         )}
       </span>
+      {disabled && title && (
+        <span id={whyId} className="sr-only">
+          {title}
+        </span>
+      )}
     </button>
   );
 }
@@ -63,7 +70,7 @@ function GoalBody({ n, onOpen, padLeft }: { n: LeafNode; onOpen: (id: string) =>
       <span className="shrink-0 text-[12px] font-semibold text-ink-2" style={{ color: statusColor(c) }}>
         {codeLabel(n, c)}
       </span>
-      {n.archived && <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">보관됨</span>}
+      {n.archived && <ArchivedBadge left={n.ownerLeft} />}
     </button>
   );
 }
@@ -147,7 +154,7 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
       )}
 
       {othersRows > 0 && (
-        <section aria-label={`팀원 개인 목표 ${counts.others}개`} className="flex flex-col gap-2">
+        <section aria-label={othersHeading(counts.others, counts.othersArchived, "개")} className="flex flex-col gap-2">
           <button
             type="button"
             aria-expanded={othersOpen}
@@ -156,7 +163,7 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
             className="inline-flex min-h-11 items-center gap-[6px] self-start rounded-[10px] pr-2 text-[13px] font-semibold text-ink-3"
           >
             <Disclosure open={othersOpen} />
-            팀원 개인 목표 {counts.others}개
+            {othersHeading(counts.others, counts.othersArchived, "개")}
           </button>
           {othersOpen && (
             <ul id={`others-${round.id}`} className="m-0 flex list-none flex-col overflow-hidden rounded-[12px] border border-line p-0">

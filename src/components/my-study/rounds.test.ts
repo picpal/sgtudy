@@ -156,7 +156,7 @@ describe("dropPlan (드래그 놓기 → node_move)", () => {
 
 describe("개인 목표 — 순서·드래그·추가 줄", () => {
   const nb = { parentId: "R", roundId: "R", d: 1, desc: "", s: "2026-10-15", e: "2026-10-21", archived: false, archivedByParent: false, subAll: 0, crumb: "", roundLabel: "3주차", temp: false };
-  const team = (id: string): LeafNode => ({ ...nb, id, title: id, leaf: true, type: "공통", people: [], asg: 0, sub: 0, state: "unassigned", ownerId: null, personal: false, ownerRank: -1 });
+  const team = (id: string): LeafNode => ({ ...nb, id, title: id, leaf: true, type: "공통", people: [], asg: 0, sub: 0, state: "unassigned", ownerId: null, personal: false, ownerRank: -1, ownerLeft: false });
   const personal = (id: string, owner: string): LeafNode => ({ ...team(id), type: "개인", ownerId: owner, personal: true, ownerRank: 0 });
   const mkRound = (kids: TreeNode[]): ParentNode => ({ ...nb, id: "R", parentId: null, d: 0, title: "R", leaf: false, label: "3주차", kids, childCount: kids.length, asg: 0, sub: 0, pct: 0 });
 
@@ -208,6 +208,13 @@ describe("개인 목표 — 순서·드래그·추가 줄", () => {
     expect(r3(true)).toEqual(["3", "31", "311", "32", "p3", "o3:1", "33", "4"]);
     // 추가 자격이 없어도 소제목은 나온다
     expect(r3(false)).toEqual(["3", "31", "311", "32", "o3:1", "33", "4"]);
+  });
+  it("withPersonalAddRows: 소제목 개수는 보관 제외, 그룹장에게 보이는 보관 목표는 따로 (C-4 '5 · 보관 2')", () => {
+    const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "33" ? { ...n, archived: true } : n)) };
+    const t = buildTree(cur, EMPTY_OVERRIDES, REF_DAY);
+    const rows = visibleNodes(t.roots, {}, { ...sc, others: true, isLeader: true });
+    const head = withPersonalAddRows(rows, t.roots, {}, false, CHULSU).find((e) => e.kind === "others");
+    expect(head).toMatchObject({ kind: "others", count: 0, archived: 1 });
   });
   it("withEmptyRounds: 펼친 회차 아래 보이는 노드가 없으면 회차 바로 뒤에 안내 줄", () => {
     // 도윤(u5) — 배정·개인 목표 없음. 접힌 회차는 안내 없음

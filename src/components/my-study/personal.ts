@@ -38,7 +38,8 @@ export function personalActions(n: LeafNode, meId: string | null, isLeader: bool
   }
   if (!isLeader) return { ...NONE };
   const hasSub = n.subAll > 0;
-  return { edit: false, complete: false, archive: canArchive, remove: !hasSub, ...(hasSub ? { removeOff: "완료 기록이 있어 보관만 할 수 있어요" } : {}), note: LEADER_NOTE };
+  // 이탈한 팀원의 보관 목표는 해제할 수 없다(서버 OWNER_NOT_ACTIVE — 해제해도 다시 보관된다)
+  return { edit: false, complete: false, archive: canArchive && !(n.archived && n.ownerLeft), remove: !hasSub, ...(hasSub ? { removeOff: "완료 기록이 있어 보관만 할 수 있어요" } : {}), note: LEADER_NOTE };
 }
 
 export const isDone = (c: Code) => c === "D" || c === "L";
@@ -124,14 +125,32 @@ export function groupOthers(round: ParentNode, meId: string | null, isLeader: bo
 }
 
 /** 회차 상세 머리 개수 — 보관 제외. mine = 내 것 n·완료 d, others = 팀원 것 n (보관된 줄은 보여도 세지 않는다) */
-export function sectionCounts(round: ParentNode, meId: string | null, isLeader: boolean): { mine: { total: number; done: number }; others: number } {
+export function sectionCounts(round: ParentNode, meId: string | null, isLeader: boolean): { mine: { total: number; done: number }; others: number; othersArchived: number } {
   const mine = { total: 0, done: 0 };
   round.kids.forEach((k) => {
     if (!isPersonal(k) || k.archived || meId === null || k.ownerId !== meId) return;
     mine.total += 1;
     if (isDone(ownerCode(k))) mine.done += 1;
   });
-  return { mine, others: groupOthers(round, meId, isLeader).reduce((a, g) => a + g.count, 0) };
+  const groups = groupOthers(round, meId, isLeader);
+  const others = groups.reduce((a, g) => a + g.count, 0);
+  return { mine, others, othersArchived: groups.reduce((a, g) => a + g.items.length, 0) - others };
+}
+
+/** 팀원 개인 목표 소제목 — "팀원 개인 목표 {n}{unit}" + 그룹장에게 보이는 보관 목표가 있으면 " · 보관 {m}" (시안 C-2·C-4) */
+export const othersHeading = (n: number, archived: number, unit = ""): string => `팀원 개인 목표 ${n}${unit}${archived > 0 ? ` · 보관 ${archived}` : ""}`;
+
+/** 제출 카드(LeafBody) 다시 받기 판단. skip = 카드에서 처음 제출한 그때의 코드(from)와 노드(at) */
+export type CardSkip = { from: Code; at: unknown } | null;
+/**
+ * 소유자 코드가 카드 밖(체크·토스트 "되돌리기"·회차 섹션)에서 바뀌면 카드를 다시 받는다(remount).
+ * 카드에서 처음 제출해 바뀐 한 번은 카드가 이미 최신이라 건너뛴다 — 저장 직전 코드(from)에서 바뀐 경우에만.
+ * 저장 뒤 새 노드가 왔는데 코드가 그대로면(재조회 실패·같은 코드) 건너뛰기를 잊는다 — 다음 바깥 변화는 다시 받는다.
+ */
+export function cardSync(seen: Code | null, code: Code | null, skip: CardSkip, node: unknown): { remount: boolean; skip: CardSkip } {
+  if (code !== seen) return { remount: !(skip && seen === skip.from), skip: null };
+  if (skip && node !== skip.at) return { remount: false, skip: null };
+  return { remount: false, skip };
 }
 
 /** 서버 오류 코드 → 스펙 §6 문구 (서버 문구보다 자세한 것만) */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_STATE, goLeafPatch, modeSwitchPatch, toggleMinePatch, toggleOthersPatch } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, goLeafPatch, modeSwitchPatch, toggleMinePatch, toggleOthersPatch } from "./state";
 
 describe("goLeafPatch", () => {
   it("opens the task detail view instead of an inline row", () =>
@@ -33,4 +33,9 @@ describe("진행목표·간트 필터 칩 — 두 칩은 서로 끈다", () => {
     expect(toggleOthersPatch(S(true, false))).toEqual({ othersPersonal: true, mineOnly: false });
     expect(toggleOthersPatch(S(false, true))).toEqual({ othersPersonal: false, mineOnly: false });
   });
+});
+
+describe("SHOW_OTHERS_PATCH (개요 '팀원 개인 목표 보기 →')", () => {
+  it("열린 상세를 닫고 진행목표 보기 + 팀원 목표 칩", () =>
+    expect(SHOW_OTHERS_PATCH).toMatchObject({ tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, viewSel: null, editSel: null, viewFocus: null, calPick: null }));
 });

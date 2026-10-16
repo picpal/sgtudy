@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_OVERRIDES, buildTree, type LeafNode, type ParentNode } from "./model";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { groupOthers, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusText } from "./personal";
+import { cardSync, groupOthers, othersHeading, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusText } from "./personal";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const leaf = (id: string) => tree.nodes.find((n) => n.id === id) as LeafNode;
@@ -51,6 +51,13 @@ describe("personalActions", () => {
     expect(personalActions(n, CHULSU, false, "active")).toEqual({ edit: false, complete: false, archive: true, remove: true });
     // 회차째 보관된 목표는 여기서 해제할 수 없다
     expect(personalActions({ ...n, archivedByParent: true }, CHULSU, false, "active").archive).toBe(false);
+  });
+
+  it("leader on a left member's archived goal: no unarchive (서버 OWNER_NOT_ACTIVE) — delete rule unchanged", () => {
+    const n = { ...mine, archived: true, ownerLeft: true };
+    expect(personalActions(n, LEADER, true, "active")).toMatchObject({ archive: false, remove: true });
+    // 아직 보관 전이면 보관은 할 수 있다
+    expect(personalActions({ ...mine, ownerLeft: true }, LEADER, true, "active").archive).toBe(true);
   });
 
   it("leader who owns the goal is treated as owner (no note)", () => {
@@ -118,12 +125,14 @@ describe("groupOthers", () => {
 describe("sectionCounts — 보관 제외 (personalStats 와 같은 기준)", () => {
   const withArchived = (ids: string[]) => ({ ...round("3"), kids: round("3").kids.map((k) => (ids.includes(k.id) ? { ...k, archived: true } : k)) }) as ParentNode;
   it("counts mine and others", () => {
-    expect(sectionCounts(round("3"), CHULSU, false)).toEqual({ mine: { total: 1, done: 0 }, others: 1 });
-    expect(sectionCounts(round("3"), JIEUN, false)).toEqual({ mine: { total: 1, done: 1 }, others: 1 });
+    expect(sectionCounts(round("3"), CHULSU, false)).toEqual({ mine: { total: 1, done: 0 }, others: 1, othersArchived: 0 });
+    expect(sectionCounts(round("3"), JIEUN, false)).toEqual({ mine: { total: 1, done: 1 }, others: 1, othersArchived: 0 });
   });
   it("archived goals drop out of the counts (leader still sees the rows)", () => {
-    expect(sectionCounts(withArchived(["32"]), CHULSU, false)).toEqual({ mine: { total: 0, done: 0 }, others: 1 });
-    expect(sectionCounts(withArchived(["33"]), CHULSU, true)).toEqual({ mine: { total: 1, done: 0 }, others: 0 });
+    expect(sectionCounts(withArchived(["32"]), CHULSU, false)).toEqual({ mine: { total: 0, done: 0 }, others: 1, othersArchived: 0 });
+    // 그룹장에게 보관된 팀원 것만 있으면 "0 · 보관 1" (시안 C-4)
+    expect(sectionCounts(withArchived(["33"]), CHULSU, true)).toEqual({ mine: { total: 1, done: 0 }, others: 0, othersArchived: 1 });
+    expect(sectionCounts(withArchived(["33"]), CHULSU, false).othersArchived).toBe(0);
     expect(sectionCounts(withArchived(["33"]), JIEUN, false).mine).toEqual({ total: 0, done: 0 });
   });
 });
@@ -138,4 +147,28 @@ describe("pickRound — 편집 폼 회차 선택", () => {
     expect(pickRound(mine, moved, tree.roots, "3")).toEqual({ draft: { ...moved, roundId: "3", s: mine.s, e: mine.e }, note: "" });
   });
   it("same round → null", () => expect(pickRound(mine, base, tree.roots, "3")).toBeNull());
+});
+
+describe("othersHeading — 팀원 개인 목표 소제목 (시안 C-2·C-4)", () => {
+  it("보관이 없으면 개수만", () => expect(othersHeading(6, 0)).toBe("팀원 개인 목표 6"));
+  it("보관이 있으면 '· 보관 m'", () => expect(othersHeading(5, 2)).toBe("팀원 개인 목표 5 · 보관 2"));
+  it("단위를 붙일 수 있다 (회차 상세)", () => expect(othersHeading(0, 1, "개")).toBe("팀원 개인 목표 0개 · 보관 1"));
+});
+
+describe("cardSync — 소유자 코드가 바뀌면 제출 카드를 다시 받을지", () => {
+  const A = { id: "a" };
+  const B = { id: "b" };
+  it("코드가 그대로면 아무것도 하지 않는다", () => expect(cardSync("O", "O", null, A)).toEqual({ remount: false, skip: null }));
+  it("카드 밖(체크·되돌리기)에서 바뀌면 다시 받는다", () => expect(cardSync("O", "D", null, A)).toEqual({ remount: true, skip: null }));
+  it("카드에서 처음 제출해 바뀐 한 번은 건너뛴다", () => expect(cardSync("O", "D", { from: "O", at: A }, B)).toEqual({ remount: false, skip: null }));
+  it("저장 뒤 새 목록이 왔는데 코드가 그대로면 건너뛰기를 잊는다 — 다음 바깥 변화는 다시 받는다", () => {
+    const r = cardSync("O", "O", { from: "O", at: A }, B);
+    expect(r).toEqual({ remount: false, skip: null });
+    expect(cardSync("O", "D", r.skip, B).remount).toBe(true);
+  });
+  it("저장 직후 아직 목록이 오지 않았으면 건너뛰기를 유지한다", () => {
+    const skip = { from: "O" as const, at: A };
+    expect(cardSync("O", "O", skip, A)).toEqual({ remount: false, skip });
+  });
+  it("저장 직전 코드가 아닌 데서 바뀌면 다시 받는다", () => expect(cardSync("D", "O", { from: "O", at: A }, B).remount).toBe(true));
 });

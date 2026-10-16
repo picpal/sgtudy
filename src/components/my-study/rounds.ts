@@ -79,8 +79,8 @@ export type ListEntry =
   | { kind: "node"; n: TreeNode }
   | { kind: "add"; round: ParentNode }
   | { kind: "padd"; round: ParentNode }
-  /** 소제목 "팀원 개인 목표 {count}" — 그 회차에 보이는 남의 개인 목표 앞 */
-  | { kind: "others"; round: ParentNode; count: number }
+  /** 소제목 "팀원 개인 목표 {count}( · 보관 {archived})" — 그 회차에 보이는 남의 개인 목표 앞. count 는 보관 제외 */
+  | { kind: "others"; round: ParentNode; count: number; archived: number }
   /** "내 것만" 에서 펼친 회차 아래 보이는 항목이 없을 때 안내 */
   | { kind: "empty"; round: ParentNode };
 
@@ -108,9 +108,13 @@ export function withPersonalAddRows(rows: TreeNode[], roots: ParentNode[], close
     return canAdd && !!r && !r.archived && !r.temp && !closed[r.id];
   };
   const isOther = (n: TreeNode) => isPersonal(n) && (meId === null || n.ownerId !== meId);
-  const others = new Map<string, number>();
+  const others = new Map<string, { count: number; archived: number }>();
   rows.forEach((n) => {
-    if (isOther(n)) others.set(n.roundId, (others.get(n.roundId) ?? 0) + 1);
+    if (!isOther(n)) return;
+    const c = others.get(n.roundId) ?? { count: 0, archived: 0 };
+    if (n.archived) c.archived += 1;
+    else c.count += 1;
+    others.set(n.roundId, c);
   });
   const out: ListEntry[] = [];
   let added = false;
@@ -124,7 +128,7 @@ export function withPersonalAddRows(rows: TreeNode[], roots: ParentNode[], close
     if (round && isOther(n) && !header) {
       if (!added && addable(round.id)) out.push({ kind: "padd", round });
       added = true;
-      out.push({ kind: "others", round, count: others.get(round.id) ?? 0 });
+      out.push({ kind: "others", round, ...(others.get(round.id) ?? { count: 0, archived: 0 }) });
       header = true;
     }
     out.push({ kind: "node", n });

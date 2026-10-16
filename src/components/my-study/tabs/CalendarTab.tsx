@@ -9,7 +9,6 @@ import {
   CODE_COLOR,
   CODE_STATE,
   codeLabel,
-  calendarAnchor,
   calendarGrid,
   ddayLabel,
   shiftAnchor,
@@ -21,7 +20,7 @@ import {
   type Tree,
   type TreeMember,
 } from "../model";
-import { calendarSource } from "../sources";
+import { calendarSource, calendarStart } from "../sources";
 import type { ScreenState, Update } from "../state";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
@@ -42,7 +41,7 @@ const dowColor = (c: number) => (c === 0 ? "#C0453A" : c === 6 ? "#2F5BC2" : "#4
 export function CalendarTab({ tree, S, update, goLeaf }: Props) {
   const today = useToday();
   const meId = useMe()?.id ?? null;
-  const anchor = S.calAnchor ?? calendarAnchor(tree.leaves, today);
+  const anchor = S.calAnchor ?? calendarStart(tree, meId, today);
   const isWeek = S.calMode === "week";
   const { gridStart, rows, label, month } = calendarGrid(anchor, S.calMode);
   const whoId = S.calWho === "all" ? null : S.calWho === "me" ? meId : S.calWho;

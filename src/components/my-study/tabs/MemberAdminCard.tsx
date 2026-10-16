@@ -9,10 +9,6 @@ import { setCurriculumEditor } from "@/lib/api/my-study";
 import type { RoomMemberDto } from "@/lib/api/types";
 import { editorErrorText, editorRows } from "../editors";
 import { personalStats, type Tree } from "../model";
-import type { ScreenState } from "../state";
-
-/** "팀원 개인 목표 보기 →" — 열려 있던 상세·편집 항목을 닫고 진행목표 보기 목록 + 팀원 목표 칩 (두 칩은 서로 끈다) */
-export const SHOW_OTHERS_PATCH: Partial<ScreenState> = { tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, viewSel: null, editSel: null, viewFocus: null, calPick: null };
 
 type Props = {
   slug: string;

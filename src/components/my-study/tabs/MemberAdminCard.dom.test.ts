@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { RoomMemberDto } from "@/lib/api/types";
-import { MemberAdminCard, SHOW_OTHERS_PATCH } from "./MemberAdminCard";
+import { MemberAdminCard } from "./MemberAdminCard";
 import { EMPTY_OVERRIDES, buildTree } from "../model";
 import { AWS, REF_DAY } from "../fixtures";
 
@@ -38,8 +38,5 @@ describe("MemberAdminCard 개인 목표 열", () => {
   it("표 아래 '팀원 개인 목표 보기 →' 버튼", () => {
     const btn = Array.from(render("3").querySelectorAll("button")).find((b) => b.textContent?.includes("팀원 개인 목표 보기"));
     expect(btn).toBeTruthy();
-  });
-  it("팀원 개인 목표 보기 patch — 열려 있던 상세를 닫고 보기 목록 + 팀원 목표", () => {
-    expect(SHOW_OTHERS_PATCH).toMatchObject({ tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, viewSel: null, editSel: null, viewFocus: null });
   });
 });

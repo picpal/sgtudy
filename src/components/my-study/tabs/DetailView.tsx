@@ -8,9 +8,9 @@ import { md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { MarkdownView } from "../MarkdownView";
-import { TypeBadge } from "../bits";
+import { ArchivedBadge, TypeBadge } from "../bits";
 import { roundStatus, type LeafNode, type ParentNode, type TreeNode } from "../model";
-import { isDone, ownerCode, personalActions, removeText, roundWarning, statusColor, statusText, type PersonalActions } from "../personal";
+import { cardSync, isDone, ownerCode, personalActions, removeText, roundWarning, statusColor, statusText, type CardSkip, type PersonalActions } from "../personal";
 import type { RoomStatus } from "../submission";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { ChildList } from "./ChildList";
@@ -76,6 +76,12 @@ function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActio
     const i = items.indexOf(document.activeElement as HTMLButtonElement);
     items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
   };
+  // Tab 으로 메뉴 밖(⋯ 버튼 포함 바깥)으로 포커스가 나가면 닫는다 — 포커스는 옮겨 간 자리에 둔다
+  const onBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    const to = e.relatedTarget as Node | null;
+    if (!to || menu.current?.contains(to) || btn.current?.contains(to)) return;
+    setOpen(false);
+  };
   const pick = (f: () => void) => () => {
     setOpen(false);
     f();
@@ -99,7 +105,7 @@ function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActio
         </svg>
       </button>
       {open && (
-        <div ref={menu} role="menu" aria-label="개인 목표 메뉴" onKeyDown={onKey} className="absolute right-0 top-[52px] z-[3] flex w-[270px] max-w-[calc(100vw-32px)] flex-col rounded-[14px] border border-line bg-surface p-[6px] shadow-[0_12px_32px_rgba(27,34,48,.14)]">
+        <div ref={menu} role="menu" aria-label="개인 목표 메뉴" onKeyDown={onKey} onBlur={onBlur} className="absolute right-0 top-[52px] z-[3] flex w-[270px] max-w-[calc(100vw-32px)] flex-col rounded-[14px] border border-line bg-surface p-[6px] shadow-[0_12px_32px_rgba(27,34,48,.14)]">
           {a.archive && (
             <button type="button" role="menuitem" onClick={pick(onArchive)} className={item}>
               {n.archived ? "보관 해제" : "보관"}
@@ -134,14 +140,15 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   // 소유자 코드가 체크·토스트 "되돌리기" 등 제출 카드 밖에서 바뀌면 제출 카드(task_get)를 새로 받는다 — LeafBody 를 다시 마운트.
-  // 카드에서 제출해 바뀐 것(onSubmitted → refresh)은 카드가 이미 최신이라 다시 마운트하지 않는다
+  // 카드에서 처음 제출해 바뀐 것(onSubmitted → refresh)은 카드가 이미 최신이라 다시 마운트하지 않는다 — 저장 직전 코드·노드를 기억(personal.cardSync)
   const [subTick, setSubTick] = useState(0);
   const [seenCode, setSeenCode] = useState(code);
-  const [cardSaved, setCardSaved] = useState(false);
-  if (code !== seenCode) {
+  const [cardSkip, setCardSkip] = useState<CardSkip>(null);
+  const sync = cardSync(seenCode, code, cardSkip, n);
+  if (code !== seenCode || sync.skip !== cardSkip) {
     setSeenCode(code);
-    if (cardSaved) setCardSaved(false);
-    else setSubTick((t) => t + 1);
+    setCardSkip(sync.skip);
+    if (sync.remount) setSubTick((t) => t + 1);
   }
   const heading = useRef<HTMLHeadingElement>(null);
   // 진입 포커스가 있으면 제목 포커스는 건너뛴다 — 처음 열릴 때 한 번만 본다
@@ -225,6 +232,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
                 aria-busy={busy || undefined}
                 disabled={!acts.complete || busy}
                 title={acts.complete ? undefined : NOT_ACTIVE}
+                aria-describedby={acts.complete ? undefined : "complete-why"}
                 onClick={() => void complete()}
                 className={`inline-flex h-11 items-center gap-[6px] rounded-[22px] px-4 text-[14px] font-semibold disabled:opacity-50 ${done ? "border border-line-3 bg-surface text-ink" : "bg-[#1E9E6A] text-white"}`}
               >
@@ -234,6 +242,11 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
                   </svg>
                 )}
                 {done ? "완료 취소" : "완료로 표시"}
+                {!acts.complete && (
+                  <span id="complete-why" className="sr-only">
+                    {NOT_ACTIVE}
+                  </span>
+                )}
               </button>
             )}
             {acts.edit && (
@@ -313,7 +326,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
             <h2 id="detail-title" ref={heading} tabIndex={-1} className="m-0 min-w-0 text-[20px] font-bold text-ink outline-none [overflow-wrap:anywhere]">
               {n.title}
             </h2>
-            {n.archived && <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">보관됨</span>}
+            {n.archived && <ArchivedBadge left={n.leaf && n.ownerLeft} />}
           </div>
           <p className="m-0 flex flex-wrap items-center gap-x-[6px] text-[13px] text-ink-2">
             {/* 남의 개인 목표만 소유자(아바타 20px + 이름) — 내 것에는 표시 없음 (결정 5) */}
@@ -354,7 +367,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
               focus={focus}
               onFocused={onFocused}
               onSubmitted={() => {
-                if (pn && !done) setCardSaved(true); // 처음 제출이면 코드가 바뀐다 — 그때만 다시 마운트를 건너뛴다
+                if (pn && !done && code) setCardSkip({ from: code, at: n }); // 처음 제출이면 코드가 바뀐다 — 이 코드에서 바뀐 한 번만 다시 마운트를 건너뛴다
                 onSubmitted();
               }}
               toast={toast}

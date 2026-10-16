@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { TreeRow } from "./TreeRow";
 import { InlineConfirm } from "./InlineConfirm";
-import { EMPTY_OVERRIDES, buildTree } from "../model";
+import { EMPTY_OVERRIDES, buildTree, type LeafNode, type TreeNode } from "../model";
 import { AWS, CHULSU, REF_DAY } from "../fixtures";
 
 // 목록 삭제 확인 상자는 행의 treeitem 안에 — role="tree" 가 treeitem 아닌 것을 직접 소유하지 않게 (a11y required-owned)
@@ -75,5 +75,17 @@ describe("TreeRow personal goal row", () => {
     const other = render("33").querySelector("[data-owner]")!;
     expect(other.textContent).toContain("지은");
     expect((other.querySelector("span[style*='width']") as HTMLElement).style.width).toBe("20px");
+  });
+
+  it("보관 배지: 이탈한 소유자면 '보관됨 · 이탈'(시안 C-2), 아니면 '보관됨'", () => {
+    const row = (n: TreeNode) => {
+      const root = document.createElement("div");
+      root.innerHTML = renderToStaticMarkup(createElement(TreeRow, { n, isEdit: false, open: true, meId: CHULSU, onToggle: () => {}, onClick: () => {} }));
+      return root.querySelector("[data-archived-badge]")?.textContent;
+    };
+    const jieun = node("33") as LeafNode;
+    expect(row({ ...jieun, archived: true })).toBe("보관됨");
+    expect(row({ ...jieun, archived: true, ownerLeft: true })).toBe("보관됨 · 이탈");
+    expect(row(jieun)).toBeUndefined();
   });
 });

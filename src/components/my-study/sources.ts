@@ -1,4 +1,4 @@
-import { myCode, type LeafNode, type Tree } from "./model";
+import { calendarAnchor, myCode, type LeafNode, type Tree } from "./model";
 
 const hasPerson = (l: LeafNode, userId: string | null) => !!userId && l.people.some((p) => p.userId === userId);
 const ownedBy = (tree: Tree, userId: string | null) => (userId ? tree.personal.filter((l) => l.ownerId === userId) : []);
@@ -15,3 +15,6 @@ export function calendarSource(tree: Tree, who: string, meId: string | null): Le
   const uid = who === "me" ? meId : who;
   return [...tree.leaves.filter((l) => hasPerson(l, uid)), ...ownedBy(tree, uid)];
 }
+
+/** 캘린더 첫 화면 기준 날짜 — 팀 과제 + 내 개인 목표 범위 (팀 과제 없이 개인 목표만 있는 방도 그 기간으로) */
+export const calendarStart = (tree: Tree, meId: string | null, today: string): string => calendarAnchor(calendarSource(tree, "all", meId), today);

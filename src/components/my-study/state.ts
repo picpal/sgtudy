@@ -83,5 +83,7 @@ export function modeSwitchPatch(S: ScreenState, mode: CurMode): Partial<ScreenSt
 export const patchOv = <K extends keyof Overrides>(prev: ScreenState, key: K, value: Overrides[K]): Partial<ScreenState> => ({ ov: { ...prev.ov, [key]: value } });
 
 /** 진행목표·간트 필터 칩 — 두 칩은 서로 끈다("내 것만" 은 남의 목표를 숨기므로 둘 다 켜지면 "팀원 목표" 가 아무 일도 하지 않는다) */
+/** 개요 "팀원 개인 목표 보기 →" — 열려 있던 상세·편집 항목을 닫고 진행목표 보기 목록 + 팀원 목표 칩 (두 칩은 서로 끈다) */
+export const SHOW_OTHERS_PATCH: Partial<ScreenState> = { tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, viewSel: null, editSel: null, viewFocus: null, calPick: null };
 export const toggleMinePatch = (p: ScreenState): Partial<ScreenState> => ({ mineOnly: !p.mineOnly, othersPersonal: p.mineOnly ? p.othersPersonal : false });
 export const toggleOthersPatch = (p: ScreenState): Partial<ScreenState> => ({ othersPersonal: !p.othersPersonal, mineOnly: p.othersPersonal ? p.mineOnly : false });

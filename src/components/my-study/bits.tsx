@@ -53,6 +53,15 @@ export function Chip({ on, onClick, children, withAvatar }: { on: boolean; onCli
 /** 개인 목표 막대 [bg, 글자, border] — slate 톤 + 점선 (캘린더·간트 공용) */
 export const PERSONAL_BAR: [string, string, string] = [PAL.slate.bg, PAL.slate.fg, "1.5px dashed #8C97A4"];
 
+/** 보관 배지 — 이탈한 팀원의 개인 목표면 "보관됨 · 이탈" (시안 C-2) */
+export function ArchivedBadge({ left = false }: { left?: boolean }) {
+  return (
+    <span data-archived-badge className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">
+      {left ? "보관됨 · 이탈" : "보관됨"}
+    </span>
+  );
+}
+
 /** 과제 유형 배지: 공통 = mint, 지정 = lav, 개인 = slate */
 export function TypeBadge({ type }: { type: TaskType }) {
   const c = type === "공통" ? PAL.mint : type === "개인" ? PAL.slate : PAL.lav;

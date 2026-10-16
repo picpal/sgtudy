@@ -2,7 +2,7 @@
 
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { AvatarStack, TypeBadge } from "../bits";
+import { ArchivedBadge, AvatarStack, TypeBadge } from "../bits";
 import { md } from "@/lib/date";
 import { codeLabel, type LeafNode, type TreeNode } from "../model";
 
@@ -112,7 +112,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
           <span className="shrink-0 whitespace-nowrap text-[12px] text-muted">
             {md(n.s)} – {md(n.e)}
           </span>
-          {n.archived && <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">보관됨</span>}
+          {n.archived && <ArchivedBadge left={n.leaf && n.ownerLeft} />}
         </button>
 
         {personal ? (

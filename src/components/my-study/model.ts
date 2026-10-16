@@ -104,6 +104,8 @@ export type LeafNode = NodeBase & {
   personal: boolean;
   /** 개인 목표 소유자의 멤버 순서(Curriculum.members). 팀 과제·명단에 없는 소유자는 -1 / 끝 */
   ownerRank: number;
+  /** 개인 목표 소유자가 ACTIVE 명단에 없다(이탈) — "보관됨 · 이탈" 배지, 그룹장 "보관 해제" 없음(서버 OWNER_NOT_ACTIVE) */
+  ownerLeft: boolean;
 };
 export type ParentNode = NodeBase & { leaf: false; label: string | null; kids: TreeNode[]; childCount: number; asg: number; sub: number; pct: number };
 export type TreeNode = LeafNode | ParentNode;
@@ -138,6 +140,7 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
   const members: TreeMember[] = cur.members.filter((m) => m.status === "active").map((m) => ({ userId: m.userId, name: m.nickname, tone: m.tone, doesTasks: m.doesTasks }));
   const doers = members.filter((m) => m.doesTasks);
   const rank = new Map(cur.members.map((m, i) => [m.userId, i]));
+  const activeIds = new Set(members.map((m) => m.userId));
   const byParent = new Map<string | null, NodeDto[]>();
   for (const n of cur.nodes) {
     const list = byParent.get(n.parentId) ?? [];
@@ -183,7 +186,8 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
       const sub = people.filter((p) => p.c === "D" || p.c === "L").length;
       const ownerId = personal ? (n.ownerId ?? null) : null;
       const ownerRank = ownerId ? (rank.get(ownerId) ?? rank.size) : -1;
-      const leaf: LeafNode = { ...base, subAll: sub, leaf: true, type, people, asg, sub, state: leafState(asg, sub, s, e, today), roundLabel: rl, ownerId, personal, ownerRank };
+      const ownerLeft = !!ownerId && !activeIds.has(ownerId);
+      const leaf: LeafNode = { ...base, subAll: sub, leaf: true, type, people, asg, sub, state: leafState(asg, sub, s, e, today), roundLabel: rl, ownerId, personal, ownerRank, ownerLeft };
       nodes.push(leaf);
       return leaf;
     }

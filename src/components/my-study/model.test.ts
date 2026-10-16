@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, codeLabel, descendantCount, dropFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope } from "./model";
+import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, codeLabel, descendantCount, dropFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope, type LeafNode } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -293,5 +293,17 @@ describe("개인 목표", () => {
     const ov = { ...EMPTY_OVERRIDES, typeOv: { "32": "공통" as const }, assignOv: { "32": ["u2", "u3"] } };
     const p = buildTree(AWS, ov, REF_DAY).personal.find((l) => l.id === "32")!;
     expect([p.type, p.people.map((x) => x.userId)]).toEqual(["개인", [CHULSU]]);
+  });
+});
+
+describe("ownerLeft — 이탈(비활성)한 팀원의 개인 목표", () => {
+  const dy = AWS.nodes.find((n) => n.id === "33")!;
+  const cur = { ...AWS, nodes: [...AWS.nodes, { ...dy, id: "3d", sortOrder: 9, archived: true, ownerId: "u5", task: { ...dy.task!, people: [{ ...dy.task!.people[0], userId: "u5", nickname: "도윤" }] } }] };
+  const t = buildTree(cur, EMPTY_OVERRIDES, REF_DAY);
+  const leafOf = (id: string) => t.nodes.find((l) => l.id === id) as LeafNode;
+  it("ACTIVE 명단에 없는 소유자면 true", () => expect(leafOf("3d").ownerLeft).toBe(true));
+  it("ACTIVE 소유자·팀 과제는 false", () => {
+    expect(leafOf("33").ownerLeft).toBe(false);
+    expect(leafOf("41").ownerLeft).toBe(false);
   });
 });
