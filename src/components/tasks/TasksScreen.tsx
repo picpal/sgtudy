@@ -2,22 +2,22 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
 import { fetchMyTasks, personalComplete, personalCreate } from "@/lib/api/personal";
-import { STUDY_TONE } from "@/lib/api/schedule";
 import type { MeTaskItem, MeTasks } from "@/lib/api/types";
 import { md, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
 import { AddPersonalForm } from "./AddPersonalForm";
-import { applyFilter, DEFAULT_FILTER, filterQuery, groupByDue, groupByRound, isDone, parseFilter, summary, type RoundGroup, type TasksFilter } from "./calc";
+import { addableStudies, applyFilter, atLimit, DEFAULT_FILTER, defaultCollapsed, emptyKind, filterQuery, groupByDue, groupByRound, isDone, normalizeFilter, parseFilter, summary, type RoundGroup, type TasksFilter } from "./calc";
 import { RoundGroupCard } from "./RoundGroupCard";
 import { TaskRow } from "./TaskRow";
 import { TasksEmpty } from "./TasksEmpty";
 import { TasksToolbar } from "./TasksToolbar";
+import { studyTone } from "./tone";
 
 const groupKey = (g: RoundGroup) => `${g.study.slug}:${g.round?.id ?? "-"}`;
 
@@ -36,13 +36,33 @@ function byStudy(groups: RoundGroup[]): RoundGroup[][] {
 export function TasksScreen({ initial }: { initial: MeTasks }) {
   const [data, setData] = useState(initial);
   const sp = useSearchParams();
-  const filter = parseFilter(new URLSearchParams(sp.toString()));
+  const raw = parseFilter(new URLSearchParams(sp.toString()));
+  // 모르는 study(떠난 방 북마크·알림 링크)는 "전체"로 — 화면·툴바·빈 상태·URL 모두 이 값을 쓴다
+  const filter = normalizeFilter(data, raw);
   // 같은 화면 안에서 쿼리만 바꾼다 — 서버 왕복(RSC) 없이 useSearchParams 와 동기화된다(Next 문서: Native History API).
   // replace: 필터 조작은 방문 기록을 쌓지 않는다. 상세로 갔다가 뒤로 오면 이 주소(필터)로 돌아온다
   const setFilter = (f: TasksFilter) => window.history.replaceState(null, "", routes.tasks(filterQuery(f)));
 
+  // URL 에 남은 모르는 study 를 걷어 낸다 (replace — 기록은 쌓지 않는다)
+  const stale = raw.study !== filter.study;
+  const cleanQuery = routes.tasks(filterQuery(filter));
+  useEffect(() => {
+    if (stale) window.history.replaceState(null, "", cleanQuery);
+  }, [stale, cleanQuery]);
+
+  // 처리 중인 항목 — 렌더용 state 와, 클로저(토스트 "되돌리기")가 최신 값을 보도록 ref 를 함께 둔다
+  const busyRef = useRef<Set<string>>(new Set());
   const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
-  const [loading, setLoading] = useState(false);
+  const markBusy = (id: string, on: boolean) => {
+    if (on) busyRef.current.add(id);
+    else busyRef.current.delete(id);
+    setBusyIds(new Set(busyRef.current));
+  };
+  // 진행 중인 요청 수 (여러 행을 동시에 눌러도 마지막 것이 끝날 때까지 aria-busy)
+  const [pending, setPending] = useState(0);
+  // 재조회 순번 — 늦게 도착한 이전 응답이 최신 목록을 덮지 않게
+  const reqId = useRef(0);
+  const headBtn = useRef<HTMLButtonElement>(null);
   const [toast, setToast] = useState<ToastMsg>(null);
   const closeToast = useCallback(() => setToast(null), []);
   const [formOpen, setFormOpen] = useState(false);
@@ -55,51 +75,68 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const sum = summary(data, items);
   const studyOf = new Map(data.studies.map((s) => [s.slug, s]));
   const roundOf = new Map(data.rounds.map((r) => [r.id, r]));
-  const addable = data.studies.some((s) => s.canAddPersonal && data.rounds.some((r) => r.slug === s.slug && r.canAdd));
+  const addable = addableStudies(data).length > 0;
 
-  const refresh = async () => setData(await fetchMyTasks());
+  const refresh = async () => {
+    const id = ++reqId.current;
+    const next = await fetchMyTasks();
+    if (id === reqId.current) setData(next);
+  };
+  const closeForm = () => {
+    setFormOpen(false);
+    headBtn.current?.focus();
+  };
 
   const setComplete = async (it: MeTaskItem, done: boolean, undoable: boolean) => {
-    setBusyIds((b) => new Set(b).add(it.id));
-    setLoading(true);
+    if (busyRef.current.has(it.id)) return; // 같은 항목이 처리 중이면(행 버튼·되돌리기 겹침) 무시
+    markBusy(it.id, true);
+    setPending((n) => n + 1);
     try {
-      await personalComplete(it.slug, it.id, done);
-      await refresh();
-      setToast(
-        done
-          ? { text: "완료했어요", tone: "ok", action: undoable ? { label: "되돌리기", onClick: () => void setComplete(it, false, false) } : undefined }
-          : { text: "완료를 취소했어요", tone: "ok" },
-      );
-    } catch (e) {
-      setToast({ text: toApiError(e).message, tone: "bad" });
+      try {
+        await personalComplete(it.slug, it.id, done);
+      } catch (e) {
+        setToast({ text: toApiError(e).message, tone: "bad" });
+        return;
+      }
+      const text = done ? "완료했어요" : "완료를 취소했어요";
+      try {
+        await refresh();
+      } catch {
+        // 저장은 됐다 — 실패로 읽히지 않게 구분해서 알린다
+        setToast({ text: `${text} · 목록을 새로고침하지 못했어요`, tone: "ok" });
+        return;
+      }
+      setToast(done && undoable ? { text, tone: "ok", action: { label: "되돌리기", onClick: () => void setComplete(it, false, false) } } : { text, tone: "ok" });
     } finally {
-      setBusyIds((b) => {
-        const n = new Set(b);
-        n.delete(it.id);
-        return n;
-      });
-      setLoading(false);
+      markBusy(it.id, false);
+      setPending((n) => n - 1);
     }
   };
   const toggleDone = (it: MeTaskItem) => void setComplete(it, !isDone(it.st), true);
 
   const add = async (slug: string, roundId: string, title: string): Promise<boolean> => {
-    setLoading(true);
+    setPending((n) => n + 1);
     try {
-      await personalCreate(slug, roundId, title);
-      await refresh();
-      setToast({ text: "내 목표를 추가했어요", tone: "ok" });
+      try {
+        await personalCreate(slug, roundId, title);
+      } catch (e) {
+        setToast({ text: toApiError(e).message, tone: "bad" });
+        return false;
+      }
+      try {
+        await refresh();
+        setToast({ text: "내 목표를 추가했어요", tone: "ok" });
+      } catch {
+        setToast({ text: "내 목표를 추가했어요 · 목록을 새로고침하지 못했어요", tone: "ok" });
+      }
       return true;
-    } catch (e) {
-      setToast({ text: toApiError(e).message, tone: "bad" });
-      return false;
     } finally {
-      setLoading(false);
+      setPending((n) => n - 1);
     }
   };
 
-  const noStudy = data.studies.length === 0;
-  const unfiltered = filter.type === "all" && !filter.hideDone && filter.study === "all";
+  const empty = emptyKind(data, filter, items);
+  const noStudy = empty === "noStudy";
   const pieces = [
     sum.left > 0 && <Fragment key="l">남은 과제 {sum.left}개</Fragment>,
     sum.dueToday > 0 && (
@@ -115,9 +152,9 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   ].filter(Boolean);
 
   const renderBody = () => {
-    if (noStudy) return <TasksEmpty kind="noStudy" />;
-    if (items.length === 0)
-      return unfiltered ? (
+    if (empty === "noStudy") return <TasksEmpty kind="noStudy" />;
+    if (empty)
+      return empty === "noTasks" ? (
         <TasksEmpty kind="noTasks" onAdd={addable && !formOpen ? () => setFormOpen(true) : undefined} />
       ) : (
         <TasksEmpty kind="filtered" onClear={() => setFilter({ ...DEFAULT_FILTER, scope: filter.scope, group: filter.group })} />
@@ -146,7 +183,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
     }
     return byStudy(groupByRound(data, items, filter)).map((gs) => {
       const study = gs[0].study;
-      const tone = STUDY_TONE[study.tone] ?? STUDY_TONE.mint;
+      const tone = studyTone(study.tone);
       return (
         <section key={study.slug} aria-label={study.title} className="flex flex-col gap-2">
           <h2 className="m-0 flex items-center gap-2 px-1 text-[15px] font-bold">
@@ -158,14 +195,14 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
           </h2>
           {gs.map((g) => {
             const k = groupKey(g);
-            const past = filter.scope === "all" && !!g.round && g.round.endDate < today;
-            const collapsed = past !== flipped.has(k);
+            const collapsed = defaultCollapsed(g, filter, today) !== flipped.has(k);
             return (
               <RoundGroupCard
                 key={k}
                 group={g}
                 today={today}
                 perRound={data.personalPerRound}
+                limited={atLimit(data, g)}
                 collapsed={collapsed}
                 onToggleCollapsed={() =>
                   setFlipped((f) => {
@@ -192,7 +229,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   return (
     <div className="box-border flex min-h-screen flex-col p-4">
       <AppHeader active="tasks" variant="card" bell={<NotificationBell />} />
-      <main aria-busy={loading} className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 rounded-[20px] bg-surface px-7 pb-[30px] pt-[26px] max-sm:px-2 max-sm:pb-7 max-sm:pt-5">
+      <main aria-busy={pending > 0} className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 rounded-[20px] bg-surface px-7 pb-[30px] pt-[26px] max-sm:px-2 max-sm:pb-7 max-sm:pt-5">
         <div className="flex items-start gap-3 max-sm:px-2">
           <div className="min-w-0 flex-1">
             <h1 className="m-0 text-[26px] font-bold tracking-[-0.02em] max-sm:text-[22px]">내 과제</h1>
@@ -209,6 +246,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
           </div>
           {!noStudy && addable && (
             <button
+              ref={headBtn}
               type="button"
               aria-expanded={formOpen}
               onClick={() => setFormOpen((o) => !o)}
@@ -229,10 +267,10 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
           <AddPersonalForm
             data={data}
             defaultSlug={filter.study === "all" ? undefined : filter.study}
-            onClose={() => setFormOpen(false)}
+            onClose={closeForm}
             onAdd={async (slug, roundId, title) => {
               const ok = await add(slug, roundId, title);
-              if (ok) setFormOpen(false);
+              if (ok) closeForm();
               return ok;
             }}
           />

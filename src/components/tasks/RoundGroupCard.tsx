@@ -57,7 +57,7 @@ function PersonalQuickAdd({ label, onAdd, onClose }: { label: string; onAdd: (ti
         onBlur={() => {
           if (!text.trim() && !busy) onClose();
         }}
-        className="h-11 min-w-0 flex-1 rounded-[10px] border-[1.5px] border-[#4F6382] bg-surface px-3 text-[14px] text-ink"
+        className="h-11 min-w-0 flex-1 rounded-[10px] border-[1.5px] border-slate-text bg-surface px-3 text-[14px] text-ink"
       />
       <span role="status" className="sr-only">
         {last ? `추가했어요: ${last}` : ""}
@@ -70,6 +70,8 @@ type Props = {
   group: RoundGroup;
   today: string;
   perRound: number;
+  /** 한도 안내 줄 (calc.atLimit) */
+  limited: boolean;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   busyIds: ReadonlySet<string>;
@@ -82,11 +84,9 @@ type Props = {
 };
 
 /** 회차 묶음 카드 — 머리(회차 라벨·제목·기간·상태·x/y 완료, 접기) + 행 + 끝 줄(＋ 내 목표 추가 / 한도 안내) */
-export function RoundGroupCard({ group, today, perRound, collapsed, onToggleCollapsed, busyIds, onToggleDone, adding, onOpenAdd, onCloseAdd, onAdd }: Props) {
+export function RoundGroupCard({ group, today, perRound, limited, collapsed, onToggleCollapsed, busyIds, onToggleDone, adding, onOpenAdd, onCloseAdd, onAdd }: Props) {
   const { study, round, items, done, canAdd } = group;
   const label = round ? [round.label, round.title].filter(Boolean).join(" ") : "회차 밖";
-  // 한도 안내는 "추가할 수 있는 방·회차인데 개수만 찼을 때"만 — 종료·DRAFT 방이나 막힌 회차는 끝 줄을 그리지 않는다
-  const atLimit = !!round && round.canAdd && study.canAddPersonal && !canAdd;
   const bodyId = `round-${study.slug}-${round?.id ?? "none"}`;
   return (
     <div className="overflow-hidden rounded-[16px] border border-line">
@@ -137,13 +137,13 @@ export function RoundGroupCard({ group, today, perRound, collapsed, onToggleColl
                   data-add-personal={round?.id}
                   onClick={onOpenAdd}
                   aria-label={`${label}에 내 목표 추가`}
-                  className="flex min-h-12 w-full items-center gap-2 bg-surface px-[18px] text-left text-[13px] font-semibold text-[#3D4F6B] hover:bg-[#F6F8FB] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mint"
+                  className="flex min-h-12 w-full items-center gap-2 bg-surface px-[18px] text-left text-[13px] font-semibold text-slate-text hover:bg-slate-soft/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mint"
                 >
                   ＋ 내 목표 추가
                 </button>
               </li>
             ))}
-          {atLimit && <li className="border-t border-line-2 bg-[#F7F9FC] px-[18px] py-[14px] text-[13px] text-muted">이 회차에는 개인 목표를 {perRound}개까지 둘 수 있어요</li>}
+          {limited && <li className="border-t border-line-2 bg-slate-soft/40 px-[18px] py-[14px] text-[13px] text-muted">이 회차에는 개인 목표를 {perRound}개까지 둘 수 있어요</li>}
         </ul>
       )}
     </div>

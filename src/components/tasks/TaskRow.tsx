@@ -4,24 +4,21 @@ import Link from "next/link";
 import { TypeBadge } from "@/components/my-study/bits";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import { TASK_TYPE_KO } from "@/lib/api/format";
-import { STUDY_TONE } from "@/lib/api/schedule";
 import type { MeTaskItem, MeTaskRound, MeTaskStudy } from "@/lib/api/types";
 import { dday, md } from "@/lib/date";
 import { routes } from "@/lib/routes";
-import { isDone, statusText } from "./calc";
-
-/** 개인 목표 체크 링 색 (slate 계열, 시안 A-4) */
-const RING = "#4F6382";
+import { isDone, rowState, statusText, type RowTone } from "./calc";
+import { studyTone } from "./tone";
 
 export const period = (s: string, e: string) => (s === e ? md(e) : `${md(s)} – ${md(e)}`);
 
-function statusCls(it: MeTaskItem, today: string): string {
-  if (it.st === "done") return "bg-[#E2F3EA] text-[#14724D]";
-  if (it.st === "late") return "bg-amber-soft text-amber-text";
-  if (it.st === "missed") return "bg-warn-soft text-warn";
-  if (it.st === "open" && it.endDate === today) return "bg-warn text-white";
-  return "bg-line-2 text-ink-2";
-}
+const TONE_CLS: Record<RowTone, string> = {
+  done: "bg-mint-soft text-mint-deep",
+  late: "bg-amber-soft text-amber-text",
+  missed: "bg-warn-soft text-warn",
+  hot: "bg-warn text-white",
+  plain: "bg-line-2 text-ink-2",
+};
 
 type Props = {
   item: MeTaskItem;
@@ -39,8 +36,9 @@ export function TaskRow({ item, study, round, today, withRoundChip, busy, onTogg
   const done = isDone(item.st);
   const personal = item.type === "personal";
   const active = study.status === "active";
-  const tone = STUDY_TONE[study.tone] ?? STUDY_TONE.mint;
-  const late = !done && item.endDate <= today;
+  const tone = studyTone(study.tone);
+  const { tone: st, dueHot } = rowState(item, today);
+  const hintId = `done-hint-${item.id}`;
   return (
     <li className="flex min-h-14 items-center gap-1 border-t border-line-2 bg-surface pl-[6px] pr-2 max-sm:items-start max-sm:py-1">
       {personal ? (
@@ -49,15 +47,25 @@ export function TaskRow({ item, study, round, today, withRoundChip, busy, onTogg
           aria-pressed={done}
           aria-label={done ? `${item.title} 완료 취소` : `${item.title} 완료로 표시`}
           title={active ? undefined : "스터디가 진행 중일 때 완료할 수 있어요"}
-          disabled={!active || busy}
+          // 진행 중이 아닌 방: 포커스는 받되 누를 수 없게(aria-disabled) + 이유를 읽어 준다. busy 는 잠깐이라 disabled
+          aria-disabled={!active || undefined}
+          aria-describedby={active ? undefined : hintId}
+          disabled={busy}
           aria-busy={busy || undefined}
-          onClick={() => onToggle(item)}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] enabled:hover:bg-[#F1F4F8] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-mint"
+          onClick={() => {
+            if (active) onToggle(item);
+          }}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] hover:bg-slate-soft disabled:cursor-wait disabled:opacity-60 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent focus-visible:outline-2 focus-visible:outline-mint"
         >
           {done ? (
             <StatusIcon status={item.st} size={22} label={false} />
           ) : (
-            <span aria-hidden="true" className="block h-[22px] w-[22px] rounded-full border-2 bg-surface" style={{ borderColor: RING }} />
+            <span aria-hidden="true" className="block h-[22px] w-[22px] rounded-full border-2 border-slate-text bg-surface" />
+          )}
+          {!active && (
+            <span id={hintId} className="sr-only">
+              스터디가 진행 중일 때 완료할 수 있어요
+            </span>
           )}
         </button>
       ) : (
@@ -86,11 +94,11 @@ export function TaskRow({ item, study, round, today, withRoundChip, busy, onTogg
           )}
           <span className="whitespace-nowrap text-muted sm:w-[96px]">{period(item.startDate, item.endDate)}</span>
           {/* 완료 행도 넓은 화면에선 D-day 칸 자리를 비워 둬 기간·상태 열이 줄 맞춤된다 */}
-          {done ? <span aria-hidden="true" className="max-sm:hidden sm:w-[48px]" /> : <span className={`whitespace-nowrap font-bold sm:w-[48px] sm:text-right ${late ? "text-warn" : "text-ink-2"}`}>{dday(today, item.endDate)}</span>}
-          <span className={`whitespace-nowrap rounded-[8px] px-[10px] py-1 text-center font-semibold sm:min-w-[84px] ${statusCls(item, today)}`}>{statusText(item)}</span>
+          {done ? <span aria-hidden="true" className="max-sm:hidden sm:w-[48px]" /> : <span className={`whitespace-nowrap font-bold sm:w-[48px] sm:text-right ${dueHot ? "text-warn" : "text-ink-2"}`}>{dday(today, item.endDate)}</span>}
+          <span className={`whitespace-nowrap rounded-[8px] px-[10px] py-1 text-center font-semibold sm:min-w-[84px] ${TONE_CLS[st]}`}>{statusText(item)}</span>
         </span>
       </Link>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A7B0BA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 max-sm:hidden">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0 text-ghost max-sm:hidden">
         <path d="m9 6 6 6-6 6" />
       </svg>
     </li>

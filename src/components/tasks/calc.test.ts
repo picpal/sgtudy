@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MeTaskItem, MeTasks } from "@/lib/api/types";
-import { DEFAULT_FILTER, applyFilter, filterQuery, groupByDue, groupByRound, parseFilter, statusText, summary, type TasksFilter } from "./calc";
+import { DEFAULT_FILTER, addableRounds, addableStudies, applyFilter, atLimit, defaultCollapsed, defaultRound, emptyKind, normalizeFilter, personalCount, rowState, filterQuery, groupByDue, groupByRound, parseFilter, statusText, summary, type TasksFilter } from "./calc";
 
 const item = (o: Partial<MeTaskItem> & { id: string }): MeTaskItem => ({
   slug: "aws", roundId: "a3", groupTitle: null, title: o.id, type: "common", startDate: "2026-10-15", endDate: "2026-10-21", st: "open", submittedAt: null, ...o,
@@ -159,5 +159,67 @@ describe("summary / statusText", () => {
     expect(statusText(item({ id: "a", type: "personal", st: "late" }))).toBe("늦게 완료");
     expect(statusText(item({ id: "a", st: "late" }))).toBe("지각 제출");
     expect(statusText(item({ id: "a", st: "open" }))).toBe("진행중");
+  });
+});
+
+describe("화면 판단 (Task 12 수정 1)", () => {
+  it("normalizeFilter: 모르는 study 는 all, 아는 건 그대로", () => {
+    const m = fx();
+    expect(normalizeFilter(m, { ...DEFAULT_FILTER, study: "zzz" })).toEqual(DEFAULT_FILTER);
+    expect(normalizeFilter(m, { ...DEFAULT_FILTER, study: "aws" }).study).toBe("aws");
+  });
+  it("personalCount / addableRounds / addableStudies / defaultRound", () => {
+    const m = fx();
+    expect(personalCount(m, "a3")).toBe(2);
+    expect(personalCount(m, "a2")).toBe(0);
+    expect(addableRounds(m, "aws").map((r) => r.id)).toEqual(["a2", "a3"]);
+    expect(addableRounds(m, "old")).toEqual([]);
+    expect(addableStudies(m).map((s) => s.slug)).toEqual(["aws"]);
+    expect(defaultRound(m, "aws")).toBe("a3");
+    expect(defaultRound(m, "old")).toBe("");
+    const full = { ...m, personalPerRound: 2 };
+    expect(addableRounds(full, "aws").map((r) => r.id)).toEqual(["a2"]); // 가득 찬 현재 회차는 빠진다
+    expect(defaultRound(full, "aws")).toBe("a2");
+    const none = { ...m, personalPerRound: 0 };
+    expect(addableStudies(none)).toEqual([]);
+  });
+  it("atLimit: 추가 가능한 방·회차인데 개수만 찼을 때만", () => {
+    const m = { ...fx(), personalPerRound: 2 };
+    const gs = groupByRound(m, applyFilter(m, { ...DEFAULT_FILTER, scope: "all" }), { ...DEFAULT_FILTER, scope: "all" });
+    const a3 = gs.find((g) => g.round?.id === "a3")!;
+    const o1 = gs.find((g) => g.round?.id === "o1")!;
+    expect(atLimit(m, a3)).toBe(true);
+    expect(atLimit(m, o1)).toBe(false); // 종료 방은 안내 없음
+    expect(atLimit(fx(), groupByRound(fx(), applyFilter(fx(), DEFAULT_FILTER), DEFAULT_FILTER)[0])).toBe(false);
+  });
+  it("defaultCollapsed: scope all 의 지난 회차만", () => {
+    const m = fx();
+    const all = { ...DEFAULT_FILTER, scope: "all" as const };
+    const gs = groupByRound(m, applyFilter(m, all), all);
+    const by = (id: string) => gs.find((g) => g.round?.id === id)!;
+    expect(defaultCollapsed(by("o1"), all, m.today)).toBe(true);
+    expect(defaultCollapsed(by("a3"), all, m.today)).toBe(false);
+    expect(defaultCollapsed(by("o1"), DEFAULT_FILTER, m.today)).toBe(false);
+    expect(defaultCollapsed({ ...by("o1"), round: null }, all, m.today)).toBe(false);
+  });
+  it("emptyKind", () => {
+    const m = fx();
+    expect(emptyKind({ ...m, studies: [] }, DEFAULT_FILTER, [])).toBe("noStudy");
+    expect(emptyKind(m, DEFAULT_FILTER, [])).toBe("noTasks");
+    expect(emptyKind(m, { ...DEFAULT_FILTER, group: "due", scope: "all" }, [])).toBe("noTasks");
+    expect(emptyKind(m, { ...DEFAULT_FILTER, study: "zzz" }, [])).toBe("noTasks"); // 모르는 스터디 = 필터 없음
+    expect(emptyKind(m, { ...DEFAULT_FILTER, type: "team" }, [])).toBe("filtered");
+    expect(emptyKind(m, { ...DEFAULT_FILTER, hideDone: true }, [])).toBe("filtered");
+    expect(emptyKind(m, { ...DEFAULT_FILTER, study: "aws" }, [])).toBe("filtered");
+    expect(emptyKind(m, DEFAULT_FILTER, m.items)).toBeNull();
+  });
+  it("rowState: 상태 톤과 마감 강조", () => {
+    const t = "2026-10-16";
+    expect(rowState(item({ id: "a", st: "done" }), t)).toEqual({ tone: "done", dueHot: false });
+    expect(rowState(item({ id: "a", st: "late", endDate: "2026-10-10" }), t)).toEqual({ tone: "late", dueHot: false });
+    expect(rowState(item({ id: "a", st: "missed", endDate: "2026-10-10" }), t)).toEqual({ tone: "missed", dueHot: true });
+    expect(rowState(item({ id: "a", st: "open", endDate: t }), t)).toEqual({ tone: "hot", dueHot: true });
+    expect(rowState(item({ id: "a", st: "open", endDate: "2026-10-12", type: "personal" }), t)).toEqual({ tone: "plain", dueHot: true });
+    expect(rowState(item({ id: "a", st: "planned", endDate: "2026-10-20" }), t)).toEqual({ tone: "plain", dueHot: false });
   });
 });

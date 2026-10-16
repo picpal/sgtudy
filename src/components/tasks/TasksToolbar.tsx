@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { STUDY_TONE } from "@/lib/api/schedule";
+import { studyTone } from "./tone";
 import type { MeTaskStudy } from "@/lib/api/types";
 import type { TasksFilter } from "./calc";
 
@@ -18,7 +18,7 @@ function Seg<T extends string>({ label, value, options, onChange }: { label: str
             type="button"
             aria-pressed={on}
             onClick={() => onChange(id)}
-            className={`h-[34px] whitespace-nowrap rounded-[9px] px-3 text-[13px] max-sm:h-[38px] ${focus} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
+            className={`h-[34px] whitespace-nowrap rounded-[9px] px-3 text-[13px] max-sm:h-11 ${focus} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
           >
             {text}
           </button>
@@ -108,7 +108,7 @@ export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilte
           </Chip>
           {studies.map((s) => (
             <Chip key={s.slug} on={filter.study === s.slug} title={s.title} onClick={() => set({ study: s.slug })}>
-              <span aria-hidden="true" className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: (STUDY_TONE[s.tone] ?? STUDY_TONE.mint).dot }} />
+              <span aria-hidden="true" className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: studyTone(s.tone).dot }} />
               <span className="truncate max-sm:max-w-[140px]">{s.title}</span>
             </Chip>
           ))}

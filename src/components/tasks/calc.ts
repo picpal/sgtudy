@@ -149,3 +149,53 @@ export const statusText = (it: MeTaskItem): string => {
   }
   return CODE_LABEL[STATUS_CODE[it.st]];
 };
+
+/* ---------- 화면 판단 (컴포넌트는 호출만) ---------- */
+
+/** 모르는 study slug(떠난 방 북마크 등)는 "all" 로 바꾼 필터 — 화면·툴바·빈 상태·URL 이 이 값을 쓴다 */
+export const normalizeFilter = (m: MeTasks, f: TasksFilter): TasksFilter => {
+  const study = effStudy(m, f);
+  return study === f.study ? f : { ...f, study };
+};
+
+/** 회차의 내 개인 목표 수(필터 무관 — 실제 한도 기준) */
+export const personalCount = (m: MeTasks, roundId: string): number => m.items.filter((it) => it.roundId === roundId && it.type === "personal").length;
+
+/** 지금 내 목표를 더할 수 있는 회차(서버 canAdd + 방 허용 + 한도 미만), 서버 순서 */
+export function addableRounds(m: MeTasks, slug: string): MeTaskRound[] {
+  const s = m.studies.find((x) => x.slug === slug);
+  if (!s?.canAddPersonal) return [];
+  return m.rounds.filter((r) => r.slug === slug && r.canAdd && personalCount(m, r.id) < m.personalPerRound);
+}
+
+export const addableStudies = (m: MeTasks): MeTaskStudy[] => m.studies.filter((s) => addableRounds(m, s.slug).length > 0);
+
+/** 추가 폼 기본 회차 = 그 방 현재 회차(추가 가능할 때) → 아니면 첫 추가 가능 회차 → "" */
+export function defaultRound(m: MeTasks, slug: string): string {
+  const rs = addableRounds(m, slug);
+  const cur = m.studies.find((s) => s.slug === slug)?.currentRoundId;
+  return (rs.find((r) => r.id === cur) ?? rs[0])?.id ?? "";
+}
+
+/** 한도 안내 줄: 추가할 수 있는 방·회차인데 개수만 찼을 때 (종료·DRAFT 방·막힌 회차는 끝 줄 없음) */
+export const atLimit = (m: MeTasks, g: RoundGroup): boolean =>
+  !!g.round && g.round.canAdd && g.study.canAddPersonal && personalCount(m, g.round.id) >= m.personalPerRound;
+
+/** "전체" 범위의 지난 회차는 접힌 채 시작 */
+export const defaultCollapsed = (g: RoundGroup, f: TasksFilter, today: string): boolean => f.scope === "all" && !!g.round && g.round.endDate < today;
+
+/** 빈 상태 종류 (스펙 §6). 결과가 있으면 null. 묶기·기간은 "필터"로 치지 않는다 */
+export function emptyKind(m: MeTasks, f: TasksFilter, items: MeTaskItem[]): "noStudy" | "noTasks" | "filtered" | null {
+  if (m.studies.length === 0) return "noStudy";
+  if (items.length > 0) return null;
+  const n = normalizeFilter(m, f);
+  return n.type === "all" && !n.hideDone && n.study === "all" ? "noTasks" : "filtered";
+}
+
+export type RowTone = "done" | "late" | "missed" | "hot" | "plain";
+/** 행 상태 톤 + D-day 강조(마감일이 오늘이거나 지났는데 미완료) */
+export function rowState(it: MeTaskItem, today: string): { tone: RowTone; dueHot: boolean } {
+  const done = isDone(it.st);
+  const tone: RowTone = it.st === "done" || it.st === "late" || it.st === "missed" ? it.st : it.st === "open" && it.endDate === today ? "hot" : "plain";
+  return { tone, dueHot: !done && it.endDate <= today };
+}
