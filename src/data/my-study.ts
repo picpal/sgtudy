@@ -39,6 +39,8 @@ export type CurTask = {
   people: [string, TaskStatus][];
   /** 이름 → DTO tone */
   tones?: Record<string, Tone>;
+  /** 이름 → userId (아바타 변형) */
+  ids?: Record<string, string>;
 };
 
 export type RoundRow = {
@@ -72,6 +74,8 @@ export type Room = {
   leader: string;
   /** 그룹장 아바타 색 — DTO leader.tone */
   leaderTone?: Tone;
+  /** 그룹장 userId — 아바타 변형(avatarColors) */
+  leaderId?: string;
   tags: RoomTag[];
   capCur: number;
   capMax: number;

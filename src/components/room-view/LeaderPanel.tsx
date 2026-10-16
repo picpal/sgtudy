@@ -214,7 +214,7 @@ function Applications({ slug, initialCount, toast, onMembership }: { slug: strin
         <ul className="m-0 flex list-none flex-col p-0">
           {items.map((a) => (
             <li key={a.userId} className="flex min-h-11 flex-wrap items-center gap-[10px] border-t border-line py-1 first:border-t-0">
-              <Avatar name={a.nickname} size={28} tone={a.tone} />
+              <Avatar name={a.nickname} size={28} tone={a.tone} id={a.userId} />
               <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{a.nickname}</span>
               <span className="flex gap-[6px]">
                 <button type="button" aria-label={`${a.nickname} 승인`} onClick={() => void decide(a, true)} disabled={!!busy[a.userId]} className="h-9 rounded-[18px] bg-navy px-3 text-[13px] font-semibold text-white disabled:opacity-60">

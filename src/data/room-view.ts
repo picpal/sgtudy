@@ -24,7 +24,7 @@ export type RoomTask = {
   title: string;
   type: "공통" | "지정";
   dates: string;
-  people: { name: string; status: TaskStatus; tone?: Tone }[];
+  people: { name: string; status: TaskStatus; tone?: Tone; userId?: string }[];
 };
 export type RoomRound = {
   label: string;
@@ -54,6 +54,8 @@ export type Room = {
   leader: string;
   /** 그룹장 아바타 색 — DTO leader.tone */
   leaderTone?: Tone;
+  /** 그룹장 userId — 아바타 변형(avatarColors) */
+  leaderId?: string;
   tags: RoomTag[];
   capCur: number;
   capMax: number;

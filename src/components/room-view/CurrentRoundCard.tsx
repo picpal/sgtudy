@@ -47,7 +47,7 @@ export function CurrentRoundCard({ cur }: { cur: Room["cur"] }) {
                       className="relative inline-flex rounded-full border-2 border-surface-2"
                       style={{ marginLeft: i === 0 ? 0 : -6 }}
                     >
-                      <Avatar name={p.name} tone={p.tone} size={30} />
+                      <Avatar name={p.name} tone={p.tone} id={p.userId} size={30} />
                       <span className="absolute -bottom-[3px] -right-[3px] flex rounded-full bg-white">
                         <StatusIcon status={p.status} size={15} />
                       </span>

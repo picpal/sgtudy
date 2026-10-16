@@ -75,7 +75,7 @@ export function OverviewTab({ room, tree, onGoCurriculum }: { room: StudyRoom; t
                     <div className="flex items-center">
                       {shown.map(([name, s], i) => (
                         <span key={name} title={`${name} · ${STATUS_LABEL[s]}`} className="relative inline-flex rounded-full border-2 border-[#F7FAF9]" style={{ marginLeft: i === 0 ? 0 : -6 }}>
-                          <Avatar name={name} size={30} tone={t.tones?.[name] ?? toneOfName(name)} />
+                          <Avatar name={name} size={30} tone={t.tones?.[name] ?? toneOfName(name)} id={t.ids?.[name]} />
                           <span className="absolute -right-[3px] -bottom-[3px] flex">
                             <RingedStatus status={s} size={15} />
                           </span>

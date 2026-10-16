@@ -34,3 +34,35 @@ export const NAME_TONE: Record<string, Tone> = {
 };
 
 export const toneOf = (name: string): Tone => NAME_TONE[name] ?? "slate";
+
+/** WCAG 2 대비율 (#RRGGBB) */
+export function contrastRatio(a: string, b: string): number {
+  const lum = (hex: string) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** 문자열 → 32bit FNV-1a (아바타 변형 고르기용, 결정적) */
+const hash = (s: string) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return h >>> 0;
+};
+
+/**
+ * 아바타 색. tone(서버 DTO, 6색)은 그대로 두고, userId 를 주면 그 해시로 연한(기본)/진한(tone 글자색 바탕 + 흰 글자) 중 하나를 고른다 —
+ * 같은 이니셜·같은 tone 인 두 사람이 똑같아 보이는 일을 절반으로 줄인다. 두 변형 모두 대비 4.5:1 이상 (palette.test)
+ */
+export function avatarColors(tone: Tone, opts: { id?: string; strong?: boolean } = {}): { bg: string; fg: string } {
+  const pal = (opts.strong ? AVATAR_PAL : PAL)[tone];
+  // Main 카드의 진한 mint 바탕(#D3F0E8)은 #0D7A64 글자가 4.4:1 — 아바타 글자만 한 단계 진하게
+  const base = contrastRatio(pal.fg, pal.bg) < 4.5 ? { bg: pal.bg, fg: "#0B6553" } : pal;
+  if (!opts.id || hash(opts.id) % 2 === 0) return base;
+  return { bg: base.fg, fg: "#FFFFFF" };
+}

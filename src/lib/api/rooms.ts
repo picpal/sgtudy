@@ -70,6 +70,7 @@ export function toRoomCard(d: RoomCardDto, today: string): Room {
     max: d.maxMembers,
     leader: d.leader.nickname,
     leaderTone: d.leader.tone,
+    leaderId: d.leader.userId,
     tags: d.tags.map((t) => t.label),
     mine: !!m && m.role === "member" && (m.status === "active" || m.status === "pending"),
     created: m?.role === "leader",

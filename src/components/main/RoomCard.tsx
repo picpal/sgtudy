@@ -96,7 +96,7 @@ export function RoomCard({ room, selectedTags, anonymous = false }: Props) {
 
       <div className="flex items-center justify-between gap-2 border-t border-line-2 px-[18px] py-3 text-[13px] text-muted">
         <span className="flex items-center gap-2">
-          <Avatar name={room.leader} tone={room.leaderTone} size={24} strong />
+          <Avatar name={room.leader} tone={room.leaderTone} id={room.leaderId} size={24} strong />
           <span>
             by <b className="font-semibold text-ink">{room.leader}</b>
           </span>

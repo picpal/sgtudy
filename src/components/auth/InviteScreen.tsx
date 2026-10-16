@@ -80,7 +80,7 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
           <dt className="text-muted">인원</dt>
           <dd className="m-0 font-medium">{r.memberCount} / {r.maxMembers}명 · {r.joinMode === "approval" ? "승인제" : "바로 참가"}{r.isPublic ? "" : " · 비공개"}</dd>
           <dt className="text-muted">그룹장</dt>
-          <dd className="m-0 flex items-center gap-2 font-medium"><Avatar name={p.leader.nickname} tone={p.leader.tone} size={22} />{p.leader.nickname}</dd>
+          <dd className="m-0 flex items-center gap-2 font-medium"><Avatar name={p.leader.nickname} tone={p.leader.tone} id={p.leader.userId} size={22} />{p.leader.nickname}</dd>
         </dl>
         {r.tags.length > 0 && (
           <div className="flex flex-wrap gap-[6px]">

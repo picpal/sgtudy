@@ -25,6 +25,8 @@ export type Room = {
   leader: string;
   /** 리더 아바타 색 — DTO leader.tone (목업은 toneOf(name)) */
   leaderTone?: Tone;
+  /** 그룹장 userId — 아바타 변형(avatarColors) */
+  leaderId?: string;
   tags: string[];
   mine: boolean;
   created: boolean;

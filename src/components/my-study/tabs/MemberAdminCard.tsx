@@ -51,7 +51,7 @@ export function MemberAdminCard({ slug, members, meId, toast }: Props) {
       <ul className="m-0 flex list-none flex-col p-0">
         {rows.map((r) => (
           <li key={r.userId} className="flex min-h-11 items-center gap-[10px] border-t border-line py-1 first:border-t-0">
-            <Avatar name={r.name} size={28} tone={r.tone} />
+            <Avatar name={r.name} size={28} tone={r.tone} id={r.userId} />
             <span className="min-w-0 flex-1 truncate text-[14px]" style={{ fontWeight: r.userId === meId ? 700 : 500 }}>
               {r.name}
             </span>

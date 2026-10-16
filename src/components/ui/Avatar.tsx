@@ -1,9 +1,11 @@
-import { AVATAR_PAL, PAL, toneOf, type Tone } from "@/lib/palette";
+import { avatarColors, toneOf, type Tone } from "@/lib/palette";
 
 type Props = {
   name: string;
   size?: number;
   tone?: Tone;
+  /** userId — 주면 같은 이니셜·같은 tone 끼리도 연한/진한 변형으로 갈린다 (avatarColors) */
+  id?: string;
   /** Main 카드처럼 조금 진한 팔레트 */
   strong?: boolean;
   /** 승인 대기 — 회색 + 점선 테두리 */
@@ -12,9 +14,9 @@ type Props = {
   title?: string;
 };
 
-export function Avatar({ name, size = 30, tone, strong, pending, className = "", title }: Props) {
+export function Avatar({ name, size = 30, tone, id, strong, pending, className = "", title }: Props) {
   const t = tone ?? toneOf(name);
-  const c = pending ? { bg: "#E9EEF0", fg: "#8C97A4" } : (strong ? AVATAR_PAL : PAL)[t];
+  const c = pending ? { bg: "#E9EEF0", fg: "#8C97A4" } : avatarColors(t, { id, strong });
   return (
     <span
       className={`inline-flex shrink-0 items-center justify-center rounded-full font-bold ${className}`}

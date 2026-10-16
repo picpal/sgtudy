@@ -65,7 +65,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
       <div role="group" aria-label="참가자 필터" className="flex flex-wrap items-center gap-[6px]">
         {who.map(([id, text, person]) => (
           <Chip key={id} on={S.calWho === id} onClick={() => update({ calWho: id, calPick: null })} withAvatar={!!person}>
-            {person && <Avatar name={person.name} size={22} tone={person.tone} />}
+            {person && <Avatar name={person.name} size={22} tone={person.tone} id={person.userId} />}
             {text}
           </Chip>
         ))}
@@ -173,7 +173,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
             <ul className="m-0 flex list-none flex-col gap-[6px] p-0">
               {pick.people.map((p) => (
                 <li key={p.userId} className="flex items-center gap-[10px] rounded-[10px] bg-surface-2 px-2 py-[6px]">
-                  <Avatar name={p.name} size={28} tone={p.tone} />
+                  <Avatar name={p.name} size={28} tone={p.tone} id={p.userId} />
                   <span className="flex-1 text-[13px] font-semibold">
                     {p.name}
                     {p.userId === meId ? " (나)" : ""}

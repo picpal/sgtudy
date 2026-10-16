@@ -46,7 +46,7 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
   it("current round card and next due", () => {
     expect(r.cur.pill).toBe("2주차 · 진행중");
     expect(r.cur.meta).toBe("10.08(목) – 10.14(수) · 마감 D-2");
-    expect(r.cur.tasks[0]).toEqual({ title: "EC2 인스턴스 유형 정리", type: "지정", dates: "10.08 – 10.14", people: [["지은", "done"], ["철수", "open"]], tones: { 지은: "peach", 철수: "blue" } });
+    expect(r.cur.tasks[0]).toEqual({ title: "EC2 인스턴스 유형 정리", type: "지정", dates: "10.08 – 10.14", people: [["지은", "done"], ["철수", "open"]], tones: { 지은: "peach", 철수: "blue" }, ids: { 지은: "u3", 철수: "u1" } });
     expect(r.next).toEqual({ nodeId: "21", title: "EC2 인스턴스 유형 정리", path: "2주차 EC2·S3 · 지정 과제", due: "10.14(수) 23:59 마감", dday: "D-2" });
   });
   it("rounds window with roundId for tree lookup", () => {
@@ -81,7 +81,7 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
     const cr = aws.currentRound!;
     const noOne = { id: "23", title: "담당자 없는 과제", type: "designated" as const, startDate: "2026-10-08", endDate: "2026-10-14", people: [] };
     const r0 = toStudyRoom({ ...aws, currentRound: { ...cr, tasks: [...cr.tasks!, noOne] } }, tree, TODAY, "u1");
-    expect(r0.cur.tasks[1]).toEqual({ title: "담당자 없는 과제", type: "지정", dates: "10.08 – 10.14", people: [], tones: {} });
+    expect(r0.cur.tasks[1]).toEqual({ title: "담당자 없는 과제", type: "지정", dates: "10.08 – 10.14", people: [], tones: {}, ids: {} });
   });
   it("gap between rounds: server currentRound = previous ended round → no current card/row (preflight C2)", () => {
     const gap = [

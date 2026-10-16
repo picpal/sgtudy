@@ -101,7 +101,7 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
 function MemberRow({ mb }: { mb: RoomMember }) {
   return (
     <li className={`flex items-center gap-[10px] rounded-[10px] px-2 py-[7px] ${mb.me ? "bg-[#F3F7FF]" : ""}`}>
-      <Avatar name={mb.name} tone={mb.tone} size={30} pending={mb.pending} />
+      <Avatar name={mb.name} tone={mb.tone} id={mb.userId} size={30} pending={mb.pending} />
       <span className="flex min-w-0 flex-1 items-center gap-[6px]">
         <span className={`whitespace-nowrap text-[14px] ${mb.me ? "font-bold" : "font-medium"} ${mb.pending ? "text-faint" : "text-ink"}`}>{mb.name}</span>
         {mb.leader && (

@@ -73,7 +73,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
               const pct = total ? Math.round((done / total) * 100) : 0;
               return (
                 <li key={m.userId ?? m.name} className="flex items-center gap-[10px] rounded-[10px] px-2 py-[7px]" style={{ background: m.me ? "#F3F7FF" : "transparent" }}>
-                  <Avatar name={m.name} size={30} tone={m.tone ?? toneOfName(m.name)} pending={m.pending} className={m.left ? "bg-slate-soft! text-[#8C97A4]!" : ""} />
+                  <Avatar name={m.name} size={30} tone={m.tone ?? toneOfName(m.name)} id={m.userId} pending={m.pending} className={m.left ? "bg-slate-soft! text-[#8C97A4]!" : ""} />
                   <span className="flex min-w-0 flex-1 items-center gap-[6px]">
                     <span className="whitespace-nowrap text-[14px]" style={{ fontWeight: m.me ? 700 : 500, color: dim ? "#7A8594" : "#1B2230" }}>
                       {m.name}

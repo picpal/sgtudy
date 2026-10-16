@@ -87,7 +87,7 @@ export function StudyHeaderInfo({ room, tab, onTab }: { room: StudyRoom; tab: Ta
           <dd className="m-0 font-medium">{room.visibility}</dd>
           <Dt icon={ic(<path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5z" />)}>그룹장</Dt>
           <dd className="m-0 flex items-center gap-2 font-medium">
-            <Avatar name={room.leader} size={26} tone={room.leaderTone ?? toneOfName(room.leader)} />
+            <Avatar name={room.leader} size={26} tone={room.leaderTone ?? toneOfName(room.leader)} id={room.leaderId} />
             {room.leader}
           </dd>
           <Dt icon={ic(<><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" /><circle cx="7.5" cy="7.5" r="1.3" /></>)}>태그</Dt>

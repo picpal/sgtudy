@@ -89,7 +89,7 @@ export function RoomInfo({ room, onShare }: { room: Room; onShare: () => void })
 
         <Dt icon={dtIcon(<path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5z" />)}>그룹장</Dt>
         <dd className="flex items-center gap-2 font-medium">
-          <Avatar name={room.leader} tone={room.leaderTone} size={26} />
+          <Avatar name={room.leader} tone={room.leaderTone} id={room.leaderId} size={26} />
           {room.leader}
         </dd>
 
