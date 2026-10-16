@@ -38,6 +38,19 @@ const res: ScheduleResponse = {
   ],
 };
 
+describe("toScheduleData personal (Task 13)", () => {
+  it("personal 플래그를 tasks·upcoming 에 옮긴다", () => {
+    const r: ScheduleResponse = {
+      ...res,
+      tasks: [{ id: "1", slug: "aws", title: "개인", s: "2026-10-08", e: "2026-10-14", st: "open", round: "2주차", personal: true }, res.tasks[0]],
+      upcoming: [{ id: "1", slug: "aws", title: "개인", s: "2026-10-08", e: "2026-10-14", st: "open", round: "2주차", personal: true }],
+    };
+    const d = toScheduleData(r);
+    expect(d.tasks.map((t) => t.personal)).toEqual([true, false]);
+    expect(d.upcoming[0].personal).toBe(true);
+  });
+});
+
 describe("toScheduleData (schedule §6)", () => {
   const d = toScheduleData(res);
   it("studies: tone → palette, pending suffix", () => {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { dday, diffDays, md, weekdayKo } from "@/lib/date";
 import { shortName, type Study, type Task } from "@/data/schedule";
+import { TypeBadge } from "@/components/my-study/bits";
 import { taskHref } from "./calc";
 
 export function UpcomingPanel({ today, studies, upcoming }: { today: string; studies: Record<string, Study>; upcoming: Task[] }) {
@@ -23,7 +24,10 @@ export function UpcomingPanel({ today, studies, upcoming }: { today: string; stu
                     {dday(today, t.e)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-semibold">{t.title}</span>
+                    <span className="flex items-center gap-[6px] text-[14px] font-semibold">
+                      {t.personal && <TypeBadge type="개인" />}
+                      <span className="min-w-0 truncate">{t.title}</span>
+                    </span>
                     <span className="mt-[2px] block text-[12px] text-muted">
                       {shortName(studies[t.study])} · {md(t.e)}({weekdayKo(t.e)}) 23:59
                     </span>

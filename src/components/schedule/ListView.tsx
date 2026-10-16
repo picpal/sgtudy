@@ -2,6 +2,7 @@ import Link from "next/link";
 import { addDays, dday, md, weekdayKo } from "@/lib/date";
 import { STATUS_LABEL } from "@/lib/types";
 import { shortName, type Study, type Task } from "@/data/schedule";
+import { TypeBadge } from "@/components/my-study/bits";
 import { isUrgent, monthRange, taskHref, weekStartOf } from "./calc";
 
 type Props = { y: number; m: number; today: string; studies: Record<string, Study>; tasks: Task[] };
@@ -47,7 +48,10 @@ export function ListView({ y, m, today, studies, tasks }: Props) {
                             {shortName(S)}
                           </span>
                           <span className="min-w-0 flex-[1_1_200px]">
-                            <span className="block text-[14px] font-semibold">{t.title}</span>
+                            <span className="flex items-center gap-[6px] text-[14px] font-semibold">
+                              {t.personal && <TypeBadge type="개인" />}
+                              {t.title}
+                            </span>
                             <span className="mt-[2px] block text-[12px] text-muted">
                               {t.round} · {md(t.s)}–{md(t.e)}
                             </span>

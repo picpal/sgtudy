@@ -38,6 +38,8 @@ export type Task = {
   round: string;
   /** false = 내 담당 아님(st null 보정, 아이콘 없음) */
   mine?: boolean;
+  /** 개인 목표 과제 — [개인] 배지·점선 막대 */
+  personal?: boolean;
 };
 
 const RAW: [StudyId, string, string, string, TaskStatus, string][] = [

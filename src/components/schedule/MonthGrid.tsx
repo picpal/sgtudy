@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { StatusIcon } from "@/components/ui/StatusIcon";
+import { STUDY_TONE } from "@/lib/api/schedule";
 import { md, WEEKDAY_KO, weekdayKo } from "@/lib/date";
 import { STATUS_LABEL } from "@/lib/types";
 import type { Marker, Study, Task } from "@/data/schedule";
@@ -111,7 +112,7 @@ function TaskBar({ seg: { task: t, col, span, isStart, isEnd, lane }, studies }:
   const finished = t.st === "done" || t.st === "late";
   const fill = S.pending ? `repeating-linear-gradient(135deg, ${S.bg} 0 6px, #FFFFFF 6px 10px)` : planned ? "#FFFFFF" : S.bg;
   const urgent = isUrgent(t);
-  const line = S.pending ? `1px solid ${S.dot}` : planned ? `1px dashed ${S.dot}` : urgent ? `1.5px solid ${S.dot}` : "1px solid transparent";
+  const line = t.personal ? `1px dashed ${STUDY_TONE.slate.dot}` : S.pending ? `1px solid ${S.dot}` : planned ? `1px dashed ${S.dot}` : urgent ? `1.5px solid ${S.dot}` : "1px solid transparent";
   const lr = isStart ? 7 : 0;
   const rr = isEnd ? 7 : 0;
   return (

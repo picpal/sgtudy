@@ -20,6 +20,10 @@ export function Legend() {
         시작 전 과제
       </span>
       <span className="inline-flex items-center gap-[5px]">
+        <span className="h-3 w-[26px] rounded-[4px] border border-dashed border-[#7A8594] bg-[#E9EEF0]" />
+        개인 목표
+      </span>
+      <span className="inline-flex items-center gap-[5px]">
         <span className="h-3 w-[26px] rounded-[4px] border border-[#C98A00] [background:repeating-linear-gradient(135deg,#FBEFD3_0_4px,#FFF_4px_7px)]" />
         승인 대기 스터디
       </span>

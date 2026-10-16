@@ -4,11 +4,12 @@ import { dday, md, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
 import { STATUS_LABEL } from "@/lib/types";
 import { shortName, type Marker, type Study, type Task } from "@/data/schedule";
+import { TypeBadge } from "@/components/my-study/bits";
 import { isUrgent, taskHref } from "./calc";
 
 type Props = { sel: string; today: string; studies: Record<string, Study>; tasks: Task[]; markers: Marker[]; ref?: Ref<HTMLElement> };
 
-type Item = { key: string; study: string; href: string; title: string; sub: string; badge: string; urgent?: boolean };
+type Item = { key: string; study: string; href: string; title: string; sub: string; badge: string; urgent?: boolean; personal?: boolean };
 
 export function DayPanel({ sel, today, studies, tasks, markers, ref }: Props) {
   const starts: Item[] = markers
@@ -31,10 +32,11 @@ export function DayPanel({ sel, today, studies, tasks, markers, ref }: Props) {
       sub: `${t.round} · ${md(t.s)}–${md(t.e)} · ${STATUS_LABEL[t.st]}`,
       badge: t.st === "done" || t.st === "late" ? STATUS_LABEL[t.st] : `마감 ${dday(today, t.e)}`,
       urgent: isUrgent(t),
+      personal: t.personal,
     }));
   const ongoing: Item[] = tasks
     .filter((t) => t.s <= sel && t.e > sel)
-    .map((t) => ({ key: `o-${t.id}`, study: t.study, href: taskHref(t, studies[t.study]), title: t.title, sub: `${t.round} · ${md(t.e)} 마감`, badge: STATUS_LABEL[t.st] }));
+    .map((t) => ({ key: `o-${t.id}`, study: t.study, href: taskHref(t, studies[t.study]), title: t.title, sub: `${t.round} · ${md(t.e)} 마감`, badge: STATUS_LABEL[t.st], personal: t.personal }));
 
   const groups = (
     [
@@ -76,7 +78,10 @@ export function DayPanel({ sel, today, studies, tasks, markers, ref }: Props) {
                   </span>
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-[14px] font-semibold text-ink">{it.title}</span>
+                  <span className="flex items-center gap-[6px] text-[14px] font-semibold text-ink">
+                    {it.personal && <TypeBadge type="개인" />}
+                    <span className="min-w-0 truncate">{it.title}</span>
+                  </span>
                   <span className="mt-[2px] block text-[12px] text-muted">{it.sub}</span>
                 </span>
               </Link>

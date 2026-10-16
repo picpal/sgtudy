@@ -37,6 +37,7 @@ const toTask = (t: ScheduleTask, today: string): Task => ({
   id: t.id, study: t.slug, title: t.title, s: t.s, e: t.e, round: t.round,
   st: t.st ?? (today < t.s ? "planned" : "open"),
   mine: t.st !== null,
+  personal: !!t.personal,
 });
 
 export const sortUpcoming = (tasks: Task[]): Task[] => [...tasks].sort((a, b) => a.e.localeCompare(b.e) || a.study.localeCompare(b.study) || a.title.localeCompare(b.title, "ko"));
