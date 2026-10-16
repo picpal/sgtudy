@@ -56,6 +56,8 @@ function toApiErrorRaw(e: unknown): ApiError {
 
 let browser: Db | null = null;
 const browserClient = (): Db => (browser ??= createClient() as Db);
+/** 브라우저 클라이언트 — src/lib/api 어댑터(Storage·테이블 읽기)가 쓴다 */
+export const browserDb = (): Db => browserClient();
 
 type RpcFn = (name: string, args: Record<string, unknown>) => PromiseLike<{ data: unknown; error: PostgrestError | null }>;
 

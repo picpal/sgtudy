@@ -278,3 +278,18 @@ export type NotificationDto = {
   readAt: string | null;
 };
 export type NotificationList = { items: NotificationDto[]; nextCursor: string | null };
+
+/* ---------- 과제 상세 · 제출 (03-api §5, 0007_submissions.sql) ---------- */
+export type FileMeta = { id: string; name: string; contentType: string; size: number; status: "pending" | "ready" };
+export type Submission = { id: string; bodyMd: string; links: string[]; files: FileMeta[]; firstSubmittedAt: string; isLate: boolean; updatedAt: string };
+export type TaskDetail = {
+  /** KST 오늘 — 0007:314 (03-api 표에는 없음) */
+  today: string;
+  node: NodeDto;
+  path: { id: string; title: string; label: string | null }[];
+  mySubmission: Submission | null;
+  isAssignee: boolean;
+  allSubmitted: boolean;
+  /** can_read_submissions 일 때만 채워진다 — 담당 해제된 사람의 제출도 섞여 온다 */
+  submissions: (Submission & { author: Person })[];
+};
