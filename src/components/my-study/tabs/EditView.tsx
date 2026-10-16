@@ -6,7 +6,7 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { TaskType } from "@/data/my-study";
 import { md } from "@/lib/date";
 import { Seg } from "../bits";
-import { dropFieldOv, isDirty, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
+import { dropFieldOv, isDirty, isPersonal, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
 import { moveNote, movedPeriod, reorderIndex, roundOf, roundOptions } from "../rounds";
 import { patchOv, type Leave, type ScreenState, type Update } from "../state";
 import type { CurriculumApi } from "../useCurriculumApi";
@@ -284,7 +284,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             })()}
           {!n.leaf && (
             <p className="m-0 min-w-0 flex-[1_1_220px] pb-[2px] text-[13px] leading-[1.55] text-ink-2 @min-[560px]:text-right">
-              과제 {n.kids.length}개 · 진척률 {n.pct}%
+              과제 {n.kids.filter((k) => !isPersonal(k)).length}개 · 진척률 {n.pct}%
               <br />
               <span className="text-[12px] text-muted">과제의 제출 수 ÷ 담당 건수로 자동 집계돼요</span>
             </p>
@@ -303,7 +303,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         {/* 회차(·묶음): 과제 섹션 — 순서·삭제·추가는 즉시 RPC (제목 등 미저장 수정과 무관) */}
         {!n.leaf && (
           <ChildList
-            parent={n}
+            // 편집 모드엔 개인 목표를 그리지 않는다 — 보이는 목록은 팀 자식만, 서버 index(reorderIndex)는 원래 kids 로
+            parent={{ ...n, kids: n.kids.filter((k) => !isPersonal(k)) }}
             onOpen={(cid) => request({ sel: cid })}
             edit={{
               busy,
