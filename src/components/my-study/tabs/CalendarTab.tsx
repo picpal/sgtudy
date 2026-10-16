@@ -21,6 +21,7 @@ import {
   type Tree,
   type TreeMember,
 } from "../model";
+import { calendarSource } from "../sources";
 import type { ScreenState, Update } from "../state";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
@@ -34,6 +35,9 @@ const BAR: Record<LeafState, [string, string, string]> = {
   unassigned: ["#FFFFFF", "#7A4F00", "1px dashed #C98A00"],
 };
 
+/** 개인 목표 막대 — slate 톤 + 점선 */
+const PERSONAL_BAR: [string, string, string] = ["#E9EEF0", "#4A5563", "1.5px dashed #8C97A4"];
+
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const dowColor = (c: number) => (c === 0 ? "#C0453A" : c === 6 ? "#2F5BC2" : "#4A5563");
 
@@ -45,8 +49,8 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
   const { gridStart, rows, label, month } = calendarGrid(anchor, S.calMode);
   const whoId = S.calWho === "all" ? null : S.calWho === "me" ? meId : S.calWho;
   const whoCode = (l: LeafNode): Code | null => (whoId ? (l.people.find((p) => p.userId === whoId)?.c ?? null) : null);
-  const calLeaves = tree.leaves.filter((l) => !whoId || !!whoCode(l));
-  const pick = tree.leaves.find((l) => l.id === S.calPick) ?? null;
+  const calLeaves = calendarSource(tree, S.calWho, meId);
+  const pick = calLeaves.find((l) => l.id === S.calPick) ?? null;
   const shift = (dir: 1 | -1) => update({ calAnchor: shiftAnchor(anchor, S.calMode, dir), calPick: null });
   const who: [string, string, TreeMember | null][] = [["all", "전체", null], ["me", "내 과제만", null], ...tree.members.filter((m) => m.userId !== meId).map((m): [string, string, TreeMember] => [m.userId, m.name, m])];
 
@@ -122,7 +126,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                   {segs.map(({ l, col, span, isStart, isEnd, lane }) => {
                     const wc = whoCode(l);
                     const st = wc ? CODE_STATE[wc] : l.state;
-                    const [bg, fg, bdr] = BAR[st];
+                    const [bg, fg, bdr] = l.personal ? PERSONAL_BAR : BAR[st];
                     const endCodes: Code[] = wc ? [wc] : l.people.map((p) => p.c);
                     const lr = isStart ? 7 : 0;
                     const rr = isEnd ? 7 : 0;
@@ -197,6 +201,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
         <Legend bg="#E6F4EC" border="1px solid #BFE3CF">완료</Legend>
         <Legend bg="#FCEBE9" border="1.5px solid #D64545">지연(미제출 있음)</Legend>
         <Legend bg="#FFFFFF" border="1px dashed #8C97A4">예정</Legend>
+        <Legend bg="#E9EEF0" border="1.5px dashed #8C97A4">개인</Legend>
         <span className="inline-flex items-center gap-[5px]">
           <span className="rounded-[5px] bg-navy px-[6px] py-px text-[10px] font-bold text-white">2주차</span>회차 시작
         </span>

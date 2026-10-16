@@ -6,6 +6,7 @@ import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { AvatarStack, Chip, Seg, TypeBadge } from "../bits";
 import { CODE_COLOR, CODE_LABEL, CODE_STATUS, boardColumn, ddayLabel, myCode, type BoardCol, type LeafNode, type Tree } from "../model";
+import { boardSource } from "../sources";
 import type { BoardMode, ScreenState, Update } from "../state";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
@@ -15,11 +16,10 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
   const meId = useMe()?.id ?? null;
   const mine = S.bMode === "mine";
   const inRound = (l: LeafNode) => S.bRound === "all" || l.roundId === S.bRound;
-  const src = tree.leaves
+  const src = boardSource(tree, mine, meId)
     .filter(inRound)
-    .filter((l) => (mine ? !!myCode(l, meId) : true))
     .sort((a, b) => a.e.localeCompare(b.e));
-  const noMine = mine && tree.leaves.every((l) => !myCode(l, meId));
+  const noMine = mine && boardSource(tree, true, meId).length === 0;
   const cols: [BoardCol, string, string][] = [
     ["todo", "예정", "#8C97A4"],
     ["doing", "진행중", "#12A386"],
@@ -78,7 +78,7 @@ function Card({ l, mine, today, meId, onOpen }: { l: LeafNode; mine: boolean; to
       type="button"
       onClick={onOpen}
       className="flex w-full flex-col items-stretch gap-[6px] rounded-[14px] border p-[14px] text-left text-ink transition-[box-shadow,border-color] duration-150 hover:border-line-dash hover:shadow-[0_6px_16px_rgba(27,34,48,.08)]"
-      style={{ borderColor: overdue ? "#E7A9A3" : "#E4ECEA", background: overdue ? "#FFF6F5" : "#FFFFFF" }}
+      style={{ borderColor: overdue ? "#E7A9A3" : l.personal ? "#C3CCD3" : "#E4ECEA", background: overdue ? "#FFF6F5" : l.personal ? "#F6F8F9" : "#FFFFFF" }}
     >
       <span className="flex flex-wrap items-center gap-[6px]">
         <TypeBadge type={l.type} />
