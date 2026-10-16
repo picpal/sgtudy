@@ -956,6 +956,7 @@ export type Database = {
         Args: { p_code: string; p_detail: string; p_hint?: Json }
         Returns: undefined
       }
+      file_discard: { Args: { p_file: string }; Returns: Json }
       file_json: {
         Args: { p_file: Database["public"]["Tables"]["files"]["Row"] }
         Returns: Json
