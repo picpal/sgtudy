@@ -1,10 +1,8 @@
-import Link from "next/link";
-import { routes } from "@/lib/routes";
+import { HomeLink } from "./HomeLink";
 
 export function Logo() {
   return (
-    <Link
-      href={routes.home()}
+    <HomeLink
       className="flex items-center gap-[10px] pr-2 text-ink hover:text-ink"
       aria-label="슥터디 홈"
     >
@@ -19,6 +17,6 @@ export function Logo() {
         />
       </svg>
       <span className="text-[20px] font-bold tracking-[-0.02em]">슥터디</span>
-    </Link>
+    </HomeLink>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { HomeLink } from "./HomeLink";
 import { Logo } from "./Logo";
 import { signOut } from "@/lib/api/me";
 import { useMe, useMyStudyHref } from "@/lib/me";
@@ -158,15 +159,19 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
       <nav aria-label="주 메뉴" className="flex gap-1 max-sm:order-last max-sm:w-full max-sm:overflow-x-auto">
         {NAV.filter((n) => me || !n.authOnly).map((n) => {
           const on = n.key === active;
+          const cls = `flex items-center gap-[7px] whitespace-nowrap rounded-[12px] px-[14px] py-[9px] text-[14px] ${
+            on ? "bg-bg font-semibold text-ink" : "font-medium text-ink-3 hover:text-ink"
+          }`;
+          // 홈은 뷰포트 프리페치 없이 — 홈을 떠날 때마다 /?_rsc 가 더 나가지 않게 (HomeLink 주석)
+          if (n.key === "home")
+            return (
+              <HomeLink key={n.key} aria-current={on ? "page" : undefined} className={cls}>
+                {n.icon}
+                {n.label}
+              </HomeLink>
+            );
           return (
-            <Link
-              key={n.key}
-              href={n.key === "myStudy" ? myStudyHref : n.href}
-              aria-current={on ? "page" : undefined}
-              className={`flex items-center gap-[7px] whitespace-nowrap rounded-[12px] px-[14px] py-[9px] text-[14px] ${
-                on ? "bg-bg font-semibold text-ink" : "font-medium text-ink-3 hover:text-ink"
-              }`}
-            >
+            <Link key={n.key} href={n.key === "myStudy" ? myStudyHref : n.href} aria-current={on ? "page" : undefined} className={cls}>
               {n.icon}
               {n.label}
             </Link>

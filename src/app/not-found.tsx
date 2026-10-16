@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { HomeLink } from "@/components/ui/HomeLink";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { NotificationBell } from "@/components/ui/NotificationBell";
-import { NOT_FOUND_TITLE, routes } from "@/lib/routes";
+import { NOT_FOUND_TITLE } from "@/lib/routes";
 
 export const metadata: Metadata = { title: NOT_FOUND_TITLE };
 
@@ -19,9 +19,9 @@ export default function NotFound() {
           <br />
           비공개 방이라면 그룹장에게 받은 초대 링크로 들어와 주세요.
         </p>
-        <Link href={routes.home()} className="mt-3 flex h-11 items-center rounded-[12px] bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white">
+        <HomeLink className="mt-3 flex h-11 items-center rounded-[12px] bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white">
           방 둘러보기
-        </Link>
+        </HomeLink>
       </main>
     </div>
   );

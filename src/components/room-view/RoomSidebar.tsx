@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { HomeLink } from "@/components/ui/HomeLink";
 import { useState } from "react";
 import { routes } from "@/lib/routes";
 import { PAL } from "@/lib/palette";
@@ -39,12 +40,12 @@ export function RoomSidebar({ selected, items, total }: Props) {
       ref={ref}
       className={`${stickyAside(fits)} flex flex-[1_1_300px] max-w-[380px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[901px]:max-w-none max-sm:px-4`}
     >
-      <Link href={routes.home()} className="inline-flex min-h-7 items-center gap-[6px] text-[13px] font-medium text-ink-3 hover:text-ink">
+      <HomeLink className="inline-flex min-h-7 items-center gap-[6px] text-[13px] font-medium text-ink-3 hover:text-ink">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M19 12H5M11 6l-6 6 6 6" />
         </svg>
         카드 목록으로
-      </Link>
+      </HomeLink>
       {/* 목록은 첫 페이지(24개)만 받는다 — 잘렸으면 보이는 개수로 적는다 */}
       <h2 className="flex items-baseline gap-2 text-[18px] font-bold">
         <button

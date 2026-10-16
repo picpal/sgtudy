@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { HomeLink } from "@/components/ui/HomeLink";
 import { useState } from "react";
 import { filterSidebarGroups } from "@/lib/api/my-study";
 import { routes } from "@/lib/routes";
@@ -91,12 +92,12 @@ export function StudySidebar({ selected, groups, collapsed = false }: { selected
           ))}
         </div>
 
-        <Link href={routes.home()} className="mt-[2px] flex h-[50px] shrink-0 items-center justify-center gap-2 rounded-[25px] bg-navy text-[15px] font-semibold text-white hover:text-white">
+        <HomeLink className="mt-[2px] flex h-[50px] shrink-0 items-center justify-center gap-2 rounded-[25px] bg-navy text-[15px] font-semibold text-white hover:text-white">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />
           </svg>
           새 스터디 찾기
-        </Link>
+        </HomeLink>
       </div>
     </aside>
   );
