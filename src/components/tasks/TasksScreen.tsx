@@ -79,15 +79,22 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const roundOf = new Map(data.rounds.map((r) => [r.id, r]));
   const addable = addableStudies(data).length > 0;
 
+  // 추가로 한도에 차 머리 버튼이 사라지면(addable true → false) 포커스가 body 에 남지 않게 제목으로
+  const wasAddable = useRef(addable);
+  useEffect(() => {
+    if (wasAddable.current && !addable && (!document.activeElement || document.activeElement === document.body)) title.current?.focus();
+    wasAddable.current = addable;
+  }, [addable]);
+
   const refresh = async () => {
     const id = seq.next();
     const next = await fetchMyTasks();
     if (seq.accept(id)) setData(next);
   };
-  // 추가로 한도에 차 머리 버튼이 사라졌으면 제목으로 (포커스가 body 로 떨어지지 않게)
+  // 폼을 닫으면 머리 버튼으로, 이미 없으면 제목으로 — 지금 DOM 기준으로 바로 옮긴다(rAF 는 창이 가려지면 멈춘다)
   const closeForm = () => {
     setFormOpen(false);
-    requestAnimationFrame(() => focusFirst(headBtn.current, title.current));
+    focusFirst(headBtn.current, title.current);
   };
 
   const setComplete = async (it: MeTaskItem, done: boolean, undoable: boolean) => {

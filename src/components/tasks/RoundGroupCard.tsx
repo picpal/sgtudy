@@ -35,7 +35,7 @@ function PersonalQuickAdd({ label, onAdd, onClose }: { label: string; onAdd: (ti
     input.current?.focus();
   };
   return (
-    <li className="flex min-h-12 items-center border-t border-line-2 bg-surface-2 px-3 py-1">
+    <li className="flex min-h-12 items-center border-t border-line-2 bg-personal-field px-3 py-1">
       <input
         ref={input}
         type="text"
@@ -58,7 +58,7 @@ function PersonalQuickAdd({ label, onAdd, onClose }: { label: string; onAdd: (ti
         onBlur={() => {
           if (!text.trim() && !busy) onClose();
         }}
-        className="h-11 min-w-0 flex-1 rounded-[10px] border-[1.5px] border-slate-text bg-surface px-3 text-[14px] text-ink"
+        className="h-11 min-w-0 flex-1 rounded-[10px] border-[1.5px] border-personal-line bg-surface px-3 text-[14px] text-ink"
       />
       <span role="status" className="sr-only">
         {last ? `추가했어요: ${last}` : ""}
@@ -89,8 +89,21 @@ export function RoundGroupCard({ group, today, perRound, limited, collapsed, onT
   const { study, round, items, done, canAdd } = group;
   const label = round ? [round.label, round.title].filter(Boolean).join(" ") : "회차 밖";
   const bodyId = `round-${study.slug}-${round?.id ?? "none"}`;
+  const card = useRef<HTMLDivElement>(null);
+  // Esc·빈 입력 blur 로 닫으면 포커스가 body 로 떨어지지 않게 "＋ 내 목표 추가" 로 되돌린다 — 버튼이 다시 그려진 뒤(effect)
+  const refocus = useRef(false);
+  const closeAdd = () => {
+    refocus.current = true;
+    onCloseAdd();
+  };
+  useEffect(() => {
+    if (adding || !refocus.current) return;
+    refocus.current = false;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    card.current?.querySelector<HTMLButtonElement>("[data-add-personal]")?.focus();
+  }, [adding]);
   return (
-    <div className="overflow-hidden rounded-[16px] border border-line">
+    <div ref={card} className="overflow-hidden rounded-[16px] border border-line">
       <div className="flex items-center gap-2 bg-surface-3 py-[6px] pl-[14px] pr-[6px] sm:pl-[18px]">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-1 py-[6px] max-sm:flex-col max-sm:items-start">
           <span className="flex min-w-0 items-center gap-2">
@@ -130,7 +143,7 @@ export function RoundGroupCard({ group, today, perRound, limited, collapsed, onT
           ))}
           {canAdd &&
             (adding ? (
-              <PersonalQuickAdd label={label} onAdd={onAdd} onClose={onCloseAdd} />
+              <PersonalQuickAdd label={label} onAdd={onAdd} onClose={closeAdd} />
             ) : (
               <li className="border-t border-line-2">
                 <button
@@ -138,7 +151,7 @@ export function RoundGroupCard({ group, today, perRound, limited, collapsed, onT
                   data-add-personal={round?.id}
                   onClick={onOpenAdd}
                   aria-label={`${label}에 내 목표 추가`}
-                  className="flex min-h-12 w-full items-center gap-2 bg-surface px-[18px] text-left text-[13px] font-semibold text-slate-text hover:bg-slate-soft/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mint"
+                  className="flex min-h-12 w-full items-center gap-2 bg-surface px-[18px] text-left text-[13px] font-semibold text-personal-ink hover:bg-slate-soft/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mint"
                 >
                   ＋ 내 목표 추가
                 </button>

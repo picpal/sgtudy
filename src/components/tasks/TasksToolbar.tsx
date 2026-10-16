@@ -6,6 +6,8 @@ import type { MeTaskStudy } from "@/lib/api/types";
 import type { TasksFilter } from "./calc";
 
 const focus = "focus-visible:outline-2 focus-visible:outline-mint focus-visible:outline-offset-2";
+/** 보이는 높이 34px, 누르는 영역은 위아래 5px 늘려 44px (진행목표 칩과 같은 방식 — before 의사 요소) */
+const tap44 = "relative before:absolute before:inset-x-0 before:-inset-y-[5px] before:content-['']";
 
 function Seg<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
@@ -18,7 +20,7 @@ function Seg<T extends string>({ label, value, options, onChange }: { label: str
             type="button"
             aria-pressed={on}
             onClick={() => onChange(id)}
-            className={`h-[34px] whitespace-nowrap rounded-[9px] px-3 text-[13px] max-sm:h-11 ${focus} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
+            className={`h-[34px] whitespace-nowrap rounded-[9px] px-3 text-[13px] max-sm:h-11 ${tap44} ${focus} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
           >
             {text}
           </button>
@@ -36,7 +38,7 @@ function Chip({ on, onClick, children, title }: { on: boolean; onClick: () => vo
       aria-pressed={on}
       title={title}
       onClick={onClick}
-      className={`inline-flex h-[34px] max-w-full items-center gap-[6px] rounded-[17px] border px-3 text-[13px] max-sm:h-11 max-sm:rounded-[22px] ${focus} ${
+      className={`inline-flex h-[34px] max-w-full items-center gap-[6px] rounded-[17px] border px-3 text-[13px] max-sm:h-11 max-sm:rounded-[22px] ${tap44} ${focus} ${
         on ? "border-ink bg-ink font-semibold text-white" : "border-line-3 bg-surface font-medium text-ink-3"
       }`}
     >
