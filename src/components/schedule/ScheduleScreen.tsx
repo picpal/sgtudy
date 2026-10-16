@@ -100,7 +100,7 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
     // overscroll-behavior: contain)을 두었는데, 넘칠 게 없는 안쪽 스크롤러도 휠·터치를 붙잡고 문서로 넘기지 않아 화면 밖 내용을 볼 수 없었다
     <div className="box-border flex min-h-screen flex-col p-4">
       <AppHeader active="schedule" variant="card" bell={<NotificationBell />} />
-      <div className="mx-auto flex w-full max-w-[1408px] flex-1 items-start gap-4 max-[901px]:flex-wrap">
+      <div className="mx-auto flex w-full max-w-[1408px] flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
         <main className="flex min-w-0 flex-[999_1_720px] flex-col self-stretch rounded-[20px] bg-surface px-6 pt-6 pb-[18px] max-sm:px-4 max-sm:pt-4" aria-busy={loading}>
           <Toolbar y={y} m={m} view={view} off={off} studies={data.studies} onPrev={() => shift(-1)} onNext={() => shift(1)} onToday={goToday} onToggle={toggle} onView={setView} />
           {view === "month" ? (
