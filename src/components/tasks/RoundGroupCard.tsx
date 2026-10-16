@@ -13,7 +13,8 @@ const mdw = (s: string) => `${md(s)}(${weekdayKo(s)})`;
 /**
  * 회차 끝 빠른 추가 — my-study QuickAdd 와 같은 IME(shouldSubmitQuickAdd)·Esc·빈 입력 blur 닫힘 규칙.
  * 개인 목표는 낙관적 임시 행 없이 응답을 기다린다(스펙 §7: 서버 한도·기간 오류를 바로 보여 주려고) → 입력 aria-busy.
- * QuickAdd 자체는 ParentNode·"과제" 문구에 묶여 있어(문구 prop 은 Task 8 범위) 같은 규칙으로 따로 둔다.
+ * my-study QuickAdd 와 합치지 않는다(Task 14 판단): 그쪽은 role="tree" 안의 treeitem div·ParentNode(회차 기간 안내)·연달아 보내기(입력을 바로 비움)이고,
+ * 여기는 ul 안의 li·me_tasks 회차·응답 뒤 목록 재조회라 보내는 동안 입력을 잠근다. 공통 규칙(제목 정리·IME Enter)은 rounds.ts 함수를 같이 쓴다.
  */
 function PersonalQuickAdd({ label, onAdd, onClose }: { label: string; onAdd: (title: string) => Promise<boolean>; onClose: () => void }) {
   const input = useRef<HTMLInputElement>(null);

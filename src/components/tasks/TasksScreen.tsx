@@ -12,6 +12,7 @@ import type { MeTaskItem, MeTasks } from "@/lib/api/types";
 import { md, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
 import { AddPersonalForm } from "./AddPersonalForm";
+import { focusFirst, latestApplied } from "./requests";
 import { addableStudies, applyFilter, atLimit, DEFAULT_FILTER, defaultCollapsed, emptyKind, filterQuery, groupByDue, groupByRound, isDone, normalizeFilter, parseFilter, summary, type RoundGroup, type TasksFilter } from "./calc";
 import { RoundGroupCard } from "./RoundGroupCard";
 import { TaskRow } from "./TaskRow";
@@ -60,9 +61,10 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   };
   // 진행 중인 요청 수 (여러 행을 동시에 눌러도 마지막 것이 끝날 때까지 aria-busy)
   const [pending, setPending] = useState(0);
-  // 재조회 순번 — 늦게 도착한 이전 응답이 최신 목록을 덮지 않게
-  const reqId = useRef(0);
+  // 재조회 순번 — 늦게 도착한 이전 응답이 최신 목록을 덮지 않게, 늦게 보낸 요청이 실패해도 앞선 성공 응답은 반영
+  const [seq] = useState(latestApplied);
   const headBtn = useRef<HTMLButtonElement>(null);
+  const title = useRef<HTMLHeadingElement>(null);
   const [toast, setToast] = useState<ToastMsg>(null);
   const closeToast = useCallback(() => setToast(null), []);
   const [formOpen, setFormOpen] = useState(false);
@@ -78,13 +80,14 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const addable = addableStudies(data).length > 0;
 
   const refresh = async () => {
-    const id = ++reqId.current;
+    const id = seq.next();
     const next = await fetchMyTasks();
-    if (id === reqId.current) setData(next);
+    if (seq.accept(id)) setData(next);
   };
+  // 추가로 한도에 차 머리 버튼이 사라졌으면 제목으로 (포커스가 body 로 떨어지지 않게)
   const closeForm = () => {
     setFormOpen(false);
-    headBtn.current?.focus();
+    requestAnimationFrame(() => focusFirst(headBtn.current, title.current));
   };
 
   const setComplete = async (it: MeTaskItem, done: boolean, undoable: boolean) => {
@@ -232,7 +235,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
       <main aria-busy={pending > 0} className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 rounded-[20px] bg-surface px-7 pb-[30px] pt-[26px] max-sm:px-2 max-sm:pb-7 max-sm:pt-5">
         <div className="flex items-start gap-3 max-sm:px-2">
           <div className="min-w-0 flex-1">
-            <h1 className="m-0 text-[26px] font-bold tracking-[-0.02em] max-sm:text-[22px]">내 과제</h1>
+            <h1 ref={title} tabIndex={-1} className="m-0 text-[26px] font-bold focus:outline-none tracking-[-0.02em] max-sm:text-[22px]">내 과제</h1>
             {pieces.length > 0 && (
               <p className="m-0 mt-[6px] text-[14px] text-muted max-sm:text-[13px]">
                 {pieces.map((p, i) => (
