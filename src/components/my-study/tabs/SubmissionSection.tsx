@@ -62,17 +62,15 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
       ? "보관된 과제예요 · 제출물은 그룹장과 작성자만 볼 수 있어요"
       : null;
 
+  // 서명 URL 은 첨부(download)라 새 탭을 열면 빈 탭만 남는다 — 지금 페이지에서 내려받는다
   const openFile = async (f: FileMeta) => {
-    // 팝업 차단을 피하려고 누른 순간 창을 연다
-    const w = window.open("about:blank", "_blank");
     try {
-      const url = await fileUrl(f);
-      if (w) {
-        w.opener = null;
-        w.location.href = url;
-      } else window.location.href = url;
+      const a = document.createElement("a");
+      a.href = await fileUrl(f);
+      a.rel = "noopener";
+      a.download = f.name;
+      a.click();
     } catch {
-      w?.close();
       toast({ text: "파일을 열 수 없어요", tone: "bad" });
     }
   };
