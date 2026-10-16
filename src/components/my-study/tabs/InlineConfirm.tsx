@@ -31,22 +31,23 @@ export function InlineConfirm({ text, actions, onCancel, cancelLabel = "취소" 
     btns[next].focus();
   };
   return (
-    <div ref={box} role="alertdialog" aria-label="확인" aria-describedby={textId} onKeyDown={onKey} className="flex scroll-my-4 flex-col gap-[10px] rounded-[12px] border border-[#F0C9C4] bg-[#FFF7F6] p-3">
+    <div ref={box} role="alertdialog" aria-label="확인" aria-describedby={textId} onKeyDown={onKey} className="flex scroll-my-4 flex-col gap-[7px] rounded-[12px] border border-[#F0C9C4] bg-[#FFF7F6] px-3 py-[9px]">
       <span id={textId} className="text-[13px] leading-[1.6] text-ink-2">
         {text}
       </span>
-      <div className="flex flex-wrap justify-end gap-2">
-        <button ref={first} type="button" onClick={onCancel} className="h-[38px] rounded-[19px] border border-line-3 bg-surface px-[14px] text-[13px]">
-          {cancelLabel}
+      {/* 누르는 자리는 44px(h-11), 보이는 알약은 38px — 상자 위아래 여백을 3px 씩 줄여 겉 크기는 그대로 */}
+      <div className="flex flex-wrap justify-end gap-x-2">
+        <button ref={first} type="button" onClick={onCancel} className="flex h-11 items-center rounded-[19px]">
+          <span className="flex h-[38px] items-center rounded-[19px] border border-line-3 bg-surface px-[14px] text-[13px]">{cancelLabel}</span>
         </button>
         {actions.map((a) => (
           <button
             key={a.label}
             type="button"
             onClick={a.onClick}
-            className={`h-[38px] rounded-[19px] px-[14px] text-[13px] font-semibold ${a.tone === "danger" ? "bg-warn text-white" : a.tone === "primary" ? "bg-navy text-white" : "border border-line-3 bg-surface text-ink"}`}
+            className="flex h-11 items-center rounded-[19px]"
           >
-            {a.label}
+            <span className={`flex h-[38px] items-center rounded-[19px] px-[14px] text-[13px] font-semibold ${a.tone === "danger" ? "bg-warn text-white" : a.tone === "primary" ? "bg-navy text-white" : "border border-line-3 bg-surface text-ink"}`}>{a.label}</span>
           </button>
         ))}
       </div>
