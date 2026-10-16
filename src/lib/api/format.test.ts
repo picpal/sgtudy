@@ -39,6 +39,11 @@ describe("ddayOf (roomview §3.2)", () => {
     expect(ddayOf("ended", TODAY, "2026-07-01", "2026-09-30")).toEqual({ short: "종료", long: "09.30 종료" });
     expect(ddayOf("draft", TODAY, "2026-11-09", "2026-12-20").short).toBe("D-28");
   });
+  it("recruit: 시작일 당일/경과 시 미래형 D+n 금지", () => {
+    expect(ddayOf("recruit", TODAY, TODAY, "2026-12-27")).toEqual({ short: "오늘 시작", long: "오늘 시작" });
+    expect(ddayOf("recruit", TODAY, "2026-10-10", "2026-12-27")).toEqual({ short: "시작일 지남", long: "시작일 지남 · 그룹장이 시작하면 진행돼요" });
+    expect(ddayOf("draft", TODAY, "2026-10-10", "2026-12-27").long).not.toContain("D+");
+  });
 });
 
 describe("curIndexOf / roundsWindow (roomview §3.6)", () => {

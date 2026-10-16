@@ -36,6 +36,8 @@ export function ddayOf(status: RoomStatusDto, today: string, start: string, end:
     const short = dday(today, end);
     return { short, long: `종료까지 ${short}` };
   }
+  if (today === start) return { short: "오늘 시작", long: "오늘 시작" };
+  if (today > start) return { short: "시작일 지남", long: "시작일 지남 · 그룹장이 시작하면 진행돼요" };
   const short = dday(today, start);
   return { short, long: `시작까지 ${short}` };
 }
