@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import type { MoreMenuItem } from "@/components/ui/MoreMenu";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
@@ -16,6 +17,7 @@ import { RoomInfo } from "./RoomInfo";
 import { JoinCard } from "./JoinCard";
 import { GlanceCard } from "./GlanceCard";
 import { LeaderPanel } from "./LeaderPanel";
+import { MORE_LABEL, roomMoreItems } from "./moreItems";
 
 /** invite: ?invite= 로 연 비공개 방의 토큰 — 참가/신청 RPC 와 로그인 복귀 주소에 그대로 이어 붙인다 */
 export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; list: RoomListResponse; invite?: string }) {
@@ -60,6 +62,11 @@ export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; l
     }
   };
 
+  // 더보기: 내 스터디로 · 참가/신청 취소 (JoinCard 와 같은 확인 대화상자)
+  const more: MoreMenuItem[] = roomMoreItems(act).map((k) =>
+    k === "myStudy" ? { key: k, label: MORE_LABEL[k], href: routes.myStudy(dto.slug) } : { key: k, label: MORE_LABEL[k], danger: true, onSelect: () => setConfirm(k === "leave" ? "leave" : "cancel") },
+  );
+
   return (
     // 한 페이지 스크롤 — 화면 높이에 가두지 않는다. 옆 목록은 화면에 다 들어갈 때만 붙는다(RoomSidebar)
     <div className="flex min-h-screen flex-col p-4">
@@ -70,7 +77,7 @@ export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; l
         <main className="min-w-0 flex-[999_1_640px] self-stretch rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:order-first max-sm:px-4">
           {/* 정보(460) + 간격(28) + 참가 카드(300) = 788 보다 좁으면 카드가 아래로 떨어진다 — 그땐 360 에 묶지 않고 두 카드를 나란히 (태블릿·좁은 PC) */}
           <div className="flex flex-wrap items-start gap-7 @container">
-            <RoomInfo room={room} onShare={share} />
+            <RoomInfo room={room} onShare={share} more={more} />
             <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px] @max-[788px]:grid @max-[788px]:max-w-none @max-[788px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] @max-[788px]:items-start">
               <JoinCard
                 room={room}

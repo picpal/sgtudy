@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { MoreMenu, type MoreMenuItem } from "@/components/ui/MoreMenu";
 import { Inline, MarkdownView } from "@/components/my-study/MarkdownView";
 import { PAL } from "@/lib/palette";
 import { JOIN_MODE_LABEL } from "@/lib/types";
@@ -38,8 +39,8 @@ function H3({ icon, className, children }: { icon: ReactNode; className: string;
   );
 }
 
-/** onShare: 방 주소(초대 토큰 없이) 복사 — 토스트는 화면이 띄운다 */
-export function RoomInfo({ room, onShare }: { room: Room; onShare: () => void }) {
+/** onShare: 방 주소(초대 토큰 없이) 복사 — 토스트는 화면이 띄운다. more: 더보기 메뉴(비면 버튼 숨김) */
+export function RoomInfo({ room, onShare, more }: { room: Room; onShare: () => void; more: MoreMenuItem[] }) {
   const recruit = room.status === "recruit";
   return (
     <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
@@ -55,13 +56,7 @@ export function RoomInfo({ room, onShare }: { room: Room; onShare: () => void })
               <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
             </svg>
           </button>
-          <button type="button" aria-label="더보기" className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#1B2230" aria-hidden="true">
-              <circle cx="6" cy="12" r="1.6" />
-              <circle cx="12" cy="12" r="1.6" />
-              <circle cx="18" cy="12" r="1.6" />
-            </svg>
-          </button>
+          <MoreMenu items={more} />
         </div>
       </div>
 

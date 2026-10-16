@@ -121,9 +121,9 @@ export function CodeIcons({ codes, size, max }: { codes: Code[]; size: number; m
 export const statusLabelOf = (s: TaskStatus) => STATUS_LABEL[s];
 
 /** 44 원형 아이콘 버튼 (동작 없음) */
-export function RoundIconButton({ label, children, size = 44 }: { label: string; children: ReactNode; size?: number }) {
+export function RoundIconButton({ label, children, size = 44, title, onClick }: { label: string; children: ReactNode; size?: number; title?: string; onClick?: () => void }) {
   return (
-    <button type="button" aria-label={label} className="flex shrink-0 items-center justify-center rounded-full border border-line bg-surface" style={{ width: size, height: size }}>
+    <button type="button" aria-label={label} title={title} onClick={onClick} className="flex shrink-0 items-center justify-center rounded-full border border-line bg-surface" style={{ width: size, height: size }}>
       {children}
     </button>
   );

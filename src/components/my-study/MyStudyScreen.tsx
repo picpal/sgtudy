@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LeaderPanel } from "@/components/room-view/LeaderPanel";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import type { MoreMenuItem } from "@/components/ui/MoreMenu";
+import { MORE_LABEL, studyMoreItems } from "@/components/room-view/moreItems";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
@@ -171,6 +173,20 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     }
   };
 
+  // 공유: 공개 방 주소를 복사한다 (내 스터디 주소는 참가자만 열 수 있다)
+  const share = async () => {
+    try {
+      await navigator.clipboard.writeText(new URL(routes.room(detail.slug), window.location.origin).href);
+      setToast({ text: "링크를 복사했어요", tone: "ok" });
+    } catch {
+      setToast({ text: "링크를 복사하지 못했어요 · 방 정보 화면의 주소를 복사해 주세요", tone: "bad" });
+    }
+  };
+  // 더보기: 방 정보(공개 방 화면) · 참가/신청 취소 (참가 카드와 같은 확인 대화상자)
+  const more: MoreMenuItem[] = studyMoreItems(room.action).map((k) =>
+    k === "room" ? { key: k, label: MORE_LABEL[k], href: routes.room(detail.slug) } : { key: k, label: MORE_LABEL[k], danger: true, onSelect: () => setConfirm(k === "leave" ? "leave" : "cancel") },
+  );
+
   // "내 과제 보기" → 보드 탭으로 바꾼 뒤 탭 목록이 보이게 (Q3-18)
   const [tabJump, setTabJump] = useState(0);
   useEffect(() => {
@@ -189,7 +205,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
             {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}
             <div className="flex flex-wrap items-start gap-7 @container">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
-                <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} />
+                <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} onShare={share} more={more} />
                 {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} onGoCurriculum={() => update({ tab: "curriculum" })} />}
                 {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} />}
                 {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}

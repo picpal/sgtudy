@@ -2,6 +2,7 @@
 
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
+import { MoreMenu, type MoreMenuItem } from "@/components/ui/MoreMenu";
 import { PAL } from "@/lib/palette";
 import { ROOM_STATUS_LABEL, type RoomStatus } from "@/lib/types";
 import type { StudyRoom } from "@/lib/api/my-study";
@@ -45,7 +46,8 @@ const ic = (d: React.ReactNode, extra?: object) => (
   </svg>
 );
 
-export function StudyHeaderInfo({ room, tab, onTab }: { room: StudyRoom; tab: TabId; onTab: (t: TabId) => void }) {
+/** onShare: 공개 방 주소 복사 · more: 더보기 메뉴 */
+export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: StudyRoom; tab: TabId; onTab: (t: TabId) => void; onShare: () => void; more: MoreMenuItem[] }) {
   return (
     <>
       <div className="flex items-start gap-3">
@@ -54,19 +56,13 @@ export function StudyHeaderInfo({ room, tab, onTab }: { room: StudyRoom; tab: Ta
           <p className="mt-2 mb-0 text-[15px] leading-[1.6] text-ink-3">{room.intro}</p>
         </div>
         <div className="flex shrink-0 gap-[6px]">
-          <RoundIconButton label="공유">
+          <RoundIconButton label="공유" title="링크 복사" onClick={onShare}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#1B2230" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 3v12M7 8l5-5 5 5" />
               <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
             </svg>
           </RoundIconButton>
-          <RoundIconButton label="더보기">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#1B2230" aria-hidden="true">
-              <circle cx="6" cy="12" r="1.6" />
-              <circle cx="12" cy="12" r="1.6" />
-              <circle cx="18" cy="12" r="1.6" />
-            </svg>
-          </RoundIconButton>
+          <MoreMenu items={more} />
         </div>
       </div>
 
