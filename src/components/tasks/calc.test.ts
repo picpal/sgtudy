@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MeTaskItem, MeTasks } from "@/lib/api/types";
-import { DEFAULT_FILTER, addableRounds, addableStudies, applyFilter, atLimit, defaultCollapsed, defaultRound, emptyKind, normalizeFilter, personalCount, rowState, filterQuery, groupByDue, groupByRound, parseFilter, statusText, summary, type TasksFilter } from "./calc";
+import { DEFAULT_FILTER, addableRounds, checkMode, addableStudies, applyFilter, atLimit, defaultCollapsed, defaultRound, emptyKind, normalizeFilter, personalCount, rowState, filterQuery, groupByDue, groupByRound, parseFilter, statusText, summary, type TasksFilter } from "./calc";
 
 const item = (o: Partial<MeTaskItem> & { id: string }): MeTaskItem => ({
   slug: "aws", roundId: "a3", groupTitle: null, title: o.id, type: "common", startDate: "2026-10-15", endDate: "2026-10-21", st: "open", submittedAt: null, ...o,
@@ -221,5 +221,15 @@ describe("화면 판단 (Task 12 수정 1)", () => {
     expect(rowState(item({ id: "a", st: "open", endDate: t }), t)).toEqual({ tone: "hot", dueHot: true });
     expect(rowState(item({ id: "a", st: "open", endDate: "2026-10-12", type: "personal" }), t)).toEqual({ tone: "plain", dueHot: true });
     expect(rowState(item({ id: "a", st: "planned", endDate: "2026-10-20" }), t)).toEqual({ tone: "plain", dueHot: false });
+  });
+});
+
+describe("checkMode (오케스트레이터 결정: 종료 방은 숨김)", () => {
+  it("active = 누를 수 있음, recruit/draft = 비활성, ended = 숨김", () => {
+    const s = fx().studies[0];
+    expect(checkMode({ ...s, status: "active" })).toBe("enabled");
+    expect(checkMode({ ...s, status: "recruit" })).toBe("disabled");
+    expect(checkMode({ ...s, status: "draft" })).toBe("disabled");
+    expect(checkMode({ ...s, status: "ended" })).toBe("hidden");
   });
 });

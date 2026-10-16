@@ -7,7 +7,7 @@ import { TASK_TYPE_KO } from "@/lib/api/format";
 import type { MeTaskItem, MeTaskRound, MeTaskStudy } from "@/lib/api/types";
 import { dday, md } from "@/lib/date";
 import { routes } from "@/lib/routes";
-import { isDone, rowState, statusText, type RowTone } from "./calc";
+import { checkMode, isDone, rowState, statusText, type RowTone } from "./calc";
 import { studyTone } from "./tone";
 
 export const period = (s: string, e: string) => (s === e ? md(e) : `${md(s)} – ${md(e)}`);
@@ -35,13 +35,15 @@ type Props = {
 export function TaskRow({ item, study, round, today, withRoundChip, busy, onToggle }: Props) {
   const done = isDone(item.st);
   const personal = item.type === "personal";
-  const active = study.status === "active";
+  const mode = checkMode(study);
+  const active = mode === "enabled";
   const tone = studyTone(study.tone);
   const { tone: st, dueHot } = rowState(item, today);
   const hintId = `done-hint-${item.id}`;
   return (
     <li className="flex min-h-14 items-center gap-1 border-t border-line-2 bg-surface pl-[6px] pr-2 max-sm:items-start max-sm:py-1">
-      {personal ? (
+      {/* 종료된 방의 개인 목표는 읽기 전용 — 체크 버튼 대신 팀 과제처럼 상태 아이콘만 */}
+      {personal && mode !== "hidden" ? (
         <button
           type="button"
           aria-pressed={done}

@@ -199,3 +199,7 @@ export function rowState(it: MeTaskItem, today: string): { tone: RowTone; dueHot
   const tone: RowTone = it.st === "done" || it.st === "late" || it.st === "missed" ? it.st : it.st === "open" && it.endDate === today ? "hot" : "plain";
   return { tone, dueHot: !done && it.endDate <= today };
 }
+
+/** 개인 목표 완료 체크 버튼: 진행 중 = 누름, 시작 전(모집·초안) = 비활성 + 안내, 종료 = 숨김(읽기 전용, 시안 E-4) */
+export const checkMode = (s: MeTaskStudy): "enabled" | "disabled" | "hidden" =>
+  s.status === "active" ? "enabled" : s.status === "ended" ? "hidden" : "disabled";
