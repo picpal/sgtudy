@@ -93,6 +93,8 @@ const ARCHIVED_NOTE = "보관된 과제라 제출·수정할 수 없어요";
 /** 내 제출 카드 상태 — 스펙 §2.2 표, 위에서부터 첫 일치 (Review Focus 2) */
 export function myCardStateOf(d: TaskDetail, room: RoomStatus): MyCardState {
   const mine = d.mySubmission;
+  // 리프를 보관하면 배정이 풀려(isAssignee=false) 아래 "담당에서 빠져" 로 떨어지므로 보관을 먼저 본다
+  if (d.node.archived && mine && !d.isAssignee) return { kind: "readonly", note: ARCHIVED_NOTE };
   if (!d.isAssignee) return mine ? { kind: "readonly", note: "담당에서 빠져 더 고칠 수 없어요 · 제출물은 남아 있어요" } : { kind: "hidden" };
   if (room === "ended") return mine ? { kind: "readonly", note: "종료된 스터디라 더 고칠 수 없어요" } : { kind: "blocked", note: "종료된 스터디라 제출할 수 없어요" };
   if (room !== "active") return { kind: "blocked", note: "스터디가 시작되면 제출할 수 있어요" };

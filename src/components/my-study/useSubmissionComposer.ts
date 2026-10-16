@@ -78,10 +78,10 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
   const busyRef = useRef(false);
   const savedIds = useMemo(() => new Set((mine?.files ?? []).map((f) => f.id)), [mine]);
 
+  // 남은 임시본은 [이어 쓰기]·[버리기] 로 고를 때까지 지킨다 — 손댔다고 덮어쓰면 안내만 사라지고 내용이 없어진다
   const touch = () => {
     setDirty(true);
     setWritePending(true);
-    setPending(null);
   };
   const setBody = (v: string) => {
     setBodyRaw(v);
@@ -212,13 +212,13 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
   /* ---------- 이 기기 임시 저장 (500ms 디바운스) ---------- */
   const readyFiles = useMemo(() => rows.filter((r) => r.status === "ready" && r.meta).map((r) => r.meta!), [rows]);
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty || pending) return;
     const t = setTimeout(() => {
       writeDraft(store(), key, { body, links, files: readyFiles, at: new Date().toISOString() });
       setWritePending(false);
     }, 500);
     return () => clearTimeout(t);
-  }, [dirty, body, links, readyFiles, key]);
+  }, [dirty, pending, body, links, readyFiles, key]);
 
   const uploading = rows.some((r) => r.status === "uploading");
   // 올리는 중이거나 임시본이 아직 안 써졌을 때만 새로고침·닫기를 묻는다
@@ -262,6 +262,7 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
     for (const r of rowsRef.current) if (r.status === "ready" && !savedIds.has(r.fileId)) void discardUnattached(r.fileId);
     load(fromMine());
     clearDraft(store(), key);
+    setPending(null);
     setDirty(false);
     setWritePending(false);
   };
@@ -281,6 +282,7 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
     try {
       const sub = await upsertSubmission(nodeId, { body, links, fileIds: readyIds(rowsRef.current) });
       clearDraft(store(), key);
+      setPending(null);
       setDirty(false);
       setWritePending(false);
       toast({ text: mine ? "수정했어요" : sub.isLate ? "지각 제출했어요" : "제출했어요", tone: "ok" });

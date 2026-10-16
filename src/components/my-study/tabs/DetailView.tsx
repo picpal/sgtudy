@@ -82,7 +82,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
           <span>{kind}</span>
         </nav>
         {canEdit && (
-          <button type="button" onClick={onEdit} className="h-11 shrink-0 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white">
+          <button type="button" onClick={() => guard(onEdit)} className="h-11 shrink-0 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white">
             편집
           </button>
         )}

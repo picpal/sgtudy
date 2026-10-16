@@ -88,6 +88,8 @@ describe("myCardStateOf — 판정 순서 (Review Focus 2)", () => {
     expect(S(detail({ mySubmission: sub() }, { archived: true }))).toEqual({ kind: "readonly", note: "보관된 과제라 제출·수정할 수 없어요" });
     expect(S(detail({}, { archived: true }))).toEqual({ kind: "blocked", note: "보관된 과제라 제출·수정할 수 없어요" });
   });
+  it("archived leaf releases assignees — my submission still reads as archived, not released", () =>
+    expect(S(detail({ isAssignee: false, mySubmission: sub() }, { archived: true }))).toEqual({ kind: "readonly", note: "보관된 과제라 제출·수정할 수 없어요" }));
   it("before start → blocked with date", () => expect(S(detail({}, { startDate: "2026-10-15" }))).toEqual({ kind: "blocked", note: "10.15(목)부터 제출할 수 있어요" }));
   it("submitted → submitted, else compose", () => {
     expect(S(detail({ mySubmission: sub() }))).toEqual({ kind: "submitted" });
