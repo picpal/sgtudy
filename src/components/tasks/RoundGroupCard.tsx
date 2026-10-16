@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { roundStatus } from "@/components/my-study/model";
 import { normalizeTitle, shouldSubmitQuickAdd } from "@/components/my-study/rounds";
 import type { MeTaskItem } from "@/lib/api/types";
+import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { md, weekdayKo } from "@/lib/date";
 import type { RoundGroup } from "./calc";
 import { TaskRow } from "./TaskRow";
@@ -90,18 +91,12 @@ export function RoundGroupCard({ group, today, perRound, limited, collapsed, onT
   const label = round ? [round.label, round.title].filter(Boolean).join(" ") : "회차 밖";
   const bodyId = `round-${study.slug}-${round?.id ?? "none"}`;
   const card = useRef<HTMLDivElement>(null);
-  // Esc·빈 입력 blur 로 닫으면 포커스가 body 로 떨어지지 않게 "＋ 내 목표 추가" 로 되돌린다 — 버튼이 다시 그려진 뒤(effect)
-  const refocus = useRef(false);
+  // Esc·빈 입력 blur 로 닫으면 포커스가 body 로 떨어지지 않게 "＋ 내 목표 추가" 로 되돌린다 — 버튼이 다시 그려진 뒤(effect, my-study 와 같은 훅)
+  const refocus = useRefocusOnClose(adding);
   const closeAdd = () => {
-    refocus.current = true;
+    refocus(() => card.current?.querySelector<HTMLButtonElement>("[data-add-personal]"));
     onCloseAdd();
   };
-  useEffect(() => {
-    if (adding || !refocus.current) return;
-    refocus.current = false;
-    if (document.activeElement && document.activeElement !== document.body) return;
-    card.current?.querySelector<HTMLButtonElement>("[data-add-personal]")?.focus();
-  }, [adding]);
   return (
     <div ref={card} className="overflow-hidden rounded-[16px] border border-line">
       <div className="flex items-center gap-2 bg-surface-3 py-[6px] pl-[14px] pr-[6px] sm:pl-[18px]">

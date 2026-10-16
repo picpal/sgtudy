@@ -88,7 +88,7 @@ export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilte
             <option value="due">마감일</option>
           </select>
         </label>
-        <div role="group" aria-label="유형" className="flex flex-wrap gap-[6px]">
+        <div role="group" aria-label="유형" className="flex flex-wrap gap-x-[6px] gap-y-[10px]">
           {TYPES.map(([id, long, short]) => (
             <Chip key={id} on={filter.type === id} onClick={() => set({ type: id })}>
               <span className="max-sm:hidden">{long}</span>
@@ -103,7 +103,7 @@ export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilte
         </label>
       </div>
       {studies.length > 1 && (
-        <div role="group" aria-label="스터디" className="flex flex-wrap items-center gap-[6px]">
+        <div role="group" aria-label="스터디" className="flex flex-wrap items-center gap-x-[6px] gap-y-[10px]">
           <span className="mr-1 text-[13px] font-semibold text-ink-3 max-sm:hidden">스터디</span>
           <Chip on={filter.study === "all"} onClick={() => set({ study: "all" })}>
             전체

@@ -63,7 +63,8 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
         <span className="flex-[1_1_20px]" />
         <Seg<CalMode> label="보기 단위" value={S.calMode} onChange={(m) => update({ calMode: m, calPick: null })} options={[["month", "월간"], ["week", "주간"]]} />
       </div>
-      <div role="group" aria-label="참가자 필터" className="flex flex-wrap items-center gap-[6px]">
+      {/* 칩 누르는 영역은 위아래 5px 씩 넓다(44px) — 줄바꿈돼도 겹치지 않게 줄 간격 10px */}
+      <div role="group" aria-label="참가자 필터" className="flex flex-wrap items-center gap-x-[6px] gap-y-[10px]">
         {who.map(([id, text, person]) => (
           <Chip key={id} on={S.calWho === id} onClick={() => update({ calWho: id, calPick: null })} withAvatar={!!person}>
             {person && <Avatar name={person.name} size={22} tone={person.tone} id={person.userId} />}

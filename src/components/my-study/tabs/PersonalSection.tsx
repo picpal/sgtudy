@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { Avatar } from "@/components/ui/Avatar";
 import { md } from "@/lib/date";
 import { ArchivedBadge, TypeBadge } from "../bits";
@@ -108,12 +109,11 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
       setBusy(null);
     }
   };
+  // 닫으면 "＋ 내 목표 추가" 로 — 버튼이 다시 그려진 뒤(effect, /tasks 와 같은 훅)
+  const refocus = useRefocusOnClose(adding);
   const closeAdd = () => {
+    refocus(() => document.querySelector<HTMLButtonElement>(`[data-add-personal="${CSS.escape(round.id)}"]`));
     setAdding(false);
-    requestAnimationFrame(() => {
-      if (document.activeElement && document.activeElement !== document.body) return;
-      document.querySelector<HTMLButtonElement>(`[data-add-personal="${CSS.escape(round.id)}"]`)?.focus();
-    });
   };
 
   const showMine = mine.length > 0 || canAdd;

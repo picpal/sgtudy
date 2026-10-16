@@ -32,7 +32,7 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
       <div className="flex flex-wrap items-center gap-[10px]">
         <Seg<BoardMode> label="칸반 범위" value={S.bMode} onChange={(m) => update({ bMode: m })} options={[["mine", "내 칸반"], ["team", "팀 칸반"]]} />
         <span className="flex-[1_1_20px]" />
-        <div role="group" aria-label="회차 필터" className="flex flex-wrap gap-[6px]">
+        <div role="group" aria-label="회차 필터" className="flex flex-wrap gap-x-[6px] gap-y-[10px]">
           {rounds.map(([id, label]) => (
             <Chip key={id} on={S.bRound === id} onClick={() => update({ bRound: id })}>
               {label}

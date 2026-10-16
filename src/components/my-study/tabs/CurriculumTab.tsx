@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { Chip, PillButton, Seg } from "../bits";
 import { addDays, md } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
@@ -134,12 +135,11 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   const entries = scope.mineOnly ? withEmptyRounds(listed, S.closed) : listed;
   // "＋ 내 목표 추가" → 그 자리가 빠른 추가 입력 (한 번에 하나 — S.quickAdd 를 편집 목록과 함께 쓴다)
   const openPAdd = (id: string) => update({ quickAdd: pKey(id) });
+  // 닫으면 그 자리 "＋ 내 목표 추가" 로 — 버튼이 다시 그려진 뒤(effect, /tasks 와 같은 훅)
+  const refocusPAdd = useRefocusOnClose(!!S.quickAdd?.startsWith("p:"));
   const closePAdd = (id: string) => {
+    refocusPAdd(() => document.querySelector<HTMLButtonElement>(`[data-add-personal="${CSS.escape(id)}"]`));
     update((p) => (p.quickAdd === pKey(id) ? { quickAdd: null } : {}));
-    requestAnimationFrame(() => {
-      if (document.activeElement && document.activeElement !== document.body) return;
-      document.querySelector<HTMLButtonElement>(`[data-add-personal="${CSS.escape(id)}"]`)?.focus();
-    });
   };
   // 두 칩은 서로 끈다 — "내 것만" 은 남의 목표를 숨기므로 둘이 함께 켜져 있으면 "팀원 목표" 가 아무 일도 하지 않는다
   const toggleMine = () => update(toggleMinePatch);
