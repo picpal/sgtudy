@@ -76,7 +76,7 @@ export function MemberAdminCard({ slug, members, meId, toast, tree, roundId, onS
               <span className="max-w-full truncate text-[14px]" style={{ fontWeight: r.userId === meId ? 700 : 500 }}>
                 {r.name}
               </span>
-              <span title={`개인 목표 · ${st.label}`} className="inline-flex items-center gap-1 rounded-[6px] bg-[#EDF1F7] px-[6px] text-[11px] leading-[18px] text-[#3D4F6B]">
+              <span title={`개인 목표 · ${st.label}`} className="inline-flex items-center gap-1 rounded-[6px] bg-personal-field px-[6px] text-[11px] leading-[18px] text-personal-ink">
                 <span aria-hidden="true">개인 목표</span>
                 <span className="sr-only">{st.label}</span>
                 <b aria-hidden="true" data-personal-stat className={st.text === "없음" || st.text === "–" ? "font-medium" : "font-bold"}>

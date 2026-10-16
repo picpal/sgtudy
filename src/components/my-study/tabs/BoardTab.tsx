@@ -78,7 +78,7 @@ function Card({ l, mine, today, meId, onOpen }: { l: LeafNode; mine: boolean; to
       type="button"
       onClick={onOpen}
       className="flex w-full flex-col items-stretch gap-[6px] rounded-[14px] border p-[14px] text-left text-ink transition-[box-shadow,border-color] duration-150 hover:border-line-dash hover:shadow-[0_6px_16px_rgba(27,34,48,.08)]"
-      style={{ borderColor: overdue ? "#E7A9A3" : l.personal ? "#C3CCD3" : "#E4ECEA", background: overdue ? "#FFF6F5" : l.personal ? "#F6F8F9" : "#FFFFFF" }}
+      style={{ borderColor: overdue ? "#E7A9A3" : l.personal ? "var(--personal-edge)" : "#E4ECEA", background: overdue ? "#FFF6F5" : l.personal ? "var(--personal-bg)" : "#FFFFFF" }}
     >
       <span className="flex flex-wrap items-center gap-[6px]">
         <TypeBadge type={l.type} />

@@ -2,10 +2,9 @@ import Link from "next/link";
 import type { Ref } from "react";
 import { dday, md, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
-import { STATUS_LABEL } from "@/lib/types";
 import { shortName, type Marker, type Study, type Task } from "@/data/schedule";
 import { TypeBadge } from "@/components/my-study/bits";
-import { isUrgent, taskHref } from "./calc";
+import { isUrgent, statusLabel, taskHref } from "./calc";
 
 type Props = { sel: string; today: string; studies: Record<string, Study>; tasks: Task[]; markers: Marker[]; ref?: Ref<HTMLElement> };
 
@@ -29,14 +28,14 @@ export function DayPanel({ sel, today, studies, tasks, markers, ref }: Props) {
       study: t.study,
       href: taskHref(t, studies[t.study]),
       title: t.title,
-      sub: `${t.round} · ${md(t.s)}–${md(t.e)} · ${STATUS_LABEL[t.st]}`,
-      badge: t.st === "done" || t.st === "late" ? STATUS_LABEL[t.st] : `마감 ${dday(today, t.e)}`,
+      sub: `${t.round} · ${md(t.s)}–${md(t.e)} · ${statusLabel(t)}`,
+      badge: t.st === "done" || t.st === "late" ? statusLabel(t) : `마감 ${dday(today, t.e)}`,
       urgent: isUrgent(t),
       personal: t.personal,
     }));
   const ongoing: Item[] = tasks
     .filter((t) => t.s <= sel && t.e > sel)
-    .map((t) => ({ key: `o-${t.id}`, study: t.study, href: taskHref(t, studies[t.study]), title: t.title, sub: `${t.round} · ${md(t.e)} 마감`, badge: STATUS_LABEL[t.st], personal: t.personal }));
+    .map((t) => ({ key: `o-${t.id}`, study: t.study, href: taskHref(t, studies[t.study]), title: t.title, sub: `${t.round} · ${md(t.e)} 마감`, badge: statusLabel(t), personal: t.personal }));
 
   const groups = (
     [

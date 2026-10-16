@@ -35,7 +35,7 @@ const LEGEND: [TaskStatus, string][] = [
 export function MyPersonalLine({ tree, userId, roundId, slug }: { tree: Tree; userId: string; roundId: string; slug: string }) {
   const { done, total } = personalStats(tree.personal, userId, roundId);
   return (
-    <div data-my-personal className="flex flex-wrap items-center gap-x-2 rounded-[12px] bg-[#F7F9FC] px-[14px] text-[13px] text-ink-2">
+    <div data-my-personal className="flex flex-wrap items-center gap-x-2 rounded-[12px] bg-personal-bg px-[14px] text-[13px] text-ink-2">
       <TypeBadge type="개인" />
       <span>
         {total === 0 ? (

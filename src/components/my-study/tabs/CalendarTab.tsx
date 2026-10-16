@@ -145,6 +145,9 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                           fontWeight: st === "progress" || st === "delayed" ? 700 : 500,
                         }}
                       >
+                        {l.personal && (isStart || col === 0) && (
+                          <span className="shrink-0 rounded-[5px] bg-slate-soft px-[5px] text-[10px] font-bold leading-4 text-personal-ink max-sm:hidden">개인</span>
+                        )}
                         <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{isStart || col === 0 ? l.title : `${l.title} (계속)`}</span>
                         {isEnd && <CodeIcons codes={endCodes} size={13} max={3} />}
                       </button>
@@ -198,7 +201,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
         <Legend bg="#E6F4EC" border="1px solid #BFE3CF">완료</Legend>
         <Legend bg="#FCEBE9" border="1.5px solid #D64545">지연(미제출 있음)</Legend>
         <Legend bg="#FFFFFF" border="1px dashed #8C97A4">예정</Legend>
-        <Legend bg="#E9EEF0" border="1.5px dashed #8C97A4">개인</Legend>
+        <Legend bg="#FFFFFF" border={PERSONAL_BAR[2]}>개인</Legend>
         <span className="inline-flex items-center gap-[5px]">
           <span className="rounded-[5px] bg-navy px-[6px] py-px text-[10px] font-bold text-white">2주차</span>회차 시작
         </span>

@@ -29,7 +29,7 @@ export function AddRow({ round, indent, onOpen, inTree = false, tone = "team" }:
         {...(personal ? { "data-add-personal": round.id } : { "data-add-task": round.id })}
         onClick={onOpen}
         aria-label={label}
-        className={`inline-flex h-11 items-center gap-[6px] rounded-[10px] px-2 text-[13px] font-semibold ${personal ? "text-[#3D4F6B]" : "text-mint"}`}
+        className={`inline-flex h-11 items-center gap-[6px] rounded-[10px] px-2 text-[13px] font-semibold ${personal ? "text-personal-ink" : "text-mint"}`}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
           <path d="M12 5v14M5 12h14" />
@@ -63,7 +63,7 @@ export function QuickAdd({ round, indent, onAdd, onClose, inTree = false, tone =
   return (
     <div
       {...treeItem(inTree, indent, personal ? `${roundName(round)}에 내 목표 빠른 추가` : `${round.title}에 과제 빠른 추가`)}
-      className={`flex min-h-11 flex-wrap items-center gap-x-2 border-b border-line-2 py-1 pl-2 pr-3 ${personal ? "bg-[#F3F6FA]" : "bg-surface-2"}`}
+      className={`flex min-h-11 flex-wrap items-center gap-x-2 border-b border-line-2 py-1 pl-2 pr-3 ${personal ? "bg-personal-field" : "bg-surface-2"}`}
     >
       <span className={indentCls} style={{ "--d": indent } as React.CSSProperties} />
       {personal && <TypeBadge type="개인" />}
@@ -88,7 +88,7 @@ export function QuickAdd({ round, indent, onAdd, onClose, inTree = false, tone =
         onBlur={() => {
           if (!text.trim()) onClose();
         }}
-        className={`h-11 min-w-0 flex-1 rounded-[10px] border bg-surface px-3 text-[14px] text-ink ${personal ? "border-[#4F6382]" : "border-line-3"}`}
+        className={`h-11 min-w-0 flex-1 rounded-[10px] border bg-surface px-3 text-[14px] text-ink ${personal ? "border-personal-line" : "border-line-3"}`}
       />
       {personal && (
         <span className="shrink-0 whitespace-nowrap text-[12px] text-muted max-sm:hidden">{last ? "다음 목표를 이어서 쓸 수 있어요" : `기간 = 회차 기간 ${md(round.s)} – ${md(round.e)}`}</span>

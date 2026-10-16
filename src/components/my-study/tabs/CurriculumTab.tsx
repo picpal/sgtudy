@@ -39,7 +39,14 @@ type Props = {
 /** 트리 안 비활성 안내 줄(한도·빈 회차·소제목) — tree 안에는 treeitem 만 둔다. 선택 대상이 아니라 aria-selected 는 두지 않는다(다른 보기 행과 같게) */
 function InfoRow({ children, tone = "plain", ...rest }: { children: React.ReactNode; tone?: "plain" | "personal" | "heading" } & React.HTMLAttributes<HTMLDivElement> & { "data-limit"?: string }) {
   const item = { role: "treeitem", "aria-level": 3, "aria-disabled": true };
-  const cls = tone === "heading" ? "bg-[#F7F9FC] pb-[6px] pt-2 text-[12px] font-bold text-slate-text" : `min-h-11 py-2 text-[13px] text-muted ${tone === "personal" ? "bg-[#F7F9FC]" : "bg-surface"}`;
+  // 소제목(시안 C-2): 글자는 행 제목 세로줄(68px = 여백 8 + 들여쓰기 22 + 간격 8 + 점 30)에 맞춘다. 390 은 들여쓰기 10 → 56px
+  if (tone === "heading")
+    return (
+      <div {...item} {...rest} className="flex items-center border-b border-line-2 bg-personal-bg pb-[6px] pl-[68px] pr-[18px] pt-2 text-[12px] font-bold text-personal-ink focus-visible:-outline-offset-2 max-sm:pl-[56px]">
+        {children}
+      </div>
+    );
+  const cls = `min-h-11 py-2 text-[13px] text-muted ${tone === "personal" ? "bg-personal-bg" : "bg-surface"}`;
   return (
     <div {...item} {...rest} className={`flex items-center border-b border-line-2 pl-2 pr-3 focus-visible:-outline-offset-2 ${cls}`}>
       <span className="w-[22px] shrink-0 max-sm:w-[10px]" />

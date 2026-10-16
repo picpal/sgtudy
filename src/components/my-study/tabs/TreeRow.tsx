@@ -65,7 +65,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
       data-node={n.id}
       className={`border-b border-line-2 ${dropHint === "top" ? "shadow-[inset_0_2px_0_#12A386]" : dropHint === "bottom" ? "shadow-[inset_0_-2px_0_#12A386]" : ""}`}
       data-personal={personal || undefined}
-      style={{ background: n.d === 0 ? "#FAFCFB" : personal ? "#F7F9FC" : "#FFFFFF" }}
+      style={{ background: n.d === 0 ? "#FAFCFB" : personal ? "var(--personal-bg)" : "#FFFFFF" }}
     >
       {/* 보이는 행(52px) — treeitem 은 이 행과 아래 확인 상자를 함께 감싼다 */}
       <div className={`flex min-h-[52px] items-center gap-2 py-1 pl-2 pr-3 ${dragging ? "opacity-50" : ""}`} style={{ opacity: n.archived ? 0.55 : undefined }}>
@@ -84,7 +84,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
         )}
         {n.leaf ? (
           <span className="flex w-[30px] shrink-0 justify-center">
-            <span className={`h-[6px] w-[6px] rounded-full ${personal ? "bg-[#9BA8BB]" : "bg-line-dash"}`} />
+            <span className={`h-[6px] w-[6px] rounded-full ${personal ? "bg-personal-dot" : "bg-line-dash"}`} />
           </span>
         ) : (
           <button type="button" aria-label={`${n.title} ${open ? "접기" : "펼치기"}`} aria-expanded={open} onClick={onToggle} className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] bg-transparent text-ink-3">

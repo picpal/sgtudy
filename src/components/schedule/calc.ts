@@ -1,9 +1,29 @@
 import { addDays, diffDays, parseISO, toISO } from "@/lib/date";
+import { PERSONAL_LABEL, STATUS_CODE } from "@/components/my-study/model";
+import { PERSONAL_LOOK } from "@/lib/palette";
+import { STATUS_LABEL } from "@/lib/types";
 import { routes } from "@/lib/routes";
 import type { Study, Task } from "@/data/schedule";
 
 /** 진행 중(open)이면서 내 담당인 과제만 급함으로 그린다 — 그룹장 전용(st:null → mine:false) 과제는 빼낸다 */
 export const isUrgent = (t: Pick<Task, "st" | "mine">) => t.st === "open" && t.mine !== false;
+
+/**
+ * 내 일정 막대 모양. 시작 전(planned) 팀 과제도 흰 바탕 + 점선이라, 개인 목표는 굵기(1.5px)·slate 색·[개인] 배지로 구분한다.
+ * 임박(진행 중·내 것)은 굵은 글자 — 팀 과제는 1.5px 실선을 더하고, 개인은 점선을 유지한다.
+ */
+export function barLook(t: Pick<Task, "st" | "mine" | "personal">, S: Pick<Study, "bg" | "fg" | "dot" | "pending">): { fill: string; color: string; line: string; weight: number; badge: boolean } {
+  const urgent = isUrgent(t);
+  const weight = urgent ? 700 : 500;
+  if (t.personal) return { ...PERSONAL_LOOK, weight, badge: true };
+  const planned = t.st === "planned";
+  const fill = S.pending ? `repeating-linear-gradient(135deg, ${S.bg} 0 6px, #FFFFFF 6px 10px)` : planned ? "#FFFFFF" : S.bg;
+  const line = S.pending ? `1px solid ${S.dot}` : planned ? `1px dashed ${S.dot}` : urgent ? `1.5px solid ${S.dot}` : "1px solid transparent";
+  return { fill, color: S.fg, line, weight, badge: false };
+}
+
+/** 상태 문구 — 개인 목표는 "완료" 문구(model.PERSONAL_LABEL, 내 과제·진행목표와 같은 출처), 팀 과제는 제출 문구 */
+export const statusLabel = (t: Pick<Task, "st" | "personal">): string => (t.personal ? PERSONAL_LABEL[STATUS_CODE[t.st]] : STATUS_LABEL[t.st]);
 
 /** 달력 격자: 1일이 속한 주(일요일 시작)부터 말일이 속한 주까지, 주별 7개 ISO 날짜 */
 export function monthWeeks(y: number, m: number): string[][] {

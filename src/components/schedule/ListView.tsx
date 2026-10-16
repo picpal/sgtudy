@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { addDays, dday, md, weekdayKo } from "@/lib/date";
-import { STATUS_LABEL } from "@/lib/types";
 import { shortName, type Study, type Task } from "@/data/schedule";
 import { TypeBadge } from "@/components/my-study/bits";
-import { isUrgent, monthRange, taskHref, weekStartOf } from "./calc";
+import { isUrgent, monthRange, statusLabel, taskHref, weekStartOf } from "./calc";
 
 type Props = { y: number; m: number; today: string; studies: Record<string, Study>; tasks: Task[] };
 
@@ -60,7 +59,7 @@ export function ListView({ y, m, today, studies, tasks }: Props) {
                             className="shrink-0 rounded-[8px] px-[10px] py-1 text-[12px] font-semibold"
                             style={{ color: urgent ? "#FFFFFF" : "#3A4452", background: urgent ? "#B4462B" : "#EEF2F1" }}
                           >
-                            {urgent ? `${STATUS_LABEL[t.st]} · ${dday(today, t.e)}` : STATUS_LABEL[t.st]}
+                            {urgent ? `${statusLabel(t)} · ${dday(today, t.e)}` : statusLabel(t)}
                           </span>
                         </Link>
                       </li>

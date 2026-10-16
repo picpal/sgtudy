@@ -6,7 +6,7 @@ import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, CodeIcons, PERSONAL_BAR, Seg, TypeBadge } from "../bits";
-import { ganttRange, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
+import { codeLabel, ganttRange, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
 import { toggleMinePatch, toggleOthersPatch, type ScreenState, type Update, type Zoom } from "../state";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void; isLeader: boolean };
@@ -19,8 +19,8 @@ const GBAR: Record<LeafState, [string, string, string]> = {
   planned: ["#FFFFFF", "#4A5563", "1px dashed #8C97A4"],
   unassigned: ["#FFFFFF", "#7A4F00", "1px dashed #C98A00"],
 };
-/** 개인 목표 막대 = 공용 PERSONAL_BAR(slate 점선). 완료면 글자·테두리만 진하게 */
-const PERSONAL_DONE: [string, string, string] = [PERSONAL_BAR[0], "#3D4F6B", "1.5px dashed #4F6382"];
+/** 개인 목표 막대 = 공용 PERSONAL_BAR(흰 바탕 + slate 점선). 완료면 slate 바탕을 채운다 */
+const PERSONAL_DONE: [string, string, string] = ["var(--slate-soft)", PERSONAL_BAR[1], PERSONAL_BAR[2]];
 
 /** 개인 목표 소유자(서버 people = [소유자]) */
 const ownerOf = (n: LeafNode) => n.people.find((p) => p.userId === n.ownerId) ?? n.people[0] ?? null;
@@ -133,13 +133,13 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
               const owner = personal ? ownerOf(n) : null;
               // 남의 개인 목표에만 소유자 표시 (결정 5 — 내 것에는 "나" 칩·아바타 없음)
               const other = personal && owner && owner.userId !== meId ? owner : null;
-              const what = personal ? `개인 목표${other ? ` · ${other.name}` : ""} · ${done ? "완료" : "미완료"}` : n.leaf ? (n.asg ? `${n.sub}/${n.asg} 제출` : "담당자 미정") : `${n.pct}%`;
+              const what = personal ? `개인 목표${other ? ` · ${other.name}` : ""} · ${codeLabel(n, owner?.c ?? "P")}` : n.leaf ? (n.asg ? `${n.sub}/${n.asg} 제출` : "담당자 미정") : `${n.pct}%`;
               const tip = `${n.title} · ${md(n.s)}–${md(n.e)} · ${what}`;
               // 리프 막대 색 (회차·묶음은 아래 진척 막대 — 팀만)
               const bar = personal ? (done ? PERSONAL_DONE : PERSONAL_BAR) : n.leaf ? GBAR[n.state] : GBAR.planned;
               return (
                 <div key={n.id} data-gantt-row={n.id} className="flex h-11 border-b border-line-2">
-                  <div className="sticky left-0 z-[2] flex w-[var(--gantt-left)] shrink-0 items-center gap-[6px] border-r border-line pl-2 pr-3 max-sm:gap-[2px] max-sm:pl-1 max-sm:pr-1" style={{ background: n.d === 0 ? "#FAFCFB" : personal ? "#F7F9FC" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}>
+                  <div className="sticky left-0 z-[2] flex w-[var(--gantt-left)] shrink-0 items-center gap-[6px] border-r border-line pl-2 pr-3 max-sm:gap-[2px] max-sm:pl-1 max-sm:pr-1" style={{ background: n.d === 0 ? "#FAFCFB" : personal ? "var(--personal-bg)" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}>
                     <span className="w-[calc(var(--d)*16px)] shrink-0 max-sm:w-[calc(var(--d)*4px)]" style={{ "--d": n.d } as React.CSSProperties} />
                     {n.leaf ? (
                       <span className="w-[26px] shrink-0 max-sm:w-0" />

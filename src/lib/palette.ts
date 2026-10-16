@@ -66,3 +66,6 @@ export function avatarColors(tone: Tone, opts: { id?: string; strong?: boolean }
   if (!opts.id || hash(opts.id) % 2 === 0) return base;
   return { bg: base.fg, fg: "#FFFFFF" };
 }
+
+/** 개인 목표 막대 — 흰 바탕 + slate 글자 + 1.5px slate 점선 (시안 A-8). 내 일정·방 캘린더·간트 공용 (globals.css --personal-*) */
+export const PERSONAL_LOOK = { fill: "var(--surface)", color: "var(--personal-ink)", line: "1.5px dashed var(--personal-line)" } as const;

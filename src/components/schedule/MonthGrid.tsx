@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { StatusIcon } from "@/components/ui/StatusIcon";
-import { STUDY_TONE } from "@/lib/api/schedule";
 import { md, WEEKDAY_KO, weekdayKo } from "@/lib/date";
-import { STATUS_LABEL } from "@/lib/types";
 import type { Marker, Study, Task } from "@/data/schedule";
-import { isUrgent, monthWeeks, packWeek, taskHref, type Seg } from "./calc";
+import { barLook, monthWeeks, packWeek, statusLabel, taskHref, type Seg } from "./calc";
 
 type Props = {
   y: number;
@@ -108,30 +106,33 @@ function WeekRow({ days, m, sel, today, studies, tasks, markers, onPick }: WeekP
 
 function TaskBar({ seg: { task: t, col, span, isStart, isEnd, lane }, studies }: { seg: Seg; studies: Record<string, Study> }) {
   const S = studies[t.study];
-  const planned = t.st === "planned";
   const finished = t.st === "done" || t.st === "late";
-  const fill = S.pending ? `repeating-linear-gradient(135deg, ${S.bg} 0 6px, #FFFFFF 6px 10px)` : planned ? "#FFFFFF" : S.bg;
-  const urgent = isUrgent(t);
-  const line = t.personal ? `1px dashed ${STUDY_TONE.slate.dot}` : S.pending ? `1px solid ${S.dot}` : planned ? `1px dashed ${S.dot}` : urgent ? `1.5px solid ${S.dot}` : "1px solid transparent";
+  const look = barLook(t, S);
   const lr = isStart ? 7 : 0;
   const rr = isEnd ? 7 : 0;
   return (
     <Link
       href={taskHref(t, S)}
-      title={`${S.name} · ${t.round} · ${t.title} (${md(t.s)}–${md(t.e)}) · ${STATUS_LABEL[t.st]}`}
+      title={`${t.personal ? "[개인] " : ""}${S.name} · ${t.round} · ${t.title} (${md(t.s)}–${md(t.e)}) · ${statusLabel(t)}`}
       className="pointer-events-auto relative box-border max-sm:pointer-events-none flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-[12px] transition-[box-shadow,transform] duration-[120ms] hover:z-[2] hover:-translate-y-px hover:shadow-[0_3px_8px_rgba(27,34,48,.18)] focus-visible:z-[2] focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-1"
       style={{
         gridColumn: `${col + 1} / span ${span}`,
         gridRow: lane + 1,
         margin: `0 ${isEnd ? 5 : 0}px 0 ${isStart ? 5 : 0}px`,
         borderRadius: `${lr}px ${rr}px ${rr}px ${lr}px`,
-        fontWeight: urgent ? 700 : 500,
-        color: S.fg,
-        background: fill,
-        border: line,
+        fontWeight: look.weight,
+        color: look.color,
+        background: look.fill,
+        border: look.line,
         opacity: finished ? 0.72 : 1,
       }}
     >
+      {/* [개인] 미니 배지 — 시작 조각에만, 390 에선 막대가 좁아 점선·색으로만 구분 */}
+      {look.badge && (isStart || col === 0) && (
+        <span className="shrink-0 rounded-[5px] bg-slate-soft px-[5px] text-[10px] font-bold leading-4 text-personal-ink max-sm:hidden">
+          개인
+        </span>
+      )}
       <span className="min-w-0 flex-1 truncate">{isStart || col === 0 ? t.title : `${t.title} (계속)`}</span>
       {isEnd && t.mine !== false && (
         <span className="flex shrink-0">

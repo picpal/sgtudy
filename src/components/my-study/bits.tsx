@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { StatusIcon } from "@/components/ui/StatusIcon";
-import { PAL, toneOf } from "@/lib/palette";
+import { PAL, PERSONAL_LOOK, toneOf } from "@/lib/palette";
 import type { TaskStatus } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/types";
 import type { TaskType } from "@/data/my-study";
@@ -50,8 +50,8 @@ export function Chip({ on, onClick, children, withAvatar }: { on: boolean; onCli
   );
 }
 
-/** 개인 목표 막대 [bg, 글자, border] — slate 톤 + 점선 (캘린더·간트 공용) */
-export const PERSONAL_BAR: [string, string, string] = [PAL.slate.bg, PAL.slate.fg, "1.5px dashed #8C97A4"];
+/** 개인 목표 막대 [bg, 글자, border] — 흰 바탕 + slate 글자 + 1.5px slate 점선 (캘린더·간트 공용, 내 일정 PERSONAL_LOOK 과 같은 값 — 시안 A-8) */
+export const PERSONAL_BAR: [string, string, string] = [PERSONAL_LOOK.fill, PERSONAL_LOOK.color, PERSONAL_LOOK.line];
 
 /** 보관 배지 — 이탈한 팀원의 개인 목표면 "보관됨 · 이탈" (시안 C-2) */
 export function ArchivedBadge({ left = false }: { left?: boolean }) {

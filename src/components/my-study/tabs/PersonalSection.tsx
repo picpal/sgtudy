@@ -132,7 +132,7 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
               const a = personalActions(k, meId, isLeader, roomStatus, eligible);
               const why = a.complete ? undefined : k.archived ? "보관된 목표는 완료할 수 없어요" : roomStatus === "active" ? undefined : NOT_ACTIVE;
               return (
-                <li key={k.id} className="flex items-center border-b border-line-2 bg-[#F7F9FC] pl-1 last:border-b-0" style={{ opacity: k.archived ? 0.55 : 1 }}>
+                <li key={k.id} className="flex items-center border-b border-line-2 bg-personal-bg pl-1 last:border-b-0" style={{ opacity: k.archived ? 0.55 : 1 }}>
                   <CheckButton n={k} done={done} disabled={!a.complete} busy={busy === k.id} title={why} onClick={() => void toggle(k, done)} />
                   <GoalBody n={k} onOpen={onOpen} padLeft="pl-1" />
                 </li>
@@ -141,7 +141,7 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
             {canAdd && (
               <li className="[&>div]:border-b-0">
                 {atLimit ? (
-                  <p className="m-0 bg-[#F7F9FC] px-4 py-3 text-[13px] text-muted">이 회차에는 개인 목표를 {limit}개까지 둘 수 있어요</p>
+                  <p className="m-0 bg-personal-bg px-4 py-3 text-[13px] text-muted">이 회차에는 개인 목표를 {limit}개까지 둘 수 있어요</p>
                 ) : adding ? (
                   <QuickAdd round={round} indent={0} tone="personal" onAdd={(t) => api.createPersonal(round.id, t)} onClose={closeAdd} />
                 ) : (
@@ -187,7 +187,7 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
                     {open && (
                       <ul className="m-0 flex list-none flex-col border-t border-line-2 p-0">
                         {g.items.map((k) => (
-                          <li key={k.id} className="flex items-center border-b border-line-2 bg-[#F7F9FC] last:border-b-0" style={{ opacity: k.archived ? 0.55 : 1 }}>
+                          <li key={k.id} className="flex items-center border-b border-line-2 bg-personal-bg last:border-b-0" style={{ opacity: k.archived ? 0.55 : 1 }}>
                             <GoalBody n={k} onOpen={onOpen} padLeft="pl-[34px]" />
                           </li>
                         ))}

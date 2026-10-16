@@ -40,6 +40,13 @@
   --lav-soft: #eee7fb;
   --slate-soft: #e9eef0;
   --slate-text: #4a5563;
+  /* 개인 목표(슬레이트) — 행 바탕·입력 줄 바탕·글자·점선/입력 테두리·트리 점·카드 테두리 (시안 A-1·A-8·C-2) */
+  --personal-bg: #f7f9fc;
+  --personal-field: #f3f6fa;
+  --personal-ink: #3d4f6b;
+  --personal-line: #4f6382;
+  --personal-dot: #9ba8bb;
+  --personal-edge: #cdd6e3;
 
   --done: #1e9e6a;
   --late: #c98a00;
@@ -86,6 +93,12 @@
   --color-lav-soft: var(--lav-soft);
   --color-slate-soft: var(--slate-soft);
   --color-slate-text: var(--slate-text);
+  --color-personal-bg: var(--personal-bg);
+  --color-personal-field: var(--personal-field);
+  --color-personal-ink: var(--personal-ink);
+  --color-personal-line: var(--personal-line);
+  --color-personal-dot: var(--personal-dot);
+  --color-personal-edge: var(--personal-edge);
   --color-done: var(--done);
   --color-late: var(--late);
   --color-missed: var(--missed);

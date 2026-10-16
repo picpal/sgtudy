@@ -45,6 +45,11 @@ describe("GanttTab 개인 목표", () => {
     expect(bar.style.border).toContain("dashed");
     expect(doc.querySelector<HTMLElement>('[data-gantt-row="311"] [data-bar]')!.dataset.personal).toBeUndefined();
   });
+  it("개인 막대 툴팁 상태 = 내 과제·진행목표와 같은 문구(codeLabel)", () => {
+    const doc = render({ othersPersonal: true });
+    expect(doc.querySelector('[data-gantt-row="33"] [title]')!.getAttribute("title")).toContain("기한내 완료");
+    expect(doc.querySelector('[data-gantt-row="32"] [title]')!.getAttribute("title")).toContain("예정");
+  });
   it("두 칩 = 진행목표와 같은 state (aria-pressed)", () => {
     const doc = render({ mineOnly: true });
     const chips = Array.from(doc.querySelectorAll('[aria-label="보기 필터"] button'));
