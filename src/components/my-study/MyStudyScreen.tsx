@@ -208,7 +208,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                 <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} onShare={share} more={more} />
                 {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} onGoCurriculum={() => update({ tab: "curriculum" })} />}
-                {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} />}
+                {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} />}
                 {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}

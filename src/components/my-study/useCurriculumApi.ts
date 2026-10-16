@@ -23,6 +23,8 @@ export type CurriculumApi = {
   save: (n: TreeNode, ov: Overrides) => Promise<boolean>;
   /** node_move 후 dates(서브트리의 바뀌는 기간, movedPlan)를 노드마다 node_update 로 맞춘다. okText = 성공 토스트. 옮겨졌으면 true */
   move: (id: string, parentId: string, index?: number, dates?: DatePlan, okText?: string) => Promise<boolean>;
+  /** 커리큘럼만 다시 받는다 — 제출 뒤 보드·간트·개요의 사람별 코드 갱신. 실패는 조용히 */
+  refresh: () => Promise<void>;
 };
 
 const dropKey = <T,>(rec: Record<string, T>, key: string) => {
@@ -180,5 +182,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
     [slug, setCur, fail, router, toast],
   );
 
-  return { create, remove, archive, save, move };
+  const refresh = useCallback(() => fetchCurriculum(slug).then(setCur, () => {}), [slug, setCur]);
+
+  return { create, remove, archive, save, move, refresh };
 }

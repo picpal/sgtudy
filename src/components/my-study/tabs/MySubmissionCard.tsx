@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode, type Ref } from "react";
+import { useEffect, useState, type ReactNode, type Ref } from "react";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import type { ToastMsg } from "@/components/ui/Toast";
 import type { FileMeta, Submission, TaskDetail } from "@/lib/api/types";
@@ -91,6 +91,8 @@ type Props = {
   onOpenFile: (f: FileMeta) => void;
   toast: (m: ToastMsg) => void;
   headingRef?: Ref<HTMLHeadingElement>;
+  /** 파일을 올리는 중인지 — 상세 나가기 확인용 (스펙 §2.8) */
+  onUploadingChange?: (uploading: boolean) => void;
 };
 
 /** 내 제출 카드 — 작성 가능(compose/submitted)일 때만 작성 훅을 쓴다 */
@@ -99,7 +101,7 @@ export function MySubmissionCard(p: Props) {
   return <MySubmissionCardView state={p.state} badge={p.badge} mine={p.detail.mySubmission} composer={null} onEdit={() => {}} onOpenFile={p.onOpenFile} headingRef={p.headingRef} />;
 }
 
-function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch, onOpenFile, toast, headingRef }: Props) {
+function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch, onOpenFile, toast, headingRef, onUploadingChange }: Props) {
   const [editing, setEditing] = useState(false);
   const c = useSubmissionComposer({
     nodeId,
@@ -112,6 +114,10 @@ function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch
     onRefetch,
     toast,
   });
+  useEffect(() => {
+    onUploadingChange?.(c.uploading);
+  }, [c.uploading, onUploadingChange]);
+  useEffect(() => () => onUploadingChange?.(false), [onUploadingChange]);
   const mine = detail.mySubmission;
   // 제출 전이면 작성 화면이 바로 열린다. 제출 뒤에는 [수정하기] 또는 남은 임시본 [이어 쓰기]
   const composing = state.kind === "compose" || editing;

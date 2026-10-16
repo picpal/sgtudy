@@ -8,6 +8,9 @@ import { allParentsClosed, findNode, isDirty, overallPct, removePlan, unassigned
 import { modeSwitchPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
 import { dropPlan, movedPlan, roundOf, withAddRows } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
+import type { RoomStatus } from "../submission";
+import type { ToastMsg } from "@/components/ui/Toast";
+import { useMe } from "@/lib/me";
 import { DetailView } from "./DetailView";
 import { EditView } from "./EditView";
 import { InlineConfirm } from "./InlineConfirm";
@@ -15,9 +18,23 @@ import { AddRow, QuickAdd } from "./QuickAdd";
 import { TreeRow } from "./TreeRow";
 import { useRowDrag } from "./useRowDrag";
 
-type Props = { tree: Tree; S: ScreenState; update: Update; api: CurriculumApi; canEdit: boolean; isLeader: boolean; period: { start: string; end: string } };
+type Props = {
+  tree: Tree;
+  S: ScreenState;
+  update: Update;
+  api: CurriculumApi;
+  canEdit: boolean;
+  isLeader: boolean;
+  period: { start: string; end: string };
+  slug: string;
+  roomStatus: RoomStatus;
+  /** 승인 대기자 — 과제 상세에서 다른 사람 제출물을 볼 수 없다 */
+  viewerPending: boolean;
+  toast: (m: ToastMsg) => void;
+};
 
-export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period }: Props) {
+export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period, slug, roomStatus, viewerPending, toast }: Props) {
+  const meId = useMe()?.id ?? null;
   // 권한을 거둬 간 직후 등 편집할 수 없는데 모드가 남아 있으면 보기로 그린다
   const isEdit = canEdit && S.curMode === "edit";
   const rows = visibleNodes(tree.roots, S.closed);
@@ -138,7 +155,25 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
   if (viewNode)
     return (
       <div className="mt-[18px] @container">
-        <DetailView key={viewNode.id} n={viewNode} nodes={tree.nodes} canEdit={canEdit} onOpen={(id) => update({ viewSel: id, viewFocus: null })} onBack={() => update({ viewSel: null })} onEdit={() => update(modeSwitchPatch(S, "edit"))} />
+        <DetailView
+          key={viewNode.id}
+          n={viewNode}
+          nodes={tree.nodes}
+          canEdit={canEdit}
+          onOpen={(id) => update({ viewSel: id, viewFocus: null })}
+          onBack={() => update({ viewSel: null, viewFocus: null })}
+          onEdit={() => update(modeSwitchPatch(S, "edit"))}
+          slug={slug}
+          roomStatus={roomStatus}
+          focus={S.viewFocus}
+          onFocused={() => update({ viewFocus: null })}
+          onSubmitted={() => void api.refresh()}
+          toast={toast}
+          viewerPending={viewerPending}
+          isLeader={isLeader}
+          // 과제를 하지 않는 그룹장에게는 "담당 과제가 아니에요" 를 보이지 않는다
+          quietNotAssigned={isLeader && !tree.members.some((m) => m.userId === meId && m.doesTasks)}
+        />
       </div>
     );
 
