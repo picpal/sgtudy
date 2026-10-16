@@ -10,7 +10,7 @@ export type RoomId = string; // slug (D1)
 export const ROOM_IDS: RoomId[] = ["aws", "spring", "sqld", "algo"];
 export const isRoomId = (s: string): s is RoomId => (ROOM_IDS as string[]).includes(s);
 
-export type TaskType = "공통" | "지정";
+export type TaskType = "공통" | "지정" | "개인";
 export type RoomAction = "joined" | "pending" | "closed";
 
 export type MemberInfo = {

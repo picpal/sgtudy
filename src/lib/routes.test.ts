@@ -48,4 +48,10 @@ describe("mock constants removed", () => {
     expect(mod).not.toHaveProperty("TODAY");
     expect(mod).not.toHaveProperty("ME");
   });
+  it("builds task routes", () => {
+    expect(routes.task("aws", "12")).toBe("/my-study/aws?task=12");
+    expect(routes.tasks()).toBe("/tasks");
+    expect(routes.tasks({})).toBe("/tasks");
+    expect(routes.tasks({ study: "aws", scope: "all" })).toBe("/tasks?scope=all&study=aws");
+  });
 });

@@ -39,6 +39,7 @@
   --lav-text: #6b45b8;
   --lav-soft: #eee7fb;
   --slate-soft: #e9eef0;
+  --slate-text: #4a5563;
 
   --done: #1e9e6a;
   --late: #c98a00;
@@ -84,6 +85,7 @@
   --color-lav-text: var(--lav-text);
   --color-lav-soft: var(--lav-soft);
   --color-slate-soft: var(--slate-soft);
+  --color-slate-text: var(--slate-text);
   --color-done: var(--done);
   --color-late: var(--late);
   --color-missed: var(--missed);

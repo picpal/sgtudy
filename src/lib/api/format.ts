@@ -7,7 +7,7 @@ export const ymd = (iso: string) => iso.replaceAll("-", ".");
 /** "10.01" — date.ts 의 md() 는 월을 안 채우므로(7.01) 카드·회차 표기는 이것을 쓴다 */
 export const mmdd = (iso: string) => iso.slice(5).replace("-", ".");
 export const uiStatus = (s: RoomStatusDto): RoomStatus => (s === "draft" ? "recruit" : s);
-export const TASK_TYPE_KO: Record<TaskTypeDto, "공통" | "지정"> = { common: "공통", designated: "지정" };
+export const TASK_TYPE_KO: Record<TaskTypeDto, "공통" | "지정" | "개인"> = { common: "공통", designated: "지정", personal: "개인" };
 
 const sameYear = (a: string, b: string) => a.slice(0, 4) === b.slice(0, 4);
 
@@ -80,7 +80,7 @@ export function roundRow(r: RoundSummary, status: RoomStatusDto, today: string, 
 }
 
 export type CurPersonView = { userId: string; name: string; tone: Tone; status: TaskStatus };
-export type CurTaskView = { title: string; type: "공통" | "지정"; dates: string; people: CurPersonView[] };
+export type CurTaskView = { title: string; type: "공통" | "지정" | "개인"; dates: string; people: CurPersonView[] };
 export type CurView = { pill: string; title: string; meta: string; tasks: CurTaskView[] };
 export type CurInput = Pick<RoomDetail, "status" | "startDate" | "endDate" | "currentRound" | "rounds" | "stats">;
 

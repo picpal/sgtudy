@@ -4,7 +4,7 @@ import type { TaskStatus } from "@/lib/types";
 
 export type Person = { userId: string; nickname: string; tone: Tone };
 export type RoomStatusDto = "draft" | "recruit" | "active" | "ended";
-export type TaskTypeDto = "common" | "designated";
+export type TaskTypeDto = "common" | "designated" | "personal";
 export type JoinMode = "direct" | "approval";
 export type Membership = {
   role: "leader" | "member";
@@ -200,6 +200,8 @@ export type NodeDto = {
   startDate: string;
   endDate: string;
   archived: boolean;
+  /** 개인 목표의 소유자 userId (팀 노드는 없음) */
+  ownerId?: string;
   task: {
     type: TaskTypeDto;
     people: (Person & { status: TaskStatus })[];
@@ -219,6 +221,8 @@ export type Curriculum = {
   stats: { overallPct: number | null; leafCount: number; unassignedCount: number };
   warnings?: { code: string; nodeId?: string }[];
   myPermissions: MyPermissions;
+  /** 0014 — 개인 목표 추가 가능 여부·회차당 한도 */
+  personal?: { canAdd: boolean; perRound: number };
 };
 export type NodePatch = {
   title?: string;
@@ -240,7 +244,7 @@ export type StudyItem = {
 };
 export type MeStudies = { today: string; groups: { kind: "active" | "recruit" | "ended"; items: StudyItem[] }[] };
 
-export type ScheduleTask = { id: string; slug: string; title: string; s: string; e: string; st: TaskStatus | null; round: string };
+export type ScheduleTask = { id: string; slug: string; title: string; s: string; e: string; st: TaskStatus | null; round: string; personal?: boolean };
 export type ScheduleResponse = {
   today: string;
   studies: {
@@ -255,6 +259,45 @@ export type ScheduleResponse = {
   tasks: ScheduleTask[];
   markers: { date: string; slug: string; round: string }[];
   upcoming: ScheduleTask[];
+};
+
+/* ---------- 내 과제 (me_tasks, 0014) ---------- */
+export type MeTaskStudy = {
+  slug: string;
+  title: string;
+  tone: Tone;
+  status: RoomStatusDto;
+  membership: "leader" | "joined";
+  currentRoundId: string | null;
+  canAddPersonal: boolean;
+};
+export type MeTaskRound = {
+  id: string;
+  slug: string;
+  label: string | null;
+  title: string;
+  startDate: string;
+  endDate: string;
+  canAdd: boolean;
+};
+export type MeTaskItem = {
+  id: string;
+  slug: string;
+  roundId: string;
+  groupTitle: string | null;
+  title: string;
+  type: TaskTypeDto;
+  startDate: string;
+  endDate: string;
+  st: TaskStatus;
+  submittedAt: string | null;
+};
+export type MeTasks = {
+  today: string;
+  personalPerRound: number;
+  studies: MeTaskStudy[];
+  rounds: MeTaskRound[];
+  items: MeTaskItem[];
 };
 
 /* ---------- 알림 ---------- */

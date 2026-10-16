@@ -18,6 +18,13 @@ export const routes = {
   myStudyEdit: (slug: string) => `/my-study/${slug}?tab=curriculum&mode=edit`,
   /** MySchedule.dc.html — 통합 캘린더 */
   schedule: () => "/schedule",
+  /** 내 과제 — 쿼리 키는 정렬해서 URL 이 안정적이다 */
+  tasks: (q?: Record<string, string>) => {
+    const qs = new URLSearchParams(Object.entries(q ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))).toString();
+    return qs ? `/tasks?${qs}` : "/tasks";
+  },
+  /** 과제 한 건 진입 (제출 설계 §2.6) */
+  task: (slug: string, id: string) => `/my-study/${slug}?task=${id}`,
   /** 방 만들기 (디자인 §4.3) */
   createRoom: () => "/rooms/new",
   /** 이메일+비밀번호 로그인 (§4.1) — returnTo 가 있으면 plan 01 loginUrl 과 같은 값 */

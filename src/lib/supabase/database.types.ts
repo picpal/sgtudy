@@ -133,6 +133,7 @@ export type Database = {
           end_date: string
           id: number
           label: string | null
+          owner_id: string | null
           parent_id: number | null
           room_id: number
           round_id: number | null
@@ -150,6 +151,7 @@ export type Database = {
           end_date: string
           id?: never
           label?: string | null
+          owner_id?: string | null
           parent_id?: number | null
           room_id: number
           round_id?: number | null
@@ -167,6 +169,7 @@ export type Database = {
           end_date?: string
           id?: never
           label?: string | null
+          owner_id?: string | null
           parent_id?: number | null
           room_id?: number
           round_id?: number | null
@@ -177,6 +180,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "goal_nodes_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goal_nodes_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "goal_nodes_parent_id_fkey"
             columns: ["parent_id"]
@@ -1079,6 +1096,7 @@ export type Database = {
         Returns: {
           e: string
           node_id: number
+          personal: boolean
           room_id: number
           round: string
           s: string
@@ -1088,6 +1106,7 @@ export type Database = {
         }[]
       }
       me_studies: { Args: never; Returns: Json }
+      me_tasks: { Args: never; Returns: Json }
       me_update: {
         Args: { p_nickname?: string; p_optional_mail_enabled?: boolean }
         Returns: Json
@@ -1191,6 +1210,7 @@ export type Database = {
           end_date: string
           id: number
           label: string | null
+          owner_id: string | null
           parent_id: number | null
           room_id: number
           round_id: number | null
@@ -1292,6 +1312,142 @@ export type Database = {
       patch_int: { Args: { p_key: string; p_patch: Json }; Returns: number }
       pct: { Args: { p_asg: number; p_sub: number }; Returns: number }
       person_json: { Args: { p_user: string }; Returns: Json }
+      personal_archive: {
+        Args: { p_archived: boolean; p_node_id: number; p_slug: string }
+        Returns: Json
+      }
+      personal_assert_capacity: {
+        Args: { p_except: number; p_round: number; p_uid: string }
+        Returns: undefined
+      }
+      personal_check: {
+        Args: {
+          p_e: string
+          p_s: string
+          p_title: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: undefined
+      }
+      personal_complete: {
+        Args: { p_done: boolean; p_node_id: number; p_slug: string }
+        Returns: Json
+      }
+      personal_create: {
+        Args: {
+          p_description_md?: string
+          p_end_date?: string
+          p_round_id: number
+          p_slug: string
+          p_start_date?: string
+          p_title: string
+        }
+        Returns: Json
+      }
+      personal_delete: {
+        Args: { p_node_id: number; p_slug: string }
+        Returns: Json
+      }
+      personal_eligible: {
+        Args: { p_room: number; p_uid: string }
+        Returns: boolean
+      }
+      personal_get: {
+        Args: { p_node: number; p_room: number; p_uid: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          depth: number
+          description_md: string
+          end_date: string
+          id: number
+          label: string | null
+          owner_id: string | null
+          parent_id: number | null
+          room_id: number
+          round_id: number | null
+          sort_order: number
+          start_date: string
+          task_type: string | null
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "goal_nodes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      personal_limit: { Args: never; Returns: number }
+      personal_room: {
+        Args: { p_slug: string; p_uid: string }
+        Returns: {
+          archived_at: string | null
+          cover_file_id: string | null
+          created_at: string
+          description_md: string
+          end_date: string
+          ended_at: string | null
+          id: number
+          intro: string
+          join_mode: string
+          leader_does_tasks: boolean
+          leader_id: string
+          max_members: number
+          member_count: number
+          min_members: number | null
+          rules_md: string
+          slug: string
+          start_date: string
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+          visibility: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rooms"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      personal_round: {
+        Args: { p_room: number; p_round: number }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          depth: number
+          description_md: string
+          end_date: string
+          id: number
+          label: string | null
+          owner_id: string | null
+          parent_id: number | null
+          room_id: number
+          round_id: number | null
+          sort_order: number
+          start_date: string
+          task_type: string | null
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "goal_nodes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      personal_update: {
+        Args: { p_node_id: number; p_patch: Json; p_slug: string }
+        Returns: Json
+      }
+      personal_viewer: {
+        Args: { p_room: number; p_uid: string }
+        Returns: boolean
+      }
       require_curriculum_editor: {
         Args: { p_uid: string; r: Database["public"]["Tables"]["rooms"]["Row"] }
         Returns: undefined
@@ -1516,6 +1672,7 @@ export type Database = {
         }[]
       }
       room_start: { Args: { p_slug: string }; Returns: Json }
+      room_start_date_repair: { Args: never; Returns: Json }
       room_tags_get: { Args: { p_slug: string }; Returns: Json }
       room_tags_json: { Args: { p_room: number }; Returns: Json }
       room_tags_put: {
@@ -1568,6 +1725,7 @@ export type Database = {
           end_date: string
           id: number
           label: string | null
+          owner_id: string | null
           parent_id: number | null
           room_id: number
           round_id: number | null

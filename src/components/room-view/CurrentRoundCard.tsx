@@ -27,7 +27,7 @@ export function CurrentRoundCard({ cur }: { cur: Room["cur"] }) {
             const subs = t.people.filter((p) => p.status === "done" || p.status === "late").length;
             const allPlanned = t.people.every((p) => p.status === "planned");
             const shown = t.people.slice(0, 4);
-            const type = t.type === "공통" ? PAL.mint : PAL.lav;
+            const type = t.type === "공통" ? PAL.mint : t.type === "개인" ? PAL.slate : PAL.lav;
             return (
               <li key={t.title} className="flex flex-wrap items-center gap-[14px] rounded-xl bg-surface-2 px-[14px] py-3">
                 <div className="min-w-0 flex-[1_1_200px]">

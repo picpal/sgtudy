@@ -22,7 +22,7 @@ export type RoomMember = {
 };
 export type RoomTask = {
   title: string;
-  type: "공통" | "지정";
+  type: "공통" | "지정" | "개인";
   dates: string;
   people: { name: string; status: TaskStatus; tone?: Tone; userId?: string }[];
 };

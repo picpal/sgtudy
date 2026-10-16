@@ -49,9 +49,9 @@ export function Chip({ on, onClick, children, withAvatar }: { on: boolean; onCli
   );
 }
 
-/** 과제 유형 배지: 공통 = mint, 지정 = lav */
+/** 과제 유형 배지: 공통 = mint, 지정 = lav, 개인 = slate */
 export function TypeBadge({ type }: { type: TaskType }) {
-  const c = type === "공통" ? PAL.mint : PAL.lav;
+  const c = type === "공통" ? PAL.mint : type === "개인" ? PAL.slate : PAL.lav;
   return (
     <span className="shrink-0 rounded-[6px] px-[7px] py-[2px] text-[11px] font-bold" style={{ background: c.bg, color: c.fg }}>
       {type}
