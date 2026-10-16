@@ -96,3 +96,90 @@ cases("personal goals · schema", db, [
     assertEquals(await seen("anon", null), [0, true]);
   } },
 ]);
+
+const create = (q: Q, round: string, title: string, s?: string, e?: string) =>
+  one(q, "select public.personal_create('aws', $1, $2, $3::date, $4::date) as c", [round, title, s ?? null, e ?? null]).then((r) => r.c as Row);
+const nodeOf = (c: Row, id: string) => (c.nodes as Row[]).find((n) => n.id === id)!;
+
+cases("personal goals · write", db, [
+  { name: "create: 편집 권한 없는 ACTIVE 멤버, 기본 기간 = 회차, 끝 순서, 팀 수치 불변", run: async (q) => {
+    const r3 = await roundOf(q, "3주차");
+    await asUser(q, await uidOf(q, "철수"));
+    const before = (await one(q, "select public.curriculum_get('aws', true) as c")).c;
+    const c = await create(q, r3, "  Udemy 7강 듣기  ");
+    const n = nodeOf(c, c.createdId);
+    assertEquals([n.title, n.startDate, n.endDate, n.parentId, n.depth], ["Udemy 7강 듣기", "2026-10-15", "2026-10-21", r3, 3]);
+    // Task 3: assertEquals([n.task.type, n.task.assigned, n.task.submitted], ["personal", 1, 0]);
+    assertEquals(n.sortOrder, Math.max(...(c.nodes as Row[]).filter((x) => x.parentId === r3).map((x) => x.sortOrder)));
+    // Task 3: assertEquals(c.stats, before.stats);
+    assertEquals(nodeOf(c, r3).pct, nodeOf(before, r3).pct);
+    assertEquals(c.warnings, []);
+  } },
+  { name: "create 거부: 대기자·외부인·이탈자 / 종료 방 / 보관 회차 / 방 기간 밖 / 80자 초과 / 한도 20", run: async (q) => {
+    const r3 = await roundOf(q, "3주차");
+    await asUser(q, await uidOf(q, "서연"));
+    await expectFail(create(q, r3, "x"), "NOT_ACTIVE_MEMBER");
+    await asUser(q, await uidOf(q, "도윤"));                                   // INACTIVE
+    await expectFail(create(q, r3, "x"), "NOT_ACTIVE_MEMBER");
+    await asUser(q, await uidOf(q, "철수"));
+    await expectFail(create(q, r3, "x", "2026-09-30", "2026-10-02"), "INVALID_PERIOD");
+    await expectFail(create(q, r3, "가".repeat(81)), "INVALID_TITLE");
+    for (let i = 0; i < 20; i++) await create(q, r3, `목표 ${i}`);
+    await expectFail(create(q, r3, "21번째"), "PERSONAL_LIMIT_EXCEEDED");
+    await asUser(q, await uidOf(q, "민수"));
+    await q("select public.node_archive('aws', $1)", [await roundOf(q, "4주차")]);
+    await asUser(q, await uidOf(q, "지은"));
+    await expectFail(create(q, await roundOf(q, "4주차"), "x"), "PARENT_ARCHIVED");
+    await q("update public.rooms set status = 'ENDED' where slug = 'aws'");
+    await expectFail(create(q, r3, "x"), "ROOM_NOT_EDITABLE");
+  } },
+  { name: "update: 소유자만, 회차 이동 + 기간을 한 번에, 회차 밖 경고", run: async (q) => {
+    const r3 = await roundOf(q, "3주차");
+    const r4 = await roundOf(q, "4주차");
+    await asUser(q, await uidOf(q, "철수"));
+    const id = (await create(q, r3, "A")).createdId as string;
+    let c = (await one(q, "select public.personal_update('aws', $1, $2::jsonb) as c",
+      [id, JSON.stringify({ roundId: r4, startDate: "2026-10-22", endDate: "2026-10-24", title: "A2" })])).c;
+    assertEquals([nodeOf(c, id).parentId, nodeOf(c, id).roundId, nodeOf(c, id).startDate, nodeOf(c, id).title, c.warnings], [r4, r4, "2026-10-22", "A2", []]);
+    c = (await one(q, "select public.personal_update('aws', $1, '{\"endDate\":\"2026-10-30\"}'::jsonb) as c", [id])).c;
+    assertEquals(c.warnings, [{ code: "PERIOD_OUTSIDE_PARENT", nodeId: id }]);
+    await expectFail(q("select public.personal_update('aws', $1, '{\"owner\":\"x\"}'::jsonb)", [id]), "VALIDATION_FAILED");
+    await asUser(q, await uidOf(q, "민수"));                                   // 그룹장도 내용은 못 고친다
+    await expectFail(q("select public.personal_update('aws', $1, '{\"title\":\"x\"}'::jsonb)", [id]), "NOT_OWNER");
+    await asUser(q, await uidOf(q, "서연"));                                   // 외부인: 존재 숨김
+    await expectFail(q("select public.personal_update('aws', $1, '{\"title\":\"x\"}'::jsonb)", [id]), "NODE_NOT_FOUND");
+  } },
+  { name: "complete: 빈 제출로 완료·지각 판정, 내용 없는 완료만 취소", run: async (q) => {
+    const r2 = await roundOf(q, "2주차");                                      // 10.08–10.14, 오늘 10.12
+    await asUser(q, await uidOf(q, "철수"));
+    const id = (await create(q, r2, "B")).createdId as string;
+    let c = (await one(q, "select public.personal_complete('aws', $1, true) as c", [id])).c;
+    // Task 3: assertEquals([nodeOf(c, id).task.submitted, nodeOf(c, id).task.people[0].status], [1, "done"]);
+    await one(q, "select public.personal_complete('aws', $1, true) as c", [id]);   // 멱등
+    c = (await one(q, "select public.personal_complete('aws', $1, false) as c", [id])).c;
+    // Task 3: assertEquals(nodeOf(c, id).task.submitted, 0);
+    await q("select public.submission_upsert($1, '메모', '{}', '{}')", [id]);      // 제출 카드 경로도 소유자에게 열린다
+    await expectFail(q("select public.personal_complete('aws', $1, false)", [id]), "SUBMISSION_HAS_CONTENT");
+    await asUser(q, await uidOf(q, "지은"));
+    await expectFail(q("select public.personal_complete('aws', $1, true)", [id]), "NOT_OWNER");
+  } },
+  { name: "archive/delete: 소유자·그룹장, 그룹장은 제출 있으면 삭제 불가, 소유자는 제출째 삭제", run: async (q) => {
+    const r2 = await roundOf(q, "2주차");
+    const chulsu = await uidOf(q, "철수");
+    await asUser(q, chulsu);
+    const id = (await create(q, r2, "C")).createdId as string;
+    await q("select public.personal_complete('aws', $1, true)", [id]);
+    await asUser(q, await uidOf(q, "민수"));
+    await expectFail(q("select public.personal_delete('aws', $1)", [id]), "NODE_HAS_SUBMISSIONS");
+    let c = (await one(q, "select public.personal_archive('aws', $1, true) as c", [id])).c;
+    assertEquals(nodeOf(c, id).archived, true);
+    await asUser(q, await uidOf(q, "지은"));
+    await expectFail(q("select public.personal_archive('aws', $1, false)", [id]), "NOT_OWNER");
+    await asUser(q, chulsu);
+    c = (await one(q, "select public.personal_archive('aws', $1, false) as c", [id])).c;
+    assertEquals(nodeOf(c, id).archived, false);
+    c = (await one(q, "select public.personal_delete('aws', $1) as c", [id])).c;
+    assertEquals((c.nodes as Row[]).some((n) => n.id === id), false);
+    assertEquals((await one(q, "select count(*)::int as n from public.submissions where node_id = $1", [id])).n, 0);
+  } },
+]);

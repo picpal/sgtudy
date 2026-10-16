@@ -82,3 +82,262 @@ drop policy goal_nodes_select on public.goal_nodes;
 create policy goal_nodes_select on public.goal_nodes for select
   using (public.can_read_room(room_id)
          and (owner_id is null or owner_id = (select public.current_user_id()) or public.can_read_submissions(room_id)));
+
+-- ───────── 5. 개인 목표 쓰기 RPC ─────────
+-- 공통 선행: 방 잠금 → 존재 은닉(못 읽으면 ROOM_NOT_FOUND) → 방 RECRUIT·ACTIVE·미보관
+-- DRAFT 제외: 그룹장 혼자라 필요 없고, room_open_recruit 의 "말단 과제 1개 이상"(0004) 을 개인 목표가 통과시키면 안 된다
+create or replace function public.personal_room(p_slug text, p_uid uuid) returns public.rooms
+language plpgsql security definer set search_path = '' as $$
+declare r public.rooms;
+begin
+  r := public.room_lock(p_slug);
+  if not public.room_readable(r.id, p_uid) then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
+  if r.archived_at is not null or r.status not in ('RECRUIT', 'ACTIVE') then
+    perform public.fail('ROOM_NOT_EDITABLE', '모집 중이거나 진행 중인 스터디에서만 개인 목표를 바꿀 수 있어요', jsonb_build_object('status', lower(r.status)));
+  end if;
+  return r;
+end $$;
+
+-- 같은 방의 개인 목표 한 건. 팀 노드 id·남의 목표(볼 수 없는 사람) → NODE_NOT_FOUND (존재 숨김)
+create or replace function public.personal_get(p_room bigint, p_node bigint, p_uid uuid) returns public.goal_nodes
+language plpgsql security definer set search_path = '' as $$
+declare n public.goal_nodes;
+begin
+  select * into n from public.goal_nodes where id = p_node and room_id = p_room and task_type = 'PERSONAL';
+  if not found or (n.owner_id is distinct from p_uid and not public.personal_viewer(p_room, p_uid)) then
+    perform public.fail('NODE_NOT_FOUND', '개인 목표를 찾을 수 없어요', jsonb_build_object('nodeId', p_node::text));
+  end if;
+  return n;
+end $$;
+
+-- 담을 회차: 같은 방 루트 · 보관 아님 · 과제형 회차(A7) 아님
+create or replace function public.personal_round(p_room bigint, p_round bigint) returns public.goal_nodes
+language plpgsql security definer set search_path = '' as $$
+declare rd public.goal_nodes;
+begin
+  select * into rd from public.goal_nodes where id = p_round and room_id = p_room and parent_id is null;
+  if not found then perform public.fail('NODE_NOT_FOUND', '회차를 찾을 수 없어요', jsonb_build_object('nodeId', coalesce(p_round::text, ''))); end if;
+  if rd.archived_at is not null then
+    perform public.fail('PARENT_ARCHIVED', '보관된 회차에는 개인 목표를 둘 수 없어요', jsonb_build_object('nodeId', rd.id::text));
+  end if;
+  if rd.task_type is not null then
+    perform public.fail('VALIDATION_FAILED', '회차 아래에만 개인 목표를 둘 수 있어요', '{"field":"roundId"}'::jsonb);
+  end if;
+  return rd;
+end $$;
+
+-- 제목 1~80 · 시작 ≤ 끝 · 방 기간 안(팀원이 그룹장의 방 종료일 조정을 막지 않게, 스펙 §5.4)
+create or replace function public.personal_check(r public.rooms, p_title text, p_s date, p_e date) returns void
+language plpgsql set search_path = '' as $$
+begin
+  if p_title is null or length(p_title) < 1 or length(p_title) > 80 then
+    perform public.fail('INVALID_TITLE', '제목은 1~80자예요', '{"field":"title"}'::jsonb);
+  end if;
+  if p_s > p_e then perform public.fail('INVALID_PERIOD', '종료일은 시작일 이후여야 해요', '{"field":"endDate"}'::jsonb); end if;
+  if p_s < r.start_date or p_e > r.end_date then
+    perform public.fail('INVALID_PERIOD', format('방 기간(%s – %s) 안에서 정해 주세요', to_char(r.start_date, 'MM.DD'), to_char(r.end_date, 'MM.DD')),
+                        jsonb_build_object('field', case when p_s < r.start_date then 'startDate' else 'endDate' end, 'reason', 'room'));
+  end if;
+end $$;
+
+create or replace function public.personal_assert_capacity(p_round bigint, p_uid uuid, p_except bigint) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if (select count(*) from public.goal_nodes
+      where parent_id = p_round and owner_id = p_uid and archived_at is null and id is distinct from p_except) >= public.personal_limit() then
+    perform public.fail('PERSONAL_LIMIT_EXCEEDED', format('회차마다 개인 목표는 %s개까지예요', public.personal_limit()),
+                        jsonb_build_object('limit', public.personal_limit()));
+  end if;
+end $$;
+
+create or replace function public.personal_create(
+  p_slug text, p_round_id bigint, p_title text, p_start_date date default null, p_end_date date default null, p_description_md text default '')
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid   uuid := public.require_user();
+  r       public.rooms;
+  rd      public.goal_nodes;
+  v_title text := trim(coalesce(p_title, ''));
+  v_desc  text := coalesce(p_description_md, '');
+  v_s     date;
+  v_e     date;
+  v_n     int;
+  v_id    bigint;
+  v_warn  jsonb := '[]'::jsonb;
+begin
+  r := public.personal_room(p_slug, v_uid);
+  if not public.personal_eligible(r.id, v_uid) then
+    perform public.fail('NOT_ACTIVE_MEMBER', '참가 중인 팀원만 개인 목표를 만들 수 있어요');
+  end if;
+  rd := public.personal_round(r.id, p_round_id);
+  -- 기본 기간 = 회차 기간을 방 기간으로 자른 것 (방 밖으로 나간 기존 회차 대비)
+  v_s := coalesce(p_start_date, greatest(rd.start_date, r.start_date));
+  v_e := coalesce(p_end_date, least(rd.end_date, r.end_date));
+  perform public.personal_check(r, v_title, v_s, v_e);
+  if length(v_desc) > 20000 then perform public.fail('VALIDATION_FAILED', '설명은 20,000자까지예요', '{"field":"descriptionMd"}'::jsonb); end if;
+  perform public.personal_assert_capacity(rd.id, v_uid, null);
+
+  select count(*)::int into v_n from public.goal_nodes where parent_id = rd.id;
+  insert into public.goal_nodes (room_id, parent_id, round_id, depth, sort_order, title, description_md, start_date, end_date, task_type, owner_id)
+  values (r.id, rd.id, rd.id, 3, v_n, v_title, v_desc, v_s, v_e, 'PERSONAL', v_uid)
+  returning id into v_id;
+  if v_s < rd.start_date or v_e > rd.end_date then
+    v_warn := v_warn || jsonb_build_object('code', 'PERIOD_OUTSIDE_PARENT', 'nodeId', v_id::text);
+  end if;
+  return public.curriculum_json(r.id, v_uid, true) || jsonb_build_object('createdId', v_id::text, 'warnings', v_warn);
+end $$;
+
+-- 소유자 전용. 회차 이동(roundId) + 기간 + 내용을 한 트랜잭션에 (스펙 §5.5)
+create or replace function public.personal_update(p_slug text, p_node_id bigint, p_patch jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid   uuid := public.require_user();
+  r       public.rooms;
+  n       public.goal_nodes;
+  rd      public.goal_nodes;
+  k       text;
+  v_title text;
+  v_desc  text;
+  v_s     date;
+  v_e     date;
+  v_round bigint;
+  v_sort  int;
+  v_warn  jsonb := '[]'::jsonb;
+begin
+  r := public.personal_room(p_slug, v_uid);
+  n := public.personal_get(r.id, p_node_id, v_uid);
+  if n.owner_id <> v_uid then perform public.fail('NOT_OWNER', '본인 개인 목표만 고칠 수 있어요'); end if;
+  if not public.personal_eligible(r.id, v_uid) then perform public.fail('NOT_ACTIVE_MEMBER', '참가 중인 팀원만 개인 목표를 고칠 수 있어요'); end if;
+  if n.archived_at is not null then
+    perform public.fail('TASK_ARCHIVED', '보관된 목표는 고칠 수 없어요 · 먼저 보관을 해제해 주세요', jsonb_build_object('nodeId', n.id::text));
+  end if;
+  if p_patch is null or jsonb_typeof(p_patch) <> 'object' then perform public.fail('VALIDATION_FAILED', '수정 내용이 올바르지 않아요'); end if;
+  for k in select jsonb_object_keys(p_patch) loop
+    if k not in ('title', 'descriptionMd', 'startDate', 'endDate', 'roundId') then
+      perform public.fail('VALIDATION_FAILED', '알 수 없는 항목이에요', jsonb_build_object('field', k));
+    end if;
+    if k in ('title', 'descriptionMd', 'roundId') and jsonb_typeof(p_patch->k) <> 'string' then
+      perform public.fail('VALIDATION_FAILED', '문자열이어야 해요', jsonb_build_object('field', k));
+    end if;
+  end loop;
+
+  v_title := case when p_patch ? 'title' then trim(p_patch->>'title') else n.title end;
+  v_desc  := coalesce(p_patch->>'descriptionMd', n.description_md);
+  if length(v_desc) > 20000 then perform public.fail('VALIDATION_FAILED', '설명은 20,000자까지예요', '{"field":"descriptionMd"}'::jsonb); end if;
+  v_s := coalesce(public.patch_date(p_patch, 'startDate'), n.start_date);
+  v_e := coalesce(public.patch_date(p_patch, 'endDate'), n.end_date);
+  perform public.personal_check(r, v_title, v_s, v_e);
+
+  v_round := n.parent_id;
+  if p_patch ? 'roundId' then
+    begin v_round := (p_patch->>'roundId')::bigint;
+    exception when invalid_text_representation then perform public.fail('VALIDATION_FAILED', '회차 id 가 올바르지 않아요', '{"field":"roundId"}'::jsonb);
+    end;
+  end if;
+  rd := public.personal_round(r.id, v_round);
+  v_sort := n.sort_order;
+  if rd.id <> n.parent_id then
+    perform public.personal_assert_capacity(rd.id, v_uid, n.id);
+    perform public.node_renumber(r.id, n.parent_id, n.id);
+    select count(*)::int into v_sort from public.goal_nodes where parent_id = rd.id;
+  end if;
+
+  update public.goal_nodes
+     set parent_id = rd.id, round_id = rd.id, sort_order = v_sort,
+         title = v_title, description_md = v_desc, start_date = v_s, end_date = v_e, updated_at = now()
+   where id = n.id;
+  if v_s < rd.start_date or v_e > rd.end_date then
+    v_warn := v_warn || jsonb_build_object('code', 'PERIOD_OUTSIDE_PARENT', 'nodeId', n.id::text);
+  end if;
+  return public.curriculum_json(r.id, v_uid, true) || jsonb_build_object('warnings', v_warn);
+end $$;
+
+-- 소유자(자격 있음) 또는 그룹장(모더레이션, 스펙 R4·D7). 해제는 회차 보관 아님 + 소유자 자격 + 한도
+create or replace function public.personal_archive(p_slug text, p_node_id bigint, p_archived boolean) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; n public.goal_nodes;
+begin
+  if p_archived is null then perform public.fail('VALIDATION_FAILED', '보관 여부가 필요해요', '{"field":"archived"}'::jsonb); end if;
+  r := public.personal_room(p_slug, v_uid);
+  n := public.personal_get(r.id, p_node_id, v_uid);
+  if not ((n.owner_id = v_uid and public.personal_eligible(r.id, v_uid)) or r.leader_id = v_uid) then
+    perform public.fail('NOT_OWNER', '본인 개인 목표만 보관할 수 있어요');
+  end if;
+  if p_archived then
+    update public.goal_nodes set archived_at = now(), updated_at = now() where id = n.id and archived_at is null;
+  elsif n.archived_at is not null then
+    if exists (select 1 from public.goal_nodes p where p.id = n.parent_id and p.archived_at is not null) then
+      perform public.fail('PARENT_ARCHIVED', '회차가 보관 중이에요. 회차를 먼저 해제해 주세요', jsonb_build_object('nodeId', n.parent_id::text));
+    end if;
+    if not public.personal_eligible(r.id, n.owner_id) then
+      perform public.fail('OWNER_NOT_ACTIVE', '팀을 떠난 팀원의 목표는 되살릴 수 없어요');
+    end if;
+    perform public.personal_assert_capacity(n.parent_id, n.owner_id, n.id);
+    update public.goal_nodes set archived_at = null, updated_at = now() where id = n.id;
+  end if;
+  return public.curriculum_json(r.id, v_uid, true);
+end $$;
+
+-- 소유자: 제출·링크까지 삭제(첨부는 soft delete — Storage 객체는 정리 잡 몫). 그룹장: 제출 없을 때만(팀원 기록 보호)
+create or replace function public.personal_delete(p_slug text, p_node_id bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; n public.goal_nodes; v_owner boolean;
+begin
+  r := public.personal_room(p_slug, v_uid);
+  n := public.personal_get(r.id, p_node_id, v_uid);
+  v_owner := n.owner_id = v_uid and public.personal_eligible(r.id, v_uid);
+  if not (v_owner or r.leader_id = v_uid) then perform public.fail('NOT_OWNER', '본인 개인 목표만 지울 수 있어요'); end if;
+  if exists (select 1 from public.submissions s where s.node_id = n.id) then
+    if not v_owner then
+      perform public.fail('NODE_HAS_SUBMISSIONS', '제출물이 있는 팀원 목표는 삭제할 수 없어요. 보관해 주세요', jsonb_build_object('nodeId', n.id::text));
+    end if;
+    update public.files set submission_id = null, status = 'DELETED', deleted_at = now()
+     where submission_id in (select s.id from public.submissions s where s.node_id = n.id) and status <> 'DELETED';
+    delete from public.submissions where node_id = n.id;      -- submission_links 는 cascade
+  end if;
+  delete from public.goal_nodes where id = n.id;              -- files.node_id 는 set null
+  perform public.node_renumber(r.id, n.parent_id);
+  return public.curriculum_json(r.id, v_uid, true);
+end $$;
+
+-- 완료 = 빈 제출 행(지각 = 마감 뒤 처음 완료). 취소 = 내용(본문·링크·첨부) 없는 제출만 삭제 (스펙 R5·D2).
+-- 진행중 방만(제출과 같음). 시작일 검사는 없다 — 개인 목표는 미리 끝내도 된다
+create or replace function public.personal_complete(p_slug text, p_node_id bigint, p_done boolean) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid uuid := public.require_user();
+  v_now timestamptz := public.app_now();
+  r     public.rooms;
+  n     public.goal_nodes;
+  s     public.submissions;
+begin
+  if p_done is null then perform public.fail('VALIDATION_FAILED', '완료 여부가 필요해요', '{"field":"done"}'::jsonb); end if;
+  r := public.room_lock(p_slug);
+  if not public.room_readable(r.id, v_uid) then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
+  if r.status <> 'ACTIVE' or r.archived_at is not null then
+    perform public.fail('ROOM_NOT_ACTIVE', '진행중인 스터디에서만 완료할 수 있어요');
+  end if;
+  n := public.personal_get(r.id, p_node_id, v_uid);
+  if n.owner_id <> v_uid then perform public.fail('NOT_OWNER', '본인 개인 목표만 완료할 수 있어요'); end if;
+  if not public.personal_eligible(r.id, v_uid) then perform public.fail('NOT_ACTIVE_MEMBER', '참가 중인 팀원만 완료할 수 있어요'); end if;
+  if n.archived_at is not null then perform public.fail('TASK_ARCHIVED', '보관된 목표는 완료할 수 없어요', jsonb_build_object('nodeId', n.id::text)); end if;
+
+  select * into s from public.submissions where node_id = n.id and user_id = v_uid;
+  if p_done and s.id is null then
+    insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late, updated_at)
+    values (n.id, v_uid, '', v_now, v_now >= public.kst_deadline(n.end_date), v_now);
+  elsif not p_done and s.id is not null then
+    if s.body_md <> '' or exists (select 1 from public.submission_links l where l.submission_id = s.id)
+       or exists (select 1 from public.files f where f.submission_id = s.id and f.status <> 'DELETED') then
+      perform public.fail('SUBMISSION_HAS_CONTENT', '제출 내용이 있는 목표는 완료를 취소할 수 없어요');
+    end if;
+    delete from public.submissions where id = s.id;
+  end if;
+  return public.curriculum_json(r.id, v_uid, true);
+end $$;
+
+grant execute on function public.personal_create(text, bigint, text, date, date, text) to authenticated;
+grant execute on function public.personal_update(text, bigint, jsonb)                  to authenticated;
+grant execute on function public.personal_archive(text, bigint, boolean)               to authenticated;
+grant execute on function public.personal_delete(text, bigint)                         to authenticated;
+grant execute on function public.personal_complete(text, bigint, boolean)              to authenticated;
