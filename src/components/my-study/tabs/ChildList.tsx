@@ -31,6 +31,8 @@ const IconBtn = ({ label, d, onClick, disabled, tone }: { label: string; d: stri
 /** 회차(·묶음) 상세/편집 화면의 "이 회차의 과제" 목록. 내용만큼 자란다(안쪽 스크롤 없음) */
 export function ChildList({ parent, onOpen, edit }: Props) {
   const meId = useMe()?.id ?? null;
+  // 팀 과제만 — 개인 목표는 회차 상세의 개인 섹션(Task 9)에서, 편집 화면에는 그리지 않는다
+  const kids = parent.kids.filter((k) => !(k.leaf && k.personal));
   const [ask, setAsk] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   // Esc 로 닫으면(포커스 갈 곳이 없으면) "과제 추가" 버튼으로 — 다른 곳을 눌러 닫힌 거면 그 포커스를 뺏지 않는다
@@ -45,17 +47,17 @@ export function ChildList({ parent, onOpen, edit }: Props) {
     <section aria-labelledby={`kids-${parent.id}`} className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
         <h3 id={`kids-${parent.id}`} className="m-0 text-[13px] font-semibold text-ink-3">
-          이 회차의 과제 {parent.kids.length}개
+          이 회차의 과제 {kids.length}개
         </h3>
         {edit && <span className="shrink-0 text-[12px] font-medium text-muted">진척률 {parent.pct}%</span>}
       </div>
-      {parent.kids.length === 0 && !edit?.canAdd ? (
+      {kids.length === 0 && !edit?.canAdd ? (
         <p className="m-0 rounded-[12px] border border-dashed border-line-3 px-4 py-3 text-[13px] text-muted">아직 과제가 없어요</p>
       ) : (
         <>
-          {parent.kids.length === 0 && <p className="m-0 text-[13px] text-muted">아직 과제가 없어요 · 아래에서 바로 추가해 보세요</p>}
+          {kids.length === 0 && <p className="m-0 text-[13px] text-muted">아직 과제가 없어요 · 아래에서 바로 추가해 보세요</p>}
           <ul className="m-0 flex list-none flex-col overflow-hidden rounded-[12px] border border-line p-0">
-            {parent.kids.map((k, i) => {
+            {kids.map((k, i) => {
               const mine = k.leaf ? myCode(k, meId) : null;
               const plan = ask === k.id ? removePlan(k) : null;
               return (
@@ -78,7 +80,7 @@ export function ChildList({ parent, onOpen, edit }: Props) {
                     {edit && (
                       <span className="flex shrink-0 items-center pr-1">
                         <IconBtn label={`${k.title} 위로`} disabled={i === 0 || k.archived || k.temp || edit.busy !== null} onClick={() => edit.onMove(k.id, -1)} d="m6 15 6-6 6 6" />
-                        <IconBtn label={`${k.title} 아래로`} disabled={i === parent.kids.length - 1 || k.archived || k.temp || edit.busy !== null} onClick={() => edit.onMove(k.id, 1)} d="m6 9 6 6 6-6" />
+                        <IconBtn label={`${k.title} 아래로`} disabled={i === kids.length - 1 || k.archived || k.temp || edit.busy !== null} onClick={() => edit.onMove(k.id, 1)} d="m6 9 6 6 6-6" />
                         <IconBtn label={`${k.title} 삭제`} tone="warn" disabled={k.temp || edit.busy !== null} onClick={() => setAsk(k.id)} d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
                       </span>
                     )}

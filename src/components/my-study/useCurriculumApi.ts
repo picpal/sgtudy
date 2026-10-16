@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { toApiError } from "@/lib/api/errors";
 import { fetchCurriculum, nodeArchive, nodeCreate, nodeDelete, nodeMove, nodeUpdate, patchOf } from "@/lib/api/my-study";
+import { personalArchive, personalComplete, personalCreate, personalDelete, personalUpdate, type PersonalPatch } from "@/lib/api/personal";
 import type { Curriculum, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
@@ -25,6 +26,15 @@ export type CurriculumApi = {
   move: (id: string, parentId: string, index?: number, dates?: DatePlan, okText?: string) => Promise<boolean>;
   /** 커리큘럼만 다시 받는다 — 제출 뒤 보드·간트·개요의 사람별 코드 갱신. 실패는 조용히 */
   refresh: () => Promise<void>;
+  /* 개인 목표 (0014) — 낙관적 처리 없이 응답 Curriculum 으로 교체, 실패는 fail 경로(서버 문구 토스트) */
+  /** 회차에 내 목표 추가(기간 = 서버 기본: 회차 기간). 성공하면 true */
+  createPersonal: (roundId: string, title: string) => Promise<boolean>;
+  /** 완료 표시/취소. 완료 토스트에는 "되돌리기"(→ 완료 취소) 버튼 (결정 3). 성공하면 true */
+  completePersonal: (id: string, done: boolean) => Promise<boolean>;
+  /** 제목·설명·기간·회차 수정. okText = 성공 토스트(기본 "저장했어요"). 성공하면 응답 Curriculum(warnings 확인용), 실패면 null */
+  updatePersonal: (id: string, patch: PersonalPatch, okText?: string) => Promise<Curriculum | null>;
+  archivePersonal: (id: string, on: boolean) => Promise<boolean>;
+  removePersonal: (id: string) => Promise<boolean>;
 };
 
 const dropKey = <T,>(rec: Record<string, T>, key: string) => {
@@ -184,5 +194,46 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
 
   const refresh = useCallback(() => fetchCurriculum(slug).then(setCur, () => {}), [slug, setCur]);
 
-  return { create, remove, archive, save, move, refresh };
+  // 개인 목표 RPC 공통 — 응답으로 교체 + 성공 토스트. 실패는 fail
+  const personal = useCallback(
+    async (call: () => Promise<Curriculum>, ok: ToastMsg): Promise<Curriculum | null> => {
+      try {
+        const cur = await call();
+        setCur(cur);
+        toast(ok);
+        return cur;
+      } catch (e) {
+        fail(e);
+        return null;
+      }
+    },
+    [setCur, toast, fail],
+  );
+
+  const createPersonal = useCallback(
+    async (roundId: string, title: string) => !!(await personal(() => personalCreate(slug, roundId, title), { text: "내 목표를 추가했어요", tone: "ok" })),
+    [slug, personal],
+  );
+
+  const completePersonal = useCallback(
+    async function complete(id: string, done: boolean): Promise<boolean> {
+      const ok: ToastMsg = done ? { text: "완료했어요", tone: "ok", action: { label: "되돌리기", onClick: () => void complete(id, false) } } : { text: "완료를 취소했어요", tone: "ok" };
+      return !!(await personal(() => personalComplete(slug, id, done), ok));
+    },
+    [slug, personal],
+  );
+
+  const updatePersonal = useCallback(
+    (id: string, patch: PersonalPatch, okText = "저장했어요") => personal(() => personalUpdate(slug, id, patch), { text: okText, tone: "ok" }),
+    [slug, personal],
+  );
+
+  const archivePersonal = useCallback(
+    async (id: string, on: boolean) => !!(await personal(() => personalArchive(slug, id, on), { text: on ? "보관했어요" : "보관을 해제했어요", tone: "ok" })),
+    [slug, personal],
+  );
+
+  const removePersonal = useCallback(async (id: string) => !!(await personal(() => personalDelete(slug, id), { text: "삭제했어요", tone: "ok" })), [slug, personal]);
+
+  return { create, remove, archive, save, move, refresh, createPersonal, completePersonal, updatePersonal, archivePersonal, removePersonal };
 }

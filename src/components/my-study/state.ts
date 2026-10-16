@@ -19,8 +19,12 @@ export type ScreenState = {
   viewSel: string | null;
   /** 보기 상세가 열리며 한 번 옮길 포커스 — 보드·캘린더·간트·알림 진입은 제출 영역 (스펙 §2.6) */
   viewFocus: "submission" | null;
-  /** 편집 목록에서 빠른 추가 입력이 열린 회차 id */
+  /** 빠른 추가 입력이 열린 회차 id — 편집 목록 팀 과제는 그대로 id, 보기 목록 "내 목표 추가" 는 `p:{id}` */
   quickAdd: string | null;
+  /** 진행목표(·간트) "내 것만" — 내게 배정된 팀 과제 + 내 개인 목표만. URL 에 싣지 않는다 */
+  mineOnly: boolean;
+  /** 진행목표(·간트) "팀원 목표" — 남의 개인 목표도 보기 */
+  othersPersonal: boolean;
   /** 방금 추가한 항목 — 편집 화면이 열리면 제목을 선택해 바로 고쳐 쓰게 한다 */
   justAdded: string | null;
   confirm: boolean;
@@ -46,6 +50,8 @@ export const INITIAL_STATE: ScreenState = {
   viewSel: null,
   viewFocus: null,
   quickAdd: null,
+  mineOnly: false,
+  othersPersonal: false,
   justAdded: null,
   confirm: false,
   leave: null,

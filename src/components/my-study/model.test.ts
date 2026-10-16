@@ -146,12 +146,21 @@ describe("removePlan (편집 화면·목록 삭제 공통)", () => {
   });
   it("submissions anywhere below → archive instead; already archived → nothing to do", () => {
     expect(removePlan(node("1"))).toMatchObject({ kind: "archive", label: "보관" });
+    const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "1" ? { ...n, archived: true } : n)) };
+    expect(removePlan(buildTree(cur, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "1")!).kind).toBe("none");
   });
   it("개인 목표의 제출도 삭제를 막는다(서버 node_has_submissions 와 같게)", () => {
     const full = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
     expect(removePlan(full.nodes.find((n) => n.id === "3")!)).toMatchObject({ kind: "archive", label: "보관" });
-    const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "1" ? { ...n, archived: true } : n)) };
-    expect(removePlan(buildTree(cur, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "1")!).kind).toBe("none");
+  });
+  it("개인 목표가 함께 지워지면 확인 문구 끝에 개수 — 하위 항목 수는 팀 항목만", () => {
+    // 지은 개인(33)을 완료 전으로 — 제출 없음 → 삭제
+    const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "33" && n.task ? { ...n, task: { ...n.task, people: n.task.people.map((p) => ({ ...p, status: "planned" as const })), submitted: 0 } } : n)) };
+    const t3 = buildTree(cur, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "3")!;
+    expect(removePlan(t3)).toEqual({ kind: "delete", label: "삭제", text: "이 항목과 하위 항목 2개를 함께 삭제할까요? 되돌릴 수 없어요. 팀원 개인 목표 2개도 함께 삭제돼요." });
+    // 팀 자식 없이 개인 목표만 있는 회차
+    const only = { ...cur, nodes: cur.nodes.filter((n) => !["31", "311"].includes(n.id)) };
+    expect(removePlan(buildTree(only, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "3")!)).toMatchObject({ kind: "delete", text: "이 항목을 삭제할까요? 되돌릴 수 없어요. 팀원 개인 목표 2개도 함께 삭제돼요." });
   });
 });
 

@@ -8,6 +8,7 @@ describe("goLeafPatch", () => {
 
 describe("viewFocus", () => {
   it("INITIAL_STATE has no pending focus", () => expect(INITIAL_STATE.viewFocus).toBeNull());
+  it("진행목표 필터 칩은 둘 다 꺼진 채 시작", () => expect([INITIAL_STATE.mineOnly, INITIAL_STATE.othersPersonal]).toEqual([false, false]));
   it("modeSwitchPatch clears a pending focus", () =>
     expect(modeSwitchPatch({ ...INITIAL_STATE, viewSel: "7", viewFocus: "submission" }, "edit")).toMatchObject({ viewFocus: null }));
 });

@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { TreeRow } from "./TreeRow";
 import { InlineConfirm } from "./InlineConfirm";
 import { EMPTY_OVERRIDES, buildTree } from "../model";
-import { AWS, REF_DAY } from "../fixtures";
+import { AWS, CHULSU, REF_DAY } from "../fixtures";
 
 // 목록 삭제 확인 상자는 행의 treeitem 안에 — role="tree" 가 treeitem 아닌 것을 직접 소유하지 않게 (a11y required-owned)
 describe("TreeRow below (list delete confirm)", () => {
@@ -39,5 +39,41 @@ describe("TreeRow below (list delete confirm)", () => {
   it("renders only the row when no confirm is open", () => {
     const item = render().querySelector('[role="treeitem"]')!;
     expect(item.children).toHaveLength(1);
+  });
+});
+
+// 개인 목표 행 — [개인] 배지, 끌기·삭제 없음, 소유자: 내 것은 표시 없음(결정 5) · 남의 것은 아바타 20px + 이름
+describe("TreeRow personal goal row", () => {
+  const t = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
+  const node = (id: string) => t.nodes.find((n) => n.id === id)!;
+  const render = (id: string, isEdit = false) => {
+    const root = document.createElement("div");
+    root.innerHTML = renderToStaticMarkup(createElement(TreeRow, { n: node(id), isEdit, open: true, meId: CHULSU, onToggle: () => {}, onClick: () => {}, onRemove: () => {}, dragHandle: { onPointerDown: () => {} } }));
+    return root;
+  };
+
+  it("shows the [개인] badge and the owner's status (개인 완료 문구)", () => {
+    const mine = render("32");
+    expect(mine.querySelector("[data-row-main]")!.textContent).toContain("개인");
+    expect(mine.querySelector("[data-personal-status]")!.textContent).toBe("예정");
+    // 지은 것(완료) — 팀의 "기한내 제출" 대신 "기한내 완료"
+    expect(render("33").querySelector("[data-personal-status]")!.textContent).toContain("기한내 완료");
+  });
+
+  it("has no drag handle and no delete button even if asked to draw in edit mode", () => {
+    const row = render("32", true);
+    expect(row.querySelector("[data-row-del]")).toBeNull();
+    expect(row.querySelector('[title="드래그해서 순서 변경·회차 이동"]')).toBeNull();
+  });
+
+  it("owner: none on my own goal; avatar + name on a teammate's", () => {
+    const mine = render("32");
+    expect(mine.querySelector("[data-owner]")).toBeNull();
+    expect(mine.textContent).not.toContain("철수");
+    // 팀 과제 행의 아바타 묶음·sub/asg 는 그리지 않는다
+    expect(mine.textContent).not.toMatch(/\d\/\d/);
+    const other = render("33").querySelector("[data-owner]")!;
+    expect(other.textContent).toContain("지은");
+    expect((other.querySelector("span[style*='width']") as HTMLElement).style.width).toBe("20px");
   });
 });

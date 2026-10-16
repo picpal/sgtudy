@@ -334,6 +334,9 @@ export function roundStatus(n: { s: string; e: string }, today: string): string 
 /** 보관된 것까지 모든 하위 항목 수 — 삭제하면 함께 지워진다 */
 export const descendantCount = (n: TreeNode): number => (n.leaf ? 0 : n.kids.reduce((a, k) => a + 1 + descendantCount(k), 0));
 
+/** 보관된 것까지 하위의 개인 목표 수 — 회차를 지우면 함께 지워진다 */
+export const personalDescendants = (n: TreeNode): number => (n.leaf ? 0 : n.kids.reduce((a, k) => a + (isPersonal(k) ? 1 : personalDescendants(k)), 0));
+
 /**
  * 삭제 버튼을 눌렀을 때 할 일 (편집 화면·목록 공통).
  * 하위 어디에든 제출이 있으면 서버가 삭제를 막으므로 보관을 권하고, 이미 보관돼 있으면 더 할 게 없다.
@@ -344,8 +347,11 @@ export function removePlan(n: TreeNode): RemovePlan {
     if (n.archived) return { kind: "none", reason: "제출물이 있어 삭제할 수 없어요 · 이미 보관돼 있어요" };
     return { kind: "archive", label: "보관", text: "제출물이 있어 삭제할 수 없어요. 대신 보관하면 참가자 화면에서 숨겨지고 제출물은 그대로 남아요. 보관할까요?" };
   }
-  const k = descendantCount(n);
-  return { kind: "delete", label: "삭제", text: k > 0 ? `이 항목과 하위 항목 ${k}개를 함께 삭제할까요? 되돌릴 수 없어요.` : "이 항목을 삭제할까요? 되돌릴 수 없어요." };
+  // 하위 항목 수는 편집 목록에 보이는 팀 항목만 — 함께 지워지는 개인 목표(서버 0014 가 같이 지운다)는 따로 알린다
+  const p = personalDescendants(n);
+  const k = descendantCount(n) - p;
+  const head = k > 0 ? `이 항목과 하위 항목 ${k}개를 함께 삭제할까요? 되돌릴 수 없어요.` : "이 항목을 삭제할까요? 되돌릴 수 없어요.";
+  return { kind: "delete", label: "삭제", text: p > 0 ? `${head} 팀원 개인 목표 ${p}개도 함께 삭제돼요.` : head };
 }
 
 /** 분석서 E4 — 상위 기간·방 기간 밖이면 경고 문구 (저장·생성은 막지 않는다) */

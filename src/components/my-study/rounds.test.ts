@@ -183,6 +183,16 @@ describe("개인 목표 — 순서·드래그·추가 줄", () => {
     expect(dropPlan(tree.nodes, "21", "31", "bottom")).toEqual({ parentId: "3", index: 2 });
     expect(dropPlan(tree.nodes, "21", "3", "bottom")).toEqual({ parentId: "3", index: 3 });
   });
+  it("dropPlan: 개인 목표를 뺀 팀 순서가 그대로면 제자리(null)", () => {
+    // 1주차 서버 순서 [11, 개인, 12] — 12 를 11 아래로 놓아도 화면(팀 → 개인)은 같다
+    const p = AWS.nodes.find((n) => n.id === "32")!;
+    const cur = { ...AWS, nodes: [...AWS.nodes, { ...p, id: "1p", parentId: "1", roundId: "1", sortOrder: 1.5 }] };
+    const ns = buildTree(cur, EMPTY_OVERRIDES, REF_DAY).nodes;
+    expect(dropPlan(ns, "12", "11", "bottom")).toBeNull();
+    expect(dropPlan(ns, "12", "1", "bottom")).toBeNull();
+    expect(dropPlan(ns, "12", "11", "top")).toEqual({ parentId: "1", index: 0 });
+    expect(dropPlan(ns, "11", "12", "bottom")).toEqual({ parentId: "1", index: 2 });
+  });
   it("withPersonalAddRows: 펼친 비보관 회차 끝에 padd, canAdd false 면 없음", () => {
     const kinds = (closed: Record<string, boolean>, canAdd: boolean, t = tree) =>
       withPersonalAddRows(visibleNodes(t.roots, closed), t.roots, closed, canAdd).map((e) => (e.kind === "node" ? e.n.id : e.kind === "padd" ? `p${e.round.id}` : `+${e.round.id}`));

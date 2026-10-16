@@ -1,13 +1,16 @@
 "use client";
 
+import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { AvatarStack, TypeBadge } from "../bits";
 import { md } from "@/lib/date";
-import type { TreeNode } from "../model";
+import { CODE_LABEL, type Code, type LeafNode, type TreeNode } from "../model";
 
 type Props = {
   n: TreeNode;
   isEdit: boolean;
+  /** 개인 목표 행의 소유자 표시 — 내 것이면 표시 없음, 남의 것이면 아바타 + 이름 */
+  meId?: string | null;
   open: boolean;
   onToggle: () => void;
   onClick: () => void;
@@ -39,7 +42,20 @@ const Plus = () => (
   </svg>
 );
 
-export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemove, removeOff, asking = false, dragHandle, dropHint = null, dragging = false, below }: Props) {
+/** 개인 목표 상태 문구 — 완료는 팀의 "제출" 대신 "완료" */
+const PERSONAL_LABEL: Record<Code, string> = { ...CODE_LABEL, D: "기한내 완료", L: "늦게 완료" };
+
+/** 개인 목표 소유자(서버 people = [소유자]) */
+const ownerOf = (n: LeafNode) => n.people.find((p) => p.userId === n.ownerId) ?? n.people[0] ?? null;
+
+export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, onClick, onAddChild, onRemove, removeOff, asking = false, dragHandle, dropHint = null, dragging = false, below }: Props) {
+  const personal = n.leaf && n.personal;
+  // 개인 목표는 편집 모드에 그리지 않는다 — 혹시 그려져도 끌기·삭제 대상이 아니다
+  const isEdit = isEditMode && !personal;
+  const owner = personal ? ownerOf(n) : null;
+  // 남의 개인 목표에만 소유자 표시 (결정 5 — 내 것에는 "나" 칩·아바타 없음)
+  const other = personal && owner && owner.userId !== meId ? owner : null;
+  const done = !!owner && (owner.c === "D" || owner.c === "L");
   // "+" 는 회차에만 — 과제 아래 과제(묶음)는 만들지 않는다 (2단계: 회차 → 과제)
   const canAdd = isEdit && !n.leaf && n.d === 0 && !n.archived;
   const addTip = `${n.title}에 과제 추가`;
@@ -51,7 +67,8 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemo
       aria-selected={isEdit ? false : undefined}
       data-node={n.id}
       className={`border-b border-line-2 ${dropHint === "top" ? "shadow-[inset_0_2px_0_#12A386]" : dropHint === "bottom" ? "shadow-[inset_0_-2px_0_#12A386]" : ""}`}
-      style={{ background: n.d === 0 ? "#FAFCFB" : "#FFFFFF" }}
+      data-personal={personal || undefined}
+      style={{ background: n.d === 0 ? "#FAFCFB" : personal ? "#F7F9FC" : "#FFFFFF" }}
     >
       {/* 보이는 행(52px) — treeitem 은 이 행과 아래 확인 상자를 함께 감싼다 */}
       <div className={`flex min-h-[52px] items-center gap-2 py-1 pl-2 pr-3 ${dragging ? "opacity-50" : ""}`} style={{ opacity: n.archived ? 0.55 : undefined }}>
@@ -70,7 +87,7 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemo
         )}
         {n.leaf ? (
           <span className="flex w-[30px] shrink-0 justify-center">
-            <span className="h-[6px] w-[6px] rounded-full bg-line-dash" />
+            <span className={`h-[6px] w-[6px] rounded-full ${personal ? "bg-[#9BA8BB]" : "bg-line-dash"}`} />
           </span>
         ) : (
           <button type="button" aria-label={`${n.title} ${open ? "접기" : "펼치기"}`} aria-expanded={open} onClick={onToggle} className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] bg-transparent text-ink-3">
@@ -84,6 +101,12 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemo
         <button type="button" data-row-main onClick={onClick} className="-my-1 flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px] self-stretch bg-transparent px-1 py-3 text-left text-ink">
           {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[7px] bg-navy px-2 py-[3px] text-[12px] font-bold text-white">{n.label}</span>}
           {n.leaf && <TypeBadge type={n.type} />}
+          {/* 390: 소유자 이름 칸은 숨기고 남의 목표엔 제목 앞에 이니셜 아바타 (스펙 §4.4) */}
+          {other && (
+            <span className="shrink-0 sm:hidden" title={other.name}>
+              <Avatar name={other.name} size={20} tone={other.tone} id={other.userId} />
+            </span>
+          )}
           <span className="min-w-0 max-w-full [overflow-wrap:anywhere]" style={{ fontSize: n.d === 0 ? 15 : 14, fontWeight: n.d === 0 ? 700 : n.leaf ? 500 : 600 }}>
             {n.title}
           </span>
@@ -93,7 +116,22 @@ export function TreeRow({ n, isEdit, open, onToggle, onClick, onAddChild, onRemo
           {n.archived && <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">보관됨</span>}
         </button>
 
-        {n.leaf ? (
+        {personal ? (
+          <>
+            {other && (
+              <span data-owner className="flex shrink-0 items-center gap-[6px] text-[12px] font-medium text-ink-3 max-sm:hidden">
+                <Avatar name={other.name} size={20} tone={other.tone} id={other.userId} />
+                {other.name}
+              </span>
+            )}
+            {owner && (
+              <span data-personal-status className={`shrink-0 whitespace-nowrap rounded-[8px] px-[10px] py-1 text-[12px] font-semibold ${done ? "bg-[#E2F3EA] text-[#14724D]" : "bg-[#EEF2F1] text-ink-2"}`}>
+                {done && <span aria-hidden="true">✓ </span>}
+                {PERSONAL_LABEL[owner.c]}
+              </span>
+            )}
+          </>
+        ) : n.leaf ? (
           <>
             <span className="max-sm:hidden">
               <AvatarStack people={n.people} size={28} ring="#FFFFFF" iconSize={14} overflowSize={30} />

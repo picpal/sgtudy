@@ -146,6 +146,12 @@ export function dropPlan(nodes: TreeNode[], dragId: string, overId: string, half
     const sibs = p.kids.filter((k) => k.id !== drag.id);
     index = sibs.findIndex((k) => k.id === over.id) + (half === "bottom" ? 1 : 0);
   }
-  if (drag.parentId === parent.id && siblingIndex(parent, drag.id) === index) return null;
+  if (drag.parentId === parent.id) {
+    if (siblingIndex(parent, drag.id) === index) return null;
+    // 화면 순서는 팀 → 개인이라, 개인 목표를 뺀 팀 순서가 그대로면 보이는 변화가 없다 — node_move 를 보내지 않는다
+    const team = (ks: TreeNode[]) => ks.filter((k) => !isPersonal(k)).map((k) => k.id).join(",");
+    const rest = parent.kids.filter((k) => k.id !== drag.id);
+    if (team([...rest.slice(0, index), drag, ...rest.slice(index)]) === team(parent.kids)) return null;
+  }
   return { parentId: parent.id, index };
 }
