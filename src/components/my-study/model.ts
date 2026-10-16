@@ -87,7 +87,20 @@ type NodeBase = {
   temp: boolean;
 };
 
-export type LeafNode = NodeBase & { leaf: true; type: TaskType; people: Person[]; asg: number; sub: number; state: LeafState };
+export type LeafNode = NodeBase & {
+  leaf: true;
+  type: TaskType;
+  people: Person[];
+  asg: number;
+  sub: number;
+  state: LeafState;
+  /** 개인 목표 소유자 (팀 과제는 null) */
+  ownerId: string | null;
+  /** 개인 목표 리프 — 부모 롤업·Tree.leaves 에서 빠지고, 편집 모드에 그리지 않는다 */
+  personal: boolean;
+  /** 개인 목표 소유자의 멤버 순서(Curriculum.members). 팀 과제·명단에 없는 소유자는 -1 / 끝 */
+  ownerRank: number;
+};
 export type ParentNode = NodeBase & { leaf: false; label: string | null; kids: TreeNode[]; childCount: number; asg: number; sub: number; pct: number };
 export type TreeNode = LeafNode | ParentNode;
 
@@ -95,8 +108,10 @@ export type Tree = {
   roots: ParentNode[];
   /** 전위 순회 전체 (삭제 제외) */
   nodes: TreeNode[];
-  /** 보관 제외 리프 */
+  /** 보관 제외 팀 리프 (개인 목표 제외 — 집계·보드·캘린더의 팀 의미 그대로) */
   leaves: LeafNode[];
+  /** 보관 제외 개인 목표 리프 (보이는 것 = 서버가 준 것) */
+  personal: LeafNode[];
   /** 추가 회차 포함 루트 수 */
   rootCount: number;
   /** 활성 참가자 (이탈자 제외) */
@@ -118,6 +133,7 @@ export function leafState(asg: number, sub: number, s: string, e: string, today:
 export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
   const members: TreeMember[] = cur.members.filter((m) => m.status === "active").map((m) => ({ userId: m.userId, name: m.nickname, tone: m.tone, doesTasks: m.doesTasks }));
   const doers = members.filter((m) => m.doesTasks);
+  const rank = new Map(cur.members.map((m, i) => [m.userId, i]));
   const byParent = new Map<string | null, NodeDto[]>();
   for (const n of cur.nodes) {
     const list = byParent.get(n.parentId) ?? [];
@@ -148,9 +164,11 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
     const base = { id: n.id, parentId: n.parentId, roundId, d, title, desc, s, e, archived, archivedByParent, crumb: crumbs.join(" › "), temp };
 
     if (n.task && kidsRaw.length === 0) {
-      const type: TaskType = ov.typeOv[n.id] ?? TASK_TYPE_KO[n.task.type];
+      const personal = n.task.type === "personal";
+      // 개인 목표는 편집 패널 대상이 아니다 — 유형/담당 오버라이드를 무시하고 서버 people(= [소유자])을 그대로 쓴다
+      const type: TaskType = personal ? "개인" : (ov.typeOv[n.id] ?? TASK_TYPE_KO[n.task.type]);
       const known = new Map(n.task.people.map((p) => [p.userId, STATUS_CODE[p.status]]));
-      const recompute = temp || n.id in ov.typeOv || n.id in ov.assignOv;
+      const recompute = !personal && (temp || n.id in ov.typeOv || n.id in ov.assignOv);
       let people: Person[];
       if (!recompute) people = n.task.people.map((p) => ({ userId: p.userId, name: p.nickname, tone: p.tone, c: STATUS_CODE[p.status] }));
       else {
@@ -159,7 +177,9 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
       }
       const asg = people.length;
       const sub = people.filter((p) => p.c === "D" || p.c === "L").length;
-      const leaf: LeafNode = { ...base, subAll: sub, leaf: true, type, people, asg, sub, state: leafState(asg, sub, s, e, today), roundLabel: rl };
+      const ownerId = personal ? (n.ownerId ?? null) : null;
+      const ownerRank = ownerId ? (rank.get(ownerId) ?? rank.size) : -1;
+      const leaf: LeafNode = { ...base, subAll: sub, leaf: true, type, people, asg, sub, state: leafState(asg, sub, s, e, today), roundLabel: rl, ownerId, personal, ownerRank };
       nodes.push(leaf);
       return leaf;
     }
@@ -172,7 +192,8 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
       const k = walk(c, [...crumbs, here], roundLabel, archived, temp || c.sortOrder >= TEMP_ORDER);
       if (k) node.kids.push(k);
     });
-    const live = node.kids.filter((k) => !k.archived);
+    // 개인 목표는 팀 수치에서 뺀다(서버 집계와 같음). subAll 은 개인 포함 — 서버 node_has_submissions 와 같은 삭제 거부 규칙
+    const live = node.kids.filter((k) => !k.archived && !isPersonal(k));
     node.asg = live.reduce((a, k) => a + k.asg, 0);
     node.sub = live.reduce((a, k) => a + k.sub, 0);
     node.pct = node.asg ? Math.round((node.sub / node.asg) * 100) : 0;
@@ -193,16 +214,63 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
     const rt = walk(n, [], null, false, n.sortOrder >= TEMP_ORDER);
     if (rt && !rt.leaf) roots.push(rt);
   });
-  const leaves = nodes.filter((n): n is LeafNode => n.leaf && !n.archived);
-  return { roots, nodes, leaves, rootCount: rootList.length, members };
+  const leaves = nodes.filter((n): n is LeafNode => n.leaf && !n.archived && !n.personal);
+  const personal = nodes.filter((n): n is LeafNode => n.leaf && !n.archived && n.personal);
+  return { roots, nodes, leaves, personal, rootCount: rootList.length, members };
 }
 
-/** 접힘 상태를 반영한 보이는 행 (전위 순서) */
-export function visibleNodes(roots: ParentNode[], closed: Record<string, boolean>): TreeNode[] {
+export const isPersonal = (n: TreeNode): n is LeafNode => n.leaf && n.personal;
+
+/** 목록·보드·캘린더가 함께 쓰는 보기 범위 */
+export type ItemScope = {
+  meId: string | null;
+  /** 내게 배정된 팀 과제만 */
+  mineOnly: boolean;
+  /** 남의 개인 목표도 보기 */
+  others: boolean;
+  /** 커리큘럼 편집 모드 — 개인 목표를 그리지 않는다 */
+  isEdit: boolean;
+  isLeader: boolean;
+};
+
+/**
+ * 범위 판정. 부모 = 항상(빈 회차 안내는 화면 몫). 팀 리프 = mineOnly 면 내게 배정된 것만.
+ * 개인 = 편집 모드가 아니고, 내 것(보관돼도 — 흐리게) 또는 others 일 때 남의 것(보관은 그룹장만).
+ */
+export function inScope(n: TreeNode, sc: ItemScope): boolean {
+  if (!n.leaf) return true;
+  if (!n.personal) return !sc.mineOnly || !!myCode(n, sc.meId);
+  if (sc.isEdit) return false;
+  if (sc.meId !== null && n.ownerId === sc.meId) return true;
+  return sc.others && (!n.archived || sc.isLeader);
+}
+
+/** 화면 순서: [팀(서버 순서), 내 개인(서버 순서), 남의 개인(멤버 순서 → 서버 순서)] — 안정 분할. 서버 index 계산은 늘 원래 kids 로 한다 */
+function screenOrder(kids: TreeNode[], meId: string | null): TreeNode[] {
+  const team: TreeNode[] = [];
+  const mine: LeafNode[] = [];
+  const others: LeafNode[] = [];
+  kids.forEach((k) => {
+    if (!isPersonal(k)) team.push(k);
+    else if (meId !== null && k.ownerId === meId) mine.push(k);
+    else others.push(k);
+  });
+  // Array.prototype.sort 는 안정 정렬 — 같은 소유자 안에서는 서버 순서가 유지된다
+  others.sort((a, b) => a.ownerRank - b.ownerRank);
+  return [...team, ...mine, ...others];
+}
+
+/**
+ * 접힘 상태를 반영한 보이는 행 (전위 순서). 각 부모의 kids 는 screenOrder 로 나눈다.
+ * sc 가 없으면 범위 필터 없이 전부(개인은 각 부모의 끝).
+ */
+export function visibleNodes(roots: ParentNode[], closed: Record<string, boolean>, sc?: ItemScope): TreeNode[] {
   const out: TreeNode[] = [];
+  const meId = sc?.meId ?? null;
   const add = (n: TreeNode) => {
+    if (sc && !inScope(n, sc)) return;
     out.push(n);
-    if (!n.leaf && !closed[n.id]) n.kids.forEach(add);
+    if (!n.leaf && !closed[n.id]) screenOrder(n.kids, meId).forEach(add);
   };
   roots.forEach(add);
   return out;
@@ -235,6 +303,19 @@ export function memberStats(leaves: LeafNode[], userId: string): { done: number;
     if (!p) return;
     total += 1;
     if (p.c === "D" || p.c === "L") done += 1;
+  });
+  return { done, total };
+}
+
+/** 한 사람의 개인 목표 완료/전체 (보관 제외 — Tree.personal 을 넘긴다). roundId 가 있으면 그 회차만 */
+export function personalStats(personal: LeafNode[], userId: string, roundId?: string): { done: number; total: number } {
+  let done = 0;
+  let total = 0;
+  personal.forEach((l) => {
+    if (l.ownerId !== userId || (roundId !== undefined && l.roundId !== roundId)) return;
+    total += 1;
+    const c = myCode(l, userId);
+    if (c === "D" || c === "L") done += 1;
   });
   return { done, total };
 }

@@ -111,13 +111,17 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     if (!v) return;
     update((p) => ({ ...patchOv(p, "dates", { ...p.ov.dates, [id]: { ...(p.ov.dates[id] ?? {}), [k]: v } }), saved: "" }));
   };
-  const setType = (t: TaskType) =>
+  // 개인 목표는 편집 모드에 그려지지 않는 전제 — 그래도 들어오면 유형·담당을 바꾸지 않는다(지정으로 떨어지지 않게)
+  const isPersonalLeaf = n.leaf && n.personal;
+  const setType = (t: TaskType) => {
+    if (isPersonalLeaf) return;
     update((p) => ({
       ov: { ...p.ov, typeOv: { ...p.ov.typeOv, [id]: t }, assignOv: t === "지정" ? { ...p.ov.assignOv, [id]: p.ov.assignOv[id] ?? ids } : p.ov.assignOv },
       saved: "",
     }));
+  };
   const toggleMember = (m: TreeMember) => {
-    if (isGong) return;
+    if (isGong || isPersonalLeaf) return;
     const next = ids.includes(m.userId) ? ids.filter((x) => x !== m.userId) : [...ids, m.userId];
     update((p) => ({ ...patchOv(p, "assignOv", { ...p.ov.assignOv, [id]: next }), saved: "" }));
   };
@@ -235,7 +239,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             마감일
             <input type="date" value={n.e} disabled={n.temp} onChange={(e) => setDate("e", e.target.value)} className={`${field} min-w-0 px-[10px] text-[14px]`} />
           </label>
-          {n.leaf && (
+          {n.leaf && !n.personal && (
             <div className={`${label} min-w-0 flex-[0_1_300px] max-sm:flex-[1_1_100%]`}>
               <span>과제 유형</span>
               <div className="[&_button]:h-11">

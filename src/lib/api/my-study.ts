@@ -130,7 +130,11 @@ export function patchOf(n: TreeNode, ov: Overrides): NodePatch {
   if (n.id in ov.descs) p.descriptionMd = ov.descs[n.id];
   if (ov.dates[n.id]?.s) p.startDate = ov.dates[n.id].s;
   if (ov.dates[n.id]?.e) p.endDate = ov.dates[n.id].e;
-  if (n.id in ov.typeOv) p.taskType = ov.typeOv[n.id] === "공통" ? "common" : "designated";
+  // 개인 목표는 편집 패널 대상이 아니다 — 유형·담당은 절대 보내지 않는다(삼항이 "개인"을 지정으로 떨어뜨리지 않게)
+  if (n.leaf && n.personal) return p;
+  const t = ov.typeOv[n.id];
+  if (t === "공통") p.taskType = "common";
+  else if (t === "지정") p.taskType = "designated";
   if (n.id in ov.assignOv) p.assigneeIds = ov.assignOv[n.id];
   return p;
 }

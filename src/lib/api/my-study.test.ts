@@ -141,6 +141,15 @@ describe("patchOf", () => {
     expect(patchOf(n, { ...EMPTY_OVERRIDES, assignOv: { "21": ["u1"] }, descs: { "21": "설명" } })).toEqual({ assigneeIds: ["u1"], descriptionMd: "설명" });
     expect(patchOf(n, EMPTY_OVERRIDES)).toEqual({});
   });
+  it("개인 목표는 유형·담당을 패치하지 않는다(지정으로 떨어지지 않게)", () => {
+    const p = tree.nodes.find((x) => x.id === "32")!;
+    expect(patchOf(p, { ...EMPTY_OVERRIDES, titles: { "32": "R53" }, typeOv: { "32": "개인" }, assignOv: { "32": ["u2"] } })).toEqual({ title: "R53" });
+  });
+  it("유형 매핑은 공통/지정만 — 그 밖의 값은 taskType 을 보내지 않는다", () => {
+    const n = tree.nodes.find((x) => x.id === "21")!;
+    expect(patchOf(n, { ...EMPTY_OVERRIDES, typeOv: { "21": "지정" } })).toEqual({ taskType: "designated" });
+    expect(patchOf(n, { ...EMPTY_OVERRIDES, typeOv: { "21": "개인" } })).toEqual({});
+  });
 });
 
 describe("filterSidebarGroups (Q3-06)", () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { AWS, REF_DAY } from "./fixtures";
-import { EMPTY_OVERRIDES, buildTree, visibleNodes, type ParentNode } from "./model";
-import { currentRoundId, dropPlan, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows } from "./rounds";
+import { AWS, CHULSU, REF_DAY } from "./fixtures";
+import { EMPTY_OVERRIDES, buildTree, visibleNodes, type LeafNode, type ParentNode, type TreeNode } from "./model";
+import { currentRoundId, dropPlan, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows, withPersonalAddRows } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -95,7 +95,7 @@ describe("withAddRows", () => {
   const kinds = (closed: Record<string, boolean>, t = tree) =>
     withAddRows(visibleNodes(t.roots, closed), t.roots, closed).map((e) => (e.kind === "node" ? e.n.id : `+${e.round.id}`));
   it("an add row after the last visible row of every open round (묶음 children included)", () =>
-    expect(kinds({})).toEqual(["1", "11", "12", "+1", "2", "21", "22", "+2", "3", "31", "311", "+3", "4", "41", "+4", "5", "51", "52", "+5"]));
+    expect(kinds({})).toEqual(["1", "11", "12", "+1", "2", "21", "22", "+2", "3", "31", "311", "33", "32", "+3", "4", "41", "+4", "5", "51", "52", "+5"]));
   it("closed round → no add row", () => expect(kinds({ "1": true }).slice(0, 3)).toEqual(["1", "2", "21"]));
   it("empty open round still gets an add row", () => {
     const t = buildTree({ ...AWS, nodes: AWS.nodes.filter((n) => n.roundId !== "4" || n.id === "4") }, EMPTY_OVERRIDES, REF_DAY);
@@ -151,5 +151,44 @@ describe("dropPlan (드래그 놓기 → node_move)", () => {
     const t = buildTree({ ...AWS, nodes: AWS.nodes.map((n) => (n.id === "4" || n.parentId === "4" ? { ...n, archived: true } : n)) }, EMPTY_OVERRIDES, REF_DAY);
     expect(dropPlan(t.nodes, "11", "4", "bottom")).toBeNull();
     expect(dropPlan(t.nodes, "11", "41", "top")).toBeNull();
+  });
+});
+
+describe("개인 목표 — 순서·드래그·추가 줄", () => {
+  const nb = { parentId: "R", roundId: "R", d: 1, desc: "", s: "2026-10-15", e: "2026-10-21", archived: false, archivedByParent: false, subAll: 0, crumb: "", roundLabel: "3주차", temp: false };
+  const team = (id: string): LeafNode => ({ ...nb, id, title: id, leaf: true, type: "공통", people: [], asg: 0, sub: 0, state: "unassigned", ownerId: null, personal: false, ownerRank: -1 });
+  const personal = (id: string, owner: string): LeafNode => ({ ...team(id), type: "개인", ownerId: owner, personal: true, ownerRank: 0 });
+  const mkRound = (kids: TreeNode[]): ParentNode => ({ ...nb, id: "R", parentId: null, d: 0, title: "R", leaf: false, label: "3주차", kids, childCount: kids.length, asg: 0, sub: 0, pct: 0 });
+
+  it("reorderIndex: 개인 목표를 건너뛴 이웃 팀 과제와 자리를 바꾼다", () => {
+    // 서버 순서 [T0, P, T1] 인 회차를 픽스처로 만든다 — T1 을 위로 → index 0, T0 를 아래로 → index 2(자기 뺀 [P, T1] 에서 T1 뒤)
+    const round = mkRound([team("T0"), personal("P", CHULSU), team("T1")]);
+    expect(reorderIndex(round, "T1", -1)).toBe(0);
+    expect(reorderIndex(round, "T0", 1)).toBe(2);
+    expect(reorderIndex(round, "T0", -1)).toBeNull();
+  });
+  it("reorderIndex: 팀 이웃이 개인뿐이면 null", () => {
+    const round = mkRound([team("T0"), personal("P", CHULSU)]);
+    expect(reorderIndex(round, "T0", 1)).toBeNull();
+  });
+  it("dropPlan: 개인 행은 끌 수도, 놓을 자리도 아니다", () => {
+    const t = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
+    const p = t.personal[0];
+    const ec2 = t.leaves.find((l) => l.title === "EC2 인스턴스 유형 정리")!;
+    expect(dropPlan(t.nodes, p.id, ec2.id, "top")).toBeNull();
+    expect(dropPlan(t.nodes, ec2.id, p.id, "top")).toBeNull();
+  });
+  it("dropPlan: index 는 서버 순서 kids 기준(개인 포함)", () => {
+    // 3주차 서버 순서 [33(개인), 31, 32(개인)] — 21 을 31 아래로 → index 2, 회차 행 위 → 끝(3)
+    expect(dropPlan(tree.nodes, "21", "31", "bottom")).toEqual({ parentId: "3", index: 2 });
+    expect(dropPlan(tree.nodes, "21", "3", "bottom")).toEqual({ parentId: "3", index: 3 });
+  });
+  it("withPersonalAddRows: 펼친 비보관 회차 끝에 padd, canAdd false 면 없음", () => {
+    const kinds = (closed: Record<string, boolean>, canAdd: boolean, t = tree) =>
+      withPersonalAddRows(visibleNodes(t.roots, closed), t.roots, closed, canAdd).map((e) => (e.kind === "node" ? e.n.id : e.kind === "padd" ? `p${e.round.id}` : `+${e.round.id}`));
+    expect(kinds({}, true)).toEqual(["1", "11", "12", "p1", "2", "21", "22", "p2", "3", "31", "311", "33", "32", "p3", "4", "41", "p4", "5", "51", "52", "p5"]);
+    expect(kinds({ "1": true }, true).slice(0, 3)).toEqual(["1", "2", "21"]);
+    expect(kinds({}, true, archivedTree)).not.toContain("p2");
+    expect(kinds({}, false).some((k) => k.startsWith("p"))).toBe(false);
   });
 });

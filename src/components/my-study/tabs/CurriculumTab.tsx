@@ -37,7 +37,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   const meId = useMe()?.id ?? null;
   // 권한을 거둬 간 직후 등 편집할 수 없는데 모드가 남아 있으면 보기로 그린다
   const isEdit = canEdit && S.curMode === "edit";
-  const rows = visibleNodes(tree.roots, S.closed);
+  // 임시 범위(Task 8 이 필터 UI 로 교체): 편집 모드엔 개인 목표 없음, 보기 모드엔 서버가 준 개인 목표 전부(팀 → 내 것 → 남의 것)
+  const rows = visibleNodes(tree.roots, S.closed, { meId, mineOnly: false, others: true, isEdit, isLeader });
   const overall = overallPct(tree.roots) ?? 0;
   // 담당자 배정 안내는 편집할 수 있는 사람에게만 (Q1-11/Q2-12 — 그룹장 + 편집 권한을 받은 팀원)
   const warn = canEdit ? unassignedCount(tree.leaves) : 0;
@@ -216,6 +217,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
               ) : (
                 <AddRow key={`add-${entry.round.id}`} round={entry.round} indent={1} onOpen={() => openAdd(entry.round.id)} inTree />
               );
+            // "+ 개인 목표" 줄(withPersonalAddRows)은 Task 8 이 그린다 — 아직 이 목록에 넣지 않는다
+            if (entry.kind === "padd") return null;
             const n = entry.n;
             const open = !S.closed[n.id];
             const plan = removePlan(n);

@@ -3,7 +3,7 @@
  * React 와 무관. 서버 계약: node_move 의 index 는 "자기를 뺀 새 형제" 기준 위치다.
  */
 import { addDays, diffDays, md } from "@/lib/date";
-import type { ParentNode, TreeNode } from "./model";
+import { isPersonal, type ParentNode, type TreeNode } from "./model";
 
 const live = (roots: ParentNode[]) => roots.filter((r) => !r.archived && !r.temp);
 
@@ -61,14 +61,21 @@ export function movedPlan(n: PlanNode, from: { s: string; e: string }, to: { s: 
 
 export const siblingIndex = (parent: ParentNode, id: string): number => parent.kids.findIndex((k) => k.id === id);
 
-/** 위(-1)/아래(+1)로 한 칸 — node_move index. 끝이면 null */
+/**
+ * 위(-1)/아래(+1)로 한 칸 — node_move index. 이웃 = 서버 순서 kids 에서 dir 쪽 첫 "개인 아님" 형제(개인 목표는 화면에서 팀 뒤로 빠져 있어 건너뛴다).
+ * 서버 계약 "자기를 뺀 새 형제 기준": 위로 = 이웃 자리 j(이웃이 앞이라 자기를 빼도 그대로), 아래로 = 자기를 빼면 이웃이 j-1 로 당겨지므로 그 바로 뒤 = j.
+ * 없으면 null.
+ */
 export function reorderIndex(parent: ParentNode, id: string, dir: -1 | 1): number | null {
+  const sibs = parent.kids;
   const i = siblingIndex(parent, id);
-  const j = i + dir;
-  return i < 0 || j < 0 || j >= parent.kids.length ? null : j;
+  if (i < 0) return null;
+  let j = i + dir;
+  while (j >= 0 && j < sibs.length && isPersonal(sibs[j])) j += dir;
+  return j < 0 || j >= sibs.length ? null : j;
 }
 
-export type ListEntry = { kind: "node"; n: TreeNode } | { kind: "add"; round: ParentNode };
+export type ListEntry = { kind: "node"; n: TreeNode } | { kind: "add"; round: ParentNode } | { kind: "padd"; round: ParentNode };
 
 /** 편집 목록: 펼쳐진(보관 아닌) 회차마다 그 회차의 마지막 보이는 행 뒤에 "+ 과제 추가" 줄 */
 export function withAddRows(rows: TreeNode[], roots: ParentNode[], closed: Record<string, boolean>): ListEntry[] {
@@ -79,6 +86,21 @@ export function withAddRows(rows: TreeNode[], roots: ParentNode[], closed: Recor
     const next = rows[i + 1];
     const round = open.get(n.roundId);
     if (round && (!next || next.roundId !== n.roundId)) out.push({ kind: "add", round });
+  });
+  return out;
+}
+
+/** 보기 모드 목록: 펼쳐진(보관 아닌) 회차마다 그 회차의 마지막 보이는 행 뒤에 "+ 개인 목표" 줄. canAdd false 면 그대로 */
+export function withPersonalAddRows(rows: TreeNode[], roots: ParentNode[], closed: Record<string, boolean>, canAdd: boolean): ListEntry[] {
+  const nodes: ListEntry[] = rows.map((n) => ({ kind: "node", n }));
+  if (!canAdd) return nodes;
+  const open = new Map(roots.filter((r) => !r.archived && !r.temp && !closed[r.id]).map((r) => [r.id, r]));
+  const out: ListEntry[] = [];
+  rows.forEach((n, i) => {
+    out.push(nodes[i]);
+    const next = rows[i + 1];
+    const round = open.get(n.roundId);
+    if (round && (!next || next.roundId !== n.roundId)) out.push({ kind: "padd", round });
   });
   return out;
 }
@@ -109,6 +131,8 @@ export function dropPlan(nodes: TreeNode[], dragId: string, overId: string, half
   const drag = byId.get(dragId);
   const over = byId.get(overId);
   if (!drag || !over || drag.d === 0 || drag.archived || over.archived || drag.temp || over.temp) return null;
+  // 개인 목표 행은 끌 수도, 놓을 자리도 아니다(편집 모드에 없고, 서버 node_move 도 팀 구조 전용)
+  if (isPersonal(drag) || isPersonal(over)) return null;
   for (let p: TreeNode | undefined = over; p; p = p.parentId ? byId.get(p.parentId) : undefined) if (p.id === drag.id) return null;
   let parent: ParentNode;
   let index: number;
