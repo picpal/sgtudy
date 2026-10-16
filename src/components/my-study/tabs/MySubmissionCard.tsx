@@ -5,7 +5,7 @@ import { StatusIcon } from "@/components/ui/StatusIcon";
 import type { ToastMsg } from "@/components/ui/Toast";
 import type { FileMeta, Submission, TaskDetail } from "@/lib/api/types";
 import type { TaskStatus } from "@/lib/types";
-import { metaLine, type MyCardState } from "../submission";
+import { lateNote, metaLine, type MyCardState } from "../submission";
 import { useSubmissionComposer } from "../useSubmissionComposer";
 import { DraftNotice, SubmissionComposer } from "./SubmissionComposer";
 import { SubmissionView } from "./SubmissionView";
@@ -29,15 +29,17 @@ type ViewProps = {
   onEdit: () => void;
   onOpenFile: (f: FileMeta) => void;
   headingRef?: Ref<HTMLHeadingElement>;
+  /** 개인 목표 — 지각 안내를 완료 문구로 */
+  personal?: boolean;
 };
 
 /** 내 제출 카드 표시 (훅 없음) — 스펙 §2.2 */
-export function MySubmissionCardView({ state, badge, mine, composer, notice, onEdit, onOpenFile, headingRef }: ViewProps) {
+export function MySubmissionCardView({ state, badge, mine, composer, notice, onEdit, onOpenFile, headingRef, personal = false }: ViewProps) {
   const saved = mine && (
     <div className="flex flex-col gap-3">
       <p className="m-0 text-[12px] text-muted">
         {metaLine(mine)}
-        {mine.isLate && <span className="block text-amber-text">마감 뒤에 처음 제출해 지각으로 기록됐어요</span>}
+        {mine.isLate && <span className="block text-amber-text">{lateNote(personal)}</span>}
       </p>
       <SubmissionView s={mine} onOpenFile={onOpenFile} />
     </div>
@@ -93,15 +95,16 @@ type Props = {
   headingRef?: Ref<HTMLHeadingElement>;
   /** 파일을 올리는 중인지 — 상세 나가기 확인용 (스펙 §2.8) */
   onUploadingChange?: (uploading: boolean) => void;
+  personal?: boolean;
 };
 
 /** 내 제출 카드 — 작성 가능(compose/submitted)일 때만 작성 훅을 쓴다 */
 export function MySubmissionCard(p: Props) {
   if (p.state.kind === "compose" || p.state.kind === "submitted") return <EditableCard {...p} />;
-  return <MySubmissionCardView state={p.state} badge={p.badge} mine={p.detail.mySubmission} composer={null} onEdit={() => {}} onOpenFile={p.onOpenFile} headingRef={p.headingRef} />;
+  return <MySubmissionCardView state={p.state} badge={p.badge} mine={p.detail.mySubmission} composer={null} onEdit={() => {}} onOpenFile={p.onOpenFile} headingRef={p.headingRef} personal={p.personal} />;
 }
 
-function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch, onOpenFile, toast, headingRef, onUploadingChange }: Props) {
+function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch, onOpenFile, toast, headingRef, onUploadingChange, personal = false }: Props) {
   const [editing, setEditing] = useState(false);
   const c = useSubmissionComposer({
     nodeId,
@@ -131,6 +134,7 @@ function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch
       c={c}
       editing={!!mine}
       late={late}
+      personal={personal}
       onCancel={() => {
         c.cancel();
         setEditing(false);
@@ -149,5 +153,5 @@ function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch
         onDrop={c.dropDraft}
       />
     ) : null;
-  return <MySubmissionCardView state={state} badge={badge} mine={mine} composer={composer} notice={notice} onEdit={edit} onOpenFile={onOpenFile} headingRef={headingRef} />;
+  return <MySubmissionCardView state={state} badge={badge} mine={mine} composer={composer} notice={notice} onEdit={edit} onOpenFile={onOpenFile} headingRef={headingRef} personal={personal} />;
 }

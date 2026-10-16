@@ -44,4 +44,25 @@ describe("SubmissionStatusList", () => {
     expect(el(true)).not.toContain("아직 담당자가 없어요");
   });
   it("no inner vertical scroller", () => expect(render([row({ submission: S })]).innerHTML).not.toMatch(/overflow-y-auto|max-h-/));
+  it("개인 목표: 머리에 개수 없음, 상태는 codeLabel 문구, 지각 꼬리표 없음 — 팀은 그대로", () => {
+    const el = (personal: boolean, archived = false, status: StatusRow["status"] = "late") => {
+      const d = document.createElement("div");
+      d.innerHTML = renderToStaticMarkup(createElement(SubmissionStatusList, { rows: [row({ status, submission: status === "late" ? S : null })], sub: archived ? 0 : 1, asg: archived ? 0 : 1, note: null, archived, personal, onOpenFile: () => {} }));
+      return d;
+    };
+    const team = el(false);
+    expect(team.querySelector("h3")?.textContent).toBe("제출 현황 1/1");
+    expect(team.textContent).toContain("지각 제출");
+    const p = el(true);
+    expect(p.querySelector("h3")?.textContent).toBe("완료 현황");
+    expect(p.textContent).toContain("늦게 완료");
+    expect(p.textContent).not.toContain("지각");
+    // 보관된 개인 목표: 0/0 요약 없이 소유자 한 줄 + "보관됨"
+    const a = el(true, true, "open");
+    expect(a.querySelector("h3")?.textContent).toBe("완료 현황");
+    expect(a.textContent).not.toContain("0/0");
+    expect(a.textContent).not.toContain("진행중");
+    expect(a.textContent).toContain("보관됨");
+    expect(a.querySelectorAll("li").length).toBe(1);
+  });
 });

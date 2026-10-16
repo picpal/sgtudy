@@ -4,14 +4,24 @@ import { useState, type Ref } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import type { FileMeta } from "@/lib/api/types";
-import { STATUS_LABEL } from "@/lib/types";
-import { stampKst, type StatusRow } from "../submission";
+import { ArchivedBadge } from "../bits";
+import { rowStatusText, stampKst, statusHeadOf, type StatusRow } from "../submission";
 import { SubmissionView } from "./SubmissionView";
 
-type Props = { rows: StatusRow[]; sub: number; asg: number; note: string | null; archived?: boolean; headingRef?: Ref<HTMLHeadingElement>; onOpenFile: (f: FileMeta) => void };
+type Props = {
+  rows: StatusRow[];
+  sub: number;
+  asg: number;
+  note: string | null;
+  archived?: boolean;
+  /** 개인 목표 — 머리에 개수 없이, 상태는 codeLabel 문구, 보관이면 소유자 한 줄 + "보관됨" */
+  personal?: boolean;
+  headingRef?: Ref<HTMLHeadingElement>;
+  onOpenFile: (f: FileMeta) => void;
+};
 
 /** 담당자별 제출 현황 (스펙 §2.4). 펼침은 task_get.submissions 에 있는 줄만 — 트리 people 로 제출물을 추측하지 않는다 */
-export function SubmissionStatusList({ rows, sub, asg, note, archived = false, headingRef, onOpenFile }: Props) {
+export function SubmissionStatusList({ rows, sub, asg, note, archived = false, personal = false, headingRef, onOpenFile }: Props) {
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) =>
     setOpen((p) => {
@@ -23,7 +33,7 @@ export function SubmissionStatusList({ rows, sub, asg, note, archived = false, h
   return (
     <section aria-labelledby="sub-status-title" className="flex flex-col gap-2">
       <h3 id="sub-status-title" ref={headingRef} tabIndex={-1} className="m-0 scroll-mt-20 text-[15px] font-bold text-ink outline-none">
-        제출 현황 {sub}/{asg}
+        {statusHeadOf(personal, sub, asg)}
       </h3>
       {note && <p className="m-0 text-[13px] text-muted">{note}</p>}
       {/* 보관 과제는 배정이 풀려 0명 — "담당자가 없어요" 는 틀린 안내 */}
@@ -34,6 +44,7 @@ export function SubmissionStatusList({ rows, sub, asg, note, archived = false, h
             // 내 줄은 위 카드에 있어 펼치지 않는다
             const canOpen = !!r.submission && !r.me;
             const isOpen = canOpen && open.has(r.userId);
+            const label = rowStatusText(r.status, personal, archived);
             const line = (
               <>
                 <Avatar name={r.name} size={30} tone={r.tone} id={r.userId} className="shrink-0" />
@@ -42,12 +53,16 @@ export function SubmissionStatusList({ rows, sub, asg, note, archived = false, h
                     {r.name}
                     {r.me ? " (나)" : ""}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-[13px] text-ink-2">
-                    <StatusIcon status={r.status} label={false} />
-                    {STATUS_LABEL[r.status]}
-                  </span>
+                  {label && (
+                    <span className="inline-flex items-center gap-1 text-[13px] text-ink-2">
+                      <StatusIcon status={r.status} label={false} />
+                      {label}
+                    </span>
+                  )}
+                  {personal && archived && <ArchivedBadge />}
                   {r.submission && <span className="text-[12px] text-muted">{stampKst(r.submission.firstSubmittedAt)}</span>}
-                  {r.submission?.isLate && <span className="rounded-[6px] bg-amber-soft px-[6px] py-[1px] text-[11px] font-bold text-amber-text">지각</span>}
+                  {/* 개인 목표는 상태 문구("늦게 완료")가 이미 말한다 */}
+                  {r.submission?.isLate && !personal && <span className="rounded-[6px] bg-amber-soft px-[6px] py-[1px] text-[11px] font-bold text-amber-text">지각</span>}
                   {r.released && <span className="rounded-[6px] bg-slate-soft px-[6px] py-[1px] text-[11px] font-bold text-ink-3">담당 제외</span>}
                 </span>
               </>

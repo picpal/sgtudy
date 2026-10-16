@@ -2,6 +2,7 @@ import type { ApiError } from "@/lib/api/errors";
 import type { Person, Submission, TaskDetail } from "@/lib/api/types";
 import type { TaskStatus } from "@/lib/types";
 import { dday, md, weekdayKo } from "@/lib/date";
+import { STATUS_CODE, codeLabel } from "./model";
 
 /* 과제 제출 순수 로직 (스펙 2026-10-16-task-submission-design §1.3·§2). React·Supabase 무관 */
 
@@ -70,13 +71,15 @@ export function addLink(raw: string, links: string[]): LinkAdd {
   return { ok: true, links: [...links, url] };
 }
 
+export const EMPTY_BLOCKER = "내용·링크·파일 중 하나는 있어야 해요";
+
 /** 주 버튼 비활성 이유 (null = 제출 가능) — 순서: 연결 → 업로드 중 → 실패 줄 → 본문 길이 → 비어 있음 */
 export function submitBlocker(d: { body: string; links: string[]; files: { status: string }[] }, online: boolean): string | null {
   if (!online) return "인터넷 연결을 확인해 주세요";
   if (d.files.some((f) => f.status === "uploading")) return "파일을 올리는 중이에요";
   if (d.files.some((f) => f.status === "error")) return "올리지 못한 파일을 빼거나 다시 올려 주세요";
   if (d.body.length > SUB_LIMITS.body) return `본문은 ${SUB_LIMITS.body.toLocaleString("en-US")}자까지예요`;
-  if (d.body.trim() === "" && d.links.length === 0 && d.files.length === 0) return "내용·링크·파일 중 하나는 있어야 해요";
+  if (d.body.trim() === "" && d.links.length === 0 && d.files.length === 0) return EMPTY_BLOCKER;
   return null;
 }
 
@@ -111,14 +114,52 @@ export const emptyDescText = (personal: boolean) => (personal ? "설명이 아�
 export const submitLabel = (mine: Submission | null, today: string, end: string) =>
   mine ? "수정 저장" : today > end ? "지각 제출하기" : "제출하기";
 
-/** 카드 머리 배지 */
+/** 개인 목표 상세인가 — 제출 카드 문구를 완료 문구로 (스펙 §6) */
+export const isPersonalDetail = (d: TaskDetail): boolean => d.node.task?.type === "personal";
+
+/** 카드 머리 배지 — 개인 목표는 model.codeLabel 과 같은 문구(기한내 완료 · 늦게 완료 · 기한 지남) */
 export function myBadgeOf(d: TaskDetail): { status: TaskStatus; text: string } {
+  const personal = isPersonalDetail(d);
   const mine = d.mySubmission;
-  if (mine) return mine.isLate ? { status: "late", text: "지각 제출" } : { status: "done", text: "기한내 제출" };
+  const label = (status: TaskStatus) => ({ status, text: codeLabel({ personal }, STATUS_CODE[status]) });
+  if (mine) return label(mine.isLate ? "late" : "done");
   const { startDate, endDate } = d.node;
   if (d.today < startDate) return { status: "planned", text: "예정" };
-  if (d.today > endDate) return { status: "missed", text: "미제출 · 마감 지남" };
-  return { status: "open", text: `제출 전 · ${dday(d.today, endDate)}` };
+  if (d.today > endDate) return personal ? label("missed") : { status: "missed", text: "미제출 · 마감 지남" };
+  return { status: "open", text: `${personal ? "완료 전" : "제출 전"} · ${dday(d.today, endDate)}` };
+}
+
+/** "모든 담당자가 제출했어요" 배너 — 1인 개인 목표에는 뜻이 없다 */
+export const showAllSubmitted = (d: TaskDetail): boolean => d.allSubmitted && !isPersonalDetail(d);
+
+/** 저장된 내 제출의 지각 안내 */
+export const lateNote = (personal: boolean): string => (personal ? "마감 뒤에 완료해 늦게 완료로 기록됐어요" : "마감 뒤에 처음 제출해 지각으로 기록됐어요");
+
+/** 현황 머리 — 팀 "제출 현황 n/m", 개인은 소유자 한 줄뿐이라 개수 없이 (보관이면 서버가 0/0 을 준다 — 스펙 §5.3) */
+export const statusHeadOf = (personal: boolean, sub: number, asg: number): string => (personal ? "완료 현황" : `제출 현황 ${sub}/${asg}`);
+
+/** 현황 줄 상태 문구 — 개인은 codeLabel. 보관된 개인 목표는 완료했을 때만(그 밖은 "보관됨" 표시가 대신한다) */
+export function rowStatusText(status: TaskStatus, personal: boolean, archived: boolean): string | null {
+  if (personal && archived && status !== "done" && status !== "late") return null;
+  return codeLabel({ personal }, STATUS_CODE[status]);
+}
+
+/** 내 카드가 없을 때(담당 아님) 안내 */
+export const notAssignedText = (personal: boolean): string => (personal ? "팀원의 개인 목표예요" : "담당 과제가 아니에요 · 제출 현황만 볼 수 있어요");
+
+/**
+ * 작성 화면 왼쪽 안내 + 경고색 여부 (Ruling: 빈 상태는 처음엔 중립색, 입력했다 비웠을 때만 경고색 — 팀·개인 공통).
+ * 개인 목표 첫 작성은 "완료로 표시"(내용 없는 완료)를 함께 알려 모순을 없앤다.
+ */
+export function composerHint(o: { blocker: string | null; editing: boolean; late: boolean; personal: boolean; touched: boolean }): { text: string | null; warn: boolean } {
+  if (o.blocker === EMPTY_BLOCKER) {
+    const text = o.personal && !o.editing ? `${EMPTY_BLOCKER} · 내용 없이 완료하려면 위의 '완료로 표시'를 쓰세요` : EMPTY_BLOCKER;
+    return { text, warn: o.touched };
+  }
+  if (o.blocker) return { text: o.blocker, warn: true };
+  if (o.editing) return { text: o.personal ? "마감 뒤에 고쳐도 늦게 완료 여부는 처음 완료 시각으로 정해져요" : "마감 뒤에 고쳐도 지각 여부는 처음 제출 시각으로 정해져요", warn: false };
+  if (o.late) return { text: o.personal ? "마감이 지나 늦게 완료로 기록돼요" : "마감이 지나 지각으로 기록돼요", warn: false };
+  return { text: null, warn: false };
 }
 
 const KST = new Intl.DateTimeFormat("en-CA", {

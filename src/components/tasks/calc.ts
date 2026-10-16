@@ -2,7 +2,7 @@
 import { addDays, parseISO } from "@/lib/date";
 import type { MeTaskItem, MeTaskRound, MeTaskStudy, MeTasks } from "@/lib/api/types";
 import type { TaskStatus } from "@/lib/types";
-import { CODE_LABEL, STATUS_CODE } from "@/components/my-study/model";
+import { STATUS_CODE, codeLabel, isDoneCode } from "@/components/my-study/model";
 
 export type TasksFilter = {
   scope: "current" | "all";
@@ -38,7 +38,7 @@ export function filterQuery(f: TasksFilter): Record<string, string> {
   return q;
 }
 
-export const isDone = (st: TaskStatus) => st === "done" || st === "late";
+export const isDone = (st: TaskStatus): boolean => isDoneCode(STATUS_CODE[st]);
 
 const isLive = (s: MeTaskStudy) => s.status === "recruit" || s.status === "active";
 
@@ -141,14 +141,8 @@ export function summary(m: MeTasks, items: MeTaskItem[]): { left: number; dueTod
   };
 }
 
-/** 개인 목표는 done/late 를 "제출" 대신 "완료"로 */
-export const statusText = (it: MeTaskItem): string => {
-  if (it.type === "personal") {
-    if (it.st === "done") return "기한내 완료";
-    if (it.st === "late") return "늦게 완료";
-  }
-  return CODE_LABEL[STATUS_CODE[it.st]];
-};
+/** 상태 문구 — model.codeLabel 단일 출처 (개인: 기한내 완료 · 늦게 완료 · 기한 지남) */
+export const statusText = (it: MeTaskItem): string => codeLabel({ personal: it.type === "personal" }, STATUS_CODE[it.st]);
 
 /* ---------- 화면 판단 (컴포넌트는 호출만) ---------- */
 

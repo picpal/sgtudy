@@ -159,6 +159,9 @@ describe("summary / statusText", () => {
     expect(statusText(item({ id: "a", type: "personal", st: "late" }))).toBe("늦게 완료");
     expect(statusText(item({ id: "a", st: "late" }))).toBe("지각 제출");
     expect(statusText(item({ id: "a", st: "open" }))).toBe("진행중");
+    // 마감 지난 미완료 개인 = "기한 지남" (Ruling — model.codeLabel 과 같은 출처), 팀은 그대로 "미제출"
+    expect(statusText(item({ id: "a", type: "personal", st: "missed" }))).toBe("기한 지남");
+    expect(statusText(item({ id: "a", st: "missed" }))).toBe("미제출");
   });
 });
 

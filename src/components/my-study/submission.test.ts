@@ -3,6 +3,7 @@ import type { Submission, TaskDetail } from "@/lib/api/types";
 import {
   SUB_LIMITS, addLink, checkFile, extOf, focusTargetOf, metaLine, mimeOf, myBadgeOf, myCardStateOf, emptyDescText, objectKey,
   sizeText, stampKst, statusRows, submitBlocker, submitErrorAction, submitLabel,
+  composerHint, lateNote, notAssignedText, rowStatusText, showAllSubmitted, statusHeadOf,
 } from "./submission";
 
 const sub = (o: Partial<Submission> = {}): Submission =>
@@ -110,6 +111,15 @@ describe("labels", () => {
     expect(myBadgeOf(detail({ mySubmission: sub() }))).toEqual({ status: "done", text: "기한내 제출" });
     expect(myBadgeOf(detail({}, { startDate: "2026-10-13" }))).toEqual({ status: "planned", text: "예정" });
   });
+  it("myBadgeOf — 개인 목표는 완료 문구(codeLabel 과 같은 출처)", () => {
+    const pd = (o: Partial<TaskDetail> = {}, node: Partial<TaskDetail["node"]> = {}) =>
+      detail(o, { task: { type: "personal", people: [P("u1", "철수", "open")], assigned: 1, submitted: 0, state: "progress" }, ...node });
+    expect(myBadgeOf(pd({ mySubmission: sub() }))).toEqual({ status: "done", text: "기한내 완료" });
+    expect(myBadgeOf(pd({ mySubmission: sub({ isLate: true }) }))).toEqual({ status: "late", text: "늦게 완료" });
+    expect(myBadgeOf(pd({ today: "2026-10-15" }))).toEqual({ status: "missed", text: "기한 지남" });
+    expect(myBadgeOf(pd())).toEqual({ status: "open", text: "완료 전 · D-2" });
+    expect(myBadgeOf(pd({}, { startDate: "2026-10-13" }))).toEqual({ status: "planned", text: "예정" });
+  });
   it("stampKst / metaLine / sizeText", () => {
     expect(stampKst("2026-10-12T03:00:00.000Z")).toBe("10.12(월) 12:00");
     expect(stampKst("2026-10-03T15:00:30.000Z")).toBe("10.04(일) 00:00");
@@ -175,4 +185,52 @@ describe("myCardStateOf — 개인 목표 시작일 (0017: 서버 submission_ups
     expect(myCardStateOf(detail({ mySubmission: sub() }, personal), "active")).toEqual({ kind: "submitted" }));
   it("team task before start stays blocked", () =>
     expect(myCardStateOf(detail({}, { startDate: "2026-10-15" }), "active")).toEqual({ kind: "blocked", note: "10.15(목)부터 제출할 수 있어요" }));
+});
+
+describe("개인 목표 제출 카드 문구 (최종 리뷰 I2) — 팀 과제는 그대로", () => {
+  it("전원 제출 배너는 팀 과제만", () => {
+    expect(showAllSubmitted(detail({ allSubmitted: true }))).toBe(true);
+    expect(showAllSubmitted(detail({ allSubmitted: true }, { task: { type: "personal", people: [P("u1", "철수", "done")], assigned: 1, submitted: 1, state: "complete" } }))).toBe(false);
+    expect(showAllSubmitted(detail({ allSubmitted: false }))).toBe(false);
+  });
+  it("지각 안내", () => {
+    expect(lateNote(false)).toBe("마감 뒤에 처음 제출해 지각으로 기록됐어요");
+    expect(lateNote(true)).toBe("마감 뒤에 완료해 늦게 완료로 기록됐어요");
+  });
+  it("현황 머리 — 팀 n/m, 개인은 개수 없이", () => {
+    expect(statusHeadOf(false, 1, 2)).toBe("제출 현황 1/2");
+    expect(statusHeadOf(true, 0, 0)).toBe("완료 현황");
+  });
+  it("현황 줄 상태 문구 — 개인은 codeLabel, 보관된 개인은 완료일 때만", () => {
+    expect(rowStatusText("late", false, false)).toBe("지각 제출");
+    expect(rowStatusText("missed", false, false)).toBe("미제출");
+    expect(rowStatusText("late", true, false)).toBe("늦게 완료");
+    expect(rowStatusText("missed", true, false)).toBe("기한 지남");
+    expect(rowStatusText("open", true, true)).toBeNull();
+    expect(rowStatusText("done", true, true)).toBe("기한내 완료");
+    expect(rowStatusText("open", false, true)).toBe("진행중");
+  });
+  it("담당 아님 안내", () => {
+    expect(notAssignedText(false)).toBe("담당 과제가 아니에요 · 제출 현황만 볼 수 있어요");
+    expect(notAssignedText(true)).toBe("팀원의 개인 목표예요");
+  });
+});
+
+describe("composerHint — 빈 상태는 처음엔 중립색 (Ruling)", () => {
+  const EMPTY = "내용·링크·파일 중 하나는 있어야 해요";
+  const base = { editing: false, late: false, personal: false, touched: false };
+  it("처음 빈 작성 화면: 안내만, 경고색 아님", () => expect(composerHint({ ...base, blocker: EMPTY })).toEqual({ text: EMPTY, warn: false }));
+  it("입력을 비웠으면(touched) 경고색", () => expect(composerHint({ ...base, blocker: EMPTY, touched: true })).toEqual({ text: EMPTY, warn: true }));
+  it("다른 비활성 이유는 늘 경고색", () => expect(composerHint({ ...base, blocker: "파일을 올리는 중이에요" })).toEqual({ text: "파일을 올리는 중이에요", warn: true }));
+  it("개인 목표: '완료로 표시' 안내를 덧붙인다(처음 작성일 때)", () => {
+    expect(composerHint({ ...base, personal: true, blocker: EMPTY })).toEqual({ text: `${EMPTY} · 내용 없이 완료하려면 위의 '완료로 표시'를 쓰세요`, warn: false });
+    expect(composerHint({ ...base, personal: true, editing: true, blocker: EMPTY, touched: true })).toEqual({ text: EMPTY, warn: true });
+  });
+  it("막힘 없음: 수정·지각 안내 — 팀 문구 그대로, 개인은 완료 문구", () => {
+    expect(composerHint({ ...base, blocker: null })).toEqual({ text: null, warn: false });
+    expect(composerHint({ ...base, blocker: null, late: true })).toEqual({ text: "마감이 지나 지각으로 기록돼요", warn: false });
+    expect(composerHint({ ...base, blocker: null, editing: true })).toEqual({ text: "마감 뒤에 고쳐도 지각 여부는 처음 제출 시각으로 정해져요", warn: false });
+    expect(composerHint({ ...base, personal: true, blocker: null, late: true })).toEqual({ text: "마감이 지나 늦게 완료로 기록돼요", warn: false });
+    expect(composerHint({ ...base, personal: true, blocker: null, editing: true })).toEqual({ text: "마감 뒤에 고쳐도 늦게 완료 여부는 처음 완료 시각으로 정해져요", warn: false });
+  });
 });

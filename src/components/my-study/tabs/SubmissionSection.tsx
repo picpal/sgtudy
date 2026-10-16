@@ -6,7 +6,7 @@ import { fileUrl } from "@/lib/api/submission";
 import type { FileMeta, Submission } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { CODE_STATUS, type LeafNode } from "../model";
-import { focusTargetOf, myBadgeOf, myCardStateOf, statusRows, type RoomStatus, type StatusRow } from "../submission";
+import { focusTargetOf, myBadgeOf, myCardStateOf, notAssignedText, showAllSubmitted, statusRows, type RoomStatus, type StatusRow } from "../submission";
 import { useTaskDetail } from "../useTaskDetail";
 import { MySubmissionCard } from "./MySubmissionCard";
 import { SubmissionStatusList } from "./SubmissionStatusList";
@@ -53,13 +53,16 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
   const rows: StatusRow[] = detail
     ? statusRows(detail, meId)
     : n.people.map((p) => ({ userId: p.userId, name: p.name, tone: p.tone, status: CODE_STATUS[p.c], me: p.userId === meId, released: false, submission: null }));
+  const personal = n.personal;
   const task = detail?.node.task;
   const sub = task ? task.submitted : n.sub;
   const asg = task ? task.assigned : n.asg;
   const note = viewerPending
     ? "참가가 승인되면 다른 사람의 제출물을 볼 수 있어요"
     : n.archived && !isLeader
-      ? "보관된 과제예요 · 제출물은 그룹장과 작성자만 볼 수 있어요"
+      ? personal
+        ? "보관된 목표예요 · 완료 내용은 그룹장과 작성자만 볼 수 있어요"
+        : "보관된 과제예요 · 제출물은 그룹장과 작성자만 볼 수 있어요"
       : null;
 
   // 서명 URL 은 첨부(download)라 새 탭을 열면 빈 탭만 남는다 — 지금 페이지에서 내려받는다
@@ -82,7 +85,7 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
 
   return (
     <div className="flex flex-col gap-4">
-      {detail?.allSubmitted && (
+      {detail && showAllSubmitted(detail) && (
         <div role="status" className="flex items-center gap-2 rounded-[12px] border border-[#BFE6D4] bg-[#E3F5EC] px-[14px] py-3 text-[13px] font-semibold text-[#1A7F55]">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M5 12.5l4.5 4.5L19 7.5" />
@@ -112,6 +115,7 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
           userId={meId}
           state={card}
           badge={myBadgeOf(detail)}
+          personal={personal}
           onSaved={saved}
           onRefetch={refetch}
           onOpenFile={openFile}
@@ -120,8 +124,8 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
           onUploadingChange={onUploadingChange}
         />
       )}
-      {detail && card?.kind === "hidden" && !quietNotAssigned && <p className="m-0 text-[13px] text-muted">담당 과제가 아니에요 · 제출 현황만 볼 수 있어요</p>}
-      <SubmissionStatusList rows={rows} sub={sub} asg={asg} note={note} archived={n.archived} headingRef={statusRef} onOpenFile={openFile} />
+      {detail && card?.kind === "hidden" && !quietNotAssigned && <p className="m-0 text-[13px] text-muted">{notAssignedText(personal)}</p>}
+      <SubmissionStatusList rows={rows} sub={sub} asg={asg} note={note} archived={n.archived} personal={personal} headingRef={statusRef} onOpenFile={openFile} />
     </div>
   );
 }

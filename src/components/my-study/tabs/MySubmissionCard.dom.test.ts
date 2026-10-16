@@ -26,4 +26,12 @@ describe("MySubmissionCardView", () => {
     expect(d.textContent).toContain("10.15(목)부터");
     expect(d.querySelector("textarea, [contenteditable]")).toBeNull();
   });
+  it("지각 안내 — 팀은 지각, 개인 목표는 늦게 완료", () => {
+    const late = { ...sub, isLate: true };
+    const team = html({ state: { kind: "submitted" }, badge: { status: "late", text: "지각 제출" }, mine: late, composer: null, onEdit: () => {}, onOpenFile: () => {} });
+    expect(team.textContent).toContain("마감 뒤에 처음 제출해 지각으로 기록됐어요");
+    const mine = html({ state: { kind: "submitted" }, badge: { status: "late", text: "늦게 완료" }, mine: late, composer: null, personal: true, onEdit: () => {}, onOpenFile: () => {} });
+    expect(mine.textContent).toContain("마감 뒤에 완료해 늦게 완료로 기록됐어요");
+    expect(mine.textContent).not.toContain("지각");
+  });
 });
