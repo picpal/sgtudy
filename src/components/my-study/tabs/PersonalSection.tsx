@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { md } from "@/lib/date";
 import { TypeBadge } from "../bits";
-import { isPersonal, type LeafNode, type ParentNode } from "../model";
-import { completeLabel, groupOthers, isDone, ownerCode, personalActions, statusColor } from "../personal";
+import { codeLabel, isPersonal, type LeafNode, type ParentNode } from "../model";
+import { groupOthers, isDone, ownerCode, personalActions, sectionCounts, statusColor } from "../personal";
 import type { RoomStatus } from "../submission";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { AddRow, QuickAdd } from "./QuickAdd";
@@ -61,7 +61,7 @@ function GoalBody({ n, onOpen, padLeft }: { n: LeafNode; onOpen: (id: string) =>
         {md(n.s)} – {md(n.e)}
       </span>
       <span className="shrink-0 text-[12px] font-semibold text-ink-2" style={{ color: statusColor(c) }}>
-        {completeLabel(c)}
+        {codeLabel(n, c)}
       </span>
       {n.archived && <span className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">보관됨</span>}
     </button>
@@ -81,11 +81,13 @@ const Disclosure = ({ open }: { open: boolean }) => (
 export function PersonalSection({ round, meId, isLeader, roomStatus, personal, api, onOpen }: Props) {
   const mine = round.kids.filter((k): k is LeafNode => isPersonal(k) && meId !== null && k.ownerId === meId);
   const others = groupOthers(round, meId, isLeader);
-  const othersCount = others.reduce((a, g) => a + g.items.length, 0);
+  // 머리 개수는 보관 제외(personalStats 와 같은 기준) — 보관된 줄은 흐리게 보여도 세지 않는다
+  const counts = sectionCounts(round, meId, isLeader);
+  const othersRows = others.reduce((a, g) => a + g.items.length, 0);
   const eligible = !!personal?.canAdd;
   const canAdd = eligible && !round.archived && !round.temp;
   const limit = personal?.perRound ?? 20;
-  const atLimit = mine.filter((k) => !k.archived).length >= limit;
+  const atLimit = counts.mine.total >= limit;
   const [busy, setBusy] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [othersOpen, setOthersOpen] = useState(false);
@@ -108,15 +110,14 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
   };
 
   const showMine = mine.length > 0 || canAdd;
-  if (!showMine && othersCount === 0) return null;
-  const doneMine = mine.filter((k) => isDone(ownerCode(k))).length;
+  if (!showMine && othersRows === 0) return null;
 
   return (
     <>
       {showMine && (
         <section aria-labelledby={`mine-${round.id}`} className="flex flex-col gap-2">
           <h3 id={`mine-${round.id}`} className="m-0 text-[13px] font-semibold text-ink-3">
-            내 개인 목표 {mine.length}개{mine.length > 0 ? ` · ${doneMine}개 완료` : ""}
+            내 개인 목표 {counts.mine.total}개{counts.mine.total > 0 ? ` · ${counts.mine.done}개 완료` : ""}
           </h3>
           <ul className="m-0 flex list-none flex-col overflow-hidden rounded-[12px] border border-line p-0">
             {mine.map((k) => {
@@ -145,8 +146,8 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
         </section>
       )}
 
-      {othersCount > 0 && (
-        <section aria-label={`팀원 개인 목표 ${othersCount}개`} className="flex flex-col gap-2">
+      {othersRows > 0 && (
+        <section aria-label={`팀원 개인 목표 ${counts.others}개`} className="flex flex-col gap-2">
           <button
             type="button"
             aria-expanded={othersOpen}
@@ -155,7 +156,7 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
             className="inline-flex min-h-11 items-center gap-[6px] self-start rounded-[10px] pr-2 text-[13px] font-semibold text-ink-3"
           >
             <Disclosure open={othersOpen} />
-            팀원 개인 목표 {othersCount}개
+            팀원 개인 목표 {counts.others}개
           </button>
           {othersOpen && (
             <ul id={`others-${round.id}`} className="m-0 flex list-none flex-col overflow-hidden rounded-[12px] border border-line p-0">
@@ -172,7 +173,7 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
                       <Disclosure open={open} />
                       <Avatar name={g.name} size={20} tone={g.tone} />
                       <span className="min-w-0 [overflow-wrap:anywhere]">
-                        {g.name} ({g.items.length})
+                        {g.name} ({g.count})
                       </span>
                       {g.done > 0 && <span className="shrink-0 text-[12px] text-muted">· {g.done}개 완료</span>}
                     </button>

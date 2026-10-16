@@ -4,7 +4,8 @@
 import type { PersonalPatch } from "@/lib/api/personal";
 import type { Tone } from "@/lib/palette";
 import { md } from "@/lib/date";
-import { CODE_LABEL, isPersonal, roundStatus, type Code, type LeafNode, type ParentNode } from "./model";
+import { codeLabel, isPersonal, roundStatus, type Code, type LeafNode, type ParentNode } from "./model";
+import { movedPeriod } from "./rounds";
 import type { RoomStatus } from "./submission";
 
 export type PersonalActions = {
@@ -40,14 +41,6 @@ export function personalActions(n: LeafNode, meId: string | null, isLeader: bool
   return { edit: false, complete: false, archive: canArchive, remove: !hasSub, ...(hasSub ? { removeOff: "완료 기록이 있어 보관만 할 수 있어요" } : {}), note: LEADER_NOTE };
 }
 
-/** 개인 목표 상태 문구 — 완료는 "기한내 완료"/"늦게 완료", 마감 지난 미완료는 "기한 지남"(팀 "미제출" 아님 — 나중에 model.ts codeLabel 로 합친다) */
-export function completeLabel(c: Code): string {
-  if (c === "D") return "기한내 완료";
-  if (c === "L") return "늦게 완료";
-  if (c === "M") return "기한 지남";
-  return CODE_LABEL[c];
-}
-
 export const isDone = (c: Code) => c === "D" || c === "L";
 
 /** 소유자의 코드 — people = [소유자] (서버 task_node_json) */
@@ -56,7 +49,7 @@ export const ownerCode = (n: LeafNode): Code => (n.people.find((p) => p.userId =
 /** 상세 기간 줄 끝의 상태 — 완료·미완료는 코드로, 그 밖에는 기간 상태(시작 전 / 진행 중 · 마감 D-n) */
 export function statusText(n: LeafNode, today: string): string {
   const c = ownerCode(n);
-  return isDone(c) || c === "M" ? completeLabel(c) : roundStatus(n, today);
+  return isDone(c) || c === "M" ? codeLabel(n, c) : roundStatus(n, today);
 }
 
 /** 상태 글자색 — 완료 초록, 미완료 호박 */
@@ -87,13 +80,29 @@ export function movePreview(label: string, period: { s: string; e: string } | nu
   return period ? `${label}로 옮기면 기간이 ${md(period.s)} – ${md(period.e)} 로 바뀌어요` : `${label}로 옮겨도 기간은 그대로예요`;
 }
 
+/**
+ * 편집 폼에서 회차를 골랐을 때 새 값·미리보기. 같은 회차면 null.
+ * 원래 회차로 되돌아오면 원래 기간을 복원한다(중간 회차 기준 movedPeriod 는 원래 날짜를 못 돌려줄 수 있다).
+ * 그 밖에는 팀 과제 이동과 같은 규칙(movedPeriod, 고르기 전 회차 기준)으로 기간을 제안한다.
+ */
+export function pickRound(n: LeafNode, d: PersonalDraft, roots: ParentNode[], id: string): { draft: PersonalDraft; note: string } | null {
+  if (id === d.roundId) return null;
+  const to = roots.find((r) => r.id === id);
+  if (!to) return null;
+  if (id === n.roundId) return { draft: { ...d, roundId: id, s: n.s, e: n.e }, note: "" };
+  const from = roots.find((r) => r.id === d.roundId);
+  const p = from ? movedPeriod({ s: d.s, e: d.e, subAll: 0 }, from, to) : null;
+  return { draft: { ...d, roundId: id, ...(p ? { s: p.s, e: p.e } : {}) }, note: movePreview(to.label ?? to.title, p, false) };
+}
+
 /** 회차 기간 밖 경고 (서버 PERIOD_OUTSIDE_PARENT 와 같은 판정) — 소유자 상세·폼 위 */
 export function roundWarning(n: { s: string; e: string }, round: { s: string; e: string } | null): string | null {
   if (!round || (n.s >= round.s && n.e <= round.e)) return null;
   return `회차 기간(${md(round.s)} – ${md(round.e)})을 벗어났어요`;
 }
 
-export type OwnerGroup = { ownerId: string; name: string; tone: Tone; items: LeafNode[]; done: number };
+/** items = 보이는 줄(그룹장에게는 보관 포함), count·done = 보관 제외 (personalStats 와 같은 기준) */
+export type OwnerGroup = { ownerId: string; name: string; tone: Tone; items: LeafNode[]; count: number; done: number };
 
 /** 회차 상세 "팀원 개인 목표" — 남의 것만, 소유자별(멤버 순서 → 서버 순서). 보관된 것은 그룹장에게만 */
 export function groupOthers(round: ParentNode, meId: string | null, isLeader: boolean): OwnerGroup[] {
@@ -103,13 +112,26 @@ export function groupOthers(round: ParentNode, meId: string | null, isLeader: bo
     const owner = k.people.find((p) => p.userId === k.ownerId) ?? k.people[0];
     let g = by.get(k.ownerId);
     if (!g) {
-      g = { ownerId: k.ownerId, name: owner?.name ?? "", tone: owner?.tone ?? "slate", items: [], done: 0, rank: k.ownerRank };
+      g = { ownerId: k.ownerId, name: owner?.name ?? "", tone: owner?.tone ?? "slate", items: [], count: 0, done: 0, rank: k.ownerRank };
       by.set(k.ownerId, g);
     }
     g.items.push(k);
+    if (k.archived) return;
+    g.count += 1;
     if (isDone(ownerCode(k))) g.done += 1;
   });
   return [...by.values()].sort((a, b) => a.rank - b.rank).map(({ rank: _rank, ...g }) => g); // eslint-disable-line @typescript-eslint/no-unused-vars
+}
+
+/** 회차 상세 머리 개수 — 보관 제외. mine = 내 것 n·완료 d, others = 팀원 것 n (보관된 줄은 보여도 세지 않는다) */
+export function sectionCounts(round: ParentNode, meId: string | null, isLeader: boolean): { mine: { total: number; done: number }; others: number } {
+  const mine = { total: 0, done: 0 };
+  round.kids.forEach((k) => {
+    if (!isPersonal(k) || k.archived || meId === null || k.ownerId !== meId) return;
+    mine.total += 1;
+    if (isDone(ownerCode(k))) mine.done += 1;
+  });
+  return { mine, others: groupOthers(round, meId, isLeader).reduce((a, g) => a + g.count, 0) };
 }
 
 /** 서버 오류 코드 → 스펙 §6 문구 (서버 문구보다 자세한 것만) */

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_OVERRIDES, buildTree, type LeafNode, type ParentNode } from "./model";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { completeLabel, groupOthers, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusText } from "./personal";
+import { groupOthers, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusText } from "./personal";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const leaf = (id: string) => tree.nodes.find((n) => n.id === id) as LeafNode;
@@ -59,16 +59,7 @@ describe("personalActions", () => {
   });
 });
 
-describe("completeLabel / statusText", () => {
-  it("personal status wording", () => {
-    expect(completeLabel("D")).toBe("기한내 완료");
-    expect(completeLabel("L")).toBe("늦게 완료");
-    // 마감 지난 미완료 — 팀 문구 "미제출" 대신
-    expect(completeLabel("M")).toBe("기한 지남");
-    expect(completeLabel("O")).toBe("진행중");
-    expect(completeLabel("P")).toBe("예정");
-  });
-
+describe("ownerCode / statusText (문구 출처 = model.codeLabel)", () => {
   it("ownerCode reads the owner's code", () => {
     expect(ownerCode(mine)).toBe("P");
     expect(ownerCode(jieun)).toBe("D");
@@ -117,9 +108,34 @@ describe("groupOthers", () => {
     const g = groupOthers(round("3"), CHULSU, false);
     expect(g.map((x) => [x.ownerId, x.name, x.items.map((i) => i.id), x.done])).toEqual([[JIEUN, "지은", ["33"], 1]]);
   });
-  it("archived others only for the leader", () => {
+  it("archived others only for the leader — shown but not counted", () => {
     const r = { ...round("3"), kids: round("3").kids.map((k) => (k.id === "33" ? { ...k, archived: true } : k)) } as ParentNode;
     expect(groupOthers(r, CHULSU, false)).toEqual([]);
-    expect(groupOthers(r, CHULSU, true).map((x) => x.items.length)).toEqual([1]);
+    expect(groupOthers(r, CHULSU, true).map((x) => [x.items.length, x.count, x.done])).toEqual([[1, 0, 0]]);
   });
+});
+
+describe("sectionCounts — 보관 제외 (personalStats 와 같은 기준)", () => {
+  const withArchived = (ids: string[]) => ({ ...round("3"), kids: round("3").kids.map((k) => (ids.includes(k.id) ? { ...k, archived: true } : k)) }) as ParentNode;
+  it("counts mine and others", () => {
+    expect(sectionCounts(round("3"), CHULSU, false)).toEqual({ mine: { total: 1, done: 0 }, others: 1 });
+    expect(sectionCounts(round("3"), JIEUN, false)).toEqual({ mine: { total: 1, done: 1 }, others: 1 });
+  });
+  it("archived goals drop out of the counts (leader still sees the rows)", () => {
+    expect(sectionCounts(withArchived(["32"]), CHULSU, false)).toEqual({ mine: { total: 0, done: 0 }, others: 1 });
+    expect(sectionCounts(withArchived(["33"]), CHULSU, true)).toEqual({ mine: { total: 1, done: 0 }, others: 0 });
+    expect(sectionCounts(withArchived(["33"]), JIEUN, false).mine).toEqual({ total: 0, done: 0 });
+  });
+});
+
+describe("pickRound — 편집 폼 회차 선택", () => {
+  const base = { title: mine.title, desc: mine.desc, s: mine.s, e: mine.e, roundId: mine.roundId };
+  it("moving suggests the new round's period and a preview", () => {
+    expect(pickRound(mine, base, tree.roots, "4")).toEqual({ draft: { ...base, roundId: "4", s: "2026-10-22", e: "2026-10-28" }, note: "4주차로 옮기면 기간이 10.22 – 10.28 로 바뀌어요" });
+  });
+  it("going back to the original round restores the original dates, no preview", () => {
+    const moved = { ...base, roundId: "5", s: "2026-10-29", e: "2026-11-04" };
+    expect(pickRound(mine, moved, tree.roots, "3")).toEqual({ draft: { ...moved, roundId: "3", s: mine.s, e: mine.e }, note: "" });
+  });
+  it("same round → null", () => expect(pickRound(mine, base, tree.roots, "3")).toBeNull());
 });

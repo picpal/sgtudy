@@ -133,8 +133,16 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   const [unsaved, setUnsaved] = useState<(() => void) | null>(null);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
-  // 체크로 완료/취소하면 제출 카드(task_get)를 새로 받는다 — LeafBody 를 다시 마운트
+  // 소유자 코드가 체크·토스트 "되돌리기" 등 제출 카드 밖에서 바뀌면 제출 카드(task_get)를 새로 받는다 — LeafBody 를 다시 마운트.
+  // 카드에서 제출해 바뀐 것(onSubmitted → refresh)은 카드가 이미 최신이라 다시 마운트하지 않는다
   const [subTick, setSubTick] = useState(0);
+  const [seenCode, setSeenCode] = useState(code);
+  const [cardSaved, setCardSaved] = useState(false);
+  if (code !== seenCode) {
+    setSeenCode(code);
+    if (cardSaved) setCardSaved(false);
+    else setSubTick((t) => t + 1);
+  }
   const heading = useRef<HTMLHeadingElement>(null);
   // 진입 포커스가 있으면 제목 포커스는 건너뛴다 — 처음 열릴 때 한 번만 본다
   const focusAtOpen = useRef(focus);
@@ -173,9 +181,8 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   const complete = async () => {
     if (!pn || busy) return;
     setBusy(true);
-    const ok = await api.completePersonal(pn.id, !done);
+    await api.completePersonal(pn.id, !done);
     setBusy(false);
-    if (ok) setSubTick((t) => t + 1);
   };
   const archive = () => {
     if (pn) void api.archivePersonal(pn.id, !pn.archived);
@@ -189,7 +196,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   const warn = pn && isOwner ? roundWarning(pn, round) : null;
   const owner = pn && !isOwner ? (pn.people.find((p) => p.userId === pn.ownerId) ?? pn.people[0]) : null;
   return (
-    <section aria-labelledby="detail-title" onKeyDown={onKey} className="flex flex-col">
+    <section aria-labelledby={pn && editing ? `pf-${pn.id}` : "detail-title"} onKeyDown={onKey} className="flex flex-col">
       <div className="sticky top-0 z-[2] -mx-1 flex flex-wrap items-center gap-2 border-b border-line-2 bg-surface px-1 py-3">
         <button type="button" onClick={() => guard(onBack)} className="inline-flex h-11 shrink-0 items-center gap-[6px] rounded-[22px] border border-line-3 bg-surface pl-3 pr-4 text-[14px] font-semibold text-ink">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -346,7 +353,10 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
               roomStatus={roomStatus}
               focus={focus}
               onFocused={onFocused}
-              onSubmitted={onSubmitted}
+              onSubmitted={() => {
+                if (pn && !done) setCardSaved(true); // 처음 제출이면 코드가 바뀐다 — 그때만 다시 마운트를 건너뛴다
+                onSubmitted();
+              }}
               toast={toast}
               viewerPending={viewerPending}
               onUploadingChange={setUploading}

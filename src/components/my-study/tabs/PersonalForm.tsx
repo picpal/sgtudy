@@ -5,8 +5,8 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { mmdd } from "@/lib/api/format";
 import { TypeBadge } from "../bits";
 import type { LeafNode, ParentNode } from "../model";
-import { draftOf, movePreview, personalPatch, roundWarning, type PersonalDraft } from "../personal";
-import { movedPeriod, roundOptions } from "../rounds";
+import { draftOf, personalPatch, pickRound, roundWarning, type PersonalDraft } from "../personal";
+import { roundOptions } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 
 type Props = {
@@ -58,13 +58,17 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange }: P
   }, [dirty]);
 
   // 회차를 고르면 팀 과제 이동과 같은 규칙으로 기간을 제안해 날짜 칸에 채운다 — 사용자가 다시 고칠 수 있다
-  const pickRound = (id: string) => {
-    const from = roots.find((r) => r.id === d.roundId);
-    const to = roots.find((r) => r.id === id);
-    if (!to || id === d.roundId) return;
-    const p = from ? movedPeriod({ s: d.s, e: d.e, subAll: 0 }, from, to) : null;
-    setD((x) => ({ ...x, roundId: id, ...(p ? { s: p.s, e: p.e } : {}) }));
-    setNote(movePreview(to.label ?? to.title, p, id === n.roundId));
+  const choose = (id: string) => {
+    const r = pickRound(n, d, roots, id);
+    if (!r) return;
+    setD(r.draft);
+    setNote(r.note);
+  };
+  // 날짜를 손으로 고치면 회차 이동 미리보기는 더 이상 맞지 않는다 — 지운다
+  const setDate = (k: "s" | "e", v: string) => {
+    if (!v) return;
+    setD((x) => ({ ...x, [k]: v }));
+    setNote("");
   };
 
   const save = async () => {
@@ -115,7 +119,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange }: P
       </label>
       <label className={label}>
         회차
-        <select value={d.roundId} onChange={(e) => pickRound(e.target.value)} className={field}>
+        <select value={d.roundId} onChange={(e) => choose(e.target.value)} className={field}>
           {!opts.some((o) => o.id === d.roundId) && <option value={d.roundId}>{n.crumb}</option>}
           {opts.map((o) => (
             <option key={o.id} value={o.id}>
@@ -132,11 +136,11 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange }: P
       <div className="grid grid-cols-2 gap-3">
         <label className={label}>
           시작
-          <input type="date" value={d.s} min={period.start} max={period.end} required onChange={(e) => e.target.value && setD((x) => ({ ...x, s: e.target.value }))} className={field} />
+          <input type="date" value={d.s} min={period.start} max={period.end} required onChange={(e) => setDate("s", e.target.value)} className={field} />
         </label>
         <label className={label}>
           마감
-          <input type="date" value={d.e} min={period.start} max={period.end} required onChange={(e) => e.target.value && setD((x) => ({ ...x, e: e.target.value }))} className={field} />
+          <input type="date" value={d.e} min={period.start} max={period.end} required onChange={(e) => setDate("e", e.target.value)} className={field} />
         </label>
       </div>
       {badDates && <p className="-mt-2 m-0 text-[12px] font-medium text-warn">마감일은 시작일 이후여야 해요</p>}
