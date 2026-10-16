@@ -34,5 +34,14 @@ describe("SubmissionStatusList", () => {
     expect(doc.textContent).toContain("담당 제외");
     expect(doc.textContent).toContain("참가가 승인되면");
   });
+  it("archived task with no rows does not claim there are no assignees", () => {
+    const el = (archived: boolean) => {
+      const d = document.createElement("div");
+      d.innerHTML = renderToStaticMarkup(createElement(SubmissionStatusList, { rows: [], sub: 0, asg: 0, note: null, archived, onOpenFile: () => {} }));
+      return d.textContent;
+    };
+    expect(el(false)).toContain("아직 담당자가 없어요");
+    expect(el(true)).not.toContain("아직 담당자가 없어요");
+  });
   it("no inner vertical scroller", () => expect(render([row({ submission: S })]).innerHTML).not.toMatch(/overflow-y-auto|max-h-/));
 });

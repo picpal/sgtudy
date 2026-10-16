@@ -8,10 +8,10 @@ import { STATUS_LABEL } from "@/lib/types";
 import { stampKst, type StatusRow } from "../submission";
 import { SubmissionView } from "./SubmissionView";
 
-type Props = { rows: StatusRow[]; sub: number; asg: number; note: string | null; headingRef?: Ref<HTMLHeadingElement>; onOpenFile: (f: FileMeta) => void };
+type Props = { rows: StatusRow[]; sub: number; asg: number; note: string | null; archived?: boolean; headingRef?: Ref<HTMLHeadingElement>; onOpenFile: (f: FileMeta) => void };
 
 /** 담당자별 제출 현황 (스펙 §2.4). 펼침은 task_get.submissions 에 있는 줄만 — 트리 people 로 제출물을 추측하지 않는다 */
-export function SubmissionStatusList({ rows, sub, asg, note, headingRef, onOpenFile }: Props) {
+export function SubmissionStatusList({ rows, sub, asg, note, archived = false, headingRef, onOpenFile }: Props) {
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) =>
     setOpen((p) => {
@@ -26,7 +26,8 @@ export function SubmissionStatusList({ rows, sub, asg, note, headingRef, onOpenF
         제출 현황 {sub}/{asg}
       </h3>
       {note && <p className="m-0 text-[13px] text-muted">{note}</p>}
-      {rows.length === 0 && asg === 0 && <p className="m-0 text-[13px] text-amber-text">아직 담당자가 없어요</p>}
+      {/* 보관 과제는 배정이 풀려 0명 — "담당자가 없어요" 는 틀린 안내 */}
+      {rows.length === 0 && asg === 0 && !archived && <p className="m-0 text-[13px] text-amber-text">아직 담당자가 없어요</p>}
       {rows.length > 0 && (
         <ul className="m-0 flex list-none flex-col overflow-hidden rounded-[12px] border border-line p-0">
           {rows.map((r) => {

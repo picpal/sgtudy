@@ -121,7 +121,7 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
         />
       )}
       {detail && card?.kind === "hidden" && !quietNotAssigned && <p className="m-0 text-[13px] text-muted">담당 과제가 아니에요 · 제출 현황만 볼 수 있어요</p>}
-      <SubmissionStatusList rows={rows} sub={sub} asg={asg} note={note} headingRef={statusRef} onOpenFile={openFile} />
+      <SubmissionStatusList rows={rows} sub={sub} asg={asg} note={note} archived={n.archived} headingRef={statusRef} onOpenFile={openFile} />
     </div>
   );
 }
