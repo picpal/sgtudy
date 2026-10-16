@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_STATE, goLeafPatch, modeSwitchPatch } from "./state";
+import { INITIAL_STATE, goLeafPatch, modeSwitchPatch, toggleMinePatch, toggleOthersPatch } from "./state";
 
 describe("goLeafPatch", () => {
   it("opens the task detail view instead of an inline row", () =>
@@ -21,4 +21,16 @@ describe("modeSwitchPatch", () => {
   it("list stays list", () => expect(modeSwitchPatch(INITIAL_STATE, "edit")).toMatchObject({ curMode: "edit", editSel: null, viewSel: null }));
   it("temp (optimistic) items are not carried over", () =>
     expect(modeSwitchPatch({ ...INITIAL_STATE, curMode: "edit", editSel: "1.new0" }, "view")).toMatchObject({ viewSel: null }));
+});
+
+describe("진행목표·간트 필터 칩 — 두 칩은 서로 끈다", () => {
+  const S = (mineOnly: boolean, othersPersonal: boolean) => ({ ...INITIAL_STATE, mineOnly, othersPersonal });
+  it("내 것만 켜면 팀원 목표는 꺼진다, 끄면 그대로", () => {
+    expect(toggleMinePatch(S(false, true))).toEqual({ mineOnly: true, othersPersonal: false });
+    expect(toggleMinePatch(S(true, false))).toEqual({ mineOnly: false, othersPersonal: false });
+  });
+  it("팀원 목표 켜면 내 것만은 꺼진다", () => {
+    expect(toggleOthersPatch(S(true, false))).toEqual({ othersPersonal: true, mineOnly: false });
+    expect(toggleOthersPatch(S(false, true))).toEqual({ othersPersonal: false, mineOnly: false });
+  });
 });

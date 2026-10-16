@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Chip, PillButton, Seg } from "../bits";
 import { addDays, md } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
-import { allParentsClosed, findNode, isDirty, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type ParentNode, type Tree, type TreeNode } from "../model";
-import { modeSwitchPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
-import { dropPlan, movedPlan, roundOf, withAddRows, withPersonalAddRows, type ListEntry } from "../rounds";
+import { allParentsClosed, findNode, isDirty, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
+import { modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
+import { dropPlan, movedPlan, roundOf, withAddRows, withEmptyRounds, withPersonalAddRows } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import type { RoomStatus } from "../submission";
 import type { ToastMsg } from "@/components/ui/Toast";
@@ -35,19 +35,16 @@ type Props = {
   personal?: { canAdd: boolean; perRound: number };
 };
 
-/** 목록 줄 — "내 것만" 에서 보이는 항목이 없는 회차의 안내 줄(empty)이 더해진다 */
-type Entry = ListEntry | { kind: "empty"; round: ParentNode };
-
-/** "내 것만" 에서 회차 행 바로 다음이 다른 회차(또는 끝)면 그 회차 아래에 내 항목이 없다 — 펼친 회차만 */
-function withEmptyRounds(entries: ListEntry[], closed: Record<string, boolean>): Entry[] {
-  const out: Entry[] = [];
-  entries.forEach((e, i) => {
-    out.push(e);
-    if (e.kind !== "node" || e.n.leaf || e.n.d !== 0 || closed[e.n.id]) return;
-    const next = entries[i + 1];
-    if (!next || next.kind !== "node" || next.n.roundId !== e.n.id) out.push({ kind: "empty", round: e.n });
-  });
-  return out;
+/** 트리 안 비활성 안내 줄(한도·빈 회차·소제목) — tree 안에는 treeitem 만 둔다. 선택 대상이 아니라 aria-selected 는 두지 않는다(다른 보기 행과 같게) */
+function InfoRow({ children, tone = "plain", ...rest }: { children: React.ReactNode; tone?: "plain" | "personal" | "heading" } & React.HTMLAttributes<HTMLDivElement> & { "data-limit"?: string }) {
+  const item = { role: "treeitem", "aria-level": 3, "aria-disabled": true };
+  const cls = tone === "heading" ? "bg-[#F7F9FC] pb-[6px] pt-2 text-[12px] font-bold text-slate-text" : `min-h-11 py-2 text-[13px] text-muted ${tone === "personal" ? "bg-[#F7F9FC]" : "bg-surface"}`;
+  return (
+    <div {...item} {...rest} className={`flex items-center border-b border-line-2 pl-2 pr-3 focus-visible:-outline-offset-2 ${cls}`}>
+      <span className="w-[22px] shrink-0 max-sm:w-[10px]" />
+      <span className="px-2">{children}</span>
+    </div>
+  );
 }
 
 /** 보기 목록 개인 목표 빠른 추가의 S.quickAdd 값 — 편집 목록 팀 과제 빠른 추가(회차 id 그대로)와 겹치지 않게 */
@@ -125,8 +122,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   const drag = useRowDrag(onDrop);
   // 놓을 수 없는 자리(자기·하위·보관·제자리)에는 표시선을 그리지 않는다
   const hint = isEdit && drag.dragging && drag.over && dropPlan(tree.nodes, drag.dragging, drag.over.id, drag.over.half) ? drag.over : null;
-  const listed = isEdit ? withAddRows(rows, tree.roots, S.closed) : withPersonalAddRows(rows, tree.roots, S.closed, canAddPersonal);
-  const entries: Entry[] = scope.mineOnly ? withEmptyRounds(listed, S.closed) : listed;
+  const listed = isEdit ? withAddRows(rows, tree.roots, S.closed) : withPersonalAddRows(rows, tree.roots, S.closed, canAddPersonal, meId);
+  const entries = scope.mineOnly ? withEmptyRounds(listed, S.closed) : listed;
   // "＋ 내 목표 추가" → 그 자리가 빠른 추가 입력 (한 번에 하나 — S.quickAdd 를 편집 목록과 함께 쓴다)
   const openPAdd = (id: string) => update({ quickAdd: pKey(id) });
   const closePAdd = (id: string) => {
@@ -137,8 +134,15 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
     });
   };
   // 두 칩은 서로 끈다 — "내 것만" 은 남의 목표를 숨기므로 둘이 함께 켜져 있으면 "팀원 목표" 가 아무 일도 하지 않는다
-  const toggleMine = () => update((p) => ({ mineOnly: !p.mineOnly, othersPersonal: p.mineOnly ? p.othersPersonal : false }));
-  const toggleOthers = () => update((p) => ({ othersPersonal: !p.othersPersonal, mineOnly: p.othersPersonal ? p.mineOnly : false }));
+  const toggleMine = () => update(toggleMinePatch);
+  const toggleOthers = () => update(toggleOthersPatch);
+  // 빠른 추가로 한도에 닿으면 입력이 안내 줄로 바뀐다 — 열림 상태를 정리하고 포커스를 안내 줄로 옮겨 읽어 준다
+  const limitHit = S.quickAdd?.startsWith("p:") && atLimit(S.quickAdd.slice(2)) ? S.quickAdd.slice(2) : null;
+  useEffect(() => {
+    if (!limitHit) return;
+    update({ quickAdd: null });
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-limit="${CSS.escape(limitHit)}"]`)?.focus());
+  }, [limitHit, update]);
 
   // 편집·상세 화면에서 목록으로 돌아오면 열었던 행으로 포커스·스크롤을 돌려준다
   // (삭제해서 행이 없으면 상위 행, 그것도 없으면 "회차 추가")
@@ -245,7 +249,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
         <p className="m-0 text-[12px] text-muted">
           회차는 기간·대주제, 과제는 회차 안의 할 일이에요 · 회차나 과제를 누르면 편집 화면이 열려요.
           {isLeader ? " 개요 탭 멤버 관리에서 팀원에게 편집 권한을 줄 수 있어요." : " 그룹장이 준 편집 권한으로 고치고 있어요."}
-          {" · 개인 목표는 보기 모드에서 관리해요"}
+          {" 개인 목표는 보기 모드에서 관리해요."}
         </p>
       )}
       {warn > 0 && (
@@ -275,10 +279,9 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
               // 한도 도달 — 추가 줄 대신 안내(트리 안에는 treeitem 만이라 비활성 treeitem 으로)
               if (atLimit(r.id))
                 return (
-                  <div key={`padd-${r.id}`} role="treeitem" aria-level={3} aria-selected={false} aria-disabled="true" className="flex min-h-11 items-center border-b border-line-2 bg-[#F7F9FC] py-2 pl-2 pr-3 text-[13px] text-muted">
-                    <span className="w-[22px] shrink-0 max-sm:w-[10px]" />
-                    <span className="px-2">이 회차에는 개인 목표를 {limit}개까지 둘 수 있어요</span>
-                  </div>
+                  <InfoRow key={`padd-${r.id}`} tone="personal" tabIndex={-1} data-limit={r.id}>
+                    이 회차에는 개인 목표를 {limit}개까지 둘 수 있어요
+                  </InfoRow>
                 );
               return S.quickAdd === pKey(r.id) ? (
                 <QuickAdd key={`pqa-${r.id}`} round={r} indent={1} tone="personal" onAdd={(t) => api.createPersonal(r.id, t)} onClose={() => closePAdd(r.id)} inTree />
@@ -286,12 +289,13 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
                 <AddRow key={`padd-${r.id}`} round={r} indent={1} tone="personal" onOpen={() => openPAdd(r.id)} inTree />
               );
             }
-            if (entry.kind === "empty")
+            if (entry.kind === "empty") return <InfoRow key={`empty-${entry.round.id}`}>이 회차에 내 항목이 없어요</InfoRow>;
+            // 시안 C-2 — 남의 개인 목표 앞 소제목
+            if (entry.kind === "others")
               return (
-                <div key={`empty-${entry.round.id}`} role="treeitem" aria-level={3} aria-selected={false} aria-disabled="true" className="flex min-h-11 items-center border-b border-line-2 bg-surface py-2 pl-2 pr-3 text-[13px] text-muted">
-                  <span className="w-[22px] shrink-0 max-sm:w-[10px]" />
-                  <span className="px-2">이 회차에 내 항목이 없어요</span>
-                </div>
+                <InfoRow key={`others-${entry.round.id}`} tone="heading">
+                  팀원 개인 목표 {entry.count}
+                </InfoRow>
               );
             const n = entry.n;
             const open = !S.closed[n.id];

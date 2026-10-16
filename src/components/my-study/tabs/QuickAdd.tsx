@@ -46,16 +46,17 @@ export function QuickAdd({ round, indent, onAdd, onClose, inTree = false, tone =
   const input = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
   const [last, setLast] = useState("");
-  // 개인 목표는 낙관적 임시 행 없이 응답을 기다린다 — 그동안 입력에 aria-busy (스펙 §7)
-  const [busy, setBusy] = useState(false);
+  // 개인 목표는 낙관적 임시 행 없이 응답을 기다린다 — 그동안 입력에 aria-busy (스펙 §7). 연달아 보내면 마지막 응답까지
+  const [pending, setPending] = useState(0);
+  const busy = pending > 0;
   useEffect(() => input.current?.focus(), []);
   const submit = async () => {
     const t = normalizeTitle(text);
     if (!t) return;
     setText("");
-    setBusy(true);
+    setPending((c) => c + 1);
     const ok = await onAdd(t);
-    setBusy(false);
+    setPending((c) => c - 1);
     if (ok) setLast(t);
     else setText((cur) => cur || t); // 실패하면 쓴 글자를 되살린다 (그새 새로 쓴 게 있으면 그대로)
   };
@@ -92,9 +93,12 @@ export function QuickAdd({ round, indent, onAdd, onClose, inTree = false, tone =
       {personal && (
         <span className="shrink-0 whitespace-nowrap text-[12px] text-muted max-sm:hidden">{last ? "다음 목표를 이어서 쓸 수 있어요" : `기간 = 회차 기간 ${md(round.s)} – ${md(round.e)}`}</span>
       )}
-      <span role="status" className="sr-only">
-        {last ? `추가했어요: ${last}` : ""}
-      </span>
+      {/* 개인 목표는 토스트("내 목표를 추가했어요")가 알리므로 두 번 읽지 않게 팀 빠른 추가에만 */}
+      {!personal && (
+        <span role="status" className="sr-only">
+          {last ? `추가했어요: ${last}` : ""}
+        </span>
+      )}
     </div>
   );
 }

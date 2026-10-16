@@ -17,6 +17,10 @@ export type Person = { userId: string; name: string; tone: Tone; c: Code };
 export type TreeMember = { userId: string; name: string; tone: Tone; doesTasks: boolean };
 
 export const CODE_LABEL: Record<Code, string> = { D: "기한내 제출", L: "지각 제출", M: "미제출", O: "진행중", P: "예정" };
+/** 개인 목표 상태 문구 — 제출이 아니라 완료한다. 마감 지난 미완료(M)는 "기한 지남" */
+export const PERSONAL_LABEL: Record<Code, string> = { D: "기한내 완료", L: "늦게 완료", M: "기한 지남", O: "진행중", P: "예정" };
+/** 리프의 사람별 상태 문구 단일 출처 — 개인 목표면 PERSONAL_LABEL, 팀 과제면 CODE_LABEL */
+export const codeLabel = (l: { personal: boolean }, c: Code): string => (l.personal ? PERSONAL_LABEL[c] : CODE_LABEL[c]);
 export const CODE_COLOR: Record<Code, string> = { D: "#1A7F55", L: "#8A5A00", M: "#C0392B", O: "#3A4452", P: "#5B6675" };
 export const CODE_STATUS: Record<Code, TaskStatus> = { D: "done", L: "late", M: "missed", O: "open", P: "planned" };
 export const STATUS_CODE: Record<TaskStatus, Code> = { done: "D", late: "L", missed: "M", open: "O", planned: "P" };
@@ -260,6 +264,8 @@ function screenOrder(kids: TreeNode[], meId: string | null): TreeNode[] {
   return [...team, ...mine, ...others];
 }
 
+const hasLeafInScope = (n: ParentNode, sc: ItemScope): boolean => n.kids.some((k) => (k.leaf ? inScope(k, sc) : hasLeafInScope(k, sc)));
+
 /**
  * 접힘 상태를 반영한 보이는 행 (전위 순서). 각 부모의 kids 는 screenOrder 로 나눈다.
  * sc 가 없으면 범위 필터 없이 전부(개인은 각 부모의 끝).
@@ -269,6 +275,8 @@ export function visibleNodes(roots: ParentNode[], closed: Record<string, boolean
   const meId = sc?.meId ?? null;
   const add = (n: TreeNode) => {
     if (sc && !inScope(n, sc)) return;
+    // "내 것만": 내 리프가 하나도 없는 묶음(비루트 부모)은 빈 행이 되므로 건너뛴다. 회차 행은 남긴다(빈 회차 안내는 화면 몫)
+    if (sc?.mineOnly && !n.leaf && n.d > 0 && !hasLeafInScope(n, sc)) return;
     out.push(n);
     if (!n.leaf && !closed[n.id]) screenOrder(n.kids, meId).forEach(add);
   };
@@ -351,7 +359,7 @@ export function removePlan(n: TreeNode): RemovePlan {
   const p = personalDescendants(n);
   const k = descendantCount(n) - p;
   const head = k > 0 ? `이 항목과 하위 항목 ${k}개를 함께 삭제할까요? 되돌릴 수 없어요.` : "이 항목을 삭제할까요? 되돌릴 수 없어요.";
-  return { kind: "delete", label: "삭제", text: p > 0 ? `${head} 팀원 개인 목표 ${p}개도 함께 삭제돼요.` : head };
+  return { kind: "delete", label: "삭제", text: p > 0 ? `${head} 개인 목표 ${p}개도 함께 삭제돼요.` : head };
 }
 
 /** 분석서 E4 — 상위 기간·방 기간 밖이면 경고 문구 (저장·생성은 막지 않는다) */

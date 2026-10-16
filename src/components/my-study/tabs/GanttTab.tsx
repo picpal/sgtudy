@@ -7,7 +7,7 @@ import { useToday } from "@/lib/today";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, CodeIcons, Seg, TypeBadge } from "../bits";
 import { ganttRange, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
-import type { ScreenState, Update, Zoom } from "../state";
+import { toggleMinePatch, toggleOthersPatch, type ScreenState, type Update, type Zoom } from "../state";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void; isLeader: boolean };
 
@@ -40,8 +40,8 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
   // 진행목표와 같은 두 칩·같은 state ("내 것만"·"팀원 목표"; 둘은 서로 끈다). 간트는 읽기 전용 — 편집 범위 없음
   const scope: ItemScope = { meId, mineOnly: S.mineOnly, others: S.othersPersonal && !S.mineOnly, isEdit: false, isLeader };
   const rows = visibleNodes(tree.roots, S.closed, scope);
-  const toggleMine = () => update((p) => ({ mineOnly: !p.mineOnly, othersPersonal: p.mineOnly ? p.othersPersonal : false }));
-  const toggleOthers = () => update((p) => ({ othersPersonal: !p.othersPersonal, mineOnly: p.othersPersonal ? p.mineOnly : false }));
+  const toggleMine = () => update(toggleMinePatch);
+  const toggleOthers = () => update(toggleOthersPatch);
 
   const months: { i: number; label: string; end: number }[] = [];
   for (let i = 0; i < nDays; i++) {

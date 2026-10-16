@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { EMPTY_OVERRIDES, buildTree, descendantCount, dropFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope } from "./model";
+import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, codeLabel, descendantCount, dropFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -157,10 +157,10 @@ describe("removePlan (편집 화면·목록 삭제 공통)", () => {
     // 지은 개인(33)을 완료 전으로 — 제출 없음 → 삭제
     const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "33" && n.task ? { ...n, task: { ...n.task, people: n.task.people.map((p) => ({ ...p, status: "planned" as const })), submitted: 0 } } : n)) };
     const t3 = buildTree(cur, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "3")!;
-    expect(removePlan(t3)).toEqual({ kind: "delete", label: "삭제", text: "이 항목과 하위 항목 2개를 함께 삭제할까요? 되돌릴 수 없어요. 팀원 개인 목표 2개도 함께 삭제돼요." });
+    expect(removePlan(t3)).toEqual({ kind: "delete", label: "삭제", text: "이 항목과 하위 항목 2개를 함께 삭제할까요? 되돌릴 수 없어요. 개인 목표 2개도 함께 삭제돼요." });
     // 팀 자식 없이 개인 목표만 있는 회차
     const only = { ...cur, nodes: cur.nodes.filter((n) => !["31", "311"].includes(n.id)) };
-    expect(removePlan(buildTree(only, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "3")!)).toMatchObject({ kind: "delete", text: "이 항목을 삭제할까요? 되돌릴 수 없어요. 팀원 개인 목표 2개도 함께 삭제돼요." });
+    expect(removePlan(buildTree(only, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "3")!)).toMatchObject({ kind: "delete", text: "이 항목을 삭제할까요? 되돌릴 수 없어요. 개인 목표 2개도 함께 삭제돼요." });
   });
 });
 
@@ -192,6 +192,21 @@ describe("개인 목표", () => {
   it("mineOnly: 내게 배정 안 된 팀 과제는 빠진다", () => {
     const rows = visibleNodes(t.roots, {}, { meId: CHULSU, mineOnly: true, others: false, isEdit: false, isLeader: false });
     expect(rows.filter((n) => n.leaf && !n.personal).every((n) => n.leaf && !!myCode(n, CHULSU))).toBe(true);
+  });
+  it("mineOnly: 내 리프가 하나도 없는 묶음 행은 건너뛴다(회차 행은 남긴다)", () => {
+    // 311 에서 철수를 뺀다 → 묶음 31 아래 철수 것이 없다
+    const cur = { ...AWS, nodes: AWS.nodes.map((n) => (n.id === "311" && n.task ? { ...n, task: { ...n.task, people: n.task.people.filter((p) => p.userId !== CHULSU) } } : n)) };
+    const t2 = buildTree(cur, EMPTY_OVERRIDES, REF_DAY);
+    const ids = visibleNodes(t2.roots, {}, { meId: CHULSU, mineOnly: true, others: false, isEdit: false, isLeader: false }).filter((n) => n.roundId === "3").map((n) => n.id);
+    expect(ids).toEqual(["3", "32"]);
+    // mineOnly 가 아니면 묶음은 그대로
+    expect(visibleNodes(t2.roots, {}, { meId: CHULSU, mineOnly: false, others: false, isEdit: false, isLeader: false }).some((n) => n.id === "31")).toBe(true);
+  });
+  it("codeLabel: 개인 = 기한내 완료/늦게 완료/기한 지남, 팀 = CODE_LABEL", () => {
+    const p = t.personal[0];
+    const team = t.leaves[0];
+    expect([codeLabel(p, "D"), codeLabel(p, "L"), codeLabel(p, "M"), codeLabel(p, "O"), codeLabel(p, "P")]).toEqual(["기한내 완료", "늦게 완료", "기한 지남", CODE_LABEL.O, CODE_LABEL.P]);
+    expect([codeLabel(team, "D"), codeLabel(team, "M")]).toEqual([CODE_LABEL.D, CODE_LABEL.M]);
   });
   it("personalStats", () => {
     expect(personalStats(t.personal, JIEUN)).toEqual({ done: 1, total: 1 });

@@ -40,7 +40,8 @@ export function Chip({ on, onClick, children, withAvatar }: { on: boolean; onCli
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      className={`inline-flex h-[34px] items-center gap-[6px] rounded-[17px] border pr-3 text-[13px] ${withAvatar ? "pl-[6px]" : "pl-3"} ${
+      // 보이는 칩은 34px, 누르는 영역은 위아래로 5px 늘려 44px (before 의사 요소)
+      className={`relative inline-flex h-[34px] items-center gap-[6px] rounded-[17px] border pr-3 before:absolute before:inset-x-0 before:-inset-y-[5px] before:content-[''] text-[13px] ${withAvatar ? "pl-[6px]" : "pl-3"} ${
         on ? "border-ink bg-ink font-semibold text-white" : "border-line-3 bg-surface font-medium text-ink-3"
       }`}
     >

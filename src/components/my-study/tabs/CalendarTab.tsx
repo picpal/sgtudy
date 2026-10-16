@@ -7,8 +7,8 @@ import { useToday } from "@/lib/today";
 import { Chip, CodeIcons, Seg, TypeBadge } from "../bits";
 import {
   CODE_COLOR,
-  CODE_LABEL,
   CODE_STATE,
+  codeLabel,
   calendarAnchor,
   calendarGrid,
   ddayLabel,
@@ -134,7 +134,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                       <button
                         key={l.id}
                         type="button"
-                        title={`${l.crumb} · ${l.title} (${md(l.s)}–${md(l.e)})`}
+                        title={`${l.personal ? "[개인] " : ""}${l.crumb} · ${l.title} (${md(l.s)}–${md(l.e)})`}
                         onClick={() => update({ calPick: l.id })}
                         className="relative flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-left text-[12px] transition-shadow duration-100 hover:z-[2] hover:shadow-[0_3px_8px_rgba(27,34,48,.18)]"
                         style={{
@@ -172,7 +172,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
             </div>
             <div className="text-[12px] text-muted">{pick.crumb}</div>
             <div className="text-[13px] text-ink-2">
-              {md(pick.s)}({weekdayKo(pick.s)}) – {md(pick.e)}({weekdayKo(pick.e)}) · <b className="font-bold">{pick.state === "complete" ? "전원 제출" : ddayLabel(today, pick.e)}</b>
+              {md(pick.s)}({weekdayKo(pick.s)}) – {md(pick.e)}({weekdayKo(pick.e)}) · <b className="font-bold">{pick.state === "complete" ? (pick.personal ? codeLabel(pick, pick.people[0]?.c ?? "D") : "전원 제출") : ddayLabel(today, pick.e)}</b>
             </div>
             <ul className="m-0 flex list-none flex-col gap-[6px] p-0">
               {pick.people.map((p) => (
@@ -183,7 +183,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                     {p.userId === meId ? " (나)" : ""}
                   </span>
                   <span className="text-[12px] font-semibold" style={{ color: CODE_COLOR[p.c] }}>
-                    {CODE_LABEL[p.c]}
+                    {codeLabel(pick, p.c)}
                   </span>
                 </li>
               ))}

@@ -75,7 +75,14 @@ export function reorderIndex(parent: ParentNode, id: string, dir: -1 | 1): numbe
   return j < 0 || j >= sibs.length ? null : j;
 }
 
-export type ListEntry = { kind: "node"; n: TreeNode } | { kind: "add"; round: ParentNode } | { kind: "padd"; round: ParentNode };
+export type ListEntry =
+  | { kind: "node"; n: TreeNode }
+  | { kind: "add"; round: ParentNode }
+  | { kind: "padd"; round: ParentNode }
+  /** 소제목 "팀원 개인 목표 {count}" — 그 회차에 보이는 남의 개인 목표 앞 */
+  | { kind: "others"; round: ParentNode; count: number }
+  /** "내 것만" 에서 펼친 회차 아래 보이는 항목이 없을 때 안내 */
+  | { kind: "empty"; round: ParentNode };
 
 /** 편집 목록: 펼쳐진(보관 아닌) 회차마다 그 회차의 마지막 보이는 행 뒤에 "+ 과제 추가" 줄 */
 export function withAddRows(rows: TreeNode[], roots: ParentNode[], closed: Record<string, boolean>): ListEntry[] {
@@ -90,17 +97,54 @@ export function withAddRows(rows: TreeNode[], roots: ParentNode[], closed: Recor
   return out;
 }
 
-/** 보기 모드 목록: 펼쳐진(보관 아닌) 회차마다 그 회차의 마지막 보이는 행 뒤에 "+ 개인 목표" 줄. canAdd false 면 그대로 */
-export function withPersonalAddRows(rows: TreeNode[], roots: ParentNode[], closed: Record<string, boolean>, canAdd: boolean): ListEntry[] {
-  const nodes: ListEntry[] = rows.map((n) => ({ kind: "node", n }));
-  if (!canAdd) return nodes;
-  const open = new Map(roots.filter((r) => !r.archived && !r.temp && !closed[r.id]).map((r) => [r.id, r]));
+/**
+ * 보기 모드 목록 (시안 C-2): 회차 → 팀 과제 → 내 개인 목표 → "＋ 내 목표 추가"(canAdd·펼친 비보관 회차) → 소제목 "팀원 개인 목표 n" → 남의 개인 목표.
+ * rows 는 visibleNodes 순서(각 회차에서 팀 → 내 것 → 남의 것)여야 한다. 개인 목표는 늘 회차의 직계 자식이다.
+ */
+export function withPersonalAddRows(rows: TreeNode[], roots: ParentNode[], closed: Record<string, boolean>, canAdd: boolean, meId: string | null = null): ListEntry[] {
+  const byId = new Map(roots.map((r) => [r.id, r]));
+  const addable = (id: string) => {
+    const r = byId.get(id);
+    return canAdd && !!r && !r.archived && !r.temp && !closed[r.id];
+  };
+  const isOther = (n: TreeNode) => isPersonal(n) && (meId === null || n.ownerId !== meId);
+  const others = new Map<string, number>();
+  rows.forEach((n) => {
+    if (isOther(n)) others.set(n.roundId, (others.get(n.roundId) ?? 0) + 1);
+  });
   const out: ListEntry[] = [];
+  let added = false;
+  let header = false;
   rows.forEach((n, i) => {
-    out.push(nodes[i]);
+    if (n.d === 0) {
+      added = false;
+      header = false;
+    }
+    const round = byId.get(n.roundId);
+    if (round && isOther(n) && !header) {
+      if (!added && addable(round.id)) out.push({ kind: "padd", round });
+      added = true;
+      out.push({ kind: "others", round, count: others.get(round.id) ?? 0 });
+      header = true;
+    }
+    out.push({ kind: "node", n });
     const next = rows[i + 1];
-    const round = open.get(n.roundId);
-    if (round && (!next || next.roundId !== n.roundId)) out.push({ kind: "padd", round });
+    if (round && !added && addable(round.id) && (!next || next.roundId !== n.roundId)) {
+      out.push({ kind: "padd", round });
+      added = true;
+    }
+  });
+  return out;
+}
+
+/** "내 것만": 펼친 회차 행 바로 다음이 그 회차의 노드가 아니면(= 보이는 항목 없음) 회차 행 뒤에 안내 줄 */
+export function withEmptyRounds(entries: ListEntry[], closed: Record<string, boolean>): ListEntry[] {
+  const out: ListEntry[] = [];
+  entries.forEach((e, i) => {
+    out.push(e);
+    if (e.kind !== "node" || e.n.leaf || e.n.d !== 0 || closed[e.n.id]) return;
+    const next = entries[i + 1];
+    if (!next || next.kind !== "node" || next.n.roundId !== e.n.id) out.push({ kind: "empty", round: e.n });
   });
   return out;
 }

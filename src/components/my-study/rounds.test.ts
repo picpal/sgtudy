@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, visibleNodes, type LeafNode, type ParentNode, type TreeNode } from "./model";
-import { currentRoundId, dropPlan, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows, withPersonalAddRows } from "./rounds";
+import { currentRoundId, dropPlan, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -193,12 +193,30 @@ describe("개인 목표 — 순서·드래그·추가 줄", () => {
     expect(dropPlan(ns, "12", "11", "top")).toEqual({ parentId: "1", index: 0 });
     expect(dropPlan(ns, "11", "12", "bottom")).toEqual({ parentId: "1", index: 2 });
   });
-  it("withPersonalAddRows: 펼친 비보관 회차 끝에 padd, canAdd false 면 없음", () => {
-    const kinds = (closed: Record<string, boolean>, canAdd: boolean, t = tree) =>
-      withPersonalAddRows(visibleNodes(t.roots, closed), t.roots, closed, canAdd).map((e) => (e.kind === "node" ? e.n.id : e.kind === "padd" ? `p${e.round.id}` : `+${e.round.id}`));
-    expect(kinds({}, true)).toEqual(["1", "11", "12", "p1", "2", "21", "22", "p2", "3", "31", "311", "33", "32", "p3", "4", "41", "p4", "5", "51", "52", "p5"]);
+  const label = (e: ListEntry) => (e.kind === "node" ? e.n.id : e.kind === "padd" ? `p${e.round.id}` : e.kind === "others" ? `o${e.round.id}:${e.count}` : e.kind === "empty" ? `e${e.round.id}` : `+${e.round.id}`);
+  const sc = { meId: CHULSU, mineOnly: false, others: false, isEdit: false, isLeader: false };
+  it("withPersonalAddRows: 회차 → 팀 → 내 개인 → padd (팀원 목표 끔), canAdd false 면 padd 없음", () => {
+    const kinds = (closed: Record<string, boolean>, canAdd: boolean, t = tree) => withPersonalAddRows(visibleNodes(t.roots, closed, sc), t.roots, closed, canAdd, CHULSU).map(label);
+    expect(kinds({}, true)).toEqual(["1", "11", "12", "p1", "2", "21", "22", "p2", "3", "31", "311", "32", "p3", "4", "41", "p4", "5", "51", "52", "p5"]);
     expect(kinds({ "1": true }, true).slice(0, 3)).toEqual(["1", "2", "21"]);
     expect(kinds({}, true, archivedTree)).not.toContain("p2");
     expect(kinds({}, false).some((k) => k.startsWith("p"))).toBe(false);
+  });
+  it("withPersonalAddRows: 팀원 목표 켜면 padd 는 내 목표 뒤, 소제목 '팀원 개인 목표 n' 다음 남의 것 (C-2)", () => {
+    const rows = visibleNodes(tree.roots, {}, { ...sc, others: true });
+    const r3 = (canAdd: boolean) => withPersonalAddRows(rows, tree.roots, {}, canAdd, CHULSU).map(label).filter((k) => /^(3|31|311|32|33|p3|o3:\d|4)$/.test(k));
+    expect(r3(true)).toEqual(["3", "31", "311", "32", "p3", "o3:1", "33", "4"]);
+    // 추가 자격이 없어도 소제목은 나온다
+    expect(r3(false)).toEqual(["3", "31", "311", "32", "o3:1", "33", "4"]);
+  });
+  it("withEmptyRounds: 펼친 회차 아래 보이는 노드가 없으면 회차 바로 뒤에 안내 줄", () => {
+    // 도윤(u5) — 배정·개인 목표 없음. 접힌 회차는 안내 없음
+    const dy = { ...sc, meId: "u5", mineOnly: true };
+    const closed = { "2": true };
+    const entries = withEmptyRounds(withPersonalAddRows(visibleNodes(tree.roots, closed, dy), tree.roots, closed, true, "u5"), closed);
+    expect(entries.map(label)).toEqual(["1", "e1", "p1", "2", "3", "e3", "p3", "4", "e4", "p4", "5", "e5", "p5"]);
+    // 내 항목이 있는 회차는 안내 없음
+    const mine = withEmptyRounds(withPersonalAddRows(visibleNodes(tree.roots, {}, { ...sc, mineOnly: true }), tree.roots, {}, false, CHULSU), {});
+    expect(mine.map(label).filter((k) => k.startsWith("e"))).toEqual([]);
   });
 });

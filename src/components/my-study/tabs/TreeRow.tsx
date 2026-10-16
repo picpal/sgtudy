@@ -4,7 +4,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { AvatarStack, TypeBadge } from "../bits";
 import { md } from "@/lib/date";
-import { CODE_LABEL, type Code, type LeafNode, type TreeNode } from "../model";
+import { codeLabel, type LeafNode, type TreeNode } from "../model";
 
 type Props = {
   n: TreeNode;
@@ -41,9 +41,6 @@ const Plus = () => (
     <path d="M12 5v14M5 12h14" />
   </svg>
 );
-
-/** 개인 목표 상태 문구 — 완료는 팀의 "제출" 대신 "완료" */
-const PERSONAL_LABEL: Record<Code, string> = { ...CODE_LABEL, D: "기한내 완료", L: "늦게 완료" };
 
 /** 개인 목표 소유자(서버 people = [소유자]) */
 const ownerOf = (n: LeafNode) => n.people.find((p) => p.userId === n.ownerId) ?? n.people[0] ?? null;
@@ -105,6 +102,8 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
           {other && (
             <span className="shrink-0 sm:hidden" title={other.name}>
               <Avatar name={other.name} size={20} tone={other.tone} id={other.userId} />
+              {/* 390 에선 이름 칸이 숨으니 스크린리더용 이름 */}
+              <span className="sr-only">{other.name}</span>
             </span>
           )}
           <span className="min-w-0 max-w-full [overflow-wrap:anywhere]" style={{ fontSize: n.d === 0 ? 15 : 14, fontWeight: n.d === 0 ? 700 : n.leaf ? 500 : 600 }}>
@@ -127,7 +126,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
             {owner && (
               <span data-personal-status className={`shrink-0 whitespace-nowrap rounded-[8px] px-[10px] py-1 text-[12px] font-semibold ${done ? "bg-[#E2F3EA] text-[#14724D]" : "bg-[#EEF2F1] text-ink-2"}`}>
                 {done && <span aria-hidden="true">✓ </span>}
-                {PERSONAL_LABEL[owner.c]}
+                {codeLabel(n, owner.c)}
               </span>
             )}
           </>

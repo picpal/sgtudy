@@ -5,7 +5,7 @@ import { diffDays, md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { AvatarStack, Chip, Seg, TypeBadge } from "../bits";
-import { CODE_COLOR, CODE_LABEL, CODE_STATUS, boardColumn, ddayLabel, myCode, type BoardCol, type LeafNode, type Tree } from "../model";
+import { CODE_COLOR, CODE_STATUS, boardColumn, codeLabel, ddayLabel, myCode, type BoardCol, type LeafNode, type Tree } from "../model";
 import { boardSource } from "../sources";
 import type { BoardMode, ScreenState, Update } from "../state";
 
@@ -110,7 +110,7 @@ function Card({ l, mine, today, meId, onOpen }: { l: LeafNode; mine: boolean; to
         <span className="mt-[2px] flex items-center gap-[6px] border-t border-line-2 pt-2">
           <StatusIcon status={CODE_STATUS[c]} size={15} label={false} />
           <span className="text-[12px] font-semibold" style={{ color: CODE_COLOR[c] }}>
-            {c === "M" ? "미제출 · 기한이 지났어요" : `내 상태 · ${CODE_LABEL[c]}`}
+            {l.personal ? codeLabel(l, c) : c === "M" ? "미제출 · 기한이 지났어요" : `내 상태 · ${codeLabel(l, c)}`}
           </span>
         </span>
       ) : (
