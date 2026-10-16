@@ -138,7 +138,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
   if (viewNode)
     return (
       <div className="mt-[18px] @container">
-        <DetailView key={viewNode.id} n={viewNode} nodes={tree.nodes} canEdit={canEdit} onOpen={(id) => update({ viewSel: id })} onBack={() => update({ viewSel: null })} onEdit={() => update(modeSwitchPatch(S, "edit"))} />
+        <DetailView key={viewNode.id} n={viewNode} nodes={tree.nodes} canEdit={canEdit} onOpen={(id) => update({ viewSel: id, viewFocus: null })} onBack={() => update({ viewSel: null })} onEdit={() => update(modeSwitchPatch(S, "edit"))} />
       </div>
     );
 
@@ -193,7 +193,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period 
                   onToggle={() => toggle(n.id)}
                   onClick={() => {
                     if (isEdit) request({ sel: n.id });
-                    else update({ viewSel: n.id });
+                    else update({ viewSel: n.id, viewFocus: null });
                   }}
                   onAddChild={!n.leaf && n.d === 0 ? () => openAdd(n.id) : undefined}
                   onRemove={!n.temp && plan.kind !== "none" ? () => (asking?.id === n.id ? cancelAsk() : setAsk(n.id)) : undefined}

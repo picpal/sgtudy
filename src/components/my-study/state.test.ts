@@ -3,7 +3,13 @@ import { INITIAL_STATE, goLeafPatch, modeSwitchPatch } from "./state";
 
 describe("goLeafPatch", () => {
   it("opens the task detail view instead of an inline row", () =>
-    expect(goLeafPatch("21")).toEqual({ tab: "curriculum", curMode: "view", viewSel: "21", editSel: null, closed: {}, calPick: null }));
+    expect(goLeafPatch("21")).toEqual({ tab: "curriculum", curMode: "view", viewSel: "21", viewFocus: "submission", editSel: null, closed: {}, calPick: null }));
+});
+
+describe("viewFocus", () => {
+  it("INITIAL_STATE has no pending focus", () => expect(INITIAL_STATE.viewFocus).toBeNull());
+  it("modeSwitchPatch clears a pending focus", () =>
+    expect(modeSwitchPatch({ ...INITIAL_STATE, viewSel: "7", viewFocus: "submission" }, "edit")).toMatchObject({ viewFocus: null }));
 });
 
 describe("modeSwitchPatch", () => {
