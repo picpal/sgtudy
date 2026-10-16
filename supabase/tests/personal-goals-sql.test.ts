@@ -167,6 +167,17 @@ cases("personal goals · write", db, [
     await asUser(q, await uidOf(q, "지은"));
     await expectFail(q("select public.personal_complete('aws', $1, true)", [id]), "NOT_OWNER");
   } },
+  { name: "submit (0017): 개인 목표는 시작일 전에도 제출, 팀 과제는 여전히 TASK_NOT_STARTED", run: async (q) => {
+    await setNow(q, "2026-10-12T03:00:00Z");                                   // 오늘 10.12
+    await asUser(q, await uidOf(q, "철수"));
+    const id = (await create(q, await roundOf(q, "4주차"), "미리 하는 목표")).createdId as string;   // 회차 기간 = 미래 시작
+    const st = await one(q, "select start_date::text as s from public.goal_nodes where id = $1", [id]);
+    assert(String(st.s) > "2026-10-12");
+    const s = (await one(q, "select public.submission_upsert($1, '메모', '{https://example.com}', '{}') as s", [id])).s;
+    assertEquals([s.bodyMd, s.isLate], ["메모", false]);
+    const alb = (await one(q, "select n.id::text as id from public.goal_nodes n join public.rooms r on r.id = n.room_id where r.slug = 'aws' and n.title = 'ALB vs NLB 실습'")).id;
+    await expectFail(q("select public.submission_upsert($1, '메모', '{}', '{}')", [alb]), "TASK_NOT_STARTED");   // 10.15 시작 팀 과제
+  } },
   { name: "archive/delete: 소유자·그룹장, 그룹장은 제출 있으면 삭제 불가, 소유자는 제출째 삭제", run: async (q) => {
     const r2 = await roundOf(q, "2주차");
     const chulsu = await uidOf(q, "철수");
