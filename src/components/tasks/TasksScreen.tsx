@@ -14,7 +14,7 @@ import { routes } from "@/lib/routes";
 import { AddPersonalForm } from "./AddPersonalForm";
 import { focusFirst, latestApplied } from "./requests";
 import { personalErrorText } from "@/components/my-study/personal";
-import { addableStudies, applyFilter, atLimit, DEFAULT_FILTER, defaultCollapsed, emptyKind, filterQuery, groupByDue, groupByRound, isDone, normalizeFilter, parseFilter, summary, type RoundGroup, type TasksFilter } from "./calc";
+import { addableStudies, applyFilter, studyNote, atLimit, DEFAULT_FILTER, defaultCollapsed, emptyKind, filterQuery, groupByDue, groupByRound, isDone, normalizeFilter, parseFilter, summary, type RoundGroup, type TasksFilter } from "./calc";
 import { RoundGroupCard } from "./RoundGroupCard";
 import { TaskRow } from "./TaskRow";
 import { TasksEmpty } from "./TasksEmpty";
@@ -204,6 +204,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
               진행목표 ›
             </Link>
           </h2>
+          {studyNote(study) && <p className="m-0 rounded-[12px] bg-slate-soft px-[14px] py-[10px] text-[13px] text-ink-2">{studyNote(study)}</p>}
           {gs.map((g) => {
             const k = groupKey(g);
             const collapsed = defaultCollapsed(g, filter, today) !== flipped.has(k);
@@ -276,8 +277,9 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
         </div>
         {formOpen && (
           <AddPersonalForm
+            key={filter.study}
             data={data}
-            defaultSlug={filter.study === "all" ? undefined : filter.study}
+            chosenSlug={filter.study === "all" ? undefined : filter.study}
             onClose={closeForm}
             onAdd={async (slug, roundId, title) => {
               const ok = await add(slug, roundId, title);

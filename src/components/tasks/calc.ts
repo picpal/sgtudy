@@ -164,6 +164,22 @@ export function addableRounds(m: MeTasks, slug: string): MeTaskRound[] {
 
 export const addableStudies = (m: MeTasks): MeTaskStudy[] => m.studies.filter((s) => addableRounds(m, s.slug).length > 0);
 
+export const DRAFT_ADD_NOTE = "모집을 시작하면 개인 목표를 추가할 수 있어요";
+
+/** 그 방에 지금 내 목표를 못 더하는 이유 (null = 더할 수 있음) — 머리 폼이 고른 스터디 칩을 따를 때 (QA Q3-2) */
+export function addBlockReason(m: MeTasks, slug: string): string | null {
+  const s = m.studies.find((x) => x.slug === slug);
+  if (!s) return null;
+  if (addableRounds(m, slug).length > 0) return null;
+  if (s.status === "draft") return DRAFT_ADD_NOTE;
+  if (s.status === "ended" || !s.canAddPersonal) return "종료된 스터디에는 내 목표를 추가할 수 없어요";
+  if (!m.rounds.some((r) => r.slug === slug && r.canAdd)) return "아직 회차가 없어 내 목표를 추가할 수 없어요";
+  return `모든 회차에 내 목표가 ${m.personalPerRound}개씩 있어 더 추가할 수 없어요`;
+}
+
+/** 스터디 묶음 머리 아래 안내 — 준비중(모집 전) 방에는 "＋ 내 목표 추가" 줄이 없는 이유를 한 번만 (QA Q3-2) */
+export const studyNote = (s: MeTaskStudy): string | null => (s.status === "draft" ? DRAFT_ADD_NOTE : null);
+
 /** 추가 폼 기본 회차 = 그 방 현재 회차(추가 가능할 때) → 아니면 첫 추가 가능 회차 → "" */
 export function defaultRound(m: MeTasks, slug: string): string {
   const rs = addableRounds(m, slug);

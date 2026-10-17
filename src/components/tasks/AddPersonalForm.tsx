@@ -3,16 +3,35 @@
 import { useEffect, useRef, useState } from "react";
 import { normalizeTitle } from "@/components/my-study/rounds";
 import type { MeTasks } from "@/lib/api/types";
-import { addableRounds, addableStudies, defaultRound, personalCount } from "./calc";
+import { addBlockReason, addableRounds, addableStudies, defaultRound, personalCount } from "./calc";
 import { period } from "./TaskRow";
+import { studyTone } from "./tone";
 
 const field = "h-11 rounded-[10px] border border-line-3 bg-surface px-[10px] text-[14px] text-ink";
 const lbl = "flex min-w-0 flex-col gap-[6px] text-[12px] font-semibold text-ink-3";
 
-/** 머리 "＋ 내 목표 추가" 폼 — 스터디(추가 가능한 방만, 1개면 숨김) · 회차(그 방 canAdd 회차, 기본 = 현재 회차) · 제목 */
-export function AddPersonalForm({ data, defaultSlug, onAdd, onClose }: { data: MeTasks; defaultSlug?: string; onAdd: (slug: string, roundId: string, title: string) => Promise<boolean>; onClose: () => void }) {
-  const studies = addableStudies(data);
-  const initSlug = studies.find((s) => s.slug === defaultSlug)?.slug ?? studies[0]?.slug ?? "";
+const box = "rounded-[16px] border-[1.5px] border-slate-text/25 bg-slate-soft/40 p-[14px]";
+
+/** 스터디 이름(점 + 제목) — 어느 방에 더하는지 늘 보이게 (QA Q3-2) */
+function StudyName({ title, tone }: { title: string; tone: Parameters<typeof studyTone>[0] }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-[6px] text-[14px] font-semibold text-ink">
+      <span aria-hidden="true" className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: studyTone(tone).dot }} />
+      <span className="min-w-0 [overflow-wrap:anywhere]">{title}</span>
+    </span>
+  );
+}
+
+/**
+ * 머리 "＋ 내 목표 추가" 폼 — 스터디 · 회차(그 방 canAdd 회차, 기본 = 현재 회차) · 제목.
+ * 스터디 칩으로 방을 골랐으면(chosenSlug) 그 방에만 더한다 — 못 더하는 방이면 폼 대신 이유 (QA Q3-2).
+ * "전체" 이고 추가 가능한 방이 여럿이면 스터디 고르기, 하나면 이름만.
+ */
+export function AddPersonalForm({ data, chosenSlug, onAdd, onClose }: { data: MeTasks; chosenSlug?: string; onAdd: (slug: string, roundId: string, title: string) => Promise<boolean>; onClose: () => void }) {
+  const chosen = data.studies.find((s) => s.slug === chosenSlug) ?? null;
+  const blocked = chosen ? addBlockReason(data, chosen.slug) : null;
+  const studies = chosen ? (blocked ? [] : [chosen]) : addableStudies(data);
+  const initSlug = studies[0]?.slug ?? "";
   const [slug, setSlug] = useState(initSlug);
   const [roundId, setRoundId] = useState(() => defaultRound(data, initSlug));
   const [title, setTitle] = useState("");
@@ -35,13 +54,27 @@ export function AddPersonalForm({ data, defaultSlug, onAdd, onClose }: { data: M
     if (!ok) titleRef.current?.focus();
   };
 
+  if (chosen && blocked) {
+    return (
+      <div role="status" className={`${box} flex flex-wrap items-center gap-x-3 gap-y-2`}>
+        <p className="m-0 flex min-w-0 flex-[1_1_240px] flex-col gap-1 text-[13px] text-ink-2">
+          <StudyName title={chosen.title} tone={chosen.tone} />
+          <span>지금은 내 목표를 추가할 수 없어요 · {blocked}</span>
+        </p>
+        <button type="button" onClick={onClose} className="h-11 shrink-0 rounded-[12px] border border-line-3 bg-surface px-[18px] text-[14px] font-semibold text-ink">
+          닫기
+        </button>
+      </div>
+    );
+  }
   if (studies.length === 0) {
     return (
-      <div className="rounded-[16px] border-[1.5px] border-slate-text/25 bg-slate-soft/40 p-[14px] text-[13px] text-muted">
+      <div className={`${box} text-[13px] text-muted`}>
         지금 내 목표를 추가할 수 있는 스터디가 없어요 · 모집 중이거나 진행 중인 스터디에서 추가할 수 있어요
       </div>
     );
   }
+  const only = studies.length === 1 ? studies[0] : null;
   return (
     <form
       aria-label="내 목표 추가"
@@ -56,10 +89,16 @@ export function AddPersonalForm({ data, defaultSlug, onAdd, onClose }: { data: M
           onClose();
         }
       }}
-      className="flex flex-col gap-[10px] rounded-[16px] border-[1.5px] border-slate-text/25 bg-slate-soft/40 p-[14px]"
+      className={`${box} flex flex-col gap-[10px]`}
     >
+      {only && (
+        <p className="m-0 flex flex-wrap items-center gap-x-2 text-[12px] font-semibold text-ink-3">
+          스터디
+          <StudyName title={only.title} tone={only.tone} />
+        </p>
+      )}
       <div className="flex flex-wrap gap-[10px] [&>*]:flex-[1_1_220px]">
-        {studies.length > 1 && (
+        {!only && (
           <label className={lbl}>
             스터디
             <select

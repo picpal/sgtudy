@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MeTaskItem, MeTasks } from "@/lib/api/types";
-import { DEFAULT_FILTER, addableRounds, checkMode, addableStudies, applyFilter, atLimit, defaultCollapsed, defaultRound, emptyKind, normalizeFilter, personalCount, rowState, filterQuery, groupByDue, groupByRound, parseFilter, statusText, summary, type TasksFilter } from "./calc";
+import { DEFAULT_FILTER, addBlockReason, studyNote, addableRounds, checkMode, addableStudies, applyFilter, atLimit, defaultCollapsed, defaultRound, emptyKind, normalizeFilter, personalCount, rowState, filterQuery, groupByDue, groupByRound, parseFilter, statusText, summary, type TasksFilter } from "./calc";
 
 const item = (o: Partial<MeTaskItem> & { id: string }): MeTaskItem => ({
   slug: "aws", roundId: "a3", groupTitle: null, title: o.id, type: "common", startDate: "2026-10-15", endDate: "2026-10-21", st: "open", submittedAt: null, ...o,
@@ -234,5 +234,32 @@ describe("checkMode (오케스트레이터 결정: 종료 방은 숨김)", () =>
     expect(checkMode({ ...s, status: "recruit" })).toBe("disabled");
     expect(checkMode({ ...s, status: "draft" })).toBe("disabled");
     expect(checkMode({ ...s, status: "ended" })).toBe("hidden");
+  });
+});
+
+describe("addBlockReason / studyNote — 추가 못 하는 방은 이유 안내 (QA Q3-2)", () => {
+  const draft = (): MeTasks => {
+    const m = fx();
+    m.studies.push({ slug: "mine", title: "내 방", tone: "lav", status: "draft", membership: "leader", currentRoundId: "m1", canAddPersonal: false });
+    m.rounds.push({ id: "m1", slug: "mine", label: "1주차", title: "m1", startDate: "2026-11-01", endDate: "2026-11-07", canAdd: false });
+    return m;
+  };
+  it("추가할 수 있는 방은 null", () => expect(addBlockReason(fx(), "aws")).toBeNull());
+  it("준비중(모집 전) 방 · 종료 방 · 회차 없음 · 한도", () => {
+    expect(addBlockReason(draft(), "mine")).toBe("모집을 시작하면 개인 목표를 추가할 수 있어요");
+    expect(addBlockReason(fx(), "old")).toBe("종료된 스터디에는 내 목표를 추가할 수 없어요");
+    const none = fx();
+    none.rounds = none.rounds.filter((r) => r.slug !== "aws");
+    expect(addBlockReason(none, "aws")).toBe("아직 회차가 없어 내 목표를 추가할 수 없어요");
+    const full = fx();
+    full.personalPerRound = 1;
+    full.items.push(item({ id: "p-a2", roundId: "a2", type: "personal" }));
+    expect(addBlockReason(full, "aws")).toBe("모든 회차에 내 목표가 1개씩 있어 더 추가할 수 없어요");
+  });
+  it("studyNote: 준비중 방만 스터디 묶음 머리 아래 안내", () => {
+    const m = draft();
+    expect(studyNote(m.studies.find((s) => s.slug === "mine")!)).toBe("모집을 시작하면 개인 목표를 추가할 수 있어요");
+    expect(studyNote(m.studies[0])).toBeNull();
+    expect(studyNote(m.studies[1])).toBeNull(); // 종료 방은 읽기 전용 — 안내 없음(시안 E-4)
   });
 });

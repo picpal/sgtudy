@@ -6,8 +6,6 @@ import type { MeTaskStudy } from "@/lib/api/types";
 import type { TasksFilter } from "./calc";
 
 const focus = "focus-visible:outline-2 focus-visible:outline-mint focus-visible:outline-offset-2";
-/** 보이는 높이 34px, 누르는 영역은 위아래 5px 늘려 44px (진행목표 칩과 같은 방식 — before 의사 요소) */
-const tap44 = "relative before:absolute before:inset-x-0 before:-inset-y-[5px] before:content-['']";
 
 function Seg<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void }) {
   return (
@@ -20,7 +18,7 @@ function Seg<T extends string>({ label, value, options, onChange }: { label: str
             type="button"
             aria-pressed={on}
             onClick={() => onChange(id)}
-            className={`h-[34px] whitespace-nowrap rounded-[9px] px-3 text-[13px] max-sm:h-11 ${tap44} ${focus} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
+            className={`h-11 whitespace-nowrap rounded-[9px] px-3 text-[13px] ${focus} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
           >
             {text}
           </button>
@@ -30,7 +28,7 @@ function Seg<T extends string>({ label, value, options, onChange }: { label: str
   );
 }
 
-/** 필터 칩 — 390 에서는 44px 높이 */
+/** 필터 칩 — 모든 폭에서 44px 높이 (QA Q1-6) */
 function Chip({ on, onClick, children, title }: { on: boolean; onClick: () => void; children: ReactNode; title?: string }) {
   return (
     <button
@@ -38,7 +36,7 @@ function Chip({ on, onClick, children, title }: { on: boolean; onClick: () => vo
       aria-pressed={on}
       title={title}
       onClick={onClick}
-      className={`inline-flex h-[34px] max-w-full items-center gap-[6px] rounded-[17px] border px-3 text-[13px] max-sm:h-11 max-sm:rounded-[22px] ${tap44} ${focus} ${
+      className={`inline-flex h-11 max-w-full items-center gap-[6px] rounded-[22px] border px-3 text-[13px] ${focus} ${
         on ? "border-ink bg-ink font-semibold text-white" : "border-line-3 bg-surface font-medium text-ink-3"
       }`}
     >
@@ -47,8 +45,9 @@ function Chip({ on, onClick, children, title }: { on: boolean; onClick: () => vo
   );
 }
 
+/** "전체" 가 범위·유형·스터디 세 곳에 같은 낱말로 겹치지 않게 — 유형은 390 에서도 "모든 유형" (QA Q3-9) */
 const TYPES: [TasksFilter["type"], string, string][] = [
-  ["all", "전체 유형", "전체"],
+  ["all", "모든 유형", "모든 유형"],
   ["team", "팀 과제", "팀 과제"],
   ["personal", "개인 목표", "개인"],
 ];
@@ -64,7 +63,7 @@ export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilte
           value={filter.scope}
           options={[
             ["current", "이번 회차"],
-            ["all", "전체"],
+            ["all", "전체 회차"],
           ]}
           onChange={(scope) => set({ scope })}
         />
@@ -97,16 +96,17 @@ export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilte
           ))}
         </div>
         <span className="flex-[1_1_10px] max-sm:hidden" />
-        <label className="inline-flex min-h-11 items-center gap-2 px-1 text-[13px] text-ink-2">
-          <input type="checkbox" checked={filter.hideDone} onChange={(e) => set({ hideDone: e.target.checked })} className="m-0 h-[18px] w-[18px] accent-mint" />
+        {/* 라벨 전체(44px)가 누르는 영역 — 상자는 20px */}
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[12px] px-2 text-[13px] text-ink-2">
+          <input type="checkbox" checked={filter.hideDone} onChange={(e) => set({ hideDone: e.target.checked })} className="m-0 h-5 w-5 cursor-pointer accent-mint" />
           완료 숨기기
         </label>
       </div>
       {studies.length > 1 && (
         <div role="group" aria-label="스터디" className="flex flex-wrap items-center gap-x-[6px] gap-y-[10px]">
-          <span className="mr-1 text-[13px] font-semibold text-ink-3 max-sm:hidden">스터디</span>
+          <span aria-hidden="true" className="mr-1 text-[13px] font-semibold text-ink-3">스터디</span>
           <Chip on={filter.study === "all"} onClick={() => set({ study: "all" })}>
-            전체
+            모든 스터디
           </Chip>
           {studies.map((s) => (
             <Chip key={s.slug} on={filter.study === s.slug} title={s.title} onClick={() => set({ study: s.slug })}>
