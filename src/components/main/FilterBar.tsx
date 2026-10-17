@@ -106,6 +106,12 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
             </button>
           );
         })}
+        {tags.length > 1 && (
+          // 서버는 고른 태그 중 하나라도 가진 방을 돌려준다(OR) — 좁히는 게 아니라 넓힌다는 걸 알린다(Q3-4)
+          <span data-tag-hint className="basis-full text-[12px] text-muted">
+            고른 태그 중 하나라도 있는 방을 보여줘요
+          </span>
+        )}
         {tags.length > 0 && (
           <button
             type="button"

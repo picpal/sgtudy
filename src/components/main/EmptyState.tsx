@@ -3,11 +3,11 @@ import { routes } from "@/lib/routes";
 import { emptyCopy } from "./empty-copy";
 import type { StatusFilter, Tab } from "./FilterBar";
 
-type Props = { q: string; tab: Tab; status: StatusFilter; tagLabels: string[]; onReset: () => void; onBrowse: () => void };
+type Props = { q: string; tab: Tab; status: StatusFilter; tagLabels: string[]; onReset: () => void; onClearQuery: () => void; onBrowse: () => void };
 
 const cta = "mt-2 flex h-11 items-center rounded-[12px] bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white";
 
-export function EmptyState({ q, tab, status, tagLabels, onReset, onBrowse }: Props) {
+export function EmptyState({ q, tab, status, tagLabels, onReset, onClearQuery, onBrowse }: Props) {
   const { title, body, action } = emptyCopy(q.trim(), tab, status, tagLabels);
   return (
     <div className="mb-6 flex flex-col items-center gap-3 rounded-[20px] border border-dashed border-line-dash bg-surface px-6 py-16 text-center">
@@ -31,8 +31,18 @@ export function EmptyState({ q, tab, status, tagLabels, onReset, onBrowse }: Pro
       )}
       {action === "reset" && (
         <button type="button" onClick={onReset} className={cta}>
-          필터 초기화
+          {q.trim() ? "필터·검색어 초기화" : "필터 초기화"}
         </button>
+      )}
+      {action === "clear" && (
+        <>
+          <button type="button" onClick={onClearQuery} className={cta}>
+            검색어 지우기
+          </button>
+          <Link href={routes.createRoom()} className="text-[13px] font-semibold text-mint">
+            찾는 방이 없다면 직접 만들기
+          </Link>
+        </>
       )}
     </div>
   );

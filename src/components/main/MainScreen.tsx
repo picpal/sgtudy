@@ -141,9 +141,16 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
             tab={tab}
             status={status}
             tagLabels={selectedLabels}
+            // 필터 초기화는 검색어도 지운다 — 남겨 두면 결과가 계속 비어 있다(Q3-5)
             onReset={() => {
               setStatus("all");
               setTags([]);
+              setQ("");
+              setDq("");
+            }}
+            onClearQuery={() => {
+              setQ("");
+              setDq("");
             }}
             onBrowse={() => setTab("public")}
           />

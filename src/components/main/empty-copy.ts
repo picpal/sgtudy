@@ -3,8 +3,8 @@ import type { StatusFilter, Tab } from "./FilterBar";
 const BODY = "채팅방 만들듯 30초면 충분해요. 첫 스터디를 열어 보세요.";
 const STATUS_LABEL: Record<Exclude<StatusFilter, "all">, string> = { recruit: "모집중", active: "진행중", ended: "종료" };
 
-/** create: 방 만들기 · browse: 전체 공개 방 탭으로 · reset: 상태·태그 필터 초기화 */
-export type EmptyAction = "create" | "browse" | "reset";
+/** create: 방 만들기 · browse: 전체 공개 방 탭으로 · reset: 상태·태그 필터(와 검색어) 초기화 · clear: 검색어 지우기(방 만들기는 보조) */
+export type EmptyAction = "create" | "browse" | "reset" | "clear";
 export type EmptyCopy = { title: string; body: string; action: EmptyAction };
 
 /**
@@ -16,7 +16,7 @@ export function emptyCopy(q: string, tab: Tab, status: StatusFilter, tagLabels: 
   const filters = [...(status === "all" ? [] : [STATUS_LABEL[status]]), ...tagLabels.map((t) => `#${t}`)].join(" · ");
   if (q) {
     if (filters) return { title: `‘${q}’ 검색 결과가 없어요`, body: `${filters} 필터가 함께 걸려 있어요. 필터를 풀고 다시 찾아보세요.`, action: "reset" };
-    return { title: `‘${q}’ 검색 결과가 없어요`, body: "다른 키워드나 태그로 다시 찾아보세요.", action: "create" };
+    return { title: `‘${q}’ 검색 결과가 없어요`, body: "다른 키워드나 태그로 다시 찾아보세요.", action: "clear" };
   }
   if (filters) return { title: "조건에 맞는 방이 없어요", body: `${filters} 필터에 맞는 방이 없어요.`, action: "reset" };
   if (tab === "created") return { title: "아직 만든 방이 없어요", body: BODY, action: "create" };

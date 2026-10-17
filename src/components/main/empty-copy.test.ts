@@ -3,7 +3,8 @@ import { emptyCopy } from "./empty-copy";
 
 describe("emptyCopy", () => {
   it("spec priority without filters", () => {
-    expect(emptyCopy("aws", "public", "all", [])).toEqual({ title: "‘aws’ 검색 결과가 없어요", body: "다른 키워드나 태그로 다시 찾아보세요.", action: "create" });
+    // 검색어만 걸린 빈 상태 — 검색어를 지우는 버튼이 먼저(Q3-5), 방 만들기는 보조
+    expect(emptyCopy("aws", "public", "all", [])).toEqual({ title: "‘aws’ 검색 결과가 없어요", body: "다른 키워드나 태그로 다시 찾아보세요.", action: "clear" });
     expect(emptyCopy("", "created", "all", []).title).toBe("아직 만든 방이 없어요");
     expect(emptyCopy("", "public", "all", []).title).toBe("조건에 맞는 방이 없어요");
   });
