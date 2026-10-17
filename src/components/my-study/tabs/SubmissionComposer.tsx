@@ -35,7 +35,8 @@ export function SubmissionComposer({ c, editing, late, personal = false, onCance
   const [touched, setTouched] = useState(false);
   if (!touched && (c.body.trim() !== "" || c.links.length > 0 || c.rows.length > 0)) setTouched(true);
   // 왼쪽 안내: 비활성 이유가 먼저, 없으면 수정·지각 안내
-  const hint = composerHint({ blocker: c.blocker, editing, late, personal, touched });
+  const empty = c.body.trim() === "" && c.links.length === 0 && c.rows.length === 0;
+  const hint = composerHint({ blocker: c.blocker, editing, late, personal, touched, empty });
   return (
     <div className="flex flex-col gap-4">
       {c.pending && <DraftNotice at={c.pending.at} onResume={c.resume} onDrop={c.dropDraft} />}
@@ -72,7 +73,7 @@ export function SubmissionComposer({ c, editing, late, personal = false, onCance
             aria-describedby={c.blocker ? hintId : undefined}
             className="h-11 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50"
           >
-            {c.busy ? "제출하는 중…" : c.label}
+            {c.busy ? (personal ? "저장하는 중…" : "제출하는 중…") : c.label}
           </button>
         </span>
       </div>

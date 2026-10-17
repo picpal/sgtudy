@@ -99,6 +99,12 @@ export function pickRound(n: LeafNode, d: PersonalDraft, roots: ParentNode[], id
   return { draft: { ...d, roundId: id, ...(p ? { s: p.s, e: p.e } : {}) }, note: movePreview(to.label ?? to.title, p, false) };
 }
 
+/**
+ * 편집 폼을 열 때 화면으로 끌어올리나 (QA Q1-8) — top = 상세 섹션 머리의 화면 기준 위치.
+ * 위로 지나갔거나 화면 위쪽 40% 아래에 있으면(390: 방 머리·아코디언·탭 아래 약 600px) 맨 위로 맞춘다.
+ */
+export const formScrollNeeded = (top: number, viewportH: number): boolean => top < 0 || top > viewportH * 0.4;
+
 /** 회차 기간 밖 경고 (서버 PERIOD_OUTSIDE_PARENT 와 같은 판정) — 소유자 상세·폼 위 */
 export function roundWarning(n: { s: string; e: string }, round: { s: string; e: string } | null): string | null {
   if (!round || (n.s >= round.s && n.e <= round.e)) return null;
@@ -158,7 +164,8 @@ export function cardSync(seen: Code | null, code: Code | null, skip: CardSkip, n
 
 /** 서버 오류 코드 → 스펙 §6 문구 (서버 문구보다 자세한 것만) */
 export const PERSONAL_ERROR_TEXT: Record<string, string> = {
-  SUBMISSION_HAS_CONTENT: "제출 내용이 있는 목표는 완료를 취소할 수 없어요 · 상세에서 확인해 주세요",
+  // 상세 안(완료 취소 버튼)·회차 섹션·/tasks 어디서 나도 맞는 문구 — 빠져나갈 방법(기록 비우기, QA Q1-2)까지 알린다
+  SUBMISSION_HAS_CONTENT: "기록이 있는 목표는 완료를 취소할 수 없어요 · 상세의 기록에서 내용·링크·파일을 모두 비워 저장한 뒤 취소해 주세요",
 };
 /** 개인 목표 RPC 실패 문구 — my-study·/tasks 공용 (같은 오류는 같은 문구) */
 export const personalErrorText = (e: { code: string; message: string }): string => PERSONAL_ERROR_TEXT[e.code] ?? e.message;

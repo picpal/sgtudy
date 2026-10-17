@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CODE_COLOR, EMPTY_OVERRIDES, buildTree, type LeafNode, type ParentNode } from "./model";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { cardSync, groupOthers, isDone, othersHeading, ownerOf, personalErrorText, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusColor, statusText } from "./personal";
+import { cardSync, formScrollNeeded, groupOthers, isDone, othersHeading, ownerOf, personalErrorText, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusColor, statusText } from "./personal";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const leaf = (id: string) => tree.nodes.find((n) => n.id === id) as LeafNode;
@@ -99,7 +99,7 @@ describe("ownerOf / isDone / statusColor (공용 — 최종 리뷰 Minor 5·7)",
 
 describe("personalErrorText (my-study · /tasks 공용)", () => {
   it("스펙 §6 매핑이 있으면 그 문구, 없으면 서버 문구", () => {
-    expect(personalErrorText({ code: "SUBMISSION_HAS_CONTENT", message: "x" })).toBe("제출 내용이 있는 목표는 완료를 취소할 수 없어요 · 상세에서 확인해 주세요");
+    expect(personalErrorText({ code: "SUBMISSION_HAS_CONTENT", message: "x" })).toBe("기록이 있는 목표는 완료를 취소할 수 없어요 · 상세의 기록에서 내용·링크·파일을 모두 비워 저장한 뒤 취소해 주세요");
     expect(personalErrorText({ code: "ROOM_NOT_ACTIVE", message: "서버 문구" })).toBe("서버 문구");
   });
 });
@@ -197,4 +197,16 @@ describe("cardSync — 소유자 코드가 바뀌면 제출 카드를 다시 받
     expect(cardSync("O", "O", skip, A)).toEqual({ remount: false, skip });
   });
   it("저장 직전 코드가 아닌 데서 바뀌면 다시 받는다", () => expect(cardSync("D", "O", { from: "O", at: A }, B).remount).toBe(true));
+});
+
+describe("formScrollNeeded — 개인 목표 편집 폼을 열 때 화면으로 끌어올리나 (QA Q1-8)", () => {
+  it("폼 머리가 화면 위로 지나갔거나 화면 아래쪽 60%에 있으면 끌어올린다", () => {
+    expect(formScrollNeeded(-10, 844)).toBe(true);
+    expect(formScrollNeeded(620, 844)).toBe(true); // 390: 방 머리·아코디언·탭 아래
+    expect(formScrollNeeded(900, 844)).toBe(true);
+  });
+  it("이미 화면 위쪽에 보이면 그대로(데스크톱)", () => {
+    expect(formScrollNeeded(0, 900)).toBe(false);
+    expect(formScrollNeeded(300, 900)).toBe(false);
+  });
 });

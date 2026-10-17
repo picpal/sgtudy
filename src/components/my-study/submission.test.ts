@@ -3,7 +3,7 @@ import type { Submission, TaskDetail } from "@/lib/api/types";
 import {
   SUB_LIMITS, addLink, checkFile, extOf, focusTargetOf, metaLine, mimeOf, myBadgeOf, myCardStateOf, emptyDescText, objectKey,
   sizeText, stampKst, statusRows, submitBlocker, submitErrorAction, submitLabel,
-  composerHint, lateNote, savedToast, notAssignedText, rowStatusText, showAllSubmitted, statusHeadOf,
+  composerHint, emptyAllowed, lateNote, savedToast, notAssignedText, rowStatusText, showAllSubmitted, statusHeadOf,
 } from "./submission";
 
 const sub = (o: Partial<Submission> = {}): Submission =>
@@ -73,6 +73,24 @@ describe("submitBlocker", () => {
     expect(submitBlocker({ body: "a".repeat(50_001), links: [], files: [] }, true)).toBe("본문은 50,000자까지예요");
   });
   it("ok with only a file", () => expect(submitBlocker({ body: "", links: [], files: [ready] }, true)).toBeNull());
+  it("Q1-2: allowEmpty(완료한 개인 기록 수정)면 비워도 저장 가능 — 다른 막힘은 그대로", () => {
+    expect(submitBlocker({ body: " ", links: [], files: [] }, true, { allowEmpty: true })).toBeNull();
+    expect(submitBlocker({ body: "", links: [], files: [] }, false, { allowEmpty: true })).toBe("인터넷 연결을 확인해 주세요");
+    expect(submitBlocker({ body: "", links: [], files: [{ status: "uploading" }] }, true, { allowEmpty: true })).toBe("파일을 올리는 중이에요");
+  });
+  it("회귀: 팀 과제(allowEmpty 없음)는 처음 제출·수정 모두 빈 내용 거부", () => {
+    expect(submitBlocker({ body: "", links: [], files: [] }, true)).toBe("내용·링크·파일 중 하나는 있어야 해요");
+    expect(submitBlocker({ body: "", links: [], files: [] }, true, { allowEmpty: false })).toBe("내용·링크·파일 중 하나는 있어야 해요");
+  });
+});
+
+describe("emptyAllowed — 빈 저장은 이미 완료한 개인 목표 기록만 (Q1-2)", () => {
+  it("개인 + 내 기록 있음만 true", () => {
+    expect(emptyAllowed(true, sub())).toBe(true);
+    expect(emptyAllowed(true, null)).toBe(false);
+    expect(emptyAllowed(false, sub())).toBe(false);
+    expect(emptyAllowed(false, null)).toBe(false);
+  });
 });
 
 describe("myCardStateOf — 판정 순서 (Review Focus 2)", () => {
@@ -222,15 +240,26 @@ describe("composerHint — 빈 상태는 처음엔 중립색 (Ruling)", () => {
   it("처음 빈 작성 화면: 안내만, 경고색 아님", () => expect(composerHint({ ...base, blocker: EMPTY })).toEqual({ text: EMPTY, warn: false }));
   it("입력을 비웠으면(touched) 경고색", () => expect(composerHint({ ...base, blocker: EMPTY, touched: true })).toEqual({ text: EMPTY, warn: true }));
   it("다른 비활성 이유는 늘 경고색", () => expect(composerHint({ ...base, blocker: "파일을 올리는 중이에요" })).toEqual({ text: "파일을 올리는 중이에요", warn: true }));
-  it("개인 목표: '완료로 표시' 안내를 덧붙인다(처음 작성일 때)", () => {
-    expect(composerHint({ ...base, personal: true, blocker: EMPTY })).toEqual({ text: `${EMPTY} · 내용 없이 완료하려면 위의 '완료로 표시'를 쓰세요`, warn: false });
-    expect(composerHint({ ...base, personal: true, editing: true, blocker: EMPTY, touched: true })).toEqual({ text: EMPTY, warn: true });
+  it("Q1-3 개인 목표 처음 작성: 저장 전에 '기록을 저장하면 완료로 표시돼요' + 빈 완료는 '완료로 표시'", () => {
+    expect(composerHint({ ...base, personal: true, blocker: EMPTY })).toEqual({ text: "기록을 저장하면 완료로 표시돼요 · 내용 없이 완료하려면 위의 '완료로 표시'를 쓰세요", warn: false });
+    expect(composerHint({ ...base, personal: true, blocker: EMPTY, touched: true })).toEqual({ text: "기록을 저장하면 완료로 표시돼요 · 내용 없이 완료하려면 위의 '완료로 표시'를 쓰세요", warn: true });
+    expect(composerHint({ ...base, personal: true, blocker: null })).toEqual({ text: "기록을 저장하면 완료로 표시돼요", warn: false });
+    expect(composerHint({ ...base, personal: true, blocker: null, late: true })).toEqual({ text: "기록을 저장하면 완료로 표시돼요 · 마감이 지나 늦게 완료로 기록돼요", warn: false });
+  });
+  it("Q1-2 완료한 개인 기록을 모두 비우면: 저장 가능 + 완료는 남고 그 뒤 완료 취소 가능 안내", () => {
+    expect(composerHint({ ...base, personal: true, editing: true, blocker: null, empty: true, touched: true })).toEqual({
+      text: "비운 채 저장해도 완료는 그대로예요 · 저장한 뒤 '완료 취소'를 누를 수 있어요",
+      warn: false,
+    });
+  });
+  it("회귀: 팀 과제 빈 안내·수정 안내 문구 불변", () => {
+    expect(composerHint({ ...base, blocker: EMPTY, editing: true, touched: true })).toEqual({ text: EMPTY, warn: true });
+    expect(composerHint({ ...base, blocker: null, editing: true, empty: true })).toEqual({ text: "마감 뒤에 고쳐도 지각 여부는 처음 제출 시각으로 정해져요", warn: false });
   });
   it("막힘 없음: 수정·지각 안내 — 팀 문구 그대로, 개인은 완료 문구", () => {
     expect(composerHint({ ...base, blocker: null })).toEqual({ text: null, warn: false });
     expect(composerHint({ ...base, blocker: null, late: true })).toEqual({ text: "마감이 지나 지각으로 기록돼요", warn: false });
     expect(composerHint({ ...base, blocker: null, editing: true })).toEqual({ text: "마감 뒤에 고쳐도 지각 여부는 처음 제출 시각으로 정해져요", warn: false });
-    expect(composerHint({ ...base, personal: true, blocker: null, late: true })).toEqual({ text: "마감이 지나 늦게 완료로 기록돼요", warn: false });
     expect(composerHint({ ...base, personal: true, blocker: null, editing: true })).toEqual({ text: "마감 뒤에 고쳐도 늦게 완료 여부는 처음 완료 시각으로 정해져요", warn: false });
   });
 });
@@ -247,8 +276,9 @@ describe("개인 목표 카드 남은 문구 (시안 A-6·A-7) — 팀 과제는
     expect(metaLine(sub({ updatedAt: "2026-10-13T00:10:00.000Z" }), true)).toBe("완료 10.12(월) 12:00 · 마지막 수정 10.13(화) 09:10");
     expect(metaLine(sub())).toBe("처음 제출 10.12(월) 12:00");
   });
-  it("savedToast: 개인은 늘 '저장했어요', 팀은 제출했어요/지각 제출했어요/수정했어요", () => {
-    expect(savedToast(false, true, true)).toBe("저장했어요");
+  it("savedToast: 개인 처음 저장은 '저장했어요 · 완료로 표시했어요'(Q1-3), 수정은 '저장했어요', 팀은 제출했어요/지각 제출했어요/수정했어요", () => {
+    expect(savedToast(false, true, true)).toBe("저장했어요 · 완료로 표시했어요");
+    expect(savedToast(false, false, true)).toBe("저장했어요 · 완료로 표시했어요");
     expect(savedToast(true, false, true)).toBe("저장했어요");
     expect(savedToast(false, false, false)).toBe("제출했어요");
     expect(savedToast(false, true, false)).toBe("지각 제출했어요");

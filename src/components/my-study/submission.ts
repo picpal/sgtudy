@@ -73,13 +73,21 @@ export function addLink(raw: string, links: string[]): LinkAdd {
 
 export const EMPTY_BLOCKER = "내용·링크·파일 중 하나는 있어야 해요";
 
-/** 주 버튼 비활성 이유 (null = 제출 가능) — 순서: 연결 → 업로드 중 → 실패 줄 → 본문 길이 → 비어 있음 */
-export function submitBlocker(d: { body: string; links: string[]; files: { status: string }[] }, online: boolean): string | null {
+/**
+ * 빈 저장을 허용하나 — 이미 완료한 개인 목표 기록만 (QA Q1-2). 비워 저장하면 완료(빈 제출)는 남고, 그 뒤 완료 취소가 된다.
+ * 서버 submission_upsert(0017)는 빈 내용을 막지 않는다 — 팀 과제의 "하나는 있어야" 는 이 화면 규칙이고 그대로 둔다.
+ */
+export const emptyAllowed = (personal: boolean, mine: Submission | null): boolean => personal && mine !== null;
+
+const isEmptyDraft = (d: { body: string; links: string[]; files: unknown[] }) => d.body.trim() === "" && d.links.length === 0 && d.files.length === 0;
+
+/** 주 버튼 비활성 이유 (null = 제출 가능) — 순서: 연결 → 업로드 중 → 실패 줄 → 본문 길이 → 비어 있음(allowEmpty 면 통과) */
+export function submitBlocker(d: { body: string; links: string[]; files: { status: string }[] }, online: boolean, opts: { allowEmpty?: boolean } = {}): string | null {
   if (!online) return "인터넷 연결을 확인해 주세요";
   if (d.files.some((f) => f.status === "uploading")) return "파일을 올리는 중이에요";
   if (d.files.some((f) => f.status === "error")) return "올리지 못한 파일을 빼거나 다시 올려 주세요";
   if (d.body.length > SUB_LIMITS.body) return `본문은 ${SUB_LIMITS.body.toLocaleString("en-US")}자까지예요`;
-  if (d.body.trim() === "" && d.links.length === 0 && d.files.length === 0) return EMPTY_BLOCKER;
+  if (!opts.allowEmpty && isEmptyDraft(d)) return EMPTY_BLOCKER;
   return null;
 }
 
@@ -114,9 +122,9 @@ export const emptyDescText = (personal: boolean) => (personal ? "설명이 아�
 export const submitLabel = (mine: Submission | null, today: string, end: string, personal = false) =>
   personal ? "저장" : mine ? "수정 저장" : today > end ? "지각 제출하기" : "제출하기";
 
-/** 저장 성공 토스트 — 개인 목표는 늘 "저장했어요" (시안 A-7) */
+/** 저장 성공 토스트 — 개인 목표는 "저장했어요", 처음 저장이면 완료도 됐다고 알린다 (QA Q1-3) */
 export const savedToast = (edited: boolean, isLate: boolean, personal: boolean): string =>
-  personal ? "저장했어요" : edited ? "수정했어요" : isLate ? "지각 제출했어요" : "제출했어요";
+  personal ? (edited ? "저장했어요" : "저장했어요 · 완료로 표시했어요") : edited ? "수정했어요" : isLate ? "지각 제출했어요" : "제출했어요";
 
 /** 개인 목표 상세인가 — 제출 카드 문구를 완료 문구로 (스펙 §6) */
 export const isPersonalDetail = (d: TaskDetail): boolean => d.node.task?.type === "personal";
@@ -151,18 +159,27 @@ export function rowStatusText(status: TaskStatus, personal: boolean, archived: b
 /** 내 카드가 없을 때(담당 아님) 안내 */
 export const notAssignedText = (personal: boolean): string => (personal ? "팀원의 개인 목표예요" : "담당 과제가 아니에요 · 제출 현황만 볼 수 있어요");
 
+/** 개인 목표 처음 작성 — 저장 = 완료임을 저장 전에 알린다 (QA Q1-3) */
+export const PERSONAL_SAVE_NOTE = "기록을 저장하면 완료로 표시돼요";
+
 /**
  * 작성 화면 왼쪽 안내 + 경고색 여부 (Ruling: 빈 상태는 처음엔 중립색, 입력했다 비웠을 때만 경고색 — 팀·개인 공통).
- * 개인 목표 첫 작성은 "완료로 표시"(내용 없는 완료)를 함께 알려 모순을 없앤다.
+ * 개인 목표 첫 작성은 "저장 = 완료" 와 "완료로 표시"(내용 없는 완료)를 함께 알린다.
+ * 완료한 개인 기록을 모두 비우면(empty, 저장 가능) 완료는 남고 그 뒤 취소할 수 있음을 알린다 (QA Q1-2).
  */
-export function composerHint(o: { blocker: string | null; editing: boolean; late: boolean; personal: boolean; touched: boolean }): { text: string | null; warn: boolean } {
+export function composerHint(o: { blocker: string | null; editing: boolean; late: boolean; personal: boolean; touched: boolean; empty?: boolean }): { text: string | null; warn: boolean } {
+  const firstPersonal = o.personal && !o.editing;
   if (o.blocker === EMPTY_BLOCKER) {
-    const text = o.personal && !o.editing ? `${EMPTY_BLOCKER} · 내용 없이 완료하려면 위의 '완료로 표시'를 쓰세요` : EMPTY_BLOCKER;
+    const text = firstPersonal ? `${PERSONAL_SAVE_NOTE} · 내용 없이 완료하려면 위의 '완료로 표시'를 쓰세요` : EMPTY_BLOCKER;
     return { text, warn: o.touched };
   }
   if (o.blocker) return { text: o.blocker, warn: true };
-  if (o.editing) return { text: o.personal ? "마감 뒤에 고쳐도 늦게 완료 여부는 처음 완료 시각으로 정해져요" : "마감 뒤에 고쳐도 지각 여부는 처음 제출 시각으로 정해져요", warn: false };
-  if (o.late) return { text: o.personal ? "마감이 지나 늦게 완료로 기록돼요" : "마감이 지나 지각으로 기록돼요", warn: false };
+  if (o.editing) {
+    if (o.personal && o.empty) return { text: "비운 채 저장해도 완료는 그대로예요 · 저장한 뒤 '완료 취소'를 누를 수 있어요", warn: false };
+    return { text: o.personal ? "마감 뒤에 고쳐도 늦게 완료 여부는 처음 완료 시각으로 정해져요" : "마감 뒤에 고쳐도 지각 여부는 처음 제출 시각으로 정해져요", warn: false };
+  }
+  if (firstPersonal) return { text: o.late ? `${PERSONAL_SAVE_NOTE} · 마감이 지나 늦게 완료로 기록돼요` : PERSONAL_SAVE_NOTE, warn: false };
+  if (o.late) return { text: "마감이 지나 지각으로 기록돼요", warn: false };
   return { text: null, warn: false };
 }
 

@@ -8,7 +8,7 @@ import { discardUnattached, registerFile, roomIdOfNode, upsertSubmission } from 
 import type { Submission, TaskDetail } from "@/lib/api/types";
 import { uploadAttachment, uploadErrorText, type UploadFailure } from "@/lib/api/upload";
 import { routes } from "@/lib/routes";
-import { addLink as addLinkRule, checkFile, objectKey, isPersonalDetail, savedToast, submitBlocker, submitErrorAction, submitLabel } from "./submission";
+import { addLink as addLinkRule, checkFile, emptyAllowed, objectKey, isPersonalDetail, savedToast, submitBlocker, submitErrorAction, submitLabel } from "./submission";
 import { clearDraft, draftDiffers, draftKey, readDraft, writeDraft, type Draft } from "./submissionDraft";
 import { fromSaved, readyIds, removePlanOf, slotsLeft, uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
 
@@ -273,8 +273,9 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
   };
 
   /* ---------- 제출 ---------- */
-  const blocker = submitBlocker({ body, links, files: rows }, online);
   const personal = isPersonalDetail(detail);
+  // 완료한 개인 기록은 모두 비워도 저장된다 (QA Q1-2) — 팀 과제는 하나는 있어야
+  const blocker = submitBlocker({ body, links, files: rows }, online, { allowEmpty: emptyAllowed(personal, mine) });
   const label = submitLabel(mine, detail.today, detail.node.endDate, personal);
   const submit = async () => {
     if (busyRef.current || blocker) return;

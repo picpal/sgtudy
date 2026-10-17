@@ -178,6 +178,18 @@ cases("personal goals · write", db, [
     const alb = (await one(q, "select n.id::text as id from public.goal_nodes n join public.rooms r on r.id = n.room_id where r.slug = 'aws' and n.title = 'ALB vs NLB 실습'")).id;
     await expectFail(q("select public.submission_upsert($1, '메모', '{}', '{}')", [alb]), "TASK_NOT_STARTED");   // 10.15 시작 팀 과제
   } },
+  { name: "QA Q1-2: 완료한 개인 목표 기록을 모두 비워 저장 → 완료는 남고(빈 제출) 그 뒤 완료 취소 가능 (0022 불필요)", run: async (q) => {
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, await uidOf(q, "철수"));
+    const id = (await create(q, await roundOf(q, "2주차"), "비우는 목표")).createdId as string;
+    await q("select public.submission_upsert($1, '메모', '{https://example.com}', '{}')", [id]);
+    await expectFail(q("select public.personal_complete('aws', $1, false)", [id]), "SUBMISSION_HAS_CONTENT");
+    const s = (await one(q, "select public.submission_upsert($1, '', '{}', '{}') as s", [id])).s;     // 빈 저장 허용
+    assertEquals([s.bodyMd, s.links, s.files], ["", [], []]);
+    assertEquals((await one(q, "select count(*)::int as n from public.submissions where node_id = $1", [id])).n, 1);   // 완료 상태 유지
+    const c = (await one(q, "select public.personal_complete('aws', $1, false) as c", [id])).c;
+    assertEquals(nodeOf(c, id).task.submitted, 0);
+  } },
   { name: "archive/delete: 소유자·그룹장, 그룹장은 제출 있으면 삭제 불가, 소유자는 제출째 삭제", run: async (q) => {
     const r2 = await roundOf(q, "2주차");
     const chulsu = await uidOf(q, "철수");

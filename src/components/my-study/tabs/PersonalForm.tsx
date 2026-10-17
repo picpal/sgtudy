@@ -5,7 +5,7 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { mmdd } from "@/lib/api/format";
 import { TypeBadge } from "../bits";
 import type { LeafNode, ParentNode } from "../model";
-import { draftOf, personalPatch, pickRound, roundWarning, type PersonalDraft } from "../personal";
+import { draftOf, formScrollNeeded, personalPatch, pickRound, roundWarning, type PersonalDraft } from "../personal";
 import { roundOptions } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 
@@ -33,6 +33,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange }: P
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const descId = useId();
   const opts = roundOptions(roots);
   const round = roots.find((r) => r.id === d.roundId) ?? null;
@@ -44,6 +45,9 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange }: P
 
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
+    // 좁은 화면에서는 폼이 방 머리·탭 아래 멀리 있다 — 상세 섹션(sticky 머리 포함)을 맨 위로 맞춰 폼이 바로 보이게 (QA Q1-8)
+    const el = formRef.current?.closest("section") ?? formRef.current;
+    if (el && formScrollNeeded(el.getBoundingClientRect().top, window.innerHeight)) el.scrollIntoView({ block: "start" });
   }, []);
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   // 저장하지 않은 수정이 있는 채로 새로고침·탭 닫기 → 브라우저 확인 (앱 안 이동은 상세의 확인 상자)
@@ -86,6 +90,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange }: P
 
   return (
     <form
+      ref={formRef}
       aria-labelledby={`pf-${n.id}`}
       onSubmit={(e) => {
         e.preventDefault();
