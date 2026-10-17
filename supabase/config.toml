@@ -102,5 +102,9 @@ enable_signup = false
 [edge_runtime]
 enabled = false
 
+# 0019 의 pg_cron → pg_net 이 x-cleanup-secret 헤더(env CLEANUP_FILES_SECRET)로 부른다 — JWT 대신 함수가 직접 검사
+[functions.cleanup-files]
+verify_jwt = false
+
 [analytics]
 enabled = false
