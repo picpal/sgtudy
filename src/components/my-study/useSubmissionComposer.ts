@@ -311,6 +311,8 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
 
   return {
     mine,
+    /** 이 화면에서 무언가 바꿨다 — 수정 취소 전에 묻는다 (Q1-11) */
+    dirty,
     body,
     setBody,
     links,

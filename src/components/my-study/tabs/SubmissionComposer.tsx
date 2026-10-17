@@ -5,6 +5,7 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { SUB_LIMITS, composerHint, stampKst } from "../submission";
 import type { Composer } from "../useSubmissionComposer";
 import { FileUploadList } from "./FileUploadList";
+import { InlineConfirm } from "./InlineConfirm";
 import { LinkListEditor } from "./LinkListEditor";
 
 type Props = { c: Composer; editing: boolean; late: boolean; personal?: boolean; onCancel?: () => void };
@@ -33,6 +34,9 @@ export function SubmissionComposer({ c, editing, late, personal = false, onCance
   const over = c.body.length > SUB_LIMITS.body;
   // 한 번이라도 무언가 넣었나 — 빈 상태 안내는 넣었다 비웠을 때만 경고색 (처음 열린 빈 화면은 중립색)
   const [touched, setTouched] = useState(false);
+  // 수정 취소 — 바꾼 게 있으면 조용히 버리지 않고 묻는다 (Q1-11)
+  const [asking, setAsking] = useState(false);
+  const cancel = () => (c.dirty ? setAsking(true) : onCancel?.());
   if (!touched && (c.body.trim() !== "" || c.links.length > 0 || c.rows.length > 0)) setTouched(true);
   // 왼쪽 안내: 비활성 이유가 먼저, 없으면 수정·지각 안내
   const empty = c.body.trim() === "" && c.links.length === 0 && c.rows.length === 0;
@@ -62,7 +66,7 @@ export function SubmissionComposer({ c, editing, late, personal = false, onCance
         </span>
         <span className="flex flex-wrap justify-end gap-2">
           {editing && onCancel && (
-            <button type="button" onClick={onCancel} disabled={c.busy} className="h-11 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink disabled:opacity-50">
+            <button type="button" onClick={cancel} disabled={c.busy || asking} className="h-11 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink disabled:opacity-50">
               취소
             </button>
           )}
@@ -77,6 +81,14 @@ export function SubmissionComposer({ c, editing, late, personal = false, onCance
           </button>
         </span>
       </div>
+      {asking && (
+        <InlineConfirm
+          text="저장하지 않은 수정이 있어요. 버리고 수정을 그만둘까요?"
+          cancelLabel="계속 편집"
+          onCancel={() => setAsking(false)}
+          actions={[{ label: "버리기", tone: "danger", onClick: () => { setAsking(false); onCancel?.(); } }]}
+        />
+      )}
     </div>
   );
 }
