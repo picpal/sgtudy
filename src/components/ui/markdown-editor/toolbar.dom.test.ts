@@ -26,15 +26,21 @@ describe("MarkdownEditor 툴바 누르는 자리 44px", () => {
     for (const b of btns) {
       expect(cls(b), b.getAttribute("aria-label") ?? "").toEqual(expect.arrayContaining(["h-11", "w-11", "shrink-0"]));
       expect(cls(b).some((c) => c.startsWith("before:"))).toBe(false);
+      // 스크롤 영역(overflow)에 잘리지 않게 포커스 링은 안쪽으로
+      expect(cls(b)).toContain("focus-visible:-outline-offset-2");
     }
   });
-  it("한 줄 고정 — 서식 버튼만 안쪽 가로 스크롤(스크롤바 숨김), 크게 쓰기는 스크롤 밖 오른쪽", () => {
+  it("좁은 폭·터치만 한 줄 가로 스크롤, 데스크톱은 줄바꿈 — 크게 쓰기는 늘 스크롤 밖 오른쪽", () => {
     const root = render(true);
     const bar = root.querySelector("[role=toolbar]")!;
     expect(cls(bar)).not.toContain("flex-wrap");
     const scroller = bar.querySelector("[data-toolbar-scroll]")!;
-    expect(cls(scroller)).toEqual(expect.arrayContaining(["overflow-x-auto", "min-w-0", "flex-1", "[scrollbar-width:none]"]));
-    expect(cls(scroller)).not.toContain("flex-wrap");
+    // 좁은 폭(max-sm)·터치(pointer-coarse)만 한 줄 + 가로 스크롤. 데스크톱 마우스는 줄바꿈으로 전부 보인다(숨긴 스크롤바엔 휠로 닿기 어렵다)
+    expect(cls(scroller)).toEqual(
+      expect.arrayContaining(["min-w-0", "flex-1", "flex-wrap", "max-sm:flex-nowrap", "max-sm:overflow-x-auto", "pointer-coarse:flex-nowrap", "pointer-coarse:overflow-x-auto", "[scrollbar-width:none]"]),
+    );
+    expect(cls(scroller)).not.toContain("overflow-x-auto");
+    expect(cls(scroller)).not.toContain("flex-nowrap");
     // 서식 버튼 15개는 스크롤 안, 크게 쓰기는 툴바의 마지막 직계 자식(스크롤 밖)
     expect(scroller.querySelectorAll("button").length).toBe(15);
     const expand = bar.querySelector("button[aria-label='크게 쓰기']")!;

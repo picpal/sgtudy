@@ -76,7 +76,8 @@ const GROUPS: Tool[][] = [
 
 // 누르는 자리 = 버튼 상자 44×44, 버튼 사이·줄 사이 틈 0 — 보이는 모양(28×32 둥근 칸)은 안쪽 span.
 // (전에는 28×32 상자 + ::before 44×44 였는데 이웃 영역과 겹쳐 실제로는 버튼마다 28~36px 만 그 버튼 몫이었다)
-const BTN = "group flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] text-ink-3 hover:text-ink";
+// 포커스 링은 안쪽(-2px) — 좁은 폭·터치의 가로 스크롤 영역(overflow)에 위아래가 잘리지 않게
+const BTN = "group flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] text-ink-3 hover:text-ink focus-visible:-outline-offset-2";
 const FACE = "flex h-8 w-7 items-center justify-center rounded-[7px] group-hover:bg-line-2";
 
 function Icon({ name }: { name: string }) {
@@ -99,8 +100,9 @@ export function revealLeft(view: { left: number; width: number }, item: { left: 
 
 /**
  * 서식 툴바 — 탭 정지 하나 + 좌우 화살표 이동 (WAI-ARIA toolbar). 묶음 사이에 세로 구분선.
- * 늘 한 줄(44px): 서식 버튼은 안쪽 가로 스크롤(스크롤바 숨김, 더 있으면 오른쪽 페이드), "크게 쓰기"는 스크롤 밖 오른쪽 고정.
- * 넓은 편집 면은 다 들어가 스크롤이 없다. 좁은 폭에서 줄바꿈하면 3줄(133px)로 편집 면을 먹어서 이렇게 한다
+ * 좁은 폭(max-sm)·터치(pointer-coarse): 한 줄(44px) + 서식 버튼만 안쪽 가로 스크롤(스크롤바 숨김, 더 있으면 오른쪽 페이드) —
+ * 줄바꿈하면 3줄(133px)로 편집 면을 먹는다. 데스크톱 마우스: 줄바꿈으로 전부 보인다(숨긴 스크롤바는 휠로 닿기 어렵다).
+ * "크게 쓰기"는 늘 스크롤·줄바꿈 영역 밖 오른쪽 고정
  */
 export function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Tool[][]; view: RefObject<EditorView | null>; onExpand?: () => void; expandRef?: RefObject<HTMLButtonElement | null>; stickyTop?: string }) {
   const bar = useRef<HTMLDivElement>(null);
@@ -151,7 +153,7 @@ export function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { grou
         ref={scroller}
         data-toolbar-scroll
         onScroll={sync}
-        className={`relative flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${more ? "[mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]" : ""}`}
+        className={`relative flex min-w-0 flex-1 flex-wrap items-center max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overflow-y-hidden pointer-coarse:flex-nowrap pointer-coarse:overflow-x-auto pointer-coarse:overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${more ? "[mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]" : ""}`}
       >
         {groups.map((g, gi) => (
           <div key={gi} role="group" className="flex shrink-0 items-center gap-0">
