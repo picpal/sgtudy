@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { EditorView } from "@codemirror/view";
 import { create, run, setDoc, type Command } from "./cm";
 import { mod } from "./platform";
@@ -87,10 +87,39 @@ function Icon({ name }: { name: string }) {
   );
 }
 
-/** 서식 툴바 — 탭 정지 하나 + 좌우 화살표 이동 (WAI-ARIA toolbar). 묶음 사이에 세로 구분선 */
-function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Tool[][]; view: RefObject<EditorView | null>; onExpand?: () => void; expandRef?: RefObject<HTMLButtonElement | null>; stickyTop?: string }) {
+/** 오른쪽 가장자리 페이드 폭 — 방향키로 옮긴 버튼은 이만큼 더 안쪽까지 보이게 스크롤한다 */
+const FADE = 24;
+
+/** 가로 스크롤 안의 항목이 보이게 할 scrollLeft (이미 다 보이면 그대로). view·item 은 스크롤 내용 기준 좌표 */
+export function revealLeft(view: { left: number; width: number }, item: { left: number; width: number }, pad: number): number {
+  if (item.left - pad < view.left) return Math.max(0, item.left - pad);
+  if (item.left + item.width + pad > view.left + view.width) return item.left + item.width + pad - view.width;
+  return view.left;
+}
+
+/**
+ * 서식 툴바 — 탭 정지 하나 + 좌우 화살표 이동 (WAI-ARIA toolbar). 묶음 사이에 세로 구분선.
+ * 늘 한 줄(44px): 서식 버튼은 안쪽 가로 스크롤(스크롤바 숨김, 더 있으면 오른쪽 페이드), "크게 쓰기"는 스크롤 밖 오른쪽 고정.
+ * 넓은 편집 면은 다 들어가 스크롤이 없다. 좁은 폭에서 줄바꿈하면 3줄(133px)로 편집 면을 먹어서 이렇게 한다
+ */
+export function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Tool[][]; view: RefObject<EditorView | null>; onExpand?: () => void; expandRef?: RefObject<HTMLButtonElement | null>; stickyTop?: string }) {
   const bar = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
+  // 오른쪽에 가려진 버튼이 남았나 — 페이드 표시
+  const [more, setMore] = useState(false);
+  const sync = useCallback(() => {
+    const el = scroller.current;
+    if (el) setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+  useEffect(() => {
+    sync();
+    const el = scroller.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [sync]);
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
     const btns = Array.from(bar.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
@@ -99,7 +128,13 @@ function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Too
     e.preventDefault();
     const next = e.key === "Home" ? 0 : e.key === "End" ? btns.length - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + btns.length) % btns.length;
     setActive(next);
-    btns[next].focus();
+    const b = btns[next];
+    const el = scroller.current;
+    // 스크롤 안 버튼이면 페이드에 가리지 않게 직접 맞춘다(브라우저 기본 focus 스크롤은 페이드 밑에 걸쳐도 멈춘다)
+    if (el && el.contains(b)) {
+      b.focus({ preventScroll: true });
+      el.scrollLeft = revealLeft({ left: el.scrollLeft, width: el.clientWidth }, { left: b.offsetLeft, width: b.offsetWidth }, FADE);
+    } else b.focus();
   };
   let idx = 0;
   return (
@@ -108,42 +143,49 @@ function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Too
       role="toolbar"
       aria-label="서식 도구"
       onKeyDown={onKey}
-      className={`flex flex-wrap items-center gap-0 border-b border-line-2 bg-surface-3 py-0 ${stickyTop !== undefined ? "sticky z-[1]" : ""}`}
+      className={`flex items-center gap-0 border-b border-line-2 bg-surface-3 py-0 ${stickyTop !== undefined ? "sticky z-[1]" : ""}`}
       // 본문 줄 폭 상한(--md-content-max)이 있으면 도구 줄도 같은 세로줄에서 시작한다 — 넓은 편집 면에서 툴바만 왼쪽 끝에 떨어져 보이지 않게
       style={{ paddingInline: "max(0px, calc((100% - var(--md-content-max, 100%)) / 2 - 2px))", ...(stickyTop !== undefined ? { top: stickyTop } : {}) }}
     >
-      {groups.map((g, gi) => (
-        <div key={gi} role="group" className="flex shrink-0 items-center gap-0">
-          {gi > 0 && <span aria-hidden="true" className="mx-[2px] h-[18px] w-px bg-line-3" />}
-          {g.map((t) => {
-            const tip = t.key ? `${t.label} (${mod}${t.key})` : t.label;
-            const tabIndex = idx++ === active ? 0 : -1;
-            return (
-              <button
-                key={t.cmd}
-                type="button"
-                tabIndex={tabIndex}
-                title={tip}
-                aria-label={t.label}
-                // 클릭해도 편집 면의 선택을 잃지 않게
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => view.current && run(view.current, t.cmd)}
-                className={BTN}
-              >
-                <span className={FACE}>
-                  {t.cap ? (
-                    <span aria-hidden="true" className="text-[13px] font-bold leading-none">
-                      H<sub className="text-[9px]">{t.cap}</sub>
-                    </span>
-                  ) : (
-                    <Icon name={t.cmd} />
-                  )}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ))}
+      <div
+        ref={scroller}
+        data-toolbar-scroll
+        onScroll={sync}
+        className={`relative flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${more ? "[mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]" : ""}`}
+      >
+        {groups.map((g, gi) => (
+          <div key={gi} role="group" className="flex shrink-0 items-center gap-0">
+            {gi > 0 && <span aria-hidden="true" className="mx-[2px] h-[18px] w-px bg-line-3" />}
+            {g.map((t) => {
+              const tip = t.key ? `${t.label} (${mod}${t.key})` : t.label;
+              const tabIndex = idx++ === active ? 0 : -1;
+              return (
+                <button
+                  key={t.cmd}
+                  type="button"
+                  tabIndex={tabIndex}
+                  title={tip}
+                  aria-label={t.label}
+                  // 클릭해도 편집 면의 선택을 잃지 않게
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => view.current && run(view.current, t.cmd)}
+                  className={BTN}
+                >
+                  <span className={FACE}>
+                    {t.cap ? (
+                      <span aria-hidden="true" className="text-[13px] font-bold leading-none">
+                        H<sub className="text-[9px]">{t.cap}</sub>
+                      </span>
+                    ) : (
+                      <Icon name={t.cmd} />
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
       {onExpand && (
         <button
           ref={expandRef}
@@ -154,7 +196,7 @@ function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Too
           aria-haspopup="dialog"
           onMouseDown={(e) => e.preventDefault()}
           onClick={onExpand}
-          className={`${BTN} ml-auto`}
+          className={BTN}
         >
           <span className={FACE}>
             <Icon name="expand" />
