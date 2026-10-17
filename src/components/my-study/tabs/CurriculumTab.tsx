@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { Chip, PillButton, Seg } from "../bits";
@@ -7,7 +8,7 @@ import { addDays, md } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
 import { allParentsClosed, findNode, isDirty, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
-import { dropPlan, movedPlan, roundOf, withAddRows, withEmptyRounds, withPersonalAddRows } from "../rounds";
+import { dropPlan, movedPlan, roundOf, rowMoves, withAddRows, withEmptyRounds, withPersonalAddRows, type RowMove } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import type { RoomStatus } from "../submission";
 import type { ToastMsg } from "@/components/ui/Toast";
@@ -63,12 +64,15 @@ const pKey = (roundId: string) => `p:${roundId}`;
 
 export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period, slug, roomStatus, viewerPending, toast, personal, periodWarning }: Props) {
   const meId = useMe()?.id ?? null;
+  const router = useRouter();
   // 권한을 거둬 간 직후 등 편집할 수 없는데 모드가 남아 있으면 보기로 그린다
   const isEdit = canEdit && S.curMode === "edit";
   // 보기 범위 — 편집 모드엔 개인 목표 없음·필터 없음. 보기 모드는 칩("내 것만"·"팀원 목표"; 둘은 서로 끈다)
   const scope: ItemScope = { meId, mineOnly: !isEdit && S.mineOnly, others: !isEdit && S.othersPersonal && !S.mineOnly, isEdit, isLeader };
   const rows = visibleNodes(tree.roots, S.closed, scope);
   const canAddPersonal = !isEdit && !!personal?.canAdd;
+  // 준비중 방은 개인 목표를 아직 못 만든다(서버 canAdd: 모집·진행만) — "＋ 내 목표 추가" 자리에 이유 안내 (Q3-3)
+  const draftNote = !isEdit && roomStatus === "draft";
   const limit = personal?.perRound ?? 20;
   // 회차마다 내 목표(보관 제외)가 한도에 닿았나
   const atLimit = (roundId: string) => !!meId && personalStats(tree.personal, meId, roundId).total >= limit;
@@ -93,6 +97,11 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
       update({ leave: null });
       // 구조 변경은 즉시 RPC (낙관적 임시 노드 → 응답 Curriculum 으로 교체)
       void api.create(to.add);
+    } else if ("tab" in to) update({ tab: to.tab, calPick: null, confirm: false, leave: null, saved: "" });
+    else if ("href" in to) {
+      // 헤더 메뉴·옆 목록 링크 (leaveGuard 가 보류했던 주소)
+      update({ leave: null });
+      router.push(to.href);
     } else update({ editSel: to.sel, quickAdd: null, confirm: false, leave: null, saved: "" });
   };
   // 저장하지 않은 수정이 있으면 먼저 묻는다 (Q2-05)
@@ -112,12 +121,12 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
     update((p) => (p.quickAdd === id ? { quickAdd: null } : {}));
   };
   // 목록 드래그 놓기 → 즉시 node_move (다른 회차로 가면 기간 규칙 movedPlan — 묶음은 하위까지 — 적용 + 토스트)
-  const onDrop = useCallback(
-    (dragId: string, overId: string, half: "top" | "bottom") => {
-      const plan = dropPlan(tree.nodes, dragId, overId, half);
+  // 드래그 놓기와 행 메뉴(⋯ 옮기기, Q2-4)가 같은 길로 node_move 한다
+  const moveTo = useCallback(
+    (dragId: string, parentId: string, index: number | undefined) => {
       const n = findNode(tree.nodes, dragId);
-      const target = plan ? findNode(tree.nodes, plan.parentId) : null;
-      if (!plan || !n || !target) return;
+      const target = findNode(tree.nodes, parentId);
+      if (!n || !target) return Promise.resolve(false);
       const from = roundOf(tree.nodes, n);
       const to = roundOf(tree.nodes, target);
       const cross = !!from && !!to && from.id !== to.id;
@@ -125,14 +134,36 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
       const dates = cross ? movedPlan(n, from, to) : [];
       const period = dates.find((d) => d.id === dragId) ?? null;
       const label = to?.label ?? to?.title;
-      void api.move(dragId, plan.parentId, plan.index, dates, cross ? (period ? `${label}로 옮겼어요 · 기간 ${md(period.s)} – ${md(period.e)}` : `${label}로 옮겼어요`) : undefined);
+      return api.move(dragId, parentId, index, dates, cross ? (period ? `${label}로 옮겼어요 · 기간 ${md(period.s)} – ${md(period.e)}` : `${label}로 옮겼어요`) : undefined);
     },
     [tree.nodes, api],
   );
+  const onDrop = useCallback(
+    (dragId: string, overId: string, half: "top" | "bottom") => {
+      const plan = dropPlan(tree.nodes, dragId, overId, half);
+      if (plan) void moveTo(dragId, plan.parentId, plan.index);
+    },
+    [tree.nodes, moveTo],
+  );
+  // 행 메뉴로 옮기는 중인 항목 — 그동안 메뉴 비활성, 끝나면 옮긴 행의 메뉴 버튼으로 포커스(키보드로 연달아 옮길 수 있게)
+  const [moving, setMoving] = useState<string | null>(null);
+  const moveRow = (id: string, m: RowMove) => {
+    setMoving(id);
+    // 접힌 회차로 옮기면 행이 사라져 보인다 — 받는 회차를 펼친다
+    if (m.cross) update((p) => ({ closed: { ...p.closed, [m.parentId]: false } }));
+    void moveTo(id, m.parentId, m.index).finally(() => {
+      setMoving(null);
+      requestAnimationFrame(() => {
+        const b = document.querySelector<HTMLButtonElement>(`[data-node="${CSS.escape(id)}"] [data-row-menu]`);
+        b?.focus({ preventScroll: true });
+        b?.scrollIntoView({ block: "nearest" });
+      });
+    });
+  };
   const drag = useRowDrag(onDrop);
   // 놓을 수 없는 자리(자기·하위·보관·제자리)에는 표시선을 그리지 않는다
   const hint = isEdit && drag.dragging && drag.over && dropPlan(tree.nodes, drag.dragging, drag.over.id, drag.over.half) ? drag.over : null;
-  const listed = isEdit ? withAddRows(rows, tree.roots, S.closed) : withPersonalAddRows(rows, tree.roots, S.closed, canAddPersonal, meId);
+  const listed = isEdit ? withAddRows(rows, tree.roots, S.closed) : withPersonalAddRows(rows, tree.roots, S.closed, canAddPersonal || draftNote, meId);
   const entries = scope.mineOnly ? withEmptyRounds(listed, S.closed) : listed;
   // "＋ 내 목표 추가" → 그 자리가 빠른 추가 입력 (한 번에 하나 — S.quickAdd 를 편집 목록과 함께 쓴다)
   const openPAdd = (id: string) => update({ quickAdd: pKey(id) });
@@ -288,6 +319,12 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
               );
             if (entry.kind === "padd") {
               const r = entry.round;
+              if (draftNote)
+                return (
+                  <InfoRow key={`padd-${r.id}`} tone="personal">
+                    모집을 시작하면 개인 목표를 추가할 수 있어요
+                  </InfoRow>
+                );
               // 한도 도달 — 추가 줄 대신 안내(트리 안에는 treeitem 만이라 비활성 treeitem 으로)
               if (atLimit(r.id))
                 return (
@@ -329,6 +366,9 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
                   removeOff={n.temp ? "서버에 만드는 중…" : plan.kind === "none" ? plan.reason : undefined}
                   asking={asking?.id === n.id}
                   dragHandle={isEdit && n.d > 0 ? drag.handleProps(n.id) : undefined}
+                  moves={isEdit && n.d > 0 ? rowMoves(tree.nodes, tree.roots, n.id) : undefined}
+                  onMoveRow={(m) => moveRow(n.id, m)}
+                  moveBusy={moving !== null}
                   dropHint={hint?.id === n.id ? hint.half : null}
                   dragging={drag.dragging === n.id}
                   below={

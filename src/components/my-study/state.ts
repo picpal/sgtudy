@@ -1,11 +1,11 @@
 import type { TabId } from "./StudyHeaderInfo";
-import { EMPTY_OVERRIDES, type CalMode, type Overrides } from "./model";
+import { EMPTY_OVERRIDES, isDirty, type CalMode, type Overrides } from "./model";
 
 export type CurMode = "view" | "edit";
 export type BoardMode = "mine" | "team";
 export type Zoom = "day" | "week";
-/** 저장하지 않은 수정이 있는 채로 다른 노드·모드·추가로 가려 할 때 보류한 목적지 (Q2-05) */
-export type Leave = { sel: string | null } | { mode: CurMode } | { add: string | null };
+/** 저장하지 않은 수정이 있는 채로 다른 노드·모드·추가·탭(Q2-1)·다른 화면 주소(헤더 메뉴 등)로 가려 할 때 보류한 목적지 (Q2-05) */
+export type Leave = { sel: string | null } | { mode: CurMode } | { add: string | null } | { tab: TabId } | { href: string };
 
 /** 화면 안 모든 상태 — 방(URL) 이 바뀌면 통째로 리셋된다 */
 export type ScreenState = {
@@ -27,6 +27,8 @@ export type ScreenState = {
   othersPersonal: boolean;
   /** 방금 추가한 항목 — 편집 화면이 열리면 제목을 선택해 바로 고쳐 쓰게 한다 */
   justAdded: string | null;
+  /** "회차 추가" 로 방금 만들고 아직 한 번도 저장하지 않은 항목 — 저장 없이 편집 화면을 떠나면 빈 채로 남지 않게 지운다 (Q2-8) */
+  fresh: string | null;
   confirm: boolean;
   leave: Leave | null;
   saved: string;
@@ -53,6 +55,7 @@ export const INITIAL_STATE: ScreenState = {
   mineOnly: false,
   othersPersonal: false,
   justAdded: null,
+  fresh: null,
   confirm: false,
   leave: null,
   saved: "",
@@ -87,3 +90,10 @@ export const patchOv = <K extends keyof Overrides>(prev: ScreenState, key: K, va
 export const SHOW_OTHERS_PATCH: Partial<ScreenState> = { tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, viewSel: null, editSel: null, viewFocus: null, calPick: null };
 export const toggleMinePatch = (p: ScreenState): Partial<ScreenState> => ({ mineOnly: !p.mineOnly, othersPersonal: p.mineOnly ? p.othersPersonal : false });
 export const toggleOthersPatch = (p: ScreenState): Partial<ScreenState> => ({ othersPersonal: !p.othersPersonal, mineOnly: p.othersPersonal ? p.mineOnly : false });
+
+/** 진행목표 편집 화면에 저장하지 않은 수정이 열려 있다 — 탭·헤더 메뉴·뒤로 가기로 떠나기 전에 묻는다 (Q2-1) */
+export const blocksLeave = (S: ScreenState, canEdit: boolean): boolean => canEdit && S.tab === "curriculum" && S.curMode === "edit" && isDirty(S.ov, S.editSel);
+
+/** 방 탭 누름 — 미저장 수정이 있으면 탭은 그대로 두고 목적지를 보류(편집 화면의 "저장하지 않은 수정이 있어요" 확인) */
+export const tabPatch = (S: ScreenState, tab: TabId, canEdit: boolean): Partial<ScreenState> =>
+  tab !== S.tab && blocksLeave(S, canEdit) ? { leave: { tab }, confirm: false } : { tab, calPick: null };

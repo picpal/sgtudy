@@ -17,8 +17,10 @@ export type CurriculumApi = {
   /** open: 만든 항목의 편집 화면을 연다(기본). false = 목록에 머문다(빠른 추가 — 토스트 없음). 성공하면 true */
   create: (parentId: string | null, opts?: { title?: string; open?: boolean }) => Promise<boolean>;
   /** from: "list" — 진행목표 목록에서 지웠다. 실패해도 편집 화면을 열지 않는다.
-   *  "child" — 회차 편집 화면의 과제 섹션에서 지웠다. 열린 편집 화면(editSel)을 그대로 둔다 */
-  remove: (id: string, from?: "edit" | "list" | "child") => Promise<void>;
+   *  "child" — 회차 편집 화면의 과제 섹션에서 지웠다. 열린 편집 화면(editSel)을 그대로 둔다. okText = 성공 토스트(기본 "삭제했어요") */
+  remove: (id: string, from?: "edit" | "list" | "child", okText?: string) => Promise<void>;
+  /** 다른 화면으로 떠나며 저장한 적 없는 빈 새 회차를 지운다 (Q2-8) — 화면 상태를 건드리지 않는다(바꾸면 주소 동기화가 history.back 으로 이동을 덮는다). 실패는 조용히 */
+  discard: (id: string) => void;
   /** from: "list" — 결과를 편집 화면 문구 대신 토스트로 */
   archive: (id: string, on: boolean, from?: "edit" | "list") => Promise<void>;
   /** 성공(또는 바뀐 것 없음)이면 true */
@@ -107,12 +109,12 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const remove = useCallback(
-    async (id: string, from: "edit" | "list" | "child" = "edit") => {
+    async (id: string, from: "edit" | "list" | "child" = "edit", okText = "삭제했어요") => {
       update((p) => ({ ov: { ...p.ov, removed: { ...p.ov.removed, [id]: true } }, ...(from === "child" ? {} : { editSel: null, confirm: false }) }));
       try {
         setCur(await nodeDelete(slug, id));
         update((p) => ({ ov: { ...p.ov, removed: dropKey(p.ov.removed, id) } }));
-        toast({ text: "삭제했어요", tone: "ok" }); // Q3-14
+        toast({ text: okText, tone: "ok" }); // Q3-14
         router.refresh();
       } catch (e) {
         // 되돌림 — 편집 화면에서 지웠으면 그 화면을 다시 연다, 목록에서 지웠으면 행만 돌아온다
@@ -193,6 +195,8 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
     [slug, setCur, fail, router, toast],
   );
 
+  const discard = useCallback((id: string) => void nodeDelete(slug, id).catch(() => {}), [slug]);
+
   const refresh = useCallback(() => fetchCurriculum(slug).then(setCur, () => {}), [slug, setCur]);
 
   // 개인 목표 RPC 공통 — 응답으로 교체 + 성공 토스트. 실패는 fail
@@ -236,5 +240,5 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
 
   const removePersonal = useCallback(async (id: string) => !!(await personal(() => personalDelete(slug, id), { text: "삭제했어요", tone: "ok" })), [slug, personal]);
 
-  return { create, remove, archive, save, move, refresh, createPersonal, completePersonal, updatePersonal, archivePersonal, removePersonal };
+  return { create, remove, discard, archive, save, move, refresh, createPersonal, completePersonal, updatePersonal, archivePersonal, removePersonal };
 }

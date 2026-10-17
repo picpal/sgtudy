@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, goLeafPatch, modeSwitchPatch, toggleMinePatch, toggleOthersPatch } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, goLeafPatch, modeSwitchPatch, tabPatch, toggleMinePatch, toggleOthersPatch } from "./state";
 
 describe("goLeafPatch", () => {
   it("opens the task detail view instead of an inline row", () =>
@@ -38,4 +38,25 @@ describe("진행목표·간트 필터 칩 — 두 칩은 서로 끈다", () => {
 describe("SHOW_OTHERS_PATCH (개요 '팀원 개인 목표 보기 →')", () => {
   it("열린 상세를 닫고 진행목표 보기 + 팀원 목표 칩", () =>
     expect(SHOW_OTHERS_PATCH).toMatchObject({ tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, viewSel: null, editSel: null, viewFocus: null, calPick: null }));
+});
+
+describe("tabPatch (Q2-1 — 저장하지 않은 편집이 있으면 탭을 바꾸기 전에 묻는다)", () => {
+  const dirty = { ...INITIAL_STATE, tab: "curriculum" as const, curMode: "edit" as const, editSel: "7", ov: { ...INITIAL_STATE.ov, titles: { "7": "고친 제목" } } };
+  it("편집 화면에 미저장 수정 → 탭은 그대로, 목적지를 보류", () => expect(tabPatch(dirty, "board", true)).toEqual({ leave: { tab: "board" }, confirm: false }));
+  it("수정 없음·보기 모드·편집 권한 없음·같은 탭 → 바로 바꾼다", () => {
+    expect(tabPatch({ ...dirty, ov: INITIAL_STATE.ov }, "board", true)).toEqual({ tab: "board", calPick: null });
+    expect(tabPatch({ ...dirty, curMode: "view" }, "board", true)).toEqual({ tab: "board", calPick: null });
+    expect(tabPatch(dirty, "board", false)).toEqual({ tab: "board", calPick: null });
+    expect(tabPatch(dirty, "curriculum", true)).toEqual({ tab: "curriculum", calPick: null });
+  });
+});
+
+describe("blocksLeave (헤더 메뉴 등 다른 화면으로 — 미저장 편집)", () => {
+  it("편집 모드 + 열린 항목에 미저장 수정일 때만", () => {
+    const S = { ...INITIAL_STATE, tab: "curriculum" as const, curMode: "edit" as const, editSel: "7", ov: { ...INITIAL_STATE.ov, descs: { "7": "x" } } };
+    expect(blocksLeave(S, true)).toBe(true);
+    expect(blocksLeave(S, false)).toBe(false);
+    expect(blocksLeave({ ...S, tab: "board" }, true)).toBe(false);
+    expect(blocksLeave({ ...S, ov: INITIAL_STATE.ov }, true)).toBe(false);
+  });
 });

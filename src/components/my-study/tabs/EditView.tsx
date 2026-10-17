@@ -5,6 +5,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { TaskType } from "@/data/my-study";
 import { md } from "@/lib/date";
+import { setLeaveGuard } from "@/lib/leaveGuard";
 import { Seg } from "../bits";
 import { dropFieldOv, isDirty, isPersonal, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
 import { moveNote, movedPeriod, reorderIndex, roundOf, roundOptions } from "../rounds";
@@ -55,7 +56,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     if (S.justAdded === id && titleInput.current) {
       titleInput.current.focus({ preventScroll: true });
       titleInput.current.select();
-      update({ justAdded: null });
+      // 저장 전까지 "방금 만든 항목" — 저장 없이 떠나면 빈 회차를 지운다 (Q2-8, MyStudyScreen)
+      update({ justAdded: null, fresh: id });
     } else heading.current?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 항목이 바뀔 때(key) 한 번만
   }, [id]);
@@ -81,6 +83,21 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
+
+  // 앱 안 링크(헤더 메뉴·로고·옆 목록)로 다른 화면에 가려 하면 — 미저장 수정은 아래 확인으로 보류(Q2-1),
+  // 저장한 적 없는 새 회차(빈 채)는 지우고 그대로 보낸다(Q2-8 — 화면이 사라져 MyStudyScreen 의 정리가 돌지 않는다)
+  const fresh = S.fresh === id && !n.leaf && n.kids.every(isPersonal);
+  useEffect(() => {
+    if (!dirty && !fresh) return;
+    return setLeaveGuard((href) => {
+      if (dirty) {
+        update({ leave: { href }, confirm: false });
+        return true;
+      }
+      api.discard(id);
+      return false;
+    });
+  }, [dirty, fresh, id, api, update]);
 
   const warns = periodWarnings(n, parent, period);
   const ids = n.leaf ? n.people.map((p) => p.userId) : [];
@@ -148,12 +165,16 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   }, [S.leave]);
   const leaveSave = async () => {
     const to = S.leave;
-    if (to && (await api.save(n, S.ov))) go(to);
-    else update({ leave: null });
+    if (to && (await api.save(n, S.ov))) {
+      update({ fresh: null });
+      go(to);
+    } else update({ leave: null });
   };
   const leaveDiscard = () => {
     const to = S.leave;
     update((p) => ({ ov: dropFieldOv(p.ov, id) }));
+    // 다른 화면으로 가면 이 화면이 사라진다 — 저장한 적 없는 새 회차는 여기서 지운다(앱 안 이동은 MyStudyScreen 이 맡는다)
+    if (to && "href" in to && fresh) api.discard(id);
     if (to) go(to);
   };
   const back = () => request({ sel: null });
@@ -189,7 +210,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
               {removeLabel}
             </button>
           )}
-          <button type="button" disabled={n.temp} onClick={() => void api.save(n, S.ov)} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
+          <button type="button" disabled={n.temp} onClick={() => void api.save(n, S.ov).then((ok) => ok && update({ fresh: null }))} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
             저장
           </button>
         </div>
@@ -361,7 +382,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           <span id={`desc-label-${id}`} className="text-[12px] font-semibold text-ink-3">
             설명
           </span>
-          {/* 남은 화면 높이를 채우고(최소 420) 내용만큼 자란다 — 편집 면 안쪽 스크롤 없음(maxHeight none). 툴바는 고정 막대 아래에 붙는다. 큰 창이 따로 필요 없어 "크게 쓰기" 는 끈다 */}
+          {/* 남은 화면 높이를 채우고(최소 420) 내용만큼 자란다 — 편집 면 안쪽 스크롤 없음(maxHeight none). 툴바는 고정 막대 아래에 붙는다.
+              "크게 쓰기" 도 둔다 — 방 만들기 상세 설명·운영 규칙 편집기와 같게(Q2-6), 390 에선 큰 창이 더 넓다 */}
           <MarkdownEditor
             labelledBy={`desc-label-${id}`}
             value={n.desc}
@@ -369,7 +391,6 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             placeholder="목표, 참고 링크, 제출 형식 등을 적어 주세요"
             minHeight={n.leaf ? "max(420px, calc(100dvh - 520px))" : "420px"}
             maxHeight="none"
-            expandable={false}
             stickyToolbar="var(--edit-bar-h, 68px)"
           />
         </div>

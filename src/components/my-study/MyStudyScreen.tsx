@@ -19,7 +19,7 @@ import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
 import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, isPersonal, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId, roundsOutsidePeriod } from "./rounds";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, goLeafPatch, modeSwitchPatch, type CurMode, type Patch, type ScreenState } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, goLeafPatch, modeSwitchPatch, tabPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
 import { OverviewTab } from "./tabs/OverviewTab";
@@ -157,6 +157,29 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     return () => window.removeEventListener("popstate", onPop);
   }, [update]);
 
+  // 새로고침·링크로 바로 열린 편집 화면은 아래 기록이 목록이 아니다 — 수정을 시작하면 지금 기록을 목록으로 바꾸고 편집 기록을 쌓아,
+  // 브라우저 뒤로 가기가 다른 화면으로 조용히 떠나지 않고 위 popstate 의 "저장하지 않은 수정" 확인을 거치게 한다 (Q2-1)
+  const editDirty = !!editOpen && isDirty(S.ov, editOpen);
+  useEffect(() => {
+    if (!editDirty || !editOpen || pushed.current === editOpen || overView.current) return;
+    window.history.replaceState(null, "", withItem(window.location.href, null));
+    window.history.pushState(null, "", withItem(window.location.href, editOpen, "edit"));
+    pushed.current = editOpen;
+    backTab.current = "curriculum";
+  }, [editDirty, editOpen]);
+  // "회차 추가" 로 만든 뒤 한 번도 저장하지 않고 편집 화면을 떠나면(목록·다른 항목·탭·모드) 빈 회차를 남기지 않는다 (Q2-8).
+  // 과제를 하나라도 넣었으면 그대로 둔다. 다른 화면 주소로 떠나는 경우는 편집 화면(leaveGuard)이 맡는다
+  const prevEdit = useRef<string | null>(editOpen);
+  useEffect(() => {
+    const prev = prevEdit.current;
+    prevEdit.current = editOpen;
+    if (!prev || prev === editOpen || S.fresh !== prev) return;
+    update({ fresh: null });
+    const n = findNode(tree.nodes, prev);
+    if (n && !n.leaf && !n.temp && n.kids.every(isPersonal)) void api.remove(prev, "child", "저장하지 않은 새 회차는 지웠어요");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 열린 편집 항목이 바뀔 때만
+  }, [editOpen]);
+
   // 참가 취소(모집 기간) · 신청 취소(승인 대기) — 확인 대화상자 + 처리 중 가드 (Q1-01, Q1-12)
   const [confirm, setConfirm] = useState<"leave" | "cancel" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -228,7 +251,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
             {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}
             <div className="flex flex-wrap items-start gap-7 @container">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
-                <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} onShare={share} more={more} />
+                <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} />
                 {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} onGoCurriculum={() => update({ tab: "curriculum" })} periodWarning={periodWarning(editRounds)} />}
                 {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
                 {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}

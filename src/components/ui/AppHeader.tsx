@@ -7,6 +7,7 @@ import { HomeLink } from "./HomeLink";
 import { Logo } from "./Logo";
 import { signOut } from "@/lib/api/me";
 import { useMe, useMyStudyHref } from "@/lib/me";
+import { guardNavigate } from "@/lib/leaveGuard";
 import { AVATAR_PAL } from "@/lib/palette";
 import { routes, safeReturnTo } from "@/lib/routes";
 
@@ -172,19 +173,22 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
         {NAV.filter((n) => me || !n.authOnly).map((n) => {
           const on = n.key === active;
           // ≤640: 메뉴 4개가 한 줄(358px)에 들어가게 아이콘을 빼고 좌우 여백을 줄인다 — 높이는 44px 터치 영역
-          const cls = `flex shrink-0 items-center gap-[7px] whitespace-nowrap rounded-[12px] px-[14px] py-[9px] text-[14px] max-sm:min-h-11 max-sm:px-[10px] max-sm:py-0 max-sm:[&>svg]:hidden ${
+          // 누르는 자리는 모든 폭에서 44px (Q1-4 — 전에는 640 초과에서 39px)
+          const cls = `flex min-h-11 shrink-0 items-center gap-[7px] whitespace-nowrap rounded-[12px] px-[14px] py-0 text-[14px] max-sm:px-[10px] max-sm:[&>svg]:hidden ${
             on ? "bg-bg font-semibold text-ink" : "font-medium text-ink-3 hover:text-ink"
           }`;
           // 홈은 뷰포트 프리페치 없이 — 홈을 떠날 때마다 /?_rsc 가 더 나가지 않게 (HomeLink 주석)
           if (n.key === "home")
             return (
-              <HomeLink key={n.key} aria-current={on ? "page" : undefined} className={cls}>
+              <HomeLink key={n.key} aria-current={on ? "page" : undefined} className={cls} onNavigate={(e) => guardNavigate(n.href, e)}>
                 {n.icon}
                 {n.label}
               </HomeLink>
             );
+          const href = n.key === "myStudy" ? myStudyHref : n.href;
+          // 진행목표 편집 화면에 저장하지 않은 수정이 있으면 이동 전에 묻는다 (Q2-1, leaveGuard)
           return (
-            <Link key={n.key} href={n.key === "myStudy" ? myStudyHref : n.href} aria-current={on ? "page" : undefined} className={cls}>
+            <Link key={n.key} href={href} aria-current={on ? "page" : undefined} className={cls} onNavigate={(e) => guardNavigate(href, e)}>
               {n.icon}
               {n.label}
             </Link>
@@ -219,7 +223,7 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
             {open && (
               <div role="menu" aria-label="내 프로필 메뉴" onKeyDown={onMenuKey} className="absolute right-0 top-[52px] z-20 flex w-[180px] flex-col rounded-[14px] border border-line bg-surface p-[6px] shadow-[0_12px_32px_rgba(27,34,48,.14)]">
                 <div className="truncate px-3 py-2 text-[12px] text-muted">{me.email}</div>
-                <Link role="menuitem" href={routes.me()} onClick={() => setOpen(false)} className="flex h-11 items-center rounded-[10px] px-3 text-[14px] font-medium text-ink hover:bg-bg">
+                <Link role="menuitem" href={routes.me()} onClick={() => setOpen(false)} onNavigate={(e) => guardNavigate(routes.me(), e)} className="flex h-11 items-center rounded-[10px] px-3 text-[14px] font-medium text-ink hover:bg-bg">
                   내 프로필
                 </Link>
                 <button role="menuitem" type="button" onClick={logout} className="flex h-11 items-center rounded-[10px] px-3 text-left text-[14px] font-medium text-ink hover:bg-bg">

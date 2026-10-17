@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, visibleNodes, type LeafNode, type ParentNode, type TreeNode } from "./model";
-import { currentRoundId, dropPlan, roundsOutsidePeriod, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
+import { currentRoundId, dropPlan, roundsOutsidePeriod, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, rowMoves, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -255,5 +255,38 @@ describe("roundsOutsidePeriod", () => {
   it("늘린 종료일이 1년 상한을 넘으면 fitEnd null, 해를 넘는 기간은 끝을 YYYY.MM.DD 로", () => {
     expect(roundsOutsidePeriod(nodes, { start: "2025-11-30", end: "2026-10-23" })?.fitEnd).toBe("2026-11-25");
     expect(roundsOutsidePeriod(nodes, { start: "2025-11-01", end: "2026-10-23" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(11.01 – 2026.10.23)을 벗어나요", fitEnd: null, before: false });
+  });
+});
+
+describe("rowMoves (편집 목록 행 메뉴 — 위로·아래로·내어쓰기·다른 회차로, Q2-4)", () => {
+  const keys = (id: string, t = tree) => rowMoves(t.nodes, t.roots, id).map((m) => m.key);
+  const find = (id: string, key: string, t = tree) => rowMoves(t.nodes, t.roots, id).find((m) => m.key === key);
+  it("위로·아래로 = reorderIndex (서버 index: 자기를 뺀 새 형제 기준)", () => {
+    expect(find("11", "up")).toBeUndefined();
+    expect(find("11", "down")).toMatchObject({ parentId: "1", index: 1 });
+    expect(find("12", "up")).toMatchObject({ parentId: "1", index: 0 });
+    expect(find("12", "down")).toBeUndefined();
+  });
+  it("다른 회차로 = 보관 아닌 다른 회차마다 그 끝(index 없음), 지금 회차는 빠진다", () => {
+    expect(keys("11").filter((k) => k.startsWith("round:"))).toEqual(["round:2", "round:3", "round:4", "round:5"]);
+    expect(find("11", "round:2")).toMatchObject({ parentId: "2", label: "2주차로 옮기기", cross: true });
+    expect(find("11", "round:2")?.index).toBeUndefined();
+    expect(keys("11", archivedTree)).not.toContain("round:2");
+  });
+  it("묶음 안 과제: 내어쓰기 = 회차 바로 아래, 묶음 바로 다음 (node_outdent 와 같은 자리)", () => {
+    // 3주차 서버 순서 [33, 31, 32] — 묶음 31 바로 다음 = index 2
+    expect(find("311", "outdent")).toMatchObject({ parentId: "3", index: 2, cross: false });
+    // 묶음 안에서 지금 회차(3)로 옮기기는 내어쓰기가 맡는다
+    expect(keys("311")).not.toContain("round:3");
+  });
+  it("회차 바로 아래 과제에는 내어쓰기·들여쓰기가 없다 (2단계 — 묶음을 새로 만들지 않는다)", () => {
+    expect(keys("33")).not.toContain("outdent");
+    expect(keys("33")).not.toContain("indent");
+  });
+  it("회차·보관·임시·개인 행은 메뉴가 비어 있다", () => {
+    expect(keys("1")).toEqual([]);
+    const t = buildTree({ ...AWS, nodes: AWS.nodes.map((n) => (n.id === "11" ? { ...n, archived: true } : n)) }, EMPTY_OVERRIDES, REF_DAY);
+    expect(keys("11", t)).toEqual([]);
+    expect(keys(tree.personal[0].id)).toEqual([]);
   });
 });

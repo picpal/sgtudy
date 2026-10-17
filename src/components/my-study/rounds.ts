@@ -77,6 +77,35 @@ export function reorderIndex(parent: ParentNode, id: string, dir: -1 | 1): numbe
   return j < 0 || j >= sibs.length ? null : j;
 }
 
+/** 편집 목록 행 메뉴(⋯) 한 항목 — node_move(parentId, index). index 없음 = 그 회차 끝. cross = 다른 회차로 가는 이동(기간 규칙 movedPlan) */
+export type RowMove = { key: string; label: string; parentId: string; index?: number; cross: boolean };
+
+/**
+ * 편집 목록 행 메뉴 — 드래그 없이(390·키보드) 순서를 바꾸고 회차를 옮긴다 (Q2-4). 서버 계약은 dropPlan 과 같다:
+ * 위로/아래로 = reorderIndex(개인 목표 건너뜀), 내어쓰기 = 묶음 안 과제를 회차 바로 아래·묶음 바로 다음으로(node_outdent 와 같은 자리),
+ * 다른 회차로 = 보관·임시 아닌 다른 회차의 끝. 들여쓰기는 없다 — UI 는 회차 → 과제 2단계, 묶음을 새로 만들지 않는다(goal-subtasks 스펙 §2.2).
+ * 회차·보관·임시·개인 행(편집 모드에 없는 전제)과 보관된 부모 아래는 빈 목록.
+ */
+export function rowMoves(nodes: TreeNode[], roots: ParentNode[], id: string): RowMove[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const n = byId.get(id);
+  if (!n || n.d === 0 || n.archived || n.temp || isPersonal(n)) return [];
+  const p = n.parentId ? byId.get(n.parentId) : undefined;
+  if (!p || p.leaf || p.archived) return [];
+  const out: RowMove[] = [];
+  const up = reorderIndex(p, id, -1);
+  const down = reorderIndex(p, id, 1);
+  if (up !== null) out.push({ key: "up", label: "위로", parentId: p.id, index: up, cross: false });
+  if (down !== null) out.push({ key: "down", label: "아래로", parentId: p.id, index: down, cross: false });
+  const gp = p.d > 0 && p.parentId ? byId.get(p.parentId) : undefined;
+  if (gp && !gp.leaf) out.push({ key: "outdent", label: "내어쓰기 · 회차 바로 아래로", parentId: gp.id, index: siblingIndex(gp, p.id) + 1, cross: false });
+  for (const r of live(roots)) {
+    if (r.id === n.roundId) continue;
+    out.push({ key: `round:${r.id}`, label: r.label ? `${r.label}로 옮기기` : `‘${r.title}’ 회차로 옮기기`, parentId: r.id, cross: true });
+  }
+  return out;
+}
+
 export type ListEntry =
   | { kind: "node"; n: TreeNode }
   | { kind: "add"; round: ParentNode }
