@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { MoreMenu, type MoreMenuItem } from "@/components/ui/MoreMenu";
 import { PAL } from "@/lib/palette";
 import { roomStatusLabel, type RoomStatus } from "@/lib/types";
 import type { StudyRoom } from "@/lib/api/my-study";
+import { routes } from "@/lib/routes";
 import { RoundIconButton, toneOfName } from "./bits";
 
 export type TabId = "overview" | "curriculum" | "board" | "calendar" | "gantt";
@@ -52,8 +54,11 @@ export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: Stu
     <>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="m-0 text-[30px] font-bold leading-[1.3] tracking-[-0.02em]">{room.title}</h1>
-          <p className="mt-2 mb-0 text-[15px] leading-[1.6] text-ink-3">{room.intro}</p>
+          {/* 긴 제목은 두 줄에서 줄인다(전체는 title·방 정보 화면) — 좁은 폭에서 헤더가 화면을 덮지 않게 (Q3-14) */}
+          <h1 title={room.title} className="m-0 line-clamp-2 break-words text-[30px] font-bold leading-[1.3] tracking-[-0.02em] max-sm:text-[22px]">
+            {room.title}
+          </h1>
+          <p className="mt-2 mb-0 line-clamp-3 break-words text-[15px] leading-[1.6] text-ink-3 max-sm:text-[14px]">{room.intro}</p>
         </div>
         <div className="flex shrink-0 gap-[6px]">
           <RoundIconButton label="공유" title="링크 복사" onClick={onShare}>
@@ -99,12 +104,20 @@ export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: Stu
                 {t.label}
               </span>
             ))}
-            <span className="ml-1 inline-flex items-center gap-1 text-[12px] text-muted">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M12 2l1.8 5.4L19 9l-5.2 1.6L12 16l-1.8-5.4L5 9l5.2-1.6z" />
-              </svg>
-              자동 태그
-            </span>
+            {room.tags.length === 0 && <span className="text-[13px] text-muted">아직 태그가 없어요</span>}
+            {room.tags.some((t) => t.auto) && (
+              <span className="ml-1 inline-flex items-center gap-1 text-[12px] text-muted">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2l1.8 5.4L19 9l-5.2 1.6L12 16l-1.8-5.4L5 9l5.2-1.6z" />
+                </svg>
+                자동 태그
+              </span>
+            )}
+            {room.action === "owner" && (
+              <Link href={routes.roomSettings(room.id)} className="inline-flex min-h-11 items-center px-1 text-[12px] font-semibold text-mint hover:text-mint-dark">
+                태그 편집
+              </Link>
+            )}
           </dd>
         </dl>
       )}

@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { EndDateForm } from "@/components/room-view/EndDateForm";
 import type { ToastMsg } from "@/components/ui/Toast";
-import { mmdd } from "@/lib/api/format";
+import { dateShort } from "@/lib/api/format";
+import { useToday } from "@/lib/today";
 import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import type { PeriodGap } from "../rounds";
 
@@ -30,6 +31,7 @@ const BTN = "h-11 rounded-[22px] border border-[#E2C77F] bg-surface px-4 text-[1
  */
 export function PeriodWarning({ gap, slug, roomStatus, canEdit, isLeader, onEditRounds, toast }: Props) {
   const active = roomStatus === "active";
+  const today = useToday();
   const router = useRouter();
   const [editEnd, setEditEnd] = useState(false);
   const refocus = useRefocusOnClose(editEnd);
@@ -58,7 +60,7 @@ export function PeriodWarning({ gap, slug, roomStatus, canEdit, isLeader, onEdit
           slug={slug}
           initial={gap.fitEnd}
           min={gap.fitEnd}
-          hint={`마지막 마감 ${mmdd(gap.fitEnd)}${active ? " · 진행중에는 마지막 마감 이후로만 바꿀 수 있어요" : ""}`}
+          hint={`마지막 마감 ${dateShort(gap.fitEnd, today)}${active ? " · 진행중에는 마지막 마감 이후로만 바꿀 수 있어요" : ""}`}
           onSaved={() => {
             setEditEnd(false);
             toast({ text: gap.before ? "종료일을 바꿨어요 · 시작일 앞 일정은 회차 기간을 고쳐 주세요" : "종료일을 바꿨어요 · 일정이 스터디 기간 안에 들어와요", tone: "ok" });

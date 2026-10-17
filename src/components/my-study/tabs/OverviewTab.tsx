@@ -13,6 +13,20 @@ import { Inline, MarkdownView } from "../MarkdownView";
 
 const MAX_PEOPLE = 4;
 
+/** 빈 섹션 안내 (Q2-11) — 그룹장에게는 채우는 곳으로 가는 링크 */
+function Empty({ text, href, cta }: { text: string; href?: string; cta?: string }) {
+  return (
+    <p className="m-0 flex flex-wrap items-center gap-x-2 rounded-[12px] bg-surface-2 px-[14px] py-3 text-[13px] text-muted">
+      {text}
+      {href && cta && (
+        <Link href={href} className="inline-flex min-h-11 items-center font-semibold text-mint hover:text-mint-dark">
+          {cta}
+        </Link>
+      )}
+    </p>
+  );
+}
+
 const H3 = ({ children, icon, mt }: { children: string; icon: React.ReactNode; mt: number }) => (
   <h3 className="mb-[10px] flex items-center gap-2 text-[15px] font-bold" style={{ marginTop: mt }}>
     <svg width="16" height="16" viewBox="0 0 24 24" fill="#1B2230" aria-hidden="true">
@@ -59,6 +73,8 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning
   const hasTasks = cur.tasks.length > 0;
   // 참가 중인 나(그룹장 포함) + 이번 회차가 있을 때만 내 개인 목표 줄
   const meRow = room.members.find((m) => m.me && !m.left && !m.pending);
+  const owner = room.action === "owner";
+  const settings = owner ? routes.roomSettings(room.id) : undefined;
   return (
     <>
       {/* 방 기간을 벗어난 회차 경고 (PeriodWarning — 진행목표와 같은 줄) */}
@@ -140,16 +156,20 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning
       </div>
 
       <H3 mt={30} icon={<><path d="M12 11v6" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.4" fill="#FFFFFF" /></>}>스터디 소개</H3>
-      <MarkdownView src={room.about} />
+      {room.about.trim() ? <MarkdownView src={room.about} /> : <Empty text="아직 스터디 소개가 없어요" href={settings} cta="방 설정에서 쓰기 →" />}
 
       <H3 mt={26} icon={<path d="m8 12.2 2.8 2.8L16.5 9" stroke="#FFFFFF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />}>운영 규칙</H3>
-      <ul className="m-0 pl-5 text-[14px] leading-[1.75] text-ink-2">
-        {room.rules.map((r) => (
-          <li key={r}>
-            <Inline text={r} />
-          </li>
-        ))}
-      </ul>
+      {room.rules.length ? (
+        <ul className="m-0 pl-5 text-[14px] leading-[1.75] text-ink-2">
+          {room.rules.map((r) => (
+            <li key={r}>
+              <Inline text={r} />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Empty text="아직 운영 규칙이 없어요" href={settings} cta="방 설정에서 쓰기 →" />
+      )}
 
       <h3 className="mb-3 mt-[26px] flex items-center gap-2 text-[15px] font-bold">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="#1B2230" aria-hidden="true">
@@ -158,6 +178,16 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning
         </svg>
         전체 일정
       </h3>
+      {room.rounds.length === 0 && (
+        <p className="m-0 flex flex-wrap items-center gap-x-2 rounded-[12px] bg-surface-2 px-[14px] py-3 text-[13px] text-muted">
+          {owner ? "아직 회차가 없어요" : "아직 회차가 없어요 · 그룹장이 진행목표를 준비하고 있어요"}
+          {owner && (
+            <button type="button" onClick={onGoCurriculum} className="inline-flex min-h-11 items-center font-semibold text-mint hover:text-mint-dark">
+              진행목표에서 회차 만들기 →
+            </button>
+          )}
+        </p>
+      )}
       <ol className="m-0 flex list-none flex-col gap-2 p-0">
         {room.rounds.map((rd) => {
           // 숫자는 트리 집계로 통일 (sub / 담당 건수)

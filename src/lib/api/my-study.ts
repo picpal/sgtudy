@@ -1,5 +1,5 @@
 import { rpc, type Db } from "@/lib/api/errors";
-import { curIndexOf, curOf, ddayOf, mmdd, periodLong, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
+import { curIndexOf, curOf, dateShort, ddayOf, mmdd, periodLong, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
 import type { Curriculum, MeState, MeStudies, MyPermissions, NodePatch, RoomDetail, RoomMemberAdminDto } from "@/lib/api/types";
 import { dday, diffDays, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
@@ -107,8 +107,9 @@ export function toSidebarGroups(ms: MeStudies, today: string): SidebarGroup[] {
       label: g.label,
       items: g.items.map((it) => {
         const w = it.when;
-        // 진행중 방에 열린 과제가 없으면 서버는 kind "end"(방 종료일)를 준다 → "MM.DD 까지" (preflight C5)
-        const when = w.kind === "deadline" ? `${mmdd(w.date)} 마감` : w.kind === "start" ? `${mmdd(w.date)} 시작` : g.kind === "active" ? `${mmdd(w.date)} 까지` : `${mmdd(w.date)} 종료`;
+        // 진행중 방에 열린 과제가 없으면 서버는 kind "end"(방 종료일)를 준다 → "MM.DD 까지" (preflight C5). 올해가 아니면 연도까지(Q2-13)
+        const d = dateShort(w.date, today);
+        const when = w.kind === "deadline" ? `${d} 마감` : w.kind === "start" ? `${d} 시작` : g.kind === "active" ? `${d} 까지` : `${d} 종료`;
         return w.kind === "deadline" ? { id: it.slug, title: it.title, intro: it.intro, when, left: diffDays(today, w.date) } : { id: it.slug, title: it.title, intro: it.intro, when };
       }),
     }));

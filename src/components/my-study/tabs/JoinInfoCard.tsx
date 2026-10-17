@@ -103,8 +103,9 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
         {/* 상태별 문구·버튼 (Q1-12/Q2-13): 모집 기간 참가자는 /rooms 처럼 참가 취소 가능, 진행 중은 불가, 그룹장은 취소 없음 */}
         {(room.action === "joined" || room.action === "leave" || room.action === "owner") && (
           <div className="flex flex-col gap-[6px]">
+            {/* 헤더 "내 과제"(/tasks, 모든 방)와 헷갈리지 않게 — 이 방 보드의 내 담당만 (Q1-12) */}
             <button type="button" onClick={onMyTasks} className="flex h-12 items-center justify-center rounded-[24px] bg-navy text-[15px] font-semibold text-white">
-              내 과제 보기
+              보드에서 이 방 내 과제 보기
             </button>
             {room.action === "leave" && (
               <button type="button" onClick={() => onCancel("leave")} disabled={busy} className="h-11 rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink disabled:opacity-60">

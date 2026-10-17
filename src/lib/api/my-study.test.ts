@@ -128,6 +128,10 @@ describe("toSidebarGroups (mystudy §1.1)", () => {
       { label: "모집중 · 신청한 방", items: [{ id: "sqld", title: "SQLD", intro: "q", when: "10.26 시작" }] },
     ]);
   });
+  it("올해가 아닌 날짜는 연도까지 (Q2-13 — 날짜 표기 규칙 dateShort)", () => {
+    const ms: MeStudies = { today: TODAY, groups: [{ kind: "active", items: [{ slug: "aws", title: "AWS", intro: "a", membership: "joined", when: { kind: "end", date: "2027-02-01" } }] }] };
+    expect(toSidebarGroups(ms, TODAY)).toEqual([{ label: "진행중", items: [{ id: "aws", title: "AWS", intro: "a", when: "2027.02.01 까지" }] }]);
+  });
   it("active room without an open task (when.kind end) → \"MM.DD 까지\" (preflight C5)", () => {
     const ms: MeStudies = { today: TODAY, groups: [{ kind: "active", items: [{ slug: "aws", title: "AWS", intro: "a", membership: "joined", when: { kind: "end", date: "2026-12-31" } }] }] };
     expect(toSidebarGroups(ms, TODAY)).toEqual([{ label: "진행중", items: [{ id: "aws", title: "AWS", intro: "a", when: "12.31 까지" }] }]);

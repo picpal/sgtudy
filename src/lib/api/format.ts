@@ -11,6 +11,14 @@ export const TASK_TYPE_KO: Record<TaskTypeDto, "공통" | "지정" | "개인"> =
 
 const sameYear = (a: string, b: string) => a.slice(0, 4) === b.slice(0, 4);
 
+/**
+ * 날짜 하나 표기 규칙(Q2-13): 오늘과 같은 해면 MM.DD, 다른 해면 YYYY.MM.DD.
+ * 범위는 endPart 규칙(끝이 시작과 다른 해면 연도)을 쓴다 — 둘 다 "연도가 바뀌면 연도를 쓴다"는 같은 규칙이다
+ */
+export const dateShort = (iso: string, today: string): string => (sameYear(iso, today) ? mmdd(iso) : ymd(iso));
+/** 기간 표기 규칙(Q2-13): 시작은 dateShort, 끝은 시작과 다른 해면 YYYY.MM.DD — "10.25 – 2027.01.10", "2027.01.04 – 01.10" */
+export const rangeShort = (start: string, end: string, today: string): string => `${dateShort(start, today)} – ${sameYear(start, end) ? mmdd(end) : ymd(end)}`;
+
 /** D14: 기간 주 수 = round((일수+1)/7). 카드 "· N주" 와 종료 방 "N주 완주" 가 같은 값을 쓴다(회차 수와 무관) */
 export const periodWeeks = (start: string, end: string): number => Math.round((diffDays(start, end) + 1) / 7);
 
@@ -31,7 +39,7 @@ export function periodLong(start: string, end: string): string {
 }
 
 export function ddayOf(status: RoomStatusDto, today: string, start: string, end: string): { short: string; long: string } {
-  if (status === "ended") return { short: "종료", long: `${mmdd(end)} 종료` };
+  if (status === "ended") return { short: "종료", long: `${dateShort(end, today)} 종료` };
   if (status === "active") {
     const short = dday(today, end);
     return { short, long: `종료까지 ${short}` };
@@ -72,7 +80,7 @@ export function roundsWindow(rounds: RoundSummary[], status: RoomStatusDto, toda
 export type RoundRowView = { label: string; title: string; dates: string; state: string; sub?: number; total?: number; current?: boolean };
 
 export function roundRow(r: RoundSummary, status: RoomStatusDto, today: string, current: boolean): RoundRowView {
-  const dates = `${mmdd(r.startDate)} – ${mmdd(r.endDate)}`;
+  const dates = rangeShort(r.startDate, r.endDate, today);
   if (status === "recruit" || status === "draft") return { label: r.label, title: r.title, dates, state: `과제 ${r.leafCount}개` };
   if (status === "ended") return { label: r.label, title: r.title, dates, state: "완료", sub: r.submitted, total: r.assigned };
   const state = today < r.startDate ? "예정" : today <= r.endDate ? "진행중" : r.pct === 100 ? "완료" : "기간 종료";
@@ -84,10 +92,10 @@ export type CurTaskView = { title: string; type: "공통" | "지정" | "개인";
 export type CurView = { pill: string; title: string; meta: string; tasks: CurTaskView[] };
 export type CurInput = Pick<RoomDetail, "status" | "startDate" | "endDate" | "currentRound" | "rounds" | "stats">;
 
-const taskView = (t: LeafSummary): CurTaskView => ({
+const taskView = (t: LeafSummary, today: string): CurTaskView => ({
   title: t.title,
   type: TASK_TYPE_KO[t.type],
-  dates: `${mmdd(t.startDate)} – ${mmdd(t.endDate)}`,
+  dates: rangeShort(t.startDate, t.endDate, today),
   people: t.people.map((p) => ({ userId: p.userId, name: p.nickname, tone: p.tone, status: p.status })),
 });
 
@@ -107,7 +115,7 @@ export function curOf(dto: CurInput, today: string): CurView {
     return {
       pill: "종료",
       title: `${periodWeeks(dto.startDate, dto.endDate)}주 완주 · 전체 달성률 ${stats.overallPct === null ? "—" : `${stats.overallPct}%`}`,   // N주 = 기간 주 수(D14), N회차 = roundCount
-      meta: `${mmdd(dto.startDate)} – ${mmdd(dto.endDate)} · 제출 ${stats.totalSubmissions} / ${stats.totalAssignments}건`,
+      meta: `${rangeShort(dto.startDate, dto.endDate, today)} · 제출 ${stats.totalSubmissions} / ${stats.totalAssignments}건`,
       tasks: [],
     };
   }
@@ -117,8 +125,8 @@ export function curOf(dto: CurInput, today: string): CurView {
     return {
       pill: `${cur.label} · 진행중`,
       title: cur.title,
-      meta: `${mmdd(cur.startDate)}(${weekdayKo(cur.startDate)}) – ${mmdd(cur.endDate)}(${weekdayKo(cur.endDate)}) · 마감 ${dday(today, cur.endDate)}`,
-      tasks: (cur.tasks ?? []).map(taskView),
+      meta: `${dateShort(cur.startDate, today)}(${weekdayKo(cur.startDate)}) – ${sameYear(cur.startDate, cur.endDate) ? mmdd(cur.endDate) : ymd(cur.endDate)}(${weekdayKo(cur.endDate)}) · 마감 ${dday(today, cur.endDate)}`,
+      tasks: (cur.tasks ?? []).map((t) => taskView(t, today)),
     };
   }
   const prev = curIndexOf(dto.rounds, today);
@@ -128,7 +136,7 @@ export function curOf(dto: CurInput, today: string): CurView {
     // roundRow 와 같은 규칙: 지난 회차가 전원 제출(pct 100)이면 "완료"
     pill: last ? `${last.label} · ${last.pct === 100 ? "완료" : "기간 종료"}` : "시작 전",
     title: "진행 중인 회차가 없어요",
-    meta: next ? `다음 회차 ${mmdd(next.startDate)} 시작` : "",
+    meta: next ? `다음 회차 ${dateShort(next.startDate, today)} 시작` : "",
     tasks: [],
   };
 }

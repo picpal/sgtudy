@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays } from "@/lib/date";
-import { curIndexOf, curOf, ddayOf, endPart, glanceOf, periodCard, periodLong, periodShort, periodWeeks, roundRow, roundsWindow, rulesOf } from "./format";
+import { curIndexOf, curOf, dateShort, ddayOf, rangeShort, endPart, glanceOf, periodCard, periodLong, periodShort, periodWeeks, roundRow, roundsWindow, rulesOf } from "./format";
 import type { RoomDetail, RoundSummary } from "./types";
 
 const TODAY = "2026-10-12";
@@ -204,5 +204,30 @@ describe("rulesOf", () => {
   it("strips checklist and numbered markers too", () => {
     expect(rulesOf("- [ ] a\n1. b\n- [x] c\n2) d\n+ e")).toEqual(["a", "b", "c", "d", "e"]);
     expect(rulesOf("2026년 규칙")).toEqual(["2026년 규칙"]);
+  });
+});
+
+describe("dateShort — 날짜 하나 표기 규칙 (Q2-13): 오늘과 같은 해면 MM.DD, 다른 해면 YYYY.MM.DD", () => {
+  it("같은 해", () => expect(dateShort("2026-12-31", TODAY)).toBe("12.31"));
+  it("다음 해·지난 해", () => {
+    expect(dateShort("2027-01-10", TODAY)).toBe("2027.01.10");
+    expect(dateShort("2025-12-30", TODAY)).toBe("2025.12.30");
+  });
+});
+
+describe("rangeShort — 기간 표기 규칙 (Q2-13): 시작은 dateShort, 끝은 시작과 다른 해면 연도", () => {
+  it("올해 안", () => expect(rangeShort("2026-10-25", "2026-12-31", TODAY)).toBe("10.25 – 12.31"));
+  it("해를 넘김", () => expect(rangeShort("2026-10-25", "2027-01-10", TODAY)).toBe("10.25 – 2027.01.10"));
+  it("내년 안", () => expect(rangeShort("2027-01-04", "2027-01-10", TODAY)).toBe("2027.01.04 – 01.10"));
+});
+
+describe("날짜 표기 규칙을 쓰는 곳 (Q2-13)", () => {
+  it("종료 D-day 문구: 올해가 아닌 종료일은 연도까지", () => {
+    expect(ddayOf("ended", "2027-01-20", "2026-11-01", "2027-01-10").long).toBe("01.10 종료");
+    expect(ddayOf("ended", "2027-01-20", "2026-11-01", "2026-12-30").long).toBe("2026.12.30 종료");
+  });
+  it("회차 줄: 해를 넘기는 회차", () => {
+    const r: RoundSummary = { id: "1", label: "10주차", title: "t", startDate: "2026-12-28", endDate: "2027-01-03", leafCount: 1, assigned: 0, submitted: 0, pct: null };
+    expect(roundRow(r, "recruit", TODAY, false).dates).toBe("12.28 – 2027.01.03");
   });
 });

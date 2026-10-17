@@ -46,7 +46,9 @@ export function RoomInfo({ room, onShare, more }: { room: Room; onShare: () => v
     <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="text-[30px] font-bold leading-[1.3] tracking-[-0.02em]">{room.title}</h1>
+          <h1 title={room.title} className="line-clamp-3 break-words text-[30px] font-bold leading-[1.3] tracking-[-0.02em] max-sm:text-[22px]">
+            {room.title}
+          </h1>
           <p className="mt-2 text-[15px] leading-[1.6] text-ink-3">{room.intro}</p>
         </div>
         <div className="flex shrink-0 gap-[6px]">

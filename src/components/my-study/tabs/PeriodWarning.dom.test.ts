@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({ updateRoomEndDate: vi.fn() }));
 vi.mock("@/lib/api/leader", async (orig) => ({ ...(await orig<typeof import("@/lib/api/leader")>()), ...api }));
 
 const { PeriodWarning } = await import("./PeriodWarning");
+const { TodayProvider } = await import("@/lib/today");
 
 const gap = { count: 3, text: "회차 3개가 스터디 기간(10.15 – 10.23)을 벗어나요", fitEnd: "2026-11-25", before: false };
 type P = Parameters<typeof PeriodWarning>[0];
@@ -18,7 +19,7 @@ const base: P = { gap, slug: "aws", roomStatus: "active", canEdit: false, isLead
 const mount = (p: Partial<P>) => {
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
-  act(() => root.render(createElement(PeriodWarning, { ...base, ...p })));
+  act(() => root.render(createElement(TodayProvider, { today: "2026-10-12" } as Parameters<typeof TodayProvider>[0], createElement(PeriodWarning, { ...base, ...p }))));
   return { host, root };
 };
 const labels = (host: HTMLElement) => Array.from(host.querySelectorAll("button")).map((b) => b.textContent?.trim());
