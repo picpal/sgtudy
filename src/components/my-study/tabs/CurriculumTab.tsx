@@ -102,13 +102,12 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   const addRound = () => request({ add: null });
   // 회차 "+"·"과제 추가" 줄 → 목록에 머문 채 그 회차를 펼치고 끝에 빠른 추가 입력 (한 번에 하나)
   const openAdd = (id: string) => update((p) => ({ quickAdd: id, closed: { ...p.closed, [id]: false } }));
+  // Esc 로 닫았을 때만(포커스가 갈 곳이 없을 때) "과제 추가" 줄로 — 다른 회차 "+" 를 눌러 닫힌 거면 그쪽 입력을 뺏지 않는다.
+  // 버튼이 다시 그려진 뒤(effect) — 개인 목표 빠른 추가·/tasks 와 같은 훅. 이미 다른 회차로 넘어간 입력의 닫기는 대상을 걸지 않는다
+  const refocusAdd = useRefocusOnClose(!!S.quickAdd && !S.quickAdd.startsWith("p:"));
   const closeAdd = (id: string) => {
+    if (S.quickAdd === id) refocusAdd(() => document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(id)}"]`));
     update((p) => (p.quickAdd === id ? { quickAdd: null } : {}));
-    // Esc 로 닫았을 때만(포커스가 갈 곳이 없을 때) "과제 추가" 줄로 — 다른 회차 "+" 를 눌러 닫힌 거면 그쪽 입력을 뺏지 않는다
-    requestAnimationFrame(() => {
-      if (document.activeElement && document.activeElement !== document.body) return;
-      document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(id)}"]`)?.focus();
-    });
   };
   // 목록 드래그 놓기 → 즉시 node_move (다른 회차로 가면 기간 규칙 movedPlan — 묶음은 하위까지 — 적용 + 토스트)
   const onDrop = useCallback(

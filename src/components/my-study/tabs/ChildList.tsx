@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { md } from "@/lib/date";
 import { useMe } from "@/lib/me";
+import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { TypeBadge } from "../bits";
 import { CODE_COLOR, CODE_LABEL, myCode, removePlan, type ParentNode } from "../model";
 import { InlineConfirm } from "./InlineConfirm";
@@ -35,13 +36,11 @@ export function ChildList({ parent, onOpen, edit }: Props) {
   const kids = parent.kids.filter((k) => !(k.leaf && k.personal));
   const [ask, setAsk] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  // Esc 로 닫으면(포커스 갈 곳이 없으면) "과제 추가" 버튼으로 — 다른 곳을 눌러 닫힌 거면 그 포커스를 뺏지 않는다
+  // Esc 로 닫으면(포커스 갈 곳이 없으면) "과제 추가" 버튼으로 — 다른 곳을 눌러 닫힌 거면 그 포커스를 뺏지 않는다 (공용 훅: 다시 그려진 뒤 effect)
+  const refocus = useRefocusOnClose(adding);
   const closeAdd = () => {
+    refocus(() => document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(parent.id)}"]`));
     setAdding(false);
-    requestAnimationFrame(() => {
-      if (document.activeElement && document.activeElement !== document.body) return;
-      document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(parent.id)}"]`)?.focus();
-    });
   };
   return (
     <section aria-labelledby={`kids-${parent.id}`} className="flex flex-col gap-2">
