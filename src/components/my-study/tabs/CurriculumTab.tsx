@@ -7,7 +7,7 @@ import { addDays, md } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
 import { allParentsClosed, findNode, isDirty, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
-import { dropPlan, movedPlan, roundOf, roundsOutsidePeriod, withAddRows, withEmptyRounds, withPersonalAddRows } from "../rounds";
+import { dropPlan, movedPlan, roundOf, withAddRows, withEmptyRounds, withPersonalAddRows } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import type { RoomStatus } from "../submission";
 import type { ToastMsg } from "@/components/ui/Toast";
@@ -16,7 +16,6 @@ import { othersHeading } from "../personal";
 import { DetailView } from "./DetailView";
 import { EditView } from "./EditView";
 import { InlineConfirm } from "./InlineConfirm";
-import { PeriodWarning } from "./PeriodWarning";
 import { AddRow, QuickAdd } from "./QuickAdd";
 import { TreeRow } from "./TreeRow";
 import { useRowDrag } from "./useRowDrag";
@@ -36,6 +35,8 @@ type Props = {
   toast: (m: ToastMsg) => void;
   /** Curriculum.personal — 개인 목표 추가 자격·회차당 한도 (없으면 추가 줄 없음) */
   personal?: { canAdd: boolean; perRound: number };
+  /** 방 기간 밖 일정 경고 줄(PeriodWarning) — 화면이 서버 노드로 만든다. 인자 = 편집 모드로 가는 동작(편집 모드 안이면 undefined) */
+  periodWarning?: (onEditRounds?: () => void) => React.ReactNode;
 };
 
 /** 트리 안 비활성 안내 줄(한도·빈 회차·소제목) — tree 안에는 treeitem 만 둔다. 선택 대상이 아니라 aria-selected 는 두지 않는다(다른 보기 행과 같게) */
@@ -60,7 +61,7 @@ function InfoRow({ children, tone = "plain", ...rest }: { children: React.ReactN
 /** 보기 목록 개인 목표 빠른 추가의 S.quickAdd 값 — 편집 목록 팀 과제 빠른 추가(회차 id 그대로)와 겹치지 않게 */
 const pKey = (roundId: string) => `p:${roundId}`;
 
-export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period, slug, roomStatus, viewerPending, toast, personal }: Props) {
+export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period, slug, roomStatus, viewerPending, toast, personal, periodWarning }: Props) {
   const meId = useMe()?.id ?? null;
   // 권한을 거둬 간 직후 등 편집할 수 없는데 모드가 남아 있으면 보기로 그린다
   const isEdit = canEdit && S.curMode === "edit";
@@ -80,8 +81,6 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   const lastRoot = tree.roots[tree.roots.length - 1];
   // 다음 회차는 마지막 회차 다음 날부터 7일 — 방 종료일을 넘기면 미리 알려 준다 (E4, Q2-21)
   const nextRoundOut = !!lastRoot && addDays(lastRoot.e, 7) > period.end;
-  // 방 기간을 벗어난 회차 (지금 시작으로 기간이 바뀐 방 등) — 종료·보관된 방은 고칠 수 없어 보이지 않는다
-  const gap = roomStatus === "ended" ? null : roundsOutsidePeriod(tree, period);
 
   // 목록 행의 삭제 확인이 열린 항목 (아래 목록 삭제)
   const [ask, setAsk] = useState<string | null>(null);
@@ -273,7 +272,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
         </div>
       )}
 
-      {gap && <PeriodWarning gap={gap} slug={slug} canEdit={canEdit} isLeader={isLeader} onEditRounds={isEdit ? undefined : () => setMode("edit")} toast={toast} />}
+      {/* 방 기간을 벗어난 일정 (지금 시작으로 기간이 바뀐 방 등) */}
+      {periodWarning?.(isEdit ? undefined : () => setMode("edit"))}
 
       {/* 모서리 행은 컨테이너 안쪽 반경(16-1px)을 따라가야 선택 링(inset)이 둥근 클립에 잘리지 않는다.
           role="tree" 안에는 treeitem 만 — "회차 추가"·종료일 안내는 같은 테두리 상자 안, 트리 밖 (편집 모드에서는 그쪽이 맨 아래라 마지막 행을 둥글리지 않는다) */}

@@ -228,24 +228,32 @@ describe("개인 목표 — 순서·드래그·추가 줄", () => {
   });
 });
 
-// 방 기간 밖 회차 (서버 PERIOD_OUTSIDE_ROOM 과 같은 판정 — 시작 전 또는 종료 후로 걸치면). 서버는 수정 응답에만 경고를 실어 화면이 직접 본다
+// 방 기간 밖 일정 (서버 PERIOD_OUTSIDE_ROOM 과 같은 판정 — 보관 제외 모든 노드가 시작일 앞 또는 종료일 뒤로 걸치면).
+// 서버는 수정 응답에만 경고를 실어 화면이 직접 본다. 입력 = 서버가 준 노드 그대로(화면 필터·미저장 수정과 무관)
 describe("roundsOutsidePeriod", () => {
-  it("모든 회차가 기간 안이면 null", () => expect(roundsOutsidePeriod(tree, { start: "2026-10-01", end: "2026-11-04" })).toBeNull());
-  it("종료일 뒤로 넘친 회차 → 개수·문구, 종료일만 늘리면 맞는다(fitEnd = 보관 제외 전체 노드의 마지막 마감)", () => {
-    expect(roundsOutsidePeriod(tree, { start: "2026-10-01", end: "2026-10-23" })).toEqual({
-      count: 2,
-      text: "회차 2개가 스터디 기간(10.01 – 10.23)을 벗어나요",
-      fitEnd: "2026-11-04",
-    });
+  const n = (id: string, parentId: string | null, s: string, e: string, archived = false) => ({ id, parentId, startDate: `2026-${s}`, endDate: `2026-${e}`, archived });
+  const nodes = [
+    n("r1", null, "10-15", "10-21"),
+    n("t1", "r1", "10-15", "10-21"),
+    n("r2", null, "10-22", "10-28"),
+    n("t2", "r2", "10-22", "11-25"), // 과제가 자기 회차·방 기간 밖
+    n("r3", null, "11-01", "12-30", true), // 보관 — 세지 않고 마지막 마감에도 넣지 않는다
+  ];
+  it("모두 기간 안이면 null", () => expect(roundsOutsidePeriod(nodes, { start: "2026-10-15", end: "2026-11-25" })).toBeNull());
+  it("회차는 안인데 과제만 밖이어도 잡는다", () => {
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-15", end: "2026-10-28" })).toEqual({ count: 1, text: "과제 1개가 스터디 기간(10.15 – 10.28)을 벗어나요", fitEnd: "2026-11-25", before: false });
   });
-  it("시작일 앞에 걸친 회차가 있으면 종료일로는 못 맞춘다 (fitEnd null — 시작일은 진행중에 잠김)", () => {
-    expect(roundsOutsidePeriod(tree, { start: "2026-10-15", end: "2026-10-23" })).toEqual({ count: 4, text: "회차 4개가 스터디 기간(10.15 – 10.23)을 벗어나요", fitEnd: null });
+  it("회차·과제를 나눠 센다, 늘릴 종료일 = 보관 제외 전체 노드의 마지막 마감", () => {
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-15", end: "2026-10-23" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(10.15 – 10.23)을 벗어나요", fitEnd: "2026-11-25", before: false });
+  });
+  it("시작일 앞에 걸친 일정이 있으면 before — 종료일 늘리기는 뒤쪽만 맞춘다", () => {
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-10-23" })).toEqual({ count: 4, text: "회차 2개·과제 2개가 스터디 기간(10.16 – 10.23)을 벗어나요", fitEnd: "2026-11-25", before: true });
+  });
+  it("시작일 앞만 걸치면 fitEnd null", () => {
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-11-25" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(10.16 – 11.25)을 벗어나요", fitEnd: null, before: true });
   });
   it("늘린 종료일이 1년 상한을 넘으면 fitEnd null, 해를 넘는 기간은 끝을 YYYY.MM.DD 로", () => {
-    expect(roundsOutsidePeriod(tree, { start: "2025-10-20", end: "2026-10-10" })).toEqual({ count: 4, text: "회차 4개가 스터디 기간(10.20 – 2026.10.10)을 벗어나요", fitEnd: null });
-  });
-  it("보관된 회차는 세지 않는다", () => {
-    const t = buildTree({ ...AWS, nodes: AWS.nodes.map((n) => (n.roundId === "1" ? { ...n, archived: true } : n)) }, EMPTY_OVERRIDES, REF_DAY);
-    expect(roundsOutsidePeriod(t, { start: "2026-10-08", end: "2026-11-04" })).toBeNull();
+    expect(roundsOutsidePeriod(nodes, { start: "2025-11-30", end: "2026-10-23" })?.fitEnd).toBe("2026-11-25");
+    expect(roundsOutsidePeriod(nodes, { start: "2025-11-01", end: "2026-10-23" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(11.01 – 2026.10.23)을 벗어나요", fitEnd: null, before: false });
   });
 });

@@ -5,7 +5,7 @@
 import { addDays, diffDays, md } from "@/lib/date";
 import { endPart, mmdd } from "@/lib/api/format";
 import { maxEndDate } from "@/components/room-new/validate";
-import { isPersonal, type ParentNode, type Tree, type TreeNode } from "./model";
+import { isPersonal, type ParentNode, type TreeNode } from "./model";
 
 const live = (roots: ParentNode[]) => roots.filter((r) => !r.archived && !r.temp);
 
@@ -206,19 +206,26 @@ export function dropPlan(nodes: TreeNode[], dragId: string, overId: string, half
   return { parentId: parent.id, index };
 }
 
-export type PeriodGap = { count: number; text: string; fitEnd: string | null };
+/** before: 시작일 앞에 걸친 일정이 있다 — 종료일 늘리기로는 못 맞추고 회차·과제 기간을 고쳐야 한다 */
+export type PeriodGap = { count: number; text: string; fitEnd: string | null; before: boolean };
+type PeriodNode = { parentId: string | null; startDate: string; endDate: string; archived: boolean };
 
 /**
- * 방 기간을 벗어난 회차 (서버 PERIOD_OUTSIDE_ROOM 과 같은 판정: 시작일 앞 또는 종료일 뒤로 걸친 회차, 보관·임시 제외).
- * 서버는 이 경고를 수정 응답(node_update·room_update)에만 실어서, 진행목표·개요는 여기서 본다. 없으면 null.
- * fitEnd: 종료일만 늘려 맞출 수 있으면 그 날짜 — 보관 제외 전체 노드의 마지막 마감(진행중 room_update 규칙: 마지막 과제 마감 이후).
- * 시작일 앞에 걸친 회차가 있거나(시작일은 진행중에 잠김) 1년 상한을 넘으면 null → 회차 편집으로만
+ * 방 기간을 벗어난 일정 — 서버 PERIOD_OUTSIDE_ROOM 과 같은 판정(보관 제외 모든 노드: 시작일 앞 또는 종료일 뒤로 걸치면).
+ * 서버는 이 경고를 수정 응답(node_update·room_update)에만 실어서, 진행목표·개요는 서버가 준 노드(Curriculum.nodes —
+ * 화면 필터·미저장 수정과 무관)로 여기서 본다. 회차(parentId 없음)와 과제를 나눠 센다. 없으면 null.
+ * fitEnd: 종료일 뒤로 넘친 게 있고, 보관 제외 전체 노드의 마지막 마감(진행중 room_update 규칙: 마지막 과제 마감 이후)이
+ * 1년 상한 안이면 그 날짜 — 아니면 null(회차 편집으로만)
  */
-export function roundsOutsidePeriod(tree: Pick<Tree, "roots" | "nodes">, period: { start: string; end: string }): PeriodGap | null {
-  const out = live(tree.roots).filter((r) => r.s < period.start || r.e > period.end);
+export function roundsOutsidePeriod(nodes: PeriodNode[], period: { start: string; end: string }): PeriodGap | null {
+  const live = nodes.filter((n) => !n.archived);
+  const out = live.filter((n) => n.startDate < period.start || n.endDate > period.end);
   if (out.length === 0) return null;
-  const text = `회차 ${out.length}개가 스터디 기간(${mmdd(period.start)} – ${endPart(period.start, period.end)})을 벗어나요`;
-  const lastEnd = tree.nodes.reduce((m, n) => (!n.archived && !n.temp && n.e > m ? n.e : m), period.end);
-  const fits = !out.some((r) => r.s < period.start) && lastEnd > period.end && lastEnd <= maxEndDate(period.start);
-  return { count: out.length, text, fitEnd: fits ? lastEnd : null };
+  const rounds = out.filter((n) => n.parentId === null).length;
+  const tasks = out.length - rounds;
+  const what = [rounds ? `회차 ${rounds}개` : "", tasks ? `과제 ${tasks}개` : ""].filter(Boolean).join("·");
+  const text = `${what}가 스터디 기간(${mmdd(period.start)} – ${endPart(period.start, period.end)})을 벗어나요`;
+  const lastEnd = live.reduce((m, n) => (n.endDate > m ? n.endDate : m), period.end);
+  const fitEnd = lastEnd > period.end && lastEnd <= maxEndDate(period.start) ? lastEnd : null;
+  return { count: out.length, text, fitEnd, before: out.some((n) => n.startDate < period.start) };
 }

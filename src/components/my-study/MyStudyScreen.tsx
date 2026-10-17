@@ -204,11 +204,12 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     update(SHOW_OTHERS_PATCH);
     setTabJump((n) => n + 1);
   };
-  // 방 기간을 벗어난 회차 — 개요 경고 줄 (진행목표 탭은 CurriculumTab 이 직접 본다). 종료·보관된 방은 고칠 수 없어 보이지 않는다
-  const gap = useMemo(
-    () => (detail.archived || detail.status === "ended" ? null : roundsOutsidePeriod(savedTree, { start: detail.startDate, end: detail.endDate })),
-    [detail.archived, detail.status, detail.startDate, detail.endDate, savedTree],
-  );
+  // 방 기간을 벗어난 일정 — 개요·진행목표 경고 줄. 종료·보관된 방은 고칠 수 없어 보이지 않는다
+  // 서버가 준 노드(cur.nodes) 기준 — 화면 필터·편집 중 미저장 수정과 무관 (서버 PERIOD_OUTSIDE_ROOM·room_update 규칙과 같은 입력)
+  const periodStatus = detail.archived || detail.status === "ended" ? null : detail.status;
+  const gap = useMemo(() => (periodStatus ? roundsOutsidePeriod(cur.nodes, { start: detail.startDate, end: detail.endDate }) : null), [periodStatus, detail.startDate, detail.endDate, cur.nodes]);
+  const periodWarning = (onEditRounds?: () => void) =>
+    gap && periodStatus && <PeriodWarning gap={gap} slug={detail.slug} roomStatus={periodStatus} canEdit={canEdit} isLeader={isLeader} onEditRounds={onEditRounds} toast={setToast} />;
   const editRounds = () => {
     update((p) => ({ tab: "curriculum", ...modeSwitchPatch({ ...p, viewSel: null }, "edit") }));
     setTabJump((n) => n + 1);
@@ -230,8 +231,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
             <div className="flex flex-wrap items-start gap-7 @container">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                 <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} onShare={share} more={more} />
-                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} onGoCurriculum={() => update({ tab: "curriculum" })} periodWarning={gap && <PeriodWarning gap={gap} slug={detail.slug} canEdit={canEdit} isLeader={isLeader} onEditRounds={editRounds} toast={setToast} />} />}
-                {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} />}
+                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} onGoCurriculum={() => update({ tab: "curriculum" })} periodWarning={periodWarning(editRounds)} />}
+                {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
                 {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
