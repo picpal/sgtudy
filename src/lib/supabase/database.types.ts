@@ -978,6 +978,15 @@ export type Database = {
         Args: { p_file: Database["public"]["Tables"]["files"]["Row"] }
         Returns: Json
       }
+      file_purge_candidates: {
+        Args: { p_limit: number }
+        Returns: {
+          bucket_id: string
+          id: string
+          object_path: string
+        }[]
+      }
+      file_purge_grace: { Args: never; Returns: string }
       file_register: {
         Args: {
           p_mime: string
