@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { guardNavigate } from "@/lib/leaveGuard";
 import { useRouter } from "next/navigation";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -97,7 +98,9 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
     e.preventDefault();
     setOpen(false);
     markItemRead(n);
-    router.push(n.link);
+    let held = false;
+    guardNavigate(n.link, { preventDefault: () => (held = true) }); // 저장 안 한 편집이 있으면 가드가 확인 뒤 이동한다
+    if (!held) router.push(n.link);
   };
   const onReadAll = async () => {
     guard.bump();
