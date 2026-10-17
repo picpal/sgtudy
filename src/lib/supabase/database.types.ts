@@ -1039,6 +1039,7 @@ export type Database = {
       }
       iso: { Args: { p_ts: string }; Returns: string }
       job_cleanup: { Args: never; Returns: Json }
+      job_cleanup_files: { Args: never; Returns: number }
       job_completion_digest: { Args: never; Returns: number }
       job_deadline_reminder: { Args: never; Returns: number }
       job_draft_blocked: { Args: never; Returns: number }
