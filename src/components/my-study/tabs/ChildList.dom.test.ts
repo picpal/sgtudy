@@ -17,7 +17,7 @@ describe("ChildList 빠른 추가 닫기 포커스", () => {
   it("Esc 로 닫으면 다시 그려진 '과제 추가' 버튼으로 (rAF 를 기다리지 않는다)", () => {
     const host = document.body.appendChild(document.createElement("div"));
     const root = createRoot(host);
-    act(() => root.render(createElement(MeProvider, { me: null }, createElement(ChildList, { parent: round, onOpen: () => {}, edit }))));
+    act(() => root.render(createElement(MeProvider, { me: null, children: createElement(ChildList, { parent: round, onOpen: () => {}, edit }) })));
     const add = () => host.querySelector<HTMLButtonElement>(`[data-add-task="${round.id}"]`);
     act(() => add()!.click());
     const input = host.querySelector<HTMLInputElement>("input")!;
