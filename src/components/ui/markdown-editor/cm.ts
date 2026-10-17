@@ -237,6 +237,15 @@ function exitEmptyQuote(view: EditorView): boolean {
   return true;
 }
 
+/** 닫는 인라인 표식 바로 앞 Enter — 캐럿을 표식 뒤로(빈 쌍은 지우고) 옮긴 뒤 기본 Enter 에 넘긴다 (Q3-12, commands.enterPastInline) */
+function enterPastInline(view: EditorView): boolean {
+  const sel = view.state.selection.main;
+  if (!sel.empty || inCodeBlock(view.state, sel.head)) return false;
+  const e = C.enterPastInline(view.state.doc.toString(), sel.head);
+  if (e) view.dispatch({ changes: e.changes, selection: { anchor: e.anchor }, userEvent: "input" });
+  return false;
+}
+
 const formatKeymap = keymap.of([
   { key: "Mod-b", run: (v) => run(v, "bold") },
   { key: "Mod-i", run: (v) => run(v, "italic") },
@@ -269,7 +278,7 @@ export function create(parent: Element, opts: CreateOpts): EditorView {
     extensions: [
       historySlot.of(history()),
       formatKeymap,
-      Prec.highest(keymap.of([{ key: "Enter", run: exitEmptyQuote }])),
+      Prec.highest(keymap.of([{ key: "Enter", run: enterPastInline }, { key: "Enter", run: exitEmptyQuote }])),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       // addKeymap: Enter 로 목록·인용·체크리스트를 이어 쓰고, 빈 항목에서 Enter 면 빠져나온다
       markdown({ base: markdownLanguage, extensions: GFM, addKeymap: true }),

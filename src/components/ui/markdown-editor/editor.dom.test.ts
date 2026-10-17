@@ -220,3 +220,31 @@ describe("목록 표식 합치기 (Enter 로 이어진 표식 뒤에 표식을 �
     expect(w.state.doc.toString()).toBe("- - c");
   });
 });
+
+describe("굵게 안에서 Enter (Q3-12)", () => {
+  const at = (doc: string, pos: number) => { const v = mount(doc); v.dispatch({ selection: { anchor: pos } }); v.focus(); return v; };
+  it("닫는 ** 앞 Enter → 표식은 윗줄에 남고 목록은 이어진다", () => {
+    const v = at("- **굵게 쓴 글**", 10);
+    key(v.contentDOM, "Enter");
+    expect(v.state.doc.toString()).toBe("- **굵게 쓴 글**\n- ");
+  });
+  it("빈 쌍 **|** 에서 Enter → 쌍을 지우고 줄바꿈", () => {
+    const v = at("앞 ****", 4);
+    key(v.contentDOM, "Enter");
+    expect(v.state.doc.toString()).toBe("앞 \n");
+  });
+});
+
+describe("표 셀 Tab 이동 (Q2-7)", () => {
+  it("Tab·Shift+Tab 은 다음·이전 칸으로 가며 그 칸 글자를 통째로 선택한다 — 이어 쓰면 자리 글자(제목 n)를 바꿔 쓴다", () => {
+    const v = mount(TABLE);
+    const [a, b] = cells(v);
+    a.focus();
+    key(a, "Tab");
+    expect(document.activeElement).toBe(b);
+    expect(window.getSelection()?.toString()).toBe("b");
+    key(b, "Tab", { shiftKey: true });
+    expect(document.activeElement).toBe(a);
+    expect(window.getSelection()?.toString()).toBe("a");
+  });
+});

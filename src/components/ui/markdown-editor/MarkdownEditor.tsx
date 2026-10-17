@@ -16,7 +16,8 @@ export type MarkdownEditorProps = {
   minHeight?: number | string;
   /** 편집 면 최대 높이 — 내용이 이보다 길면 편집 면 안에서 스크롤한다. "none" 이면 내용만큼 자란다 */
   maxHeight?: number | string;
-  /** 툴바를 스크롤 부모 위쪽(이 오프셋)에 붙여 둔다 — 편집 면이 내용만큼 자라는 전용 편집 화면용 */
+  /** 툴바를 스크롤 부모 위쪽(이 오프셋)에 붙여 둔다 — 편집 면이 내용만큼 자라는 전용 편집 화면용.
+   *  생략해도 maxHeight="none"(내용만큼 자람)이면 붙는다: 오프셋은 CSS 변수 --md-sticky-top(없으면 0) — 화면 위 고정 막대가 있으면 그 높이를 조상에 실어 준다 (Q1-10) */
   stickyToolbar?: string;
   /** 본문 줄 폭 상한(px) — 넓은 편집 면에서 글 줄이 너무 길어지지 않게 가운데 정렬한다 */
   contentMaxWidth?: number;
@@ -104,7 +105,7 @@ export function revealLeft(view: { left: number; width: number }, item: { left: 
  * 줄바꿈하면 3줄(133px)로 편집 면을 먹는다. 데스크톱 마우스: 줄바꿈으로 전부 보인다(숨긴 스크롤바는 휠로 닿기 어렵다).
  * "크게 쓰기"는 늘 스크롤·줄바꿈 영역 밖 오른쪽 고정
  */
-export function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Tool[][]; view: RefObject<EditorView | null>; onExpand?: () => void; expandRef?: RefObject<HTMLButtonElement | null>; stickyTop?: string }) {
+export function Toolbar({ groups, view, onExpand, expandRef, stickyTop, wrap = false }: { groups: Tool[][]; view: RefObject<EditorView | null>; onExpand?: () => void; expandRef?: RefObject<HTMLButtonElement | null>; stickyTop?: string; /** 늘 줄바꿈(가로 스크롤 없음) — 높이 여유가 있는 "크게 쓰기" 창 (Q3-12) */ wrap?: boolean }) {
   const bar = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
@@ -138,6 +139,12 @@ export function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { grou
       el.scrollLeft = revealLeft({ left: el.scrollLeft, width: el.clientWidth }, { left: b.offsetLeft, width: b.offsetWidth }, FADE);
     } else b.focus();
   };
+  // 가려진 도구가 있다는 표시 겸 버튼 — 누르면 한 화면만큼 오른쪽으로 (포인터 전용: 키보드는 ←→ 로 닿는다, Q3-12)
+  const scrollMore = () => {
+    const el = scroller.current;
+    if (el) el.scrollBy({ left: Math.max(88, el.clientWidth - 88), behavior: "smooth" });
+  };
+  const scroll = wrap ? "" : "max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overflow-y-hidden pointer-coarse:flex-nowrap pointer-coarse:overflow-x-auto pointer-coarse:overflow-y-hidden";
   let idx = 0;
   return (
     <div
@@ -149,11 +156,12 @@ export function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { grou
       // 본문 줄 폭 상한(--md-content-max)이 있으면 도구 줄도 같은 세로줄에서 시작한다 — 넓은 편집 면에서 툴바만 왼쪽 끝에 떨어져 보이지 않게
       style={{ paddingInline: "max(0px, calc((100% - var(--md-content-max, 100%)) / 2 - 2px))", ...(stickyTop !== undefined ? { top: stickyTop } : {}) }}
     >
+      <div className="relative flex min-w-0 flex-1">
       <div
         ref={scroller}
         data-toolbar-scroll
         onScroll={sync}
-        className={`relative flex min-w-0 flex-1 flex-wrap items-center max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overflow-y-hidden pointer-coarse:flex-nowrap pointer-coarse:overflow-x-auto pointer-coarse:overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${more ? "[mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]" : ""}`}
+        className={`relative flex min-w-0 flex-1 flex-wrap items-center ${scroll} [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${more ? "[mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)]" : ""}`}
       >
         {groups.map((g, gi) => (
           <div key={gi} role="group" className="flex shrink-0 items-center gap-0">
@@ -187,6 +195,23 @@ export function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { grou
             })}
           </div>
         ))}
+      </div>
+      {more && (
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          data-toolbar-more
+          title="도구 더 보기"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={scrollMore}
+          className="absolute inset-y-0 right-0 flex w-11 items-center justify-end bg-[linear-gradient(to_right,transparent,var(--surface-3)_55%)] pr-[4px] text-ink-3"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m9 6 6 6-6 6" />
+          </svg>
+        </button>
+      )}
       </div>
       {onExpand && (
         <button
@@ -278,15 +303,17 @@ export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy
     expandBtn.current?.focus();
   };
 
+  // 긴 글에서 툴바가 위로 사라지지 않게 (Q1-10) — 안쪽 스크롤 편집 면(maxHeight 숫자)은 툴바가 이미 늘 보인다
+  const sticky = stickyToolbar ?? (maxHeight === "none" ? "var(--md-sticky-top, 0px)" : undefined);
   const groups = tools ? GROUPS.map((g) => g.filter((t) => tools.includes(t.cmd))).filter((g) => g.length > 0) : GROUPS;
   return (
     <>
       <div
         // sticky 툴바는 overflow:hidden 조상 안에서 붙지 않는다 → 둥근 모서리만 자르는 clip 으로
-        className={`${FRAME} ${stickyToolbar !== undefined ? "overflow-clip" : "overflow-hidden"} ${className}`}
+        className={`${FRAME} ${sticky !== undefined ? "overflow-clip" : "overflow-hidden"} ${className}`}
         style={{ ["--md-min-h" as string]: len(minHeight), ["--md-max-h" as string]: len(maxHeight), ...(contentMaxWidth ? { ["--md-content-max" as string]: `${contentMaxWidth}px` } : {}) }}
       >
-        <Toolbar groups={groups} view={view} onExpand={expandable ? expand : undefined} expandRef={expandBtn} stickyTop={stickyToolbar} />
+        <Toolbar groups={groups} view={view} onExpand={expandable ? expand : undefined} expandRef={expandBtn} stickyTop={sticky} />
         <div ref={host} className="text-left" />
       </div>
       {expandable && (
@@ -306,7 +333,7 @@ export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy
             </button>
           </div>
           <div className={`${FRAME} flex min-h-0 flex-1 flex-col overflow-hidden`} style={{ ["--md-min-h" as string]: "100%", ["--md-max-h" as string]: "none" }}>
-            <Toolbar groups={groups} view={view} />
+            <Toolbar groups={groups} view={view} wrap />
             <div ref={bigHost} className="min-h-0 flex-1 text-left [&>.cm-editor]:h-full [&_.cm-content]:text-[16px]" />
           </div>
         </dialog>

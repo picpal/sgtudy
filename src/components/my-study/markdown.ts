@@ -19,7 +19,8 @@ export type MdBlock =
   | { type: "table"; table: TableModel };
 
 const H = /^(#{1,6})\s+(.+)$/;
-const TASK = /^[-*+]\s+\[([ xX])\]\s+(.*)$/;
+// 글자 없는 항목("- [ ]" — 줄 끝 공백은 trim 으로 빠진다)도 체크리스트 (Q1-11)
+const TASK = /^[-*+]\s+\[([ xX])\](?:\s+(.*))?$/;
 const UL = /^[-*+]\s+(.*)$/;
 const OL = /^\d+[.)]\s+(.*)$/;
 const FENCE = /^(```|~~~)\s*([\w+#-]*)\s*$/;
@@ -98,7 +99,7 @@ export function parseMarkdown(src: string): MdBlock[] {
     }
     const task = TASK.exec(line);
     if (task) {
-      open("task").push({ text: task[2], done: task[1] !== " " });
+      open("task").push({ text: task[2] ?? "", done: task[1] !== " " });
       continue;
     }
     const ul = UL.exec(line);

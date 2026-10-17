@@ -102,7 +102,8 @@ function Block({ b }: { b: MdBlock }) {
                 <tr key={k}>
                   {r.map((c, j) => (
                     <td key={j} className="border border-line-3 px-[10px] py-[6px] align-top" style={{ textAlign: ALIGN[b.table.align[j] ?? "none"] }}>
-                      <Lines text={c} />
+                      {/* 빈 칸도 한 줄 높이 — 빈 행이 납작하게 접히지 않게(에디터 표와 같게, Q1-11) */}
+                      {c.trim() ? <Lines text={c} /> : "\u00a0"}
                     </td>
                   ))}
                 </tr>

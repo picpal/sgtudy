@@ -67,3 +67,10 @@ describe("parseInline — 취소선·밑줄 기울임", () => {
     ]);
   });
 });
+
+describe("에디터와 같은 모양 (Q1-11)", () => {
+  it("글자 없는 체크리스트 줄(- [ ])도 체크리스트 — 인용 안에서도", () => {
+    expect(parseMarkdown("- [ ]")).toEqual([{ type: "task", items: [{ text: "", done: false }] }]);
+    expect(parseMarkdown("> - [ ] a\n> - [x]")).toEqual([{ type: "quote", blocks: [{ type: "task", items: [{ text: "a", done: false }, { text: "", done: true }] }] }]);
+  });
+});

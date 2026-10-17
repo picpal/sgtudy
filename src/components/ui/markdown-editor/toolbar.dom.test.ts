@@ -49,6 +49,11 @@ describe("MarkdownEditor 툴바 누르는 자리 44px", () => {
     expect(cls(expand)).toContain("shrink-0");
     root.querySelectorAll("[role=toolbar] [role=group]").forEach((g) => expect(cls(g)).toEqual(expect.arrayContaining(["gap-0", "shrink-0"])));
   });
+  it("크게 쓰기 창의 툴바는 폭과 상관없이 줄바꿈 — 목록 뒤 도구(링크·코드·표)가 가려지지 않는다 (Q3-12)", () => {
+    const big = render(true).querySelector("dialog [role=toolbar] [data-toolbar-scroll]")!;
+    expect(cls(big)).toContain("flex-wrap");
+    expect(cls(big).some((c) => c.includes("overflow-x-auto") || c.includes("nowrap"))).toBe(false);
+  });
   it("크게 쓰기 창 '완료' 버튼도 44px 높이", () => {
     const done = Array.from(render(true).querySelectorAll("dialog button")).find((b) => b.textContent === "완료")!;
     expect(cls(done)).toContain("h-11");
@@ -86,5 +91,22 @@ describe("Toolbar 키보드 이동 + 가로 스크롤", () => {
     expect(scroller.scrollLeft).toBe(0);
     act(() => root.unmount());
     host.remove();
+  });
+});
+
+describe("툴바 sticky (Q1-10 — 긴 글에서 서식 버튼에 닿게)", () => {
+  const bar = (props: Record<string, unknown>) => {
+    const root = document.createElement("div");
+    root.innerHTML = renderToStaticMarkup(createElement(MarkdownEditor, { value: "", onChange: () => {}, label: "설명", ...props }));
+    return root.querySelector<HTMLElement>("[role=toolbar]")!;
+  };
+  it("내용만큼 자라는 편집 면은 --md-sticky-top 에 붙는다", () => {
+    const b = bar({ maxHeight: "none" });
+    expect(cls(b)).toContain("sticky");
+    expect(b.style.top).toBe("var(--md-sticky-top, 0px)");
+  });
+  it("stickyToolbar 를 주면 그 오프셋, 안쪽 스크롤 편집 면은 붙지 않는다", () => {
+    expect(bar({ maxHeight: "none", stickyToolbar: "var(--edit-bar-h, 68px)" }).style.top).toBe("var(--edit-bar-h, 68px)");
+    expect(cls(bar({ maxHeight: 480 }))).not.toContain("sticky");
   });
 });

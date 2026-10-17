@@ -46,6 +46,18 @@ export function focusNextTable(r: number, col: number): void {
 // 구조 변경으로 위젯이 재생성될 때, 새 toDOM이 소비해 포커스를 복원할 좌표. r=0은 헤더행, r>=1은 본문행(r-1).
 let pendingFocus: { r: number; col: number } | null = null;
 
+/** 칸으로 옮기며 글자를 통째로 선택 — Tab 으로 옮긴 뒤 바로 치면 자리 글자("제목 2")를 바꿔 쓴다(스프레드시트처럼, Q2-7).
+ *  focus 리스너가 원문을 다시 넣은 뒤에 선택한다 */
+function selectCell(cell: HTMLElement): void {
+  cell.focus();
+  const sel = window.getSelection();
+  if (!sel) return;
+  const r = document.createRange();
+  r.selectNodeContents(cell);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
 /** DOM의 .cm-cell들을 읽어 모델로 복원 → 직렬화. (핸들 셀은 .cm-cell 아님 → 무시) */
 export function serializeFromDom(dom: HTMLElement): string {
   const headerCells = Array.from(dom.querySelectorAll(".cm-header-row .cm-cell")) as HTMLElement[];
@@ -245,7 +257,8 @@ export class TableWidget extends WidgetType {
     return tr?.querySelectorAll(".cm-cell")[col] as HTMLElement | undefined;
   }
   protected focusCellAt(r: number, col: number): void {
-    this.cellAt(r, col)?.focus();
+    const c = this.cellAt(r, col);
+    if (c) selectCell(c);
   }
 
   /** 모델 변형 후 재직렬화→dispatch. 위젯 재생성 시 새 toDOM이 pendingFocus로 포커스 복원. */
@@ -354,11 +367,11 @@ export class TableWidget extends WidgetType {
       const idx = cells.indexOf(cell);
       // 첫 칸에서 Shift+Tab → 표 앞으로, 마지막 칸에서 Tab → 표 뒤로. 행 추가는 마지막 행의 Enter 가 맡는다
       if (e.shiftKey) {
-        if (idx > 0) cells[idx - 1].focus();
+        if (idx > 0) selectCell(cells[idx - 1]);
         else this.leave("before");
         return;
       }
-      if (idx + 1 < cells.length) cells[idx + 1].focus();
+      if (idx + 1 < cells.length) selectCell(cells[idx + 1]);
       else this.leave("after");
       return;
     }

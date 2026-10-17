@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeBlock, heading, insertRule, insertTable, link, linesIn, mergeListMarker, tableTemplate, toggleLines, wrapInline, type Edit } from "./commands";
+import { codeBlock, enterPastInline, heading, insertRule, insertTable, link, linesIn, mergeListMarker, tableTemplate, toggleLines, wrapInline, type Edit } from "./commands";
 import { parseGfmTable } from "@/lib/markdown/gfmTable";
 
 /** 편집 결과 문서 (changes 는 원문 좌표 기준, 뒤에서부터 적용) */
@@ -171,5 +171,30 @@ describe("mergeListMarker — 자동으로 이어진 표식 뒤에 표식을 또
     expect(mergeListMarker("- ", "-")).toBeNull();
     expect(mergeListMarker("> ", "- ")).toBeNull();
     expect(mergeListMarker("", "- ")).toBeNull();
+  });
+});
+
+describe("enterPastInline (Q3-12 — 닫는 표식 바로 앞 Enter 가 표식을 다음 줄로 흩지 않게)", () => {
+  it("굵게 안에 쓰고 닫는 ** 앞에서 Enter → 캐럿을 줄 끝(표식 뒤)으로 옮긴다", () => {
+    const doc = "- **굵은 글씨**";
+    expect(enterPastInline(doc, doc.length - 2)).toEqual({ changes: [], anchor: doc.length });
+  });
+  it("여러 표식이 겹쳐 닫혀도(***, ~~ + **) 줄 끝으로", () => {
+    const doc = "a ~~**b**~~";
+    expect(enterPastInline(doc, doc.length - 4)).toEqual({ changes: [], anchor: doc.length });
+  });
+  it("아무것도 안 쓴 빈 표식 쌍(**|**)은 지운다", () => {
+    const doc = "앞 ****";
+    const e = enterPastInline(doc, 4)!;
+    expect(apply(doc, e)).toBe("앞 ");
+    expect(e.anchor).toBe(2);
+  });
+  it("뒤에 글이 더 있거나, 여는 표식이 없거나, 선택 자리 글자(굵게)가 있으면 그대로(null)", () => {
+    expect(enterPastInline("**a** b", 3)).toBeNull();
+    expect(enterPastInline("a**", 1)).toBeNull();
+    expect(enterPastInline("plain", 5)).toBeNull();
+    // 캐럿이 닫는 표식 한가운데(**a*|*)
+    expect(enterPastInline("**a**", 4)).toBeNull();
+    expect(enterPastInline("x\n**a**\ny", 5)).toEqual({ changes: [], anchor: 7 });
   });
 });
