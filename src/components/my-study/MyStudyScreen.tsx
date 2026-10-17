@@ -6,7 +6,7 @@ import { LeaderPanel } from "@/components/room-view/LeaderPanel";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { MoreMenuItem } from "@/components/ui/MoreMenu";
-import { MORE_LABEL, studyMoreItems } from "@/components/room-view/moreItems";
+import { menuItemsOf, studyMoreItems } from "@/components/room-view/moreItems";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
@@ -189,10 +189,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       setToast({ text: "링크를 복사하지 못했어요 · 방 정보 화면의 주소를 복사해 주세요", tone: "bad" });
     }
   };
-  // 더보기: 방 정보(공개 방 화면) · 참가/신청 취소 (참가 카드와 같은 확인 대화상자)
-  const more: MoreMenuItem[] = studyMoreItems(room.action).map((k) =>
-    k === "room" ? { key: k, label: MORE_LABEL[k], href: routes.room(detail.slug) } : { key: k, label: MORE_LABEL[k], danger: true, onSelect: () => setConfirm(k === "leave" ? "leave" : "cancel") },
-  );
+  // 더보기: 방 정보(공개 방 화면) · 방 설정(그룹장) · 참가/신청 취소 (참가 카드와 같은 확인 대화상자)
+  const more: MoreMenuItem[] = menuItemsOf(studyMoreItems(room.action), detail.slug, setConfirm);
 
   // "내 과제 보기" → 보드 탭으로 바꾼 뒤 탭 목록이 보이게 (Q3-18)
   const [tabJump, setTabJump] = useState(0);

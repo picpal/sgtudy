@@ -38,6 +38,7 @@ describe("routes", () => {
     expect(routes.me()).toBe("/me");
     expect(routes.invite("tok")).toBe("/invite/tok");
     expect(routes.createRoom()).toBe("/rooms/new");
+    expect(routes.roomSettings("aws")).toBe("/rooms/aws/settings");
     expect(routes.myStudyEdit("aws")).toBe("/my-study/aws?tab=curriculum&mode=edit");
   });
 });

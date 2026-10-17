@@ -27,6 +27,8 @@ export const routes = {
   task: (slug: string, id: string) => `/my-study/${slug}?task=${id}`,
   /** 방 만들기 (디자인 §4.3) */
   createRoom: () => "/rooms/new",
+  /** 방 설정 (그룹장) — 정보·태그·참가·기간 수정, 삭제·보관 (QA Q3-1·Q2-2) */
+  roomSettings: (slug: string) => `/rooms/${slug}/settings`,
   /** 이메일+비밀번호 로그인 (§4.1) — returnTo 가 있으면 plan 01 loginUrl 과 같은 값 */
   login: (returnTo?: string) => (returnTo ? loginUrl(returnTo) : "/login"),
   /** 회원가입: 이메일 인증 코드 → 비밀번호 정하기 → 닉네임 */

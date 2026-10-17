@@ -17,7 +17,7 @@ import { RoomInfo } from "./RoomInfo";
 import { JoinCard } from "./JoinCard";
 import { GlanceCard } from "./GlanceCard";
 import { LeaderPanel } from "./LeaderPanel";
-import { MORE_LABEL, roomMoreItems } from "./moreItems";
+import { menuItemsOf, roomMoreItems } from "./moreItems";
 
 /** invite: ?invite= 로 연 비공개 방의 토큰 — 참가/신청 RPC 와 로그인 복귀 주소에 그대로 이어 붙인다 */
 export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; list: RoomListResponse; invite?: string }) {
@@ -62,10 +62,8 @@ export function RoomViewScreen({ detail, list, invite }: { detail: RoomDetail; l
     }
   };
 
-  // 더보기: 내 스터디로 · 참가/신청 취소 (JoinCard 와 같은 확인 대화상자)
-  const more: MoreMenuItem[] = roomMoreItems(act).map((k) =>
-    k === "myStudy" ? { key: k, label: MORE_LABEL[k], href: routes.myStudy(dto.slug) } : { key: k, label: MORE_LABEL[k], danger: true, onSelect: () => setConfirm(k === "leave" ? "leave" : "cancel") },
-  );
+  // 더보기: 내 스터디로 · 방 설정(그룹장) · 참가/신청 취소 (JoinCard 와 같은 확인 대화상자)
+  const more: MoreMenuItem[] = menuItemsOf(roomMoreItems(act), dto.slug, setConfirm);
 
   return (
     // 한 페이지 스크롤 — 화면 높이에 가두지 않는다. 옆 목록은 화면에 다 들어갈 때만 붙는다(RoomSidebar)
