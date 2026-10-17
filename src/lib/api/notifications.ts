@@ -10,7 +10,16 @@ export const markAllRead = async () => (await rpc<{ updated: number }>("notifica
 const KST_MS = 9 * 3600_000;
 const kstDate = (d: Date) => new Date(d.getTime() + KST_MS).toISOString().slice(0, 10);
 
-/** cross-cutting §3 알림 상대시간. 24시간 안은 분·시간, 그 밖은 KST 달력일 기준 어제 / M월 D일 */
+const pad = (n: number) => String(n).padStart(2, "0");
+const kstTime = (d: Date) => {
+  const k = new Date(d.getTime() + KST_MS);
+  return `${pad(k.getUTCHours())}:${pad(k.getUTCMinutes())}`;
+};
+
+/**
+ * cross-cutting §3 알림 상대시간. 24시간 안은 분·시간, 그 밖은 KST 달력일 기준 "어제 HH:mm" / "M월 D일 HH:mm".
+ * 올해가 아니면 연도도 붙인다. 문구가 같은 알림(일정 변경 등)이 이어질 때 서로 구분되도록 시각을 함께 보인다(Q1-9·Q3-8).
+ */
 export function relativeTime(iso: string, now: Date): string {
   const t = new Date(iso);
   const diff = Math.max(0, now.getTime() - t.getTime());
@@ -18,8 +27,10 @@ export function relativeTime(iso: string, now: Date): string {
   if (diff < 3600_000) return `${Math.floor(diff / 60_000)}분 전`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3600_000)}시간 전`;
   const d = kstDate(t);
-  if (d === addDays(kstDate(now), -1)) return "어제";
-  return `${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일`;
+  const time = kstTime(t);
+  if (d === addDays(kstDate(now), -1)) return `어제 ${time}`;
+  const year = d.slice(0, 4) === kstDate(now).slice(0, 4) ? "" : `${d.slice(0, 4)}년 `;
+  return `${year}${Number(d.slice(5, 7))}월 ${Number(d.slice(8, 10))}일 ${time}`;
 }
 
 export const badgeText = (n: number) => (n > 99 ? "99+" : String(n));

@@ -10,13 +10,19 @@ describe("relativeTime (cross-cutting §3)", () => {
     expect(relativeTime("2026-10-12T02:57:00Z", NOW)).toBe("3분 전");
     expect(relativeTime("2026-10-12T01:00:00Z", NOW)).toBe("2시간 전");
   });
-  it("어제 is decided by KST calendar date, not by 24h", () => {
-    // 2026-10-11 05:00 KST (31h ago) → 어제
-    expect(relativeTime("2026-10-10T20:00:00Z", NOW)).toBe("어제");
+  it("어제 is decided by KST calendar date, not by 24h — 시각을 함께 (같은 문구 알림 구분, Q1-9)", () => {
+    // 2026-10-11 05:00 KST (31h ago) → 어제 05:00
+    expect(relativeTime("2026-10-10T20:00:00Z", NOW)).toBe("어제 05:00");
   });
-  it("older → M월 D일 (KST)", () => {
+  it("older → M월 D일 HH:mm (KST)", () => {
     // 2026-10-03 00:30 KST
-    expect(relativeTime("2026-10-02T15:30:00Z", NOW)).toBe("10월 3일");
+    expect(relativeTime("2026-10-02T15:30:00Z", NOW)).toBe("10월 3일 00:30");
+    expect(relativeTime("2026-10-05T05:07:00Z", NOW)).toBe("10월 5일 14:07");
+  });
+  it("올해가 아니면 연도도 (Q3-8)", () => {
+    expect(relativeTime("2025-12-31T14:59:00Z", NOW)).toBe("2025년 12월 31일 23:59");
+    // 연말·연초 경계: 2027-01-01 00:10 KST 의 '지금'에서 2026-12-30 은 올해가 아님
+    expect(relativeTime("2026-12-30T03:00:00Z", new Date("2027-01-02T03:00:00Z"))).toBe("2026년 12월 30일 12:00");
   });
 });
 

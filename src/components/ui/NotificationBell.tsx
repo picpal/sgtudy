@@ -135,9 +135,17 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
         <div role="dialog" aria-label="알림" style={{ right: -shift }} className="absolute right-0 top-[52px] z-20 flex w-[360px] max-w-[calc(100vw-32px)] flex-col rounded-[16px] border border-line bg-surface shadow-[0_16px_40px_rgba(27,34,48,.16)]">
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-[15px] font-bold">알림</span>
-            <button type="button" onClick={onReadAll} disabled={unread === 0 && !items?.some((n) => !n.readAt)} className="h-9 rounded-[18px] px-3 text-[13px] font-semibold text-mint disabled:text-faint">
-              모두 읽음
-            </button>
+            {/* 알림이 하나도 없으면 누를 일이 없다 — 숨긴다(Q3-8). 누르는 영역은 위아래로 늘려 44px */}
+            {items?.length !== 0 && (
+              <button
+                type="button"
+                onClick={onReadAll}
+                disabled={unread === 0 && !items?.some((n) => !n.readAt)}
+                className="relative h-9 rounded-[18px] px-3 text-[13px] font-semibold text-mint before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-[''] disabled:text-faint"
+              >
+                모두 읽음
+              </button>
+            )}
           </div>
           <div className="thin-scroll max-h-[420px] overflow-y-auto overscroll-contain border-t border-line-2">
             {error && <p role="alert" className="m-0 px-4 py-3 text-[13px] text-warn">{error}</p>}
