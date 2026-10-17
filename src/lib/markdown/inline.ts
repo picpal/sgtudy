@@ -4,7 +4,8 @@
  */
 export type MdInline = { t: "text" | "b" | "i" | "s" | "code"; v: string } | { t: "a"; v: string; href: string };
 
-const INLINE = /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\*([^*\s][^*]*?)\*|~~(.+?)~~|(?<![\p{L}\p{N}_])_([^_\s][^_]*?)_(?![\p{L}\p{N}_])/gu;
+// 8: 주소를 안 채운 링크(에디터 자리 글자 "(https://)")·스킴 없는 주소("(x링크)", "()") — 링크 문법을 감추고 글자만 (Q2-9). javascript: 등 다른 스킴은 원문 그대로 둔다
+const INLINE = /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|\[([^\]]+)\]\((?:https?:\/\/|[^\s:()]*)\)|\*([^*\s][^*]*?)\*|~~(.+?)~~|(?<![\p{L}\p{N}_])_([^_\s][^_]*?)_(?![\p{L}\p{N}_])/gu;
 
 export function parseInline(text: string): MdInline[] {
   const out: MdInline[] = [];
@@ -20,9 +21,10 @@ export function parseInline(text: string): MdInline[] {
     if (m[1] !== undefined) out.push({ t: "b", v: m[1] });
     else if (m[2] !== undefined) out.push({ t: "code", v: m[2] });
     else if (m[3] !== undefined) out.push({ t: "a", v: m[3], href: m[4] });
-    else if (m[5] !== undefined) out.push({ t: "i", v: m[5] });
-    else if (m[6] !== undefined) out.push({ t: "s", v: m[6] });
-    else out.push({ t: "i", v: m[7] });
+    else if (m[5] !== undefined) push(m[5]);
+    else if (m[6] !== undefined) out.push({ t: "i", v: m[6] });
+    else if (m[7] !== undefined) out.push({ t: "s", v: m[7] });
+    else out.push({ t: "i", v: m[8] });
     last = m.index + m[0].length;
   }
   push(text.slice(last));

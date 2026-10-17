@@ -3,7 +3,7 @@
  * React 와 무관하게 입력 → 출력만 한다. "오늘"과 "나"는 인자로 받는다.
  */
 import { addDays, dday, diffDays, md, parseISO } from "@/lib/date";
-import { TASK_TYPE_KO, mmdd } from "@/lib/api/format";
+import { TASK_TYPE_KO, rangeShort } from "@/lib/api/format";
 import type { Curriculum, NodeDto } from "@/lib/api/types";
 import type { Tone } from "@/lib/palette";
 import type { TaskStatus } from "@/lib/types";
@@ -389,10 +389,11 @@ export function removePlan(n: TreeNode): RemovePlan {
 }
 
 /** 분석서 E4 — 상위 기간·방 기간 밖이면 경고 문구 (저장·생성은 막지 않는다) */
-export function periodWarnings(n: { s: string; e: string }, parent: { s: string; e: string } | null, room: { start: string; end: string }): string[] {
+/** today: 날짜 표기 기준(rangeShort — 오늘과 다른 해·해를 넘는 끝은 연도, Q2-13). 생략하면 방 시작 해 기준 */
+export function periodWarnings(n: { s: string; e: string }, parent: { s: string; e: string } | null, room: { start: string; end: string }, today: string = room.start): string[] {
   const out: string[] = [];
-  if (parent && (n.s < parent.s || n.e > parent.e)) out.push(`상위 항목 기간(${mmdd(parent.s)} – ${mmdd(parent.e)})을 벗어났어요`);
-  if (n.s < room.start || n.e > room.end) out.push(`방 기간(${mmdd(room.start)} – ${mmdd(room.end)})을 벗어났어요`);
+  if (parent && (n.s < parent.s || n.e > parent.e)) out.push(`상위 항목 기간(${rangeShort(parent.s, parent.e, today)})을 벗어났어요`);
+  if (n.s < room.start || n.e > room.end) out.push(`방 기간(${rangeShort(room.start, room.end, today)})을 벗어났어요`);
   return out;
 }
 

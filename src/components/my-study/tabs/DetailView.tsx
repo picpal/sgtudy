@@ -8,6 +8,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
+import { useStickyOffset } from "@/lib/useStickyOffset";
 import { MarkdownView } from "../MarkdownView";
 import { ArchivedBadge, TypeBadge } from "../bits";
 import { roundStatus, type LeafNode, type ParentNode, type TreeNode } from "../model";
@@ -128,6 +129,10 @@ function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActio
 export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, isLeader, quietNotAssigned, roots, period, personal, api }: Props) {
   const today = useToday();
   const meId = useMe()?.id ?? null;
+  // 위 고정 막대 높이 → 제출·개인 목표 편집기 툴바가 그 밑에 붙는다 (Q1-10)
+  const stickyBar = useRef<HTMLDivElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  useStickyOffset(stickyBar, sectionRef);
   // 개인 목표 리프 — 머리 버튼(완료·편집·⋯)·소유자 표시·경고·편집 폼
   const pn = n.leaf && n.personal ? n : null;
   const acts = pn ? personalActions(pn, meId, isLeader, roomStatus, !!personal?.canAdd) : null;
@@ -203,11 +208,11 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
     if (await api.removePersonal(pn.id)) onBack();
   };
   const round = pn ? (nodes.find((x) => x.id === pn.parentId) ?? null) : null;
-  const warn = pn && isOwner ? roundWarning(pn, round) : null;
+  const warn = pn && isOwner ? roundWarning(pn, round, today) : null;
   const owner = pn && !isOwner ? ownerOf(pn) : null;
   return (
-    <section aria-labelledby={pn && editing ? `pf-${pn.id}` : "detail-title"} onKeyDown={onKey} className="flex flex-col">
-      <div className="sticky top-0 z-[2] -mx-1 flex flex-wrap items-center gap-2 border-b border-line-2 bg-surface px-1 py-3">
+    <section ref={sectionRef} aria-labelledby={pn && editing ? `pf-${pn.id}` : "detail-title"} onKeyDown={onKey} className="flex flex-col">
+      <div ref={stickyBar} className="sticky top-0 z-[2] -mx-1 flex flex-wrap items-center gap-2 border-b border-line-2 bg-surface px-1 py-3">
         <button type="button" onClick={() => guard(onBack)} className="inline-flex h-11 shrink-0 items-center gap-[6px] rounded-[22px] border border-line-3 bg-surface pl-3 pr-4 text-[14px] font-semibold text-ink">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M19 12H5M11 6l-6 6 6 6" />

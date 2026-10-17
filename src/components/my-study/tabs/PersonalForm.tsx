@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
-import { mmdd } from "@/lib/api/format";
+import { rangeShort } from "@/lib/api/format";
+import { useToday } from "@/lib/today";
 import { TypeBadge } from "../bits";
 import type { LeafNode, ParentNode } from "../model";
 import { draftOf, formScrollNeeded, personalPatch, pickRound, roundWarning, type PersonalDraft } from "../personal";
@@ -41,7 +42,8 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange }: P
   const dirty = Object.keys(patch).length > 0;
   const title = d.title.trim();
   const badDates = !d.s || !d.e || d.s > d.e;
-  const warn = roundWarning(d, round);
+  const today = useToday();
+  const warn = roundWarning(d, round, today);
 
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
@@ -63,7 +65,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange }: P
 
   // 회차를 고르면 팀 과제 이동과 같은 규칙으로 기간을 제안해 날짜 칸에 채운다 — 사용자가 다시 고칠 수 있다
   const choose = (id: string) => {
-    const r = pickRound(n, d, roots, id);
+    const r = pickRound(n, d, roots, id, today);
     if (!r) return;
     setD(r.draft);
     setNote(r.note);
@@ -156,7 +158,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange }: P
         <MarkdownEditor labelledBy={descId} value={d.desc} onChange={(v) => setD((x) => ({ ...x, desc: v }))} placeholder="무엇을 할지, 참고 링크 등을 적어 두세요" minHeight="240px" maxHeight="none" expandable={false} />
       </div>
       <p className="m-0 text-[12px] text-muted">
-        유형·담당자는 없어요 · 기간은 방 기간({mmdd(period.start)} – {mmdd(period.end)}) 안에서 정해 주세요
+        유형·담당자는 없어요 · 기간은 방 기간({rangeShort(period.start, period.end, today)}) 안에서 정해 주세요
       </p>
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onDone} className="h-11 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">

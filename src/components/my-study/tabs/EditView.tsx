@@ -4,8 +4,9 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { TaskType } from "@/data/my-study";
-import { md } from "@/lib/date";
 import { setLeaveGuard } from "@/lib/leaveGuard";
+import { useToday } from "@/lib/today";
+import { rangeShort } from "@/lib/api/format";
 import { Seg } from "../bits";
 import { dropFieldOv, isDirty, isPersonal, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
 import { moveNote, movedPeriod, reorderIndex, roundOf, roundOptions } from "../rounds";
@@ -99,7 +100,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     });
   }, [dirty, fresh, id, api, update]);
 
-  const warns = periodWarnings(n, parent, period);
+  const today = useToday();
+  const warns = periodWarnings(n, parent, period, today);
   const ids = n.leaf ? n.people.map((p) => p.userId) : [];
   // 보관된 하위의 제출도 센다 — 서버는 하위 어디에든 제출이 있으면 삭제를 막는다
   const hasSub = n.subAll > 0;
@@ -284,7 +286,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
                       const period = to.id === cur.id ? null : movedPeriod(n, cur, to);
                       setBusy(id);
                       void api
-                        .move(id, to.id, undefined, period ? [{ id, ...period }] : [], period ? `${to.label}로 옮겼어요 · 기간 ${md(period.s)} – ${md(period.e)}` : `${to.label}로 옮겼어요`)
+                        .move(id, to.id, undefined, period ? [{ id, ...period }] : [], period ? `${to.label}로 옮겼어요 · 기간 ${rangeShort(period.s, period.e, today)}` : `${to.label}로 옮겼어요`)
                         .then((ok) => ok && update({ saved: moveNote(n, period, false) }))
                         .finally(() => setBusy(null));
                     }}

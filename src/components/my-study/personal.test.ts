@@ -210,3 +210,7 @@ describe("formScrollNeeded — 개인 목표 편집 폼을 열 때 화면으로 
     expect(formScrollNeeded(300, 900)).toBe(false);
   });
 });
+
+describe("movePreview 날짜 표기 (Q2-13)", () => {
+  it("오늘과 다른 해면 연도", () => expect(movePreview("12주차", { s: "2027-01-04", e: "2027-01-10" }, false, "2026-10-12")).toBe("12주차로 옮기면 기간이 2027.01.04 – 01.10 로 바뀌어요"));
+});

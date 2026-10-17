@@ -307,3 +307,11 @@ describe("ownerLeft — 이탈(비활성)한 팀원의 개인 목표", () => {
     expect(leafOf("41").ownerLeft).toBe(false);
   });
 });
+
+describe("periodWarnings 날짜 표기 (Q2-13 — 연도가 다르면 연도)", () => {
+  it("오늘과 다른 해·해를 넘는 기간은 rangeShort 규칙", () => {
+    const room = { start: "2026-10-25", end: "2027-01-10" };
+    expect(periodWarnings({ s: "2027-01-11", e: "2027-01-17" }, null, room, "2026-10-12")).toEqual(["방 기간(10.25 – 2027.01.10)을 벗어났어요"]);
+    expect(periodWarnings({ s: "2027-01-11", e: "2027-01-20" }, { s: "2027-01-11", e: "2027-01-17" }, room, "2026-10-12")[0]).toBe("상위 항목 기간(2027.01.11 – 01.17)을 벗어났어요");
+  });
+});

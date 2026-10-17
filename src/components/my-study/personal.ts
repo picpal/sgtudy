@@ -3,7 +3,7 @@
  */
 import type { PersonalPatch } from "@/lib/api/personal";
 import type { Tone } from "@/lib/palette";
-import { mmdd } from "@/lib/api/format";
+import { rangeShort } from "@/lib/api/format";
 import { CODE_COLOR, codeLabel, isDoneCode, isPersonal, roundStatus, type Code, type LeafNode, type ParentNode, type Person } from "./model";
 import { movedPeriod } from "./rounds";
 import type { RoomStatus } from "./submission";
@@ -79,9 +79,10 @@ export function personalPatch(n: LeafNode, d: PersonalDraft): PersonalPatch {
 }
 
 /** 편집 폼 회차 이동 미리보기 (시안 B-2) */
-export function movePreview(label: string, period: { s: string; e: string } | null, sameRound: boolean): string {
+export function movePreview(label: string, period: { s: string; e: string } | null, sameRound: boolean, today?: string): string {
   if (sameRound) return "";
-  return period ? `${label}로 옮기면 기간이 ${mmdd(period.s)} – ${mmdd(period.e)} 로 바뀌어요` : `${label}로 옮겨도 기간은 그대로예요`;
+  // 날짜 표기는 rangeShort (Q2-13 — 오늘과 다른 해면 연도). today 생략 = 기간 시작 해 기준
+  return period ? `${label}로 옮기면 기간이 ${rangeShort(period.s, period.e, today ?? period.s)} 로 바뀌어요` : `${label}로 옮겨도 기간은 그대로예요`;
 }
 
 /**
@@ -89,14 +90,14 @@ export function movePreview(label: string, period: { s: string; e: string } | nu
  * 원래 회차로 되돌아오면 원래 기간을 복원한다(중간 회차 기준 movedPeriod 는 원래 날짜를 못 돌려줄 수 있다).
  * 그 밖에는 팀 과제 이동과 같은 규칙(movedPeriod, 고르기 전 회차 기준)으로 기간을 제안한다.
  */
-export function pickRound(n: LeafNode, d: PersonalDraft, roots: ParentNode[], id: string): { draft: PersonalDraft; note: string } | null {
+export function pickRound(n: LeafNode, d: PersonalDraft, roots: ParentNode[], id: string, today?: string): { draft: PersonalDraft; note: string } | null {
   if (id === d.roundId) return null;
   const to = roots.find((r) => r.id === id);
   if (!to) return null;
   if (id === n.roundId) return { draft: { ...d, roundId: id, s: n.s, e: n.e }, note: "" };
   const from = roots.find((r) => r.id === d.roundId);
   const p = from ? movedPeriod({ s: d.s, e: d.e, subAll: 0 }, from, to) : null;
-  return { draft: { ...d, roundId: id, ...(p ? { s: p.s, e: p.e } : {}) }, note: movePreview(to.label ?? to.title, p, false) };
+  return { draft: { ...d, roundId: id, ...(p ? { s: p.s, e: p.e } : {}) }, note: movePreview(to.label ?? to.title, p, false, today) };
 }
 
 /**
@@ -106,9 +107,9 @@ export function pickRound(n: LeafNode, d: PersonalDraft, roots: ParentNode[], id
 export const formScrollNeeded = (top: number, viewportH: number): boolean => top < 0 || top > viewportH * 0.4;
 
 /** 회차 기간 밖 경고 (서버 PERIOD_OUTSIDE_PARENT 와 같은 판정) — 소유자 상세·폼 위 */
-export function roundWarning(n: { s: string; e: string }, round: { s: string; e: string } | null): string | null {
+export function roundWarning(n: { s: string; e: string }, round: { s: string; e: string } | null, today?: string): string | null {
   if (!round || (n.s >= round.s && n.e <= round.e)) return null;
-  return `회차 기간(${mmdd(round.s)} – ${mmdd(round.e)})을 벗어났어요`;
+  return `회차 기간(${rangeShort(round.s, round.e, today ?? round.s)})을 벗어났어요`;
 }
 
 /** items = 보이는 줄(그룹장에게는 보관 포함), count·done = 보관 제외 (personalStats 와 같은 기준) */

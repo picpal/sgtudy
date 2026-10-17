@@ -17,6 +17,8 @@ import { ymd, uiStatus } from "@/lib/api/format";
 import type { RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
+import { guardNavigate } from "@/lib/leaveGuard";
+import { useLeaveConfirm } from "@/lib/useLeaveConfirm";
 import { archiveRoom, buildPatch, dangerOf, deleteRoom, lockReason, lockedOf, updateRoom, validateSettings, valuesOf } from "./settings";
 
 type Errors = Partial<Record<keyof NewRoomValues, string>>;
@@ -73,6 +75,8 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
     window.addEventListener("beforeunload", onBefore);
     return () => window.removeEventListener("beforeunload", onBefore);
   }, [dirtyCount]);
+  // 앱 안 링크(헤더 메뉴·로고·"내 스터디로")로 떠날 때도 묻는다 (Q2-1, leaveGuard)
+  const leaveAsk = useLeaveConfirm(dirtyCount > 0, (href) => router.push(href));
 
   const set = <K extends keyof NewRoomValues>(k: K, val: NewRoomValues[K]) => {
     const next = { ...v, [k]: val };
@@ -127,7 +131,7 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
     <div className="flex min-h-screen flex-col p-4">
       <AppHeader active="myStudy" variant="card" bell={<NotificationBell />} />
       <main className="mx-auto w-full max-w-[720px] rounded-[20px] bg-surface p-7 max-sm:p-5">
-        <Link href={back} className="-ml-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[14px] font-medium text-ink-3 hover:text-ink">
+        <Link href={back} onNavigate={(e) => guardNavigate(back, e)} className="-ml-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[14px] font-medium text-ink-3 hover:text-ink">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M15 18l-6-6 6-6" />
           </svg>
@@ -233,6 +237,15 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
         <DangerZone detail={d} onDetail={setD} toast={setToast} dirty={dirtyCount > 0} />
       </main>
       <Toast msg={toast} onClose={closeToast} />
+      <ConfirmDialog
+        open={leaveAsk.pending !== null}
+        title="저장하지 않은 수정이 있어요"
+        body={`바뀐 항목 ${dirtyCount}개를 저장하지 않고 이동할까요?`}
+        confirmLabel="버리고 이동"
+        danger
+        onConfirm={leaveAsk.leave}
+        onCancel={leaveAsk.stay}
+      />
     </div>
   );
 }

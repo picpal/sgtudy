@@ -4,8 +4,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { Chip, PillButton, Seg } from "../bits";
-import { addDays, md } from "@/lib/date";
-import { mmdd } from "@/lib/api/format";
+import { addDays } from "@/lib/date";
+import { dateShort, rangeShort } from "@/lib/api/format";
+import { useToday } from "@/lib/today";
 import { allParentsClosed, findNode, isDirty, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
 import { dropPlan, movedPlan, roundOf, rowMoves, withAddRows, withEmptyRounds, withPersonalAddRows, type RowMove } from "../rounds";
@@ -65,6 +66,7 @@ const pKey = (roundId: string) => `p:${roundId}`;
 export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period, slug, roomStatus, viewerPending, toast, personal, periodWarning }: Props) {
   const meId = useMe()?.id ?? null;
   const router = useRouter();
+  const today = useToday();
   // 권한을 거둬 간 직후 등 편집할 수 없는데 모드가 남아 있으면 보기로 그린다
   const isEdit = canEdit && S.curMode === "edit";
   // 보기 범위 — 편집 모드엔 개인 목표 없음·필터 없음. 보기 모드는 칩("내 것만"·"팀원 목표"; 둘은 서로 끈다)
@@ -134,9 +136,9 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
       const dates = cross ? movedPlan(n, from, to) : [];
       const period = dates.find((d) => d.id === dragId) ?? null;
       const label = to?.label ?? to?.title;
-      return api.move(dragId, parentId, index, dates, cross ? (period ? `${label}로 옮겼어요 · 기간 ${md(period.s)} – ${md(period.e)}` : `${label}로 옮겼어요`) : undefined);
+      return api.move(dragId, parentId, index, dates, cross ? (period ? `${label}로 옮겼어요 · 기간 ${rangeShort(period.s, period.e, today)}` : `${label}로 옮겼어요`) : undefined);
     },
-    [tree.nodes, api],
+    [tree.nodes, api, today],
   );
   const onDrop = useCallback(
     (dragId: string, overId: string, half: "top" | "bottom") => {
@@ -391,7 +393,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
             회차 추가
           </button>
         )}
-        {isEdit && nextRoundOut && <p className="m-0 bg-surface-3 px-4 pb-3 text-center text-[12px] font-medium text-amber-text">방 종료일({mmdd(period.end)}) 이후에 만들어져요 · 추가는 할 수 있어요</p>}
+        {isEdit && nextRoundOut && <p className="m-0 bg-surface-3 px-4 pb-3 text-center text-[12px] font-medium text-amber-text">방 종료일({dateShort(period.end, today)}) 이후에 만들어져요 · 추가는 할 수 있어요</p>}
       </div>
     </div>
   );
