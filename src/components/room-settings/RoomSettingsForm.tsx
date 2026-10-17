@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { EditorField, FIELD_CLASS, Field, JoinModeRadio, RULE_TOOLS, SwitchRow, TagPicker } from "@/components/room-new/fields";
@@ -17,9 +17,8 @@ import { ymd, uiStatus } from "@/lib/api/format";
 import type { RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
-import { guardNavigate } from "@/lib/leaveGuard";
 import { useLeaveConfirm } from "@/lib/useLeaveConfirm";
-import { archiveRoom, buildPatch, dangerOf, deleteRoom, lockReason, lockedOf, updateRoom, validateSettings, valuesOf } from "./settings";
+import { archiveRoom, buildPatch, dangerOf, deleteRoom, lockReason, lockedOf, saveSteps, updateRoom, validateSettings, valuesOf } from "./settings";
 
 type Errors = Partial<Record<keyof NewRoomValues, string>>;
 
@@ -96,9 +95,19 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
     setBusy(true);
     setServerError("");
     try {
-      let next = d;
-      if (Object.keys(patch).length) next = await updateRoom(d.slug, patch);
-      if (tagsDirty) next = { ...next, tags: await putRoomTags(d.slug, tags) };
+      // 방 정보가 저장되면 태그 결과를 기다리지 않고 기준값을 먼저 갱신 — 태그만 실패해도 "바뀐 항목"엔 태그만 남는다 (최종 리뷰 Minor 6)
+      const next = await saveSteps(
+        { hasPatch: Object.keys(patch).length > 0, tagsDirty },
+        {
+          update: () => updateRoom(d.slug, patch),
+          putTags: () => putRoomTags(d.slug, tags),
+          onRoom: (r) => {
+            setD(r);
+            setBase(valuesOf(r));
+          },
+        },
+        d,
+      );
       setD(next);
       const nv = valuesOf(next);
       setBase(nv);
@@ -131,7 +140,7 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
     <div className="flex min-h-screen flex-col p-4">
       <AppHeader active="myStudy" variant="card" bell={<NotificationBell />} />
       <main className="mx-auto w-full max-w-[720px] rounded-[20px] bg-surface p-7 max-sm:p-5">
-        <Link href={back} onNavigate={(e) => guardNavigate(back, e)} className="-ml-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[14px] font-medium text-ink-3 hover:text-ink">
+        <Link href={back} className="-ml-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[14px] font-medium text-ink-3 hover:text-ink">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M15 18l-6-6 6-6" />
           </svg>

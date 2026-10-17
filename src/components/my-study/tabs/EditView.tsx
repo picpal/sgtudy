@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { TaskType } from "@/data/my-study";
-import { setLeaveGuard } from "@/lib/leaveGuard";
+import { samePage, setLeaveGuard } from "@/lib/leaveGuard";
 import { useToday } from "@/lib/today";
 import { rangeShort } from "@/lib/api/format";
 import { Seg } from "../bits";
@@ -95,10 +95,16 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         update({ leave: { href }, confirm: false });
         return true;
       }
+      // 같은 방 주소(헤더 "내 스터디"·같은 방 알림)는 화면이 다시 그려지지 않는다 — 이동 대신 목록으로 닫고,
+      // 빈 새 회차는 MyStudyScreen 정리가 상태째 지운다(서버만 지우면 지워진 회차의 편집 화면이 남는다, 최종 리뷰 Minor 1)
+      if (samePage(href)) {
+        go({ sel: null });
+        return true;
+      }
       api.discard(id);
       return false;
     });
-  }, [dirty, fresh, id, api, update]);
+  }, [dirty, fresh, id, api, update, go]);
 
   const today = useToday();
   const warns = periodWarnings(n, parent, period, today);
@@ -176,7 +182,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     const to = S.leave;
     update((p) => ({ ov: dropFieldOv(p.ov, id) }));
     // 다른 화면으로 가면 이 화면이 사라진다 — 저장한 적 없는 새 회차는 여기서 지운다(앱 안 이동은 MyStudyScreen 이 맡는다)
-    if (to && "href" in to && fresh) api.discard(id);
+    if (to && "href" in to && fresh && !samePage(to.href)) api.discard(id);
     if (to) go(to);
   };
   const back = () => request({ sel: null });

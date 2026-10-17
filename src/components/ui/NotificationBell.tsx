@@ -97,10 +97,13 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
     }
     e.preventDefault();
     setOpen(false);
-    markItemRead(n);
     let held = false;
     guardNavigate(n.link, { preventDefault: () => (held = true) }); // 저장 안 한 편집이 있으면 가드가 확인 뒤 이동한다
-    if (!held) router.push(n.link);
+    // 확인에서 "계속 편집"을 고르면 알림은 읽지 않은 채로 남는다 — 실제로 이동할 때만 읽음 (최종 리뷰 Minor 2).
+    // 확인 뒤 "버리기/저장하고 이동"으로 가면 그 이동은 편집 화면이 하므로 이 알림은 안 읽음으로 남는다(작은 대가)
+    if (held) return;
+    markItemRead(n);
+    router.push(n.link);
   };
   const onReadAll = async () => {
     guard.bump();

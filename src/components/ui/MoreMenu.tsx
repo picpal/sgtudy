@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
 export type MoreMenuItem = { key: string; label: string; href?: string; onSelect?: () => void; danger?: boolean };

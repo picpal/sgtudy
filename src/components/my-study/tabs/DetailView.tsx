@@ -1,6 +1,8 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { setLeaveGuard } from "@/lib/leaveGuard";
 import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { Avatar } from "@/components/ui/Avatar";
 import type { ToastMsg } from "@/components/ui/Toast";
@@ -143,6 +145,15 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   const [formDirty, setFormDirty] = useState(false);
   const onDirtyChange = useCallback((d: boolean) => setFormDirty(d), []);
   const [unsaved, setUnsaved] = useState<(() => void) | null>(null);
+  // 개인 목표 편집 폼에 저장 안 한 수정 → 헤더 메뉴·⋯ 메뉴 등 앱 안 링크도 아래 "저장하지 않은 수정이 있어요" 로 보류 (최종 리뷰 Minor 8)
+  const router = useRouter();
+  useEffect(() => {
+    if (!(editing && formDirty)) return;
+    return setLeaveGuard((href) => {
+      setUnsaved(() => () => router.push(href));
+      return true;
+    });
+  }, [editing, formDirty, router]);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   // 소유자 코드가 체크·토스트 "되돌리기" 등 제출 카드 밖에서 바뀌면 제출 카드(task_get)를 새로 받는다 — LeafBody 를 다시 마운트.

@@ -38,6 +38,12 @@ cases("submission empty (0022)", db, [
     const s = await submit(q, ec2, "", [], [fid]);
     assertEquals([s.bodyMd, s.links, s.files.length], ["", [], 1]);
   } },
+  { name: "유형 없는 노드(task_type NULL — 회차·묶음)는 빈 검사 전에 submission_target 이 NODE_NOT_LEAF 로 막는다 (최종 리뷰 Minor 4: 0022 의 <> 'PERSONAL' 이 NULL 을 놓쳐도 도달 불가)", run: async (q) => {
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, await uidOf(q, "철수"));
+    const round = (await one(q, "select n.id::text as id from public.goal_nodes n join public.rooms r on r.id = n.room_id where r.slug = 'aws' and n.parent_id is null and n.label = '2주차'")).id;
+    await expectFail(q("select public.submission_upsert($1::bigint, '', '{}', '{}')", [round]), "NODE_NOT_LEAF");
+  } },
   { name: "개인 목표: 빈 저장 허용 유지 — 완료(빈 제출) 남고 그 뒤 완료 취소", run: async (q) => {
     await setNow(q, "2026-10-12T03:00:00Z");
     await asUser(q, await uidOf(q, "철수"));

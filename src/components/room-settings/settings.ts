@@ -72,3 +72,21 @@ export function dangerOf(d: State): Danger {
 export const updateRoom = (slug: string, patch: Record<string, unknown>) => rpc<RoomDetail>("room_update", { p_slug: slug, p_patch: patch });
 export const deleteRoom = (slug: string) => rpc<null>("room_delete", { p_slug: slug });
 export const archiveRoom = (slug: string, archived: boolean) => rpc<RoomDetail>(archived ? "room_archive" : "room_unarchive", { p_slug: slug });
+
+/**
+ * 저장 순서 — room_update(바뀐 칸이 있으면) → room_tags_put(태그가 바뀌었으면). 방 정보가 저장되면 태그 결과를 기다리지 않고
+ * onRoom 으로 먼저 화면 기준값을 갱신한다: 태그만 실패해도 제목 등은 저장된 것으로 보이고 "바뀐 항목"엔 태그만 남는다 (최종 리뷰 Minor 6)
+ */
+export async function saveSteps(
+  what: { hasPatch: boolean; tagsDirty: boolean },
+  io: { update: () => Promise<RoomDetail>; putTags: () => Promise<RoomDetail["tags"]>; onRoom: (r: RoomDetail) => void },
+  current: RoomDetail,
+): Promise<RoomDetail> {
+  let next = current;
+  if (what.hasPatch) {
+    next = await io.update();
+    io.onRoom(next);
+  }
+  if (what.tagsDirty) next = { ...next, tags: await io.putTags() };
+  return next;
+}

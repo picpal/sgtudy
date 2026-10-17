@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { guardNavigate, setLeaveGuard } from "./leaveGuard";
+import { guardNavigate, samePage, setLeaveGuard } from "./leaveGuard";
 
 describe("leaveGuard (Q2-1 — 저장하지 않은 편집이 있으면 앱 안 링크 이동을 보류)", () => {
   const ev = () => ({ preventDefault: vi.fn() });
@@ -28,5 +28,13 @@ describe("leaveGuard (Q2-1 — 저장하지 않은 편집이 있으면 앱 안 �
     guardNavigate("/", e);
     expect(e.preventDefault).toHaveBeenCalled();
     off2();
+  });
+});
+
+describe("samePage (최종 리뷰 Minor 1 — 같은 화면 주소로의 이동은 화면이 다시 그려지지 않는다)", () => {
+  it("경로가 같으면 true(쿼리·해시는 무시), 다르면 false", () => {
+    expect(samePage("/my-study/aws", "http://x/my-study/aws?tab=curriculum&item=3")).toBe(true);
+    expect(samePage("/my-study/aws?tab=board", "http://x/my-study/aws")).toBe(true);
+    expect(samePage("/schedule", "http://x/my-study/aws")).toBe(false);
   });
 });

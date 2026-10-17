@@ -1,13 +1,12 @@
 "use client";
 
-import Link from "next/link";
+import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { HomeLink } from "./HomeLink";
 import { Logo } from "./Logo";
 import { signOut } from "@/lib/api/me";
 import { useMe, useMyStudyHref } from "@/lib/me";
-import { guardNavigate } from "@/lib/leaveGuard";
 import { AVATAR_PAL } from "@/lib/palette";
 import { routes, safeReturnTo } from "@/lib/routes";
 
@@ -180,15 +179,15 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
           // 홈은 뷰포트 프리페치 없이 — 홈을 떠날 때마다 /?_rsc 가 더 나가지 않게 (HomeLink 주석)
           if (n.key === "home")
             return (
-              <HomeLink key={n.key} aria-current={on ? "page" : undefined} className={cls} onNavigate={(e) => guardNavigate(n.href, e)}>
+              <HomeLink key={n.key} aria-current={on ? "page" : undefined} className={cls}>
                 {n.icon}
                 {n.label}
               </HomeLink>
             );
           const href = n.key === "myStudy" ? myStudyHref : n.href;
-          // 진행목표 편집 화면에 저장하지 않은 수정이 있으면 이동 전에 묻는다 (Q2-1, leaveGuard)
+          // 진행목표 편집 화면에 저장하지 않은 수정이 있으면 이동 전에 묻는다 (Q2-1 — GuardedLink)
           return (
-            <Link key={n.key} href={href} aria-current={on ? "page" : undefined} className={cls} onNavigate={(e) => guardNavigate(href, e)}>
+            <Link key={n.key} href={href} aria-current={on ? "page" : undefined} className={cls}>
               {n.icon}
               {n.label}
             </Link>
@@ -223,7 +222,7 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
             {open && (
               <div role="menu" aria-label="내 프로필 메뉴" onKeyDown={onMenuKey} className="absolute right-0 top-[52px] z-20 flex w-[180px] flex-col rounded-[14px] border border-line bg-surface p-[6px] shadow-[0_12px_32px_rgba(27,34,48,.14)]">
                 <div className="truncate px-3 py-2 text-[12px] text-muted">{me.email}</div>
-                <Link role="menuitem" href={routes.me()} onClick={() => setOpen(false)} onNavigate={(e) => guardNavigate(routes.me(), e)} className="flex h-11 items-center rounded-[10px] px-3 text-[14px] font-medium text-ink hover:bg-bg">
+                <Link role="menuitem" href={routes.me()} onClick={() => setOpen(false)} className="flex h-11 items-center rounded-[10px] px-3 text-[14px] font-medium text-ink hover:bg-bg">
                   내 프로필
                 </Link>
                 <button role="menuitem" type="button" onClick={logout} className="flex h-11 items-center rounded-[10px] px-3 text-left text-[14px] font-medium text-ink hover:bg-bg">

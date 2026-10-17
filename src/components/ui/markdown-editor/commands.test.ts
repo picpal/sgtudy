@@ -193,6 +193,9 @@ describe("enterPastInline (Q3-12 — 닫는 표식 바로 앞 Enter 가 표식�
     expect(enterPastInline("**a** b", 3)).toBeNull();
     expect(enterPastInline("a**", 1)).toBeNull();
     expect(enterPastInline("plain", 5)).toBeNull();
+    // 앞에 이미 닫힌 쌍만 있으면(**a** b|**) 여는 짝이 아니다
+    expect(enterPastInline("**a** b**", 7)).toBeNull();
+    expect(enterPastInline("**a** **b**", 9)).toEqual({ changes: [], anchor: 11 });
     // 캐럿이 닫는 표식 한가운데(**a*|*)
     expect(enterPastInline("**a**", 4)).toBeNull();
     expect(enterPastInline("x\n**a**\ny", 5)).toEqual({ changes: [], anchor: 7 });

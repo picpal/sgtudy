@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { HomeLink } from "@/components/ui/HomeLink";
 import { useState } from "react";
 import { routes } from "@/lib/routes";

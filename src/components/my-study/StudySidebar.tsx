@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { HomeLink } from "@/components/ui/HomeLink";
 import { useState } from "react";
 import { filterSidebarGroups } from "@/lib/api/my-study";
-import { guardNavigate } from "@/lib/leaveGuard";
 import { routes } from "@/lib/routes";
 import { stickyAside, useStickyFit } from "@/lib/useStickyFit";
 import type { SidebarGroup } from "@/data/my-study";
@@ -59,8 +58,6 @@ export function StudySidebar({ selected, groups, collapsed = false }: { selected
                   <Link
                     key={it.id}
                     href={routes.myStudy(it.id)}
-                    // 다른 방으로 — 진행목표 편집 화면에 저장하지 않은 수정이 있으면 먼저 묻는다 (Q2-1)
-                    onNavigate={(e) => guardNavigate(routes.myStudy(it.id), e)}
                     aria-current={on ? "page" : undefined}
                     className={`relative flex w-full flex-col rounded-[16px] border px-4 py-[14px] text-left text-ink transition-[border-color,background-color,box-shadow] duration-150 hover:text-ink ${
                       on ? "border-[#3FB89C] bg-[#F5FBF9] shadow-[0_0_0_1px_#3FB89C,0_0_0_5px_#E3F6F0]" : "border-line bg-surface hover:border-line-dash"

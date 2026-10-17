@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoomDetail } from "@/lib/api/types";
-import { buildPatch, dangerOf, lockedOf, valuesOf, validateSettings } from "./settings";
+import { buildPatch, dangerOf, lockedOf, saveSteps, valuesOf, validateSettings } from "./settings";
 
 const TODAY = "2026-10-12";
 type D = Pick<RoomDetail, "title" | "intro" | "descriptionMd" | "rulesMd" | "startDate" | "endDate" | "maxMembers" | "minMembers" | "isPublic" | "joinMode" | "leaderDoesTasks" | "status" | "archived" | "memberCount">;
@@ -102,5 +102,22 @@ describe("dangerOf — 삭제·보관 (서버 room_delete 는 준비중·모집�
     expect(dangerOf({ status: "active", archived: false })).toBe("archive");
     expect(dangerOf({ status: "ended", archived: false })).toBe("archive");
     expect(dangerOf({ status: "ended", archived: true })).toBe("unarchive");
+  });
+});
+
+describe("saveSteps — 방 정보 저장 뒤 태그 저장 (최종 리뷰 Minor 6: 부분 실패)", () => {
+  const room = { title: "새 제목", tags: [] } as unknown as RoomDetail;
+  it("방 정보가 저장되면 태그가 실패해도 그 결과를 먼저 화면에 반영한 뒤 오류를 낸다", async () => {
+    const seen: RoomDetail[] = [];
+    const err = new Error("태그 실패");
+    await expect(
+      saveSteps({ hasPatch: true, tagsDirty: true }, { update: async () => room, putTags: async () => { throw err; }, onRoom: (r) => seen.push(r) }, base as RoomDetail),
+    ).rejects.toBe(err);
+    expect(seen).toEqual([room]);
+  });
+  it("둘 다 되면 태그까지 실은 방을 돌려준다 · 바뀐 게 없는 단계는 부르지 않는다", async () => {
+    const tags = [{ id: "t", name: "aws" }] as unknown as RoomDetail["tags"];
+    const r = await saveSteps({ hasPatch: false, tagsDirty: true }, { update: async () => { throw new Error("불리면 안 됨"); }, putTags: async () => tags, onRoom: () => {} }, base as RoomDetail);
+    expect(r.tags).toBe(tags);
   });
 });

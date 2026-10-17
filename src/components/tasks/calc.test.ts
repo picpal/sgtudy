@@ -256,6 +256,11 @@ describe("addBlockReason / studyNote — 추가 못 하는 방은 이유 안내 
     full.items.push(item({ id: "p-a2", roundId: "a2", type: "personal" }));
     expect(addBlockReason(full, "aws")).toBe("모든 회차에 내 목표가 1개씩 있어 더 추가할 수 없어요");
   });
+  it("종료가 아닌데 추가 자격이 없으면(서버 canAddPersonal 거짓) '종료' 라고 하지 않는다 (최종 리뷰 Minor 7)", () => {
+    const m = fx();
+    m.studies = m.studies.map((x) => (x.slug === "aws" ? { ...x, canAddPersonal: false } : x));
+    expect(addBlockReason(m, "aws")).toBe("지금은 이 스터디에 내 목표를 추가할 수 없어요");
+  });
   it("studyNote: 준비중 방만 스터디 묶음 머리 아래 안내", () => {
     const m = draft();
     expect(studyNote(m.studies.find((s) => s.slug === "mine")!)).toBe("모집을 시작하면 개인 목표를 추가할 수 있어요");

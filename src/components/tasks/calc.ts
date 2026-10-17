@@ -172,7 +172,8 @@ export function addBlockReason(m: MeTasks, slug: string): string | null {
   if (!s) return null;
   if (addableRounds(m, slug).length > 0) return null;
   if (s.status === "draft") return DRAFT_ADD_NOTE;
-  if (s.status === "ended" || !s.canAddPersonal) return "종료된 스터디에는 내 목표를 추가할 수 없어요";
+  if (s.status === "ended") return "종료된 스터디에는 내 목표를 추가할 수 없어요";
+  if (!s.canAddPersonal) return "지금은 이 스터디에 내 목표를 추가할 수 없어요"; // 종료 말고 다른 이유(보관·자격) — 틀린 이유를 대지 않는다
   if (!m.rounds.some((r) => r.slug === slug && r.canAdd)) return "아직 회차가 없어 내 목표를 추가할 수 없어요";
   return `모든 회차에 내 목표가 ${m.personalPerRound}개씩 있어 더 추가할 수 없어요`;
 }

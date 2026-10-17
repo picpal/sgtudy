@@ -55,3 +55,33 @@ describe("DetailView 개인 목표 머리 버튼 (스펙 §4.6)", () => {
     expect(render({ ...leaf("33"), archived: true, ownerLeft: true }, LEADER, true).querySelector("[data-archived-badge]")?.textContent).toBe("보관됨 · 이탈");
   });
 });
+
+describe("개인 목표 편집 폼 — 저장 안 한 수정이면 앱 안 링크 이동 전에 묻는다 (최종 리뷰 Minor 8)", () => {
+  it("편집 중 제목을 고친 뒤 헤더 링크 → 이동을 막고 '저장하지 않은 수정이 있어요'", async () => {
+    const { act } = await import("react");
+    const { createRoot } = await import("react-dom/client");
+    const { guardNavigate } = await import("@/lib/leaveGuard");
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    Element.prototype.scrollIntoView = () => {};
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    const view = createElement(DetailView, {
+      n: leaf("32"), nodes: tree.nodes, canEdit: false, onOpen: () => {}, onBack: () => {}, onEdit: () => {}, slug: "aws", roomStatus: "active", focus: null, onFocused: () => {}, onSubmitted: () => {}, toast: () => {},
+      viewerPending: false, isLeader: false, quietNotAssigned: false, roots: tree.roots, period: { start: "2026-10-01", end: "2026-11-30" }, personal: { canAdd: true, perRound: 20 }, api: {} as CurriculumApi,
+    });
+    const me = { id: CHULSU, nickname: "x", tone: "mint" } as unknown as Parameters<typeof MeProvider>[0]["me"];
+    act(() => root.render(createElement(TodayProvider, { today: REF_DAY } as Parameters<typeof TodayProvider>[0], createElement(MeProvider, { me } as Parameters<typeof MeProvider>[0], view))));
+    act(() => Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.trim() === "편집")!.click());
+    const title = host.querySelector<HTMLInputElement>("form input[type=text]")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "고친 제목");
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const e = { preventDefault: vi.fn() };
+    act(() => guardNavigate("/tasks", e));
+    expect(e.preventDefault).toHaveBeenCalled();
+    expect(host.textContent).toContain("저장하지 않은 수정이 있어요");
+    act(() => root.unmount());
+    host.remove();
+  });
+});

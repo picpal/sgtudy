@@ -239,5 +239,6 @@ export function enterPastInline(doc: string, pos: number): Edit | null {
     const empty = before.endsWith(opener) && (head === "" || /\s$/.test(head));
     return empty ? { changes: [{ from: pos - opener.length, to: line.to, insert: "" }], anchor: pos - opener.length } : null;
   }
-  return before.includes(opener) ? { changes: [], anchor: line.to } : null;
+  // 여는 짝이 아직 안 닫혔을 때만 — 앞에 같은 표식이 홀수 번(**a** **b|** 는 3번, **a** b|** 는 2번 = 이미 닫힘)
+  return before.split(opener).length % 2 === 0 ? { changes: [], anchor: line.to } : null;
 }

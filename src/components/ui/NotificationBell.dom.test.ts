@@ -5,18 +5,22 @@ import { createRoot } from "react-dom/client";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }));
-const api = vi.hoisted(() => ({ items: [] as unknown[] }));
+const api = vi.hoisted(() => ({ items: [] as unknown[], read: [] as string[], pushed: [] as string[] }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: (h: string) => api.pushed.push(h) }) }));
 vi.mock("@/lib/api/notifications", async (orig) => ({
   ...(await orig<typeof import("@/lib/api/notifications")>()),
   fetchNotifications: () => Promise.resolve({ items: api.items, nextCursor: null }),
   fetchUnreadCount: () => Promise.resolve(0),
   markAllRead: () => Promise.resolve(0),
-  markRead: () => Promise.resolve(),
+  markRead: (id: string) => {
+    api.read.push(id);
+    return Promise.resolve();
+  },
 }));
 
 const { MeProvider } = await import("@/lib/me");
 const { NotificationBell } = await import("./NotificationBell");
+const { setLeaveGuard } = await import("@/lib/leaveGuard");
 
 const open = async (items: unknown[]) => {
   api.items = items;
@@ -56,5 +60,21 @@ describe("NotificationBell", () => {
     expect(metas.length).toBe(2);
     expect(new Set(metas).size).toBe(2);
     expect(metas.every((m) => /\d{2}:\d{2}$|전$|방금$/.test(m ?? ""))).toBe(true);
+  });
+});
+
+describe("NotificationBell 이탈 가드 (최종 리뷰 Minor 2)", () => {
+  it("편집 화면이 이동을 보류하면 이동도 읽음 처리도 하지 않는다 — 가드가 없으면 둘 다", async () => {
+    api.read = [];
+    api.pushed = [];
+    const host = await open([item("a", "2026-10-15T03:00:00Z")]);
+    const off = setLeaveGuard(() => true);
+    await act(async () => host.querySelector<HTMLAnchorElement>("a[href='/my-study/aws']")!.click());
+    expect([api.read, api.pushed]).toEqual([[], []]);
+    off();
+    const host2 = await open([item("b", "2026-10-15T03:00:00Z")]);
+    await act(async () => host2.querySelector<HTMLAnchorElement>("a[href='/my-study/aws']")!.click());
+    expect(api.pushed).toEqual(["/my-study/aws"]);
+    expect(api.read.length).toBe(1);
   });
 });

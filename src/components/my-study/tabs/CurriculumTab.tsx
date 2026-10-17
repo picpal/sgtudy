@@ -7,6 +7,7 @@ import { Chip, PillButton, Seg } from "../bits";
 import { addDays } from "@/lib/date";
 import { dateShort, rangeShort } from "@/lib/api/format";
 import { useToday } from "@/lib/today";
+import { samePage } from "@/lib/leaveGuard";
 import { allParentsClosed, findNode, isDirty, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
 import { dropPlan, movedPlan, roundOf, rowMoves, withAddRows, withEmptyRounds, withPersonalAddRows, type RowMove } from "../rounds";
@@ -101,9 +102,12 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
       void api.create(to.add);
     } else if ("tab" in to) update({ tab: to.tab, calPick: null, confirm: false, leave: null, saved: "" });
     else if ("href" in to) {
-      // 헤더 메뉴·옆 목록 링크 (leaveGuard 가 보류했던 주소)
-      update({ leave: null });
-      router.push(to.href);
+      // 헤더 메뉴·옆 목록 링크 (leaveGuard 가 보류했던 주소). 같은 방 주소면 화면이 다시 그려지지 않으니 목록으로 닫는다 (최종 리뷰 Minor 1)
+      if (samePage(to.href)) update({ editSel: null, quickAdd: null, confirm: false, leave: null, saved: "" });
+      else {
+        update({ leave: null });
+        router.push(to.href);
+      }
     } else update({ editSel: to.sel, quickAdd: null, confirm: false, leave: null, saved: "" });
   };
   // 저장하지 않은 수정이 있으면 먼저 묻는다 (Q2-05)

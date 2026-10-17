@@ -75,7 +75,8 @@ export const EMPTY_BLOCKER = "내용·링크·파일 중 하나는 있어야 해
 
 /**
  * 빈 저장을 허용하나 — 이미 완료한 개인 목표 기록만 (QA Q1-2). 비워 저장하면 완료(빈 제출)는 남고, 그 뒤 완료 취소가 된다.
- * 서버 submission_upsert(0017)는 빈 내용을 막지 않는다 — 팀 과제의 "하나는 있어야" 는 이 화면 규칙이고 그대로 둔다.
+ * 팀 과제의 "하나는 있어야" 는 화면(EMPTY_BLOCKER)과 서버(0022 submission_upsert — SUBMISSION_EMPTY) 양쪽 규칙이다.
+ * 서버도 개인 목표(PERSONAL)만 빈 저장을 받는다.
  */
 export const emptyAllowed = (personal: boolean, mine: Submission | null): boolean => personal && mine !== null;
 

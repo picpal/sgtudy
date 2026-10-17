@@ -19,3 +19,8 @@ export function setLeaveGuard(g: Guard): () => void {
 export function guardNavigate(href: string, e: { preventDefault: () => void }): void {
   if (guard?.(href)) e.preventDefault();
 }
+
+/** href 가 지금 화면과 같은 경로인가 — Next 는 같은 경로 이동에서 화면을 다시 마운트하지 않아, 편집 화면이 남는다(쿼리·해시 무시) */
+export function samePage(href: string, current: string = window.location.href): boolean {
+  return new URL(href, current).pathname === new URL(current).pathname;
+}
