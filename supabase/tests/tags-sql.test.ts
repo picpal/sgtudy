@@ -31,11 +31,11 @@ cases("tags", db, [
     await q("delete from public.room_tags where room_id = $1::bigint", [aws]);
     await q("insert into public.room_tags (room_id, tag_slug, source, sort_order) values ($1::bigint, 'interview', 'MANUAL', 0), ($1::bigint, 'toeic', 'AUTO', 1)", [aws]);
     const n = await autoselect(q, aws);
-    assertEquals(n, 4);                                                        // B11: 시드 기준 정확히 4 (aws·certificate·cloud·data)
+    assertEquals(n, 3);                                                        // B11: 시드 기준 정확히 3 (aws·certificate·cloud). 0018: '데이터' ⊄ 5주차 '데이터베이스' → data 빠짐
     const t = await tagsOf(q, "aws");
     const auto = t.filter((x) => x.source === "AUTO").map((x) => x.slug);
     assertEquals(auto.slice(0, 3), ["aws", "certificate", "cloud"]);
-    assertEquals([...auto].sort(), ["aws", "certificate", "cloud", "data"]);
+    assertEquals([...auto].sort(), ["aws", "certificate", "cloud"]);
     assert(!auto.includes("toeic"));                                           // 옛 AUTO 는 교체
     assertEquals(t.filter((x) => x.source === "MANUAL").map((x) => x.slug), ["interview"]);
     assertEquals(await autoselect(q, aws), n);                                 // 멱등
