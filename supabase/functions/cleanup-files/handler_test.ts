@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { runCleanup, type Store } from "./cleanup.ts";
+import { MAX_SINGLE_FAILS, runCleanup, type Store } from "./cleanup.ts";
 import { createHandler } from "./handler.ts";
 import type { FileRow, RemoveResult } from "./logic.ts";
 
@@ -53,6 +53,29 @@ Deno.test("runCleanup: 묶음 remove 가 실패하면 1개씩 다시 시도해 �
   assertEquals(calls.del, [["a", "c"]]);
   assertEquals([r.removed, r.rowsDeleted, r.failed], [2, 2, 1]);
   assertEquals(r.errors, ["remove attachments p/b: storage down"]);
+});
+
+Deno.test("runCleanup: 1개씩 재시도가 연속 MAX_SINGLE_FAILS 회 실패하면 그 묶음 나머지는 건너뛰고 다음 실행으로 미룬다", async () => {
+  assertEquals(MAX_SINGLE_FAILS, 5);
+  // 묶음 1(100개): Storage 다운 흉내 — 전부 실패. 묶음 2(다른 버킷)는 정상
+  const rows = [...Array.from({ length: 100 }, (_, i) => row("x" + i)), row("ok", "covers")];
+  const { store, calls } = fakeStore(rows, { failBuckets: ["attachments"] });
+  const r = await runCleanup(store, { limit: 1000 });
+  const att = calls.remove.filter(([b]) => b === "attachments");
+  assertEquals(att.length, 1 + 5);                                          // 묶음 1회 + 1개씩 5회에서 멈춤
+  assertEquals(att.slice(1).map(([, p]) => p), [["p/x0"], ["p/x1"], ["p/x2"], ["p/x3"], ["p/x4"]]);
+  assertEquals(calls.del, [["ok"]]);                                         // 다음 묶음은 계속 처리
+  assertEquals([r.removed, r.rowsDeleted, r.failed], [1, 1, 100]);           // 건너뛴 95개도 실패(남김)로 센다
+  assertEquals(r.errors.at(-1), "remove attachments: 1개씩 재시도 연속 5회 실패 — 나머지 95개는 다음 실행으로");
+});
+
+Deno.test("runCleanup: 연속 실패 수는 성공하면 0 으로 돌아간다(띄엄띄엄 실패는 끝까지 시도)", async () => {
+  const ids = Array.from({ length: 12 }, (_, i) => "y" + i);
+  const bad = ids.filter((_, i) => i % 2 === 0).map((id) => "p/" + id);     // 6개 실패지만 연속은 1회씩
+  const { store, calls } = fakeStore(ids.map((id) => row(id)), { badPaths: bad });
+  const r = await runCleanup(store, { limit: 100 });
+  assertEquals(calls.remove.length, 1 + 12);
+  assertEquals([r.removed, r.failed], [6, 6]);
 });
 
 Deno.test("runCleanup: 대상이 없으면 아무것도 부르지 않는다(멱등)", async () => {

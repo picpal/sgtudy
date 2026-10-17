@@ -14,6 +14,10 @@ export interface Store {
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** 1개씩 재시도가 이만큼 연속 실패하면 그 묶음 나머지는 건너뛴다 — Storage 가 통째로 죽었을 때 묶음마다 100회 직렬 호출로
+ *  함수 실행 시간 상한에 닿지 않게. 건너뛴 행은 DELETED 로 남아 다음 실행이 다시 고른다 */
+export const MAX_SINGLE_FAILS = 5;
+
 async function tryRemove(store: Store, bucket: string, rows: FileRow[]): Promise<RemoveResult> {
   try {
     return await store.removeObjects(bucket, rows.map((r) => r.object_path));
@@ -32,8 +36,15 @@ export async function runCleanup(store: Store, opts: { limit: number }): Promise
       const res = await tryRemove(store, bucket, part);
       // 묶음이 실패하면 1개씩 다시 — 영구 오류 하나가 같은 묶음의 정상 행까지 매번 붙잡지 않게(1개짜리는 그 결과 그대로)
       const tries: [FileRow[], RemoveResult][] = [];
+      let skipped: FileRow[] = [];
       if (res.error && part.length > 1) {
-        for (const one of part) tries.push([[one], await tryRemove(store, bucket, [one])]);   // 순서대로(동시 100개 호출 피함)
+        let streak = 0;
+        for (const [i, one] of part.entries()) {   // 순서대로(동시 100개 호출 피함)
+          const r1 = await tryRemove(store, bucket, [one]);
+          tries.push([[one], r1]);
+          streak = r1.error ? streak + 1 : 0;
+          if (streak >= MAX_SINGLE_FAILS) { skipped = part.slice(i + 1); break; }
+        }
       } else {
         tries.push([part, res]);
       }
@@ -42,6 +53,10 @@ export async function runCleanup(store: Store, opts: { limit: number }): Promise
         ok.push(...s.ok);
         failed += s.failed.length;
         if (r.error) errors.push(`remove ${bucket} ${list.map((x) => x.object_path).join(",")}: ${r.error.message}`);
+      }
+      if (skipped.length > 0) {
+        failed += skipped.length;   // 지우지 못하고 남긴 행 — 응답 207/500 판단에 들어간다
+        errors.push(`remove ${bucket}: 1개씩 재시도 연속 ${MAX_SINGLE_FAILS}회 실패 — 나머지 ${skipped.length}개는 다음 실행으로`);
       }
     }
   }
