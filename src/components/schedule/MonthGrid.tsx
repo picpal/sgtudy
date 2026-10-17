@@ -44,7 +44,7 @@ type WeekProps = Omit<Props, "y"> & { days: string[] };
 function WeekRow({ days, m, sel, today, studies, tasks, markers, onPick }: WeekProps) {
   const segs = packWeek(tasks, days[0]);
   return (
-    <div className="relative min-h-[96px] flex-[1_0_auto] border-b border-line-2 min-[901px]:min-h-[112px]">
+    <div data-week={days[0]} className="relative min-h-[96px] flex-[1_0_auto] border-b border-line-2 min-[901px]:min-h-[112px]">
       {/* 레이어 A: 날짜 셀 */}
       <div className="absolute inset-0 grid grid-cols-7">
         {days.map((k, c) => {
@@ -58,39 +58,48 @@ function WeekRow({ days, m, sel, today, studies, tasks, markers, onPick }: WeekP
           const aria = `${Number(k.slice(5, 7))}월 ${num}일 ${weekdayKo(k)}요일${due ? `, 마감 ${due}개` : ""}${mks.length ? `, 회차 시작 ${mks.length}개` : ""}`;
           const color = isToday ? "#FFFFFF" : !inMonth ? "#A7B0BA" : c === 0 ? "#C0453A" : c === 6 ? "#2F5BC2" : past ? "#7A8594" : "#1B2230";
           return (
-            <button
+            // 칸 = 래퍼(배경·선택 테두리·막대 아래 빈 곳 클릭) + 머리 줄 버튼(36px). 버튼이 칸 전체를 덮으면 그 위의 과제 막대가 가운데를 가로채
+            // 날짜 버튼을 직접 누를 수 없다(Q1-7) — 버튼은 막대가 시작하는 pt-9(36px) 위에만 둔다. 빈 곳 클릭은 래퍼가 받고, 키보드·스크린리더는 버튼이 맡는다
+            <div
               key={k}
-              type="button"
-              aria-label={aria}
-              aria-pressed={isSel}
+              data-day-cell={k}
               onClick={() => onPick(k)}
-              className={`flex min-w-0 flex-col items-stretch px-2 py-[6px] text-left hover:bg-[#F6FAF9] focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2 max-sm:px-1 ${
-                c < 6 ? "border-r border-line-2" : ""
-              }`}
+              className={`flex min-w-0 flex-col items-stretch hover:bg-[#F6FAF9] ${c < 6 ? "border-r border-line-2" : ""}`}
               style={{ background: isSel ? "#F0F9F6" : inMonth ? "#FFFFFF" : "#FAFBFB", boxShadow: isSel ? "inset 0 0 0 2px #5FC8B0" : "none" }}
             >
-              <span className="flex w-full items-center justify-between gap-1 max-sm:gap-[2px]">
-                <span
-                  className="inline-flex h-[26px] w-[26px] shrink-0 max-sm:h-6 max-sm:w-6 items-center justify-center rounded-full text-[13px]"
-                  style={{ fontWeight: isToday ? 700 : 500, background: isToday ? "#1B2230" : "transparent", color }}
-                >
-                  {num}
+              <button
+                type="button"
+                aria-label={aria}
+                aria-pressed={isSel}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPick(k);
+                }}
+                className="flex h-9 w-full min-w-0 shrink-0 flex-col items-stretch bg-transparent px-2 pt-[5px] text-left focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2 max-sm:px-1"
+              >
+                <span className="flex w-full items-center justify-between gap-1 max-sm:gap-[2px]">
+                  <span
+                    className="inline-flex h-[26px] w-[26px] shrink-0 max-sm:h-6 max-sm:w-6 items-center justify-center rounded-full text-[13px]"
+                    style={{ fontWeight: isToday ? 700 : 500, background: isToday ? "#1B2230" : "transparent", color }}
+                  >
+                    {num}
+                  </span>
+                  {/* 좁은 칸(max-sm)에서는 글자 배지 대신 점 — 날짜 숫자·칸 경계와 부딪히지 않게 (회차는 aria-label·일 패널에 있다) */}
+                  <span className="flex min-w-0 items-center gap-[3px] max-sm:gap-[2px]">
+                    {mks.map((mk) => (
+                      <span
+                        key={mk.study}
+                        title={`${studies[mk.study].name} ${mk.round} 시작`}
+                        className="whitespace-nowrap rounded-[5px] px-[5px] py-px text-[10px] font-bold text-white max-sm:h-[7px] max-sm:w-[7px] max-sm:shrink-0 max-sm:rounded-full max-sm:p-0 max-sm:text-[0px] max-sm:leading-none"
+                        style={{ background: studies[mk.study].dot }}
+                      >
+                        {mk.round.replace("주차", "주")}
+                      </span>
+                    ))}
+                  </span>
                 </span>
-                {/* 좁은 칸(max-sm)에서는 글자 배지 대신 점 — 날짜 숫자·칸 경계와 부딪히지 않게 (회차는 aria-label·일 패널에 있다) */}
-                <span className="flex min-w-0 items-center gap-[3px] max-sm:gap-[2px]">
-                  {mks.map((mk) => (
-                    <span
-                      key={mk.study}
-                      title={`${studies[mk.study].name} ${mk.round} 시작`}
-                      className="whitespace-nowrap rounded-[5px] px-[5px] py-px text-[10px] font-bold text-white max-sm:h-[7px] max-sm:w-[7px] max-sm:shrink-0 max-sm:rounded-full max-sm:p-0 max-sm:text-[0px] max-sm:leading-none"
-                      style={{ background: studies[mk.study].dot }}
-                    >
-                      {mk.round.replace("주차", "주")}
-                    </span>
-                  ))}
-                </span>
-              </span>
-            </button>
+              </button>
+            </div>
           );
         })}
       </div>
@@ -113,6 +122,7 @@ function TaskBar({ seg: { task: t, col, span, isStart, isEnd, lane }, studies }:
   return (
     <Link
       href={taskHref(t, S)}
+      data-task={t.id}
       title={`${t.personal ? "[개인] " : ""}${S.name} · ${t.round} · ${t.title} (${md(t.s)}–${md(t.e)}) · ${statusLabel(t)}`}
       className="pointer-events-auto relative box-border max-sm:pointer-events-none flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-[12px] transition-[box-shadow,transform] duration-[120ms] hover:z-[2] hover:-translate-y-px hover:shadow-[0_3px_8px_rgba(27,34,48,.18)] focus-visible:z-[2] focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-1"
       style={{
@@ -128,12 +138,22 @@ function TaskBar({ seg: { task: t, col, span, isStart, isEnd, lane }, studies }:
       }}
     >
       {/* [개인] 미니 배지 — 시작 조각에만, 390 에선 막대가 좁아 점선·색으로만 구분 */}
-      {look.badge && (isStart || col === 0) && (
+      {!isStart && (
+        <span data-cont="prev" aria-hidden="true" className="-ml-1 shrink-0 text-[12px] font-bold leading-none opacity-60">
+          ‹
+        </span>
+      )}
+      {look.badge && span > 1 && (isStart || col === 0) && (
         <span className="shrink-0 rounded-[5px] bg-slate-soft px-[5px] text-[10px] font-bold leading-4 text-personal-ink max-sm:hidden">
           개인
         </span>
       )}
       <span className="min-w-0 flex-1 truncate">{isStart || col === 0 ? t.title : `${t.title} (계속)`}</span>
+      {!isEnd && (
+        <span data-cont="next" aria-hidden="true" className="-mr-1 shrink-0 text-[12px] font-bold leading-none opacity-60">
+          ›
+        </span>
+      )}
       {isEnd && t.mine !== false && (
         <span className="flex shrink-0">
           <StatusIcon status={t.st} size={14} />

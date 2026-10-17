@@ -38,8 +38,8 @@ describe("bits — 누르는 영역 44px", () => {
     expect(lacking([...d.querySelectorAll("button")])).toEqual([]);
   });
   it("Chip · PillButton", () => {
-    const c = dom(createElement(Chip, { on: false, onClick: () => {}, children: "칩" }));
-    const p = dom(createElement(PillButton, { onClick: () => {}, children: "모두 펼치기" }));
+    const c = dom(createElement(Chip, { on: false, onClick: () => {} } as ComponentProps<typeof Chip>, "칩"));
+    const p = dom(createElement(PillButton, { onClick: () => {} } as ComponentProps<typeof PillButton>, "모두 펼치기"));
     expect(lacking([...c.querySelectorAll("button"), ...p.querySelectorAll("button")])).toEqual([]);
   });
 });
