@@ -1,7 +1,7 @@
 // 0018 백로그 수정 — 이탈 전원 제출의 요약 알림, 노드 삭제·보관 후 자동 태그 재선택, 한글 태그 용어 뒤쪽 경계, 방 기간 변경 알림
 import { assert, assertEquals } from "@std/assert";
-import { applySeed, asUser, openDb, setToday } from "./_harness.ts";
-import { cases, nodeId, one, roomId, uidOf, type Q } from "./_fixtures.ts";
+import { applySeed, asUser, makeQ, openDb, setToday, sqlTest } from "./_harness.ts";
+import { cases, nodeId, one, roomId, TODAY, uidOf, type Q } from "./_fixtures.ts";
 
 const db = await openDb();
 await applySeed(db);
@@ -228,5 +228,36 @@ cases("backlog2", db, [
     assertEquals(n.map((x) => x.u).sort(), active.map((x) => x.u).sort());
     assert(n.length > 0);
     assert(n.every((x) => (x.dedupe_key as string).includes(":" + (n[0].dedupe_key as string).split(":")[2] + ":")));
+    // 한계: 사례 하나가 한 트랜잭션(begin … rollback)이라 txid 가 하나뿐이다 → "두 번 저장 = 두 건"은 아래 별도 DB 테스트가 본다
   } },
 ]);
+
+// 두 번 저장 = 두 건: 사례 하네스(한 트랜잭션)로는 txid 가 같아 검증할 수 없다 → 따로 연 DB 에서 저장마다 커밋한다
+sqlTest("backlog2: room_update: two saves (separate transactions) = two ROOM_PERIOD_CHANGED events per member", async () => {
+  const db2 = await openDb();
+  await applySeed(db2);
+  const q = makeQ(db2);
+  const sumin = await uidOf(q, "수민");
+  const jcg = await roomId(q, "jcg");
+  const save = async (startDate: string) => {
+    await db2.exec("begin");
+    try {
+      await setToday(q, TODAY);
+      await asUser(q, sumin);
+      await q("select public.room_update('jcg', $1::jsonb)", [JSON.stringify({ startDate })]);
+      await db2.exec("commit");
+    } catch (e) { await db2.exec("rollback"); throw e; }
+  };
+  await save("2026-10-20");
+  await save("2026-10-21");
+  const n = await q("select user_id::text as u, dedupe_key from public.notifications where kind = 'ROOM_PERIOD_CHANGED' and room_id = $1::bigint", [jcg]);
+  const active = await q("select user_id::text as u from public.room_members where room_id = $1::bigint and status = 'ACTIVE' and user_id <> $2::uuid", [jcg, sumin]);
+  assert(active.length > 0);
+  assertEquals(n.length, active.length * 2);
+  for (const a of active) {
+    const keys = n.filter((x) => x.u === a.u).map((x) => (x.dedupe_key as string).split(":")[2]);
+    assertEquals(keys.length, 2);
+    assert(keys[0] !== keys[1], JSON.stringify(keys));                 // 저장마다 다른 txid
+  }
+  await db2.close();
+});
