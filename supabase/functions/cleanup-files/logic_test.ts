@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { chunk, cutoffIso, GRACE_MS, groupByBucket, isAuthorized, MAX_LIMIT, parseLimit, DEFAULT_LIMIT, splitRemoval } from "./logic.ts";
+import { chunk, DEFAULT_LIMIT, groupByBucket, isAuthorized, MAX_LIMIT, parseLimit, responseStatus, splitRemoval } from "./logic.ts";
 
 Deno.test("parseLimit: 없으면 기본값, 숫자 문자열 허용, 1..MAX 로 자른다, 이상값은 기본값", () => {
   assertEquals(parseLimit(undefined), DEFAULT_LIMIT);
@@ -12,12 +12,6 @@ Deno.test("parseLimit: 없으면 기본값, 숫자 문자열 허용, 1..MAX 로 
   assertEquals(parseLimit(2.7), 2);
   assertEquals(parseLimit("abc"), DEFAULT_LIMIT);
   assertEquals(parseLimit({}), DEFAULT_LIMIT);
-});
-
-Deno.test("cutoffIso: now - 유예(1시간)", () => {
-  const now = new Date("2026-10-17T05:00:00.000Z");
-  assertEquals(GRACE_MS, 60 * 60 * 1000);
-  assertEquals(cutoffIso(now), "2026-10-17T04:00:00.000Z");
 });
 
 Deno.test("groupByBucket: 버킷별로 묶고 행 순서를 지킨다", () => {
@@ -56,4 +50,12 @@ Deno.test("isAuthorized: 시크릿 미설정이면 항상 거부, 헤더가 정�
   assertEquals(isAuthorized("s3cret-value", "s3cret-valuX"), false);
   assertEquals(isAuthorized("s3cret-value", "S3cret-value"), false);
   assertEquals(isAuthorized("s3cret-value", "s3cret-value"), true);
+});
+
+Deno.test("responseStatus: 오류 없으면 200, 일부만 실패 207, 하나도 못 지웠으면 500", () => {
+  assertEquals(responseStatus({ selected: 0, removed: 0, rowsDeleted: 0, failed: 0, errors: [] }), 200);
+  assertEquals(responseStatus({ selected: 3, removed: 3, rowsDeleted: 3, failed: 0, errors: [] }), 200);
+  assertEquals(responseStatus({ selected: 3, removed: 2, rowsDeleted: 2, failed: 1, errors: ["remove attachments: x"] }), 207);
+  assertEquals(responseStatus({ selected: 3, removed: 3, rowsDeleted: 0, failed: 0, errors: ["delete rows: x"] }), 207);
+  assertEquals(responseStatus({ selected: 2, removed: 0, rowsDeleted: 0, failed: 2, errors: ["remove attachments: x"] }), 500);
 });

@@ -8,20 +8,12 @@ export const DEFAULT_LIMIT = 500;
 export const MAX_LIMIT = 1000;
 /** Storage remove() 한 번·행 delete 한 번에 넣는 수(실패 범위·URL 길이를 작게) */
 export const CHUNK = 100;
-/**
- * DELETED 후 이만큼 지난 행만 정리한다. 0007 file_register 는 같은 id 를 다시 등록하면 DELETED 행을 READY 로 되살린다
- * (on conflict (id) do update … deleted_at = null) — 방금 DELETED 된 행을 바로 지우면 그 재등록과 겹칠 수 있어 짧게 둔다.
- */
-export const GRACE_MS = 60 * 60 * 1000;
+// 정리 유예(DELETED 후 1시간)는 DB 한 곳 public.file_purge_grace() 에 있다 — 후보는 file_purge_candidates RPC 가 고른다(0019).
 
 export function parseLimit(v: unknown): number {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   if (!Number.isFinite(n)) return DEFAULT_LIMIT;
   return Math.min(MAX_LIMIT, Math.max(1, Math.floor(n)));
-}
-
-export function cutoffIso(now: Date, graceMs = GRACE_MS): string {
-  return new Date(now.getTime() - graceMs).toISOString();
 }
 
 export function groupByBucket<T extends FileRow>(rows: T[]): Map<string, T[]> {
@@ -57,4 +49,12 @@ export function isAuthorized(secret: string | undefined, header: string | null):
   let diff = a.length ^ b.length;
   for (let i = 0; i < a.length; i++) diff |= a[i] ^ (b[i] ?? 0);
   return diff === 0;
+}
+
+export type Summary = { selected: number; removed: number; rowsDeleted: number; failed: number; errors: string[] };
+
+/** 예약 잡 응답 기록(net._http_response.status_code)으로 실패가 보이게: 오류 없음 200, 일부 실패 207, 하나도 못 지움 500 */
+export function responseStatus(s: Summary): number {
+  if (s.errors.length === 0 && s.failed === 0) return 200;
+  return s.removed > 0 || s.rowsDeleted > 0 ? 207 : 500;
 }
