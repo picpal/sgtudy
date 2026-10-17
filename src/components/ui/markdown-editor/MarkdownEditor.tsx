@@ -74,9 +74,10 @@ const GROUPS: Tool[][] = [
   ],
 ];
 
-// 보이는 버튼은 28×32 로 조밀하게, 누르는 자리는 ::before 로 44×44 (툴바가 isolate 라 음수 z 의 ::before 는 툴바 배경 위·모든 버튼 아래 —
-// 버튼 자체를 누르면 늘 그 버튼, 사이 틈만 이웃과 나눈다)
-const BTN = "relative flex h-8 w-[28px] shrink-0 items-center justify-center rounded-[7px] text-ink-3 before:absolute before:-inset-x-2 before:-inset-y-[6px] before:-z-10 before:content-[''] hover:bg-line-2 hover:text-ink";
+// 누르는 자리 = 버튼 상자 44×44, 버튼 사이·줄 사이 틈 0 — 보이는 모양(28×32 둥근 칸)은 안쪽 span.
+// (전에는 28×32 상자 + ::before 44×44 였는데 이웃 영역과 겹쳐 실제로는 버튼마다 28~36px 만 그 버튼 몫이었다)
+const BTN = "group flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] text-ink-3 hover:text-ink";
+const FACE = "flex h-8 w-7 items-center justify-center rounded-[7px] group-hover:bg-line-2";
 
 function Icon({ name }: { name: string }) {
   return (
@@ -107,13 +108,13 @@ function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Too
       role="toolbar"
       aria-label="서식 도구"
       onKeyDown={onKey}
-      className={`isolate flex flex-wrap items-center gap-x-[6px] gap-y-[2px] border-b border-line-2 bg-surface-3 py-[6px] ${stickyTop !== undefined ? "sticky z-[1]" : ""}`}
+      className={`flex flex-wrap items-center gap-0 border-b border-line-2 bg-surface-3 py-0 ${stickyTop !== undefined ? "sticky z-[1]" : ""}`}
       // 본문 줄 폭 상한(--md-content-max)이 있으면 도구 줄도 같은 세로줄에서 시작한다 — 넓은 편집 면에서 툴바만 왼쪽 끝에 떨어져 보이지 않게
-      style={{ paddingInline: "max(6px, calc((100% - var(--md-content-max, 100%)) / 2 + 6px))", ...(stickyTop !== undefined ? { top: stickyTop } : {}) }}
+      style={{ paddingInline: "max(0px, calc((100% - var(--md-content-max, 100%)) / 2 - 2px))", ...(stickyTop !== undefined ? { top: stickyTop } : {}) }}
     >
       {groups.map((g, gi) => (
-        <div key={gi} role="group" className="flex shrink-0 items-center gap-[2px]">
-          {gi > 0 && <span aria-hidden="true" className="mr-1 h-[18px] w-px bg-line-3" />}
+        <div key={gi} role="group" className="flex shrink-0 items-center gap-0">
+          {gi > 0 && <span aria-hidden="true" className="mx-[2px] h-[18px] w-px bg-line-3" />}
           {g.map((t) => {
             const tip = t.key ? `${t.label} (${mod}${t.key})` : t.label;
             const tabIndex = idx++ === active ? 0 : -1;
@@ -129,13 +130,15 @@ function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Too
                 onClick={() => view.current && run(view.current, t.cmd)}
                 className={BTN}
               >
-                {t.cap ? (
-                  <span aria-hidden="true" className="text-[13px] font-bold leading-none">
-                    H<sub className="text-[9px]">{t.cap}</sub>
-                  </span>
-                ) : (
-                  <Icon name={t.cmd} />
-                )}
+                <span className={FACE}>
+                  {t.cap ? (
+                    <span aria-hidden="true" className="text-[13px] font-bold leading-none">
+                      H<sub className="text-[9px]">{t.cap}</sub>
+                    </span>
+                  ) : (
+                    <Icon name={t.cmd} />
+                  )}
+                </span>
               </button>
             );
           })}
@@ -153,7 +156,9 @@ function Toolbar({ groups, view, onExpand, expandRef, stickyTop }: { groups: Too
           onClick={onExpand}
           className={`${BTN} ml-auto`}
         >
-          <Icon name="expand" />
+          <span className={FACE}>
+            <Icon name="expand" />
+          </span>
         </button>
       )}
     </div>
@@ -252,7 +257,7 @@ export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy
             <span aria-hidden="true" className="text-[14px] font-semibold text-ink-3">
               크게 쓰기
             </span>
-            <button type="button" onClick={() => dialog.current?.close()} className="h-9 rounded-[18px] bg-navy px-4 text-[14px] font-semibold text-white">
+            <button type="button" onClick={() => dialog.current?.close()} className="h-11 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white">
               완료
             </button>
           </div>
