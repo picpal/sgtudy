@@ -4,7 +4,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { addDays, md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
-import { Chip, CodeIcons, PERSONAL_BAR, Seg, TypeBadge } from "../bits";
+import { Chip, CodeIcons, HIT_SQ, HIT_Y, PERSONAL_BAR, Seg, TypeBadge } from "../bits";
 import {
   CODE_COLOR,
   CODE_STATE,
@@ -57,7 +57,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
         <h3 className="m-0 min-w-[128px] text-[20px] font-bold">{label}</h3>
         <NavBtn label="이전" onClick={() => shift(-1)} d="m15 6-6 6 6 6" />
         <NavBtn label="다음" onClick={() => shift(1)} d="m9 6 6 6-6 6" />
-        <button type="button" onClick={() => update({ calAnchor: today, calPick: null })} className="h-[38px] rounded-[19px] border border-line bg-surface px-[14px] text-[13px] font-semibold text-ink">
+        <button type="button" onClick={() => update({ calAnchor: today, calPick: null })} className={`${HIT_Y} h-[38px] rounded-[19px] border border-line bg-surface px-[14px] text-[13px] font-semibold text-ink`}>
           오늘
         </button>
         <span className="flex-[1_1_20px]" />
@@ -220,7 +220,7 @@ const Legend = ({ bg, border, children }: { bg: string; border: string; children
 );
 
 const NavBtn = ({ label, onClick, d }: { label: string; onClick: () => void; d: string }) => (
-  <button type="button" aria-label={label} onClick={onClick} className="flex h-[38px] w-[38px] items-center justify-center rounded-full border border-line bg-surface">
+  <button type="button" aria-label={label} onClick={onClick} className={`${HIT_SQ} flex h-[38px] w-[38px] items-center justify-center rounded-full border border-line bg-surface`}>
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1B2230" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d={d} />
     </svg>

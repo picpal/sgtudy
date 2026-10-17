@@ -15,7 +15,7 @@ type Props = {
   onView: (v: View) => void;
 };
 
-const roundBtn = "flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2";
+const roundBtn = "relative flex h-10 w-10 before:absolute before:left-1/2 before:top-1/2 before:h-11 before:w-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-['']  items-center justify-center rounded-full border border-line bg-surface focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2";
 
 export function Toolbar({ y, m, view, off, studies, onPrev, onNext, onToday, onToggle, onView }: Props) {
   return (
@@ -37,13 +37,13 @@ export function Toolbar({ y, m, view, off, studies, onPrev, onNext, onToday, onT
         <button
           type="button"
           onClick={onToday}
-          className="h-10 rounded-[20px] border border-line bg-surface px-[14px] text-[13px] font-semibold text-ink focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2"
+          className="relative h-10 rounded-[20px] before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-[''] border border-line bg-surface px-[14px] text-[13px] font-semibold text-ink focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2"
         >
           오늘
         </button>
       </div>
       <div className="flex-[1_1_20px]" />
-      <div role="group" aria-label="스터디 필터" className="flex flex-wrap gap-[6px]">
+      <div role="group" aria-label="스터디 필터" className="flex flex-wrap gap-x-[6px] gap-y-[10px]">
         {studies.map((s) => {
           const active = !off.includes(s.id);
           return (
@@ -52,7 +52,7 @@ export function Toolbar({ y, m, view, off, studies, onPrev, onNext, onToday, onT
               type="button"
               aria-pressed={active}
               onClick={() => onToggle(s.id)}
-              className="inline-flex h-[34px] items-center gap-[6px] rounded-[17px] border px-3 text-[13px] focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2"
+              className="relative inline-flex h-[34px] items-center gap-[6px] rounded-[17px] border px-3 before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-[''] text-[13px] focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2"
               style={{
                 borderColor: active ? s.dot : "#D9E2DF",
                 background: active ? s.bg : "#FFFFFF",
@@ -81,7 +81,7 @@ export function Toolbar({ y, m, view, off, studies, onPrev, onNext, onToday, onT
               role="tab"
               aria-selected={a}
               onClick={() => onView(id)}
-              className={`h-[34px] rounded-[9px] px-[14px] text-[13px] focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2 ${
+              className={`relative h-[34px] rounded-[9px] px-[14px] before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-[''] text-[13px] focus-visible:outline-2 focus-visible:outline-mint focus-visible:-outline-offset-2 ${
                 a ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"
               }`}
             >

@@ -11,6 +11,14 @@ import { CODE_LABEL, CODE_STATUS, type Code, type Person } from "./model";
 
 export const toneOfName = toneOf;
 
+/**
+ * 누르는 영역 44px — 보이는 크기는 그대로 두고 가상 요소로만 키운다(Q1-5·Q2-5).
+ * HIT_Y: 너비는 그대로, 세로 44px(가로로 이웃과 나란한 칩·세그). HIT_SQ: 44x44(아이콘 버튼).
+ * 이웃과 겹치지 않으려면 위아래 줄 간격은 (44 − 보이는 높이) 이상, 아이콘 버튼 사이는 44 − 보이는 크기 이상.
+ */
+export const HIT_Y = "relative before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-['']";
+export const HIT_SQ = "relative before:absolute before:left-1/2 before:top-1/2 before:h-11 before:w-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-['']";
+
 /** 세그먼트 컨트롤 */
 export function Seg<T extends string>({ label, value, options, onChange, grow }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void; grow?: boolean }) {
   return (
@@ -23,7 +31,7 @@ export function Seg<T extends string>({ label, value, options, onChange, grow }:
             type="button"
             aria-pressed={on}
             onClick={() => onChange(id)}
-            className={`h-[34px] whitespace-nowrap rounded-[9px] px-3 text-[13px] ${grow ? "flex-1" : ""} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
+            className={`${HIT_Y} h-[34px] whitespace-nowrap rounded-[9px] px-3 text-[13px] ${grow ? "flex-1" : ""} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
           >
             {text}
           </button>
@@ -41,7 +49,7 @@ export function Chip({ on, onClick, children, withAvatar }: { on: boolean; onCli
       aria-pressed={on}
       onClick={onClick}
       // 보이는 칩은 34px, 누르는 영역은 위아래로 5px 늘려 44px (before 의사 요소)
-      className={`relative inline-flex h-[34px] items-center gap-[6px] rounded-[17px] border pr-3 before:absolute before:inset-x-0 before:-inset-y-[5px] before:content-[''] text-[13px] ${withAvatar ? "pl-[6px]" : "pl-3"} ${
+      className={`${HIT_Y} inline-flex h-[34px] items-center gap-[6px] rounded-[17px] border pr-3 text-[13px] ${withAvatar ? "pl-[6px]" : "pl-3"} ${
         on ? "border-ink bg-ink font-semibold text-white" : "border-line-3 bg-surface font-medium text-ink-3"
       }`}
     >
@@ -145,7 +153,7 @@ export function RoundIconButton({ label, children, size = 44, title, onClick }: 
 /** 36 높이 라운드 보조 버튼 */
 export function PillButton({ onClick, children, weight = 400 }: { onClick: () => void; children: ReactNode; weight?: 400 | 500 | 600 }) {
   return (
-    <button type="button" onClick={onClick} className="inline-flex h-9 items-center rounded-[18px] border border-line bg-surface px-3 text-[13px] text-ink" style={{ fontWeight: weight }}>
+    <button type="button" onClick={onClick} className={`${HIT_Y} inline-flex h-9 items-center rounded-[18px] border border-line bg-surface px-3 text-[13px] text-ink`} style={{ fontWeight: weight }}>
       {children}
     </button>
   );

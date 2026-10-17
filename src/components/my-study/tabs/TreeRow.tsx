@@ -86,7 +86,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
             <span className={`h-[6px] w-[6px] rounded-full ${personal ? "bg-personal-dot" : "bg-line-dash"}`} />
           </span>
         ) : (
-          <button type="button" aria-label={`${n.title} ${open ? "접기" : "펼치기"}`} aria-expanded={open} onClick={onToggle} className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] bg-transparent text-ink-3">
+          <button type="button" aria-label={`${n.title} ${open ? "접기" : "펼치기"}`} aria-expanded={open} onClick={onToggle} className="flex h-11 w-[30px] shrink-0 items-center justify-center rounded-[8px] bg-transparent text-ink-3">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="block transition-transform duration-150" style={{ transform: `rotate(${open ? 90 : 0}deg)` }}>
               <path d="m9 6 6 6-6 6" />
             </svg>

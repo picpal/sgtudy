@@ -235,7 +235,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
 
   return (
     <div className="mt-[18px] flex flex-col gap-[14px] @container">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-[10px]">
         <span className="text-[14px] text-ink-3">
           전체 진척률 <b className="font-bold text-ink">{overall}%</b> · 과제 {tree.leaves.length}개
         </span>

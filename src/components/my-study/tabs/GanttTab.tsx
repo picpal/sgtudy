@@ -138,15 +138,15 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
                   <div className="sticky left-0 z-[2] flex w-[var(--gantt-left)] shrink-0 items-center gap-[6px] border-r border-line pl-2 pr-3 max-sm:gap-[2px] max-sm:pl-1 max-sm:pr-1" style={{ background: n.d === 0 ? "#FAFCFB" : personal ? "var(--personal-bg)" : "#FFFFFF", opacity: n.archived ? 0.55 : 1 }}>
                     <span className="w-[calc(var(--d)*16px)] shrink-0 max-sm:w-[calc(var(--d)*4px)]" style={{ "--d": n.d } as React.CSSProperties} />
                     {n.leaf ? (
-                      <span className="w-[26px] shrink-0 max-sm:w-0" />
+                      <span className="w-[30px] shrink-0 max-sm:w-0" />
                     ) : (
-                      <button type="button" aria-label={`${n.title} ${open ? "접기" : "펼치기"}`} aria-expanded={open} onClick={() => toggle(n.id)} className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] bg-transparent text-ink-3">
+                      <button type="button" aria-label={`${n.title} ${open ? "접기" : "펼치기"}`} aria-expanded={open} onClick={() => toggle(n.id)} className="flex h-11 w-[30px] shrink-0 items-center justify-center rounded-[7px] bg-transparent text-ink-3">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="block transition-transform duration-150" style={{ transform: `rotate(${open ? 90 : 0}deg)` }}>
                           <path d="m9 6 6 6-6 6" />
                         </svg>
                       </button>
                     )}
-                    <button type="button" onClick={() => (n.leaf ? goLeaf(n.id) : toggle(n.id))} title={tip} className="flex h-9 min-w-0 flex-1 items-center gap-[6px] bg-transparent p-0 text-left text-ink">
+                    <button type="button" onClick={() => (n.leaf ? goLeaf(n.id) : toggle(n.id))} title={tip} className="flex h-11 min-w-0 flex-1 items-center gap-[6px] bg-transparent p-0 text-left text-ink">
                       {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[6px] bg-navy px-[6px] py-[2px] text-[11px] font-bold text-white max-sm:hidden">{n.label}</span>}
                       {personal && (
                         <span className="flex shrink-0 max-sm:hidden">
