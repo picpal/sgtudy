@@ -5,7 +5,7 @@ import { toApiError } from "@/lib/api/errors";
 import { checkNickname } from "@/lib/api/me";
 import type { NicknameCheck } from "@/lib/api/types";
 import { useDebounced } from "@/lib/useDebounced";
-import { nicknameHint, type NickHint } from "./nickname";
+import { NICK_INPUT_MAX, nicknameHint, type NickHint } from "./nickname";
 
 type Props = { value: string; onChange: (v: string) => void; original?: string; onHint: (h: NickHint) => void; autoFocus?: boolean };
 
@@ -50,7 +50,7 @@ export function NicknameField({ value, onChange, original, onHint, autoFocus }: 
         type="text"
         autoFocus={autoFocus}
         autoComplete="nickname"
-        maxLength={16}
+        maxLength={NICK_INPUT_MAX}
         value={value}
         onChange={(e) => {
           setGen((g) => g + 1);

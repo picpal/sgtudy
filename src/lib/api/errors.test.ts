@@ -66,3 +66,17 @@ describe("rpc", () => {
     await expect(p).rejects.toMatchObject({ code: "NOT_LEADER", message: "그룹장만 할 수 있어요" });
   });
 });
+
+describe("isOnboardingRequired (Q3-7 · 닉네임 전 layout 조회는 오류가 아니다)", () => {
+  it("ApiException·PostgREST 형태 모두 ONBOARDING_REQUIRED 를 알아본다", async () => {
+    const { isOnboardingRequired, ApiException } = await import("./errors");
+    expect(isOnboardingRequired(new ApiException({ code: "ONBOARDING_REQUIRED", message: "닉네임을 먼저 정해 주세요" }))).toBe(true);
+    expect(isOnboardingRequired({ message: "ONBOARDING_REQUIRED", details: "닉네임을 먼저 정해 주세요", hint: "{}", code: "P0001" })).toBe(true);
+  });
+  it("다른 오류·값은 아니다", async () => {
+    const { isOnboardingRequired, ApiException } = await import("./errors");
+    expect(isOnboardingRequired(new ApiException({ code: "AUTH_REQUIRED", message: "x" }))).toBe(false);
+    expect(isOnboardingRequired(new Error("boom"))).toBe(false);
+    expect(isOnboardingRequired(null)).toBe(false);
+  });
+});

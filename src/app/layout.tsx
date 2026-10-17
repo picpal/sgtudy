@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans_KR } from "next/font/google";
 import { unstable_rethrow } from "next/navigation";
 import { getAuthClaims, getMe, getMyStudies, getToday } from "@/lib/api/me.server";
+import { isOnboardingRequired } from "@/lib/api/errors";
 import { myStudyHrefOf } from "@/lib/api/my-study";
 import type { Me } from "@/lib/api/types";
 import { kstToday } from "@/lib/kst";
@@ -45,7 +46,8 @@ async function loadMyStudyHref(): Promise<string> {
     return myStudyHrefOf(await getMyStudies());
   } catch (e) {
     unstable_rethrow(e);
-    console.error("[layout] me_studies failed — header links to /my-study", e);
+    // 닉네임 전(온보딩 중)에는 me_studies 가 ONBOARDING_REQUIRED 로 거절한다 — 정상 상태라 로그·개발 오버레이 이슈로 남기지 않는다(Q3-7)
+    if (!isOnboardingRequired(e)) console.error("[layout] me_studies failed — header links to /my-study", e);
     return routes.myStudy();
   }
 }

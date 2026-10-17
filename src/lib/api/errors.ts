@@ -33,6 +33,9 @@ export function toApiError(e: unknown): ApiError {
   return r.message.includes("커리큘럼") ? { ...r, message: term(r.message) } : r;
 }
 
+/** 닉네임을 아직 안 정한 계정이 닉네임이 필요한 RPC 를 불렀을 때(서버 ONBOARDING_REQUIRED) — 장애가 아니라 온보딩 전의 정상 상태 */
+export const isOnboardingRequired = (e: unknown): boolean => e != null && toApiErrorRaw(e).code === "ONBOARDING_REQUIRED";
+
 function toApiErrorRaw(e: unknown): ApiError {
   if (e instanceof ApiException) return { code: e.code, message: e.message, details: e.details };
   if (isPostgrest(e)) {
