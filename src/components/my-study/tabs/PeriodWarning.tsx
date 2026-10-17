@@ -1,0 +1,83 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { EndDateForm } from "@/components/room-view/EndDateForm";
+import type { ToastMsg } from "@/components/ui/Toast";
+import { mmdd } from "@/lib/api/format";
+import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
+import type { PeriodGap } from "../rounds";
+
+type Props = {
+  gap: PeriodGap;
+  slug: string;
+  /** 진행목표 편집 권한(그룹장 + 권한 받은 팀원) — 기간 맞추기 안내 */
+  canEdit: boolean;
+  /** room_update 는 그룹장만 — 종료일 늘리기 */
+  isLeader: boolean;
+  /** 진행목표 편집 모드로. 이미 편집 모드 안이면 넘기지 않는다(버튼 대신 안내 문구) */
+  onEditRounds?: () => void;
+  toast: (m: ToastMsg) => void;
+};
+
+const BTN = "h-11 rounded-[22px] border border-[#E2C77F] bg-surface px-4 text-[13px] font-semibold text-[#6B4700]";
+
+/**
+ * "회차 n개가 스터디 기간(…)을 벗어나요" 경고 줄 — 진행목표(보기·편집)·개요 공용.
+ * 편집자에게 기간 맞추기: 회차 기간 고치기(편집 모드로) · 그룹장이면 종료일 늘리기(마지막 마감으로 채운 EndDateForm)
+ */
+export function PeriodWarning({ gap, slug, canEdit, isLeader, onEditRounds, toast }: Props) {
+  const router = useRouter();
+  const [editEnd, setEditEnd] = useState(false);
+  const refocus = useRefocusOnClose(editEnd);
+  const canExtend = isLeader && !!gap.fitEnd;
+  const closeForm = () => {
+    refocus(() => document.querySelector<HTMLButtonElement>("[data-period-warning] [data-extend-end]"));
+    setEditEnd(false);
+  };
+  return (
+    <div data-period-warning role="status" className="flex flex-col gap-2 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-3 text-[13px] font-medium leading-[1.5] text-[#6B4700]">
+      <span className="flex items-start gap-[10px]">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mt-[1px] shrink-0">
+          <path d="M12 3 2 20h20z" />
+          <path d="M12 10v4" />
+          <circle cx="12" cy="17" r=".6" />
+        </svg>
+        <span>
+          {gap.text}
+          {canEdit && !onEditRounds && <> · 회차를 눌러 기간을 고쳐 주세요{canExtend ? " · 종료일을 늘려도 돼요" : ""}</>}
+        </span>
+      </span>
+      {canEdit && editEnd && gap.fitEnd ? (
+        <EndDateForm
+          slug={slug}
+          initial={gap.fitEnd}
+          min={gap.fitEnd}
+          hint={`마지막 마감 ${mmdd(gap.fitEnd)} · 진행중에는 마지막 마감 이후로만 바꿀 수 있어요`}
+          onSaved={() => {
+            setEditEnd(false);
+            toast({ text: "종료일을 바꿨어요 · 회차가 스터디 기간 안에 들어와요", tone: "ok" });
+            router.refresh();
+          }}
+          onCancel={closeForm}
+        />
+      ) : (
+        canEdit &&
+        (onEditRounds || canExtend) && (
+          <div className="flex flex-wrap gap-2">
+            {onEditRounds && (
+              <button type="button" onClick={onEditRounds} className={BTN}>
+                회차 기간 고치기
+              </button>
+            )}
+            {canExtend && (
+              <button type="button" data-extend-end onClick={() => setEditEnd(true)} className={BTN}>
+                종료일 늘리기
+              </button>
+            )}
+          </div>
+        )
+      )}
+    </div>
+  );
+}

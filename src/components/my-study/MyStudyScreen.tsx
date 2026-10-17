@@ -18,11 +18,12 @@ import { routes } from "@/lib/routes";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
 import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, isPersonal, stripFieldOv, thisRoundId } from "./model";
-import { currentRoundId } from "./rounds";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, goLeafPatch, type CurMode, type Patch, type ScreenState } from "./state";
+import { currentRoundId, roundsOutsidePeriod } from "./rounds";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, goLeafPatch, modeSwitchPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
 import { OverviewTab } from "./tabs/OverviewTab";
+import { PeriodWarning } from "./tabs/PeriodWarning";
 import { JoinInfoCard } from "./tabs/JoinInfoCard";
 import { CurriculumTab } from "./tabs/CurriculumTab";
 import { BoardTab } from "./tabs/BoardTab";
@@ -203,6 +204,15 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     update(SHOW_OTHERS_PATCH);
     setTabJump((n) => n + 1);
   };
+  // 방 기간을 벗어난 회차 — 개요 경고 줄 (진행목표 탭은 CurriculumTab 이 직접 본다). 종료·보관된 방은 고칠 수 없어 보이지 않는다
+  const gap = useMemo(
+    () => (detail.archived || detail.status === "ended" ? null : roundsOutsidePeriod(savedTree, { start: detail.startDate, end: detail.endDate })),
+    [detail.archived, detail.status, detail.startDate, detail.endDate, savedTree],
+  );
+  const editRounds = () => {
+    update((p) => ({ tab: "curriculum", ...modeSwitchPatch({ ...p, viewSel: null }, "edit") }));
+    setTabJump((n) => n + 1);
+  };
   // 개인 목표 "이번 회차" — /tasks(me_tasks cur)와 같은 규칙. /tasks 처럼 모집·진행 중인 방만
   const personalRoundId = !detail.archived && (detail.status === "recruit" || detail.status === "active") ? thisRoundId(savedTree.roots, today) : null;
 
@@ -220,7 +230,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
             <div className="flex flex-wrap items-start gap-7 @container">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                 <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update({ tab: t, calPick: null })} onShare={share} more={more} />
-                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} onGoCurriculum={() => update({ tab: "curriculum" })} />}
+                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} onGoCurriculum={() => update({ tab: "curriculum" })} periodWarning={gap && <PeriodWarning gap={gap} slug={detail.slug} canEdit={canEdit} isLeader={isLeader} onEditRounds={editRounds} toast={setToast} />} />}
                 {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} />}
                 {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}

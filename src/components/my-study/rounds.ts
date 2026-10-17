@@ -3,7 +3,9 @@
  * React 와 무관. 서버 계약: node_move 의 index 는 "자기를 뺀 새 형제" 기준 위치다.
  */
 import { addDays, diffDays, md } from "@/lib/date";
-import { isPersonal, type ParentNode, type TreeNode } from "./model";
+import { endPart, mmdd } from "@/lib/api/format";
+import { maxEndDate } from "@/components/room-new/validate";
+import { isPersonal, type ParentNode, type Tree, type TreeNode } from "./model";
 
 const live = (roots: ParentNode[]) => roots.filter((r) => !r.archived && !r.temp);
 
@@ -202,4 +204,21 @@ export function dropPlan(nodes: TreeNode[], dragId: string, overId: string, half
     if (team([...rest.slice(0, index), drag, ...rest.slice(index)]) === team(parent.kids)) return null;
   }
   return { parentId: parent.id, index };
+}
+
+export type PeriodGap = { count: number; text: string; fitEnd: string | null };
+
+/**
+ * 방 기간을 벗어난 회차 (서버 PERIOD_OUTSIDE_ROOM 과 같은 판정: 시작일 앞 또는 종료일 뒤로 걸친 회차, 보관·임시 제외).
+ * 서버는 이 경고를 수정 응답(node_update·room_update)에만 실어서, 진행목표·개요는 여기서 본다. 없으면 null.
+ * fitEnd: 종료일만 늘려 맞출 수 있으면 그 날짜 — 보관 제외 전체 노드의 마지막 마감(진행중 room_update 규칙: 마지막 과제 마감 이후).
+ * 시작일 앞에 걸친 회차가 있거나(시작일은 진행중에 잠김) 1년 상한을 넘으면 null → 회차 편집으로만
+ */
+export function roundsOutsidePeriod(tree: Pick<Tree, "roots" | "nodes">, period: { start: string; end: string }): PeriodGap | null {
+  const out = live(tree.roots).filter((r) => r.s < period.start || r.e > period.end);
+  if (out.length === 0) return null;
+  const text = `회차 ${out.length}개가 스터디 기간(${mmdd(period.start)} – ${endPart(period.start, period.end)})을 벗어나요`;
+  const lastEnd = tree.nodes.reduce((m, n) => (!n.archived && !n.temp && n.e > m ? n.e : m), period.end);
+  const fits = !out.some((r) => r.s < period.start) && lastEnd > period.end && lastEnd <= maxEndDate(period.start);
+  return { count: out.length, text, fitEnd: fits ? lastEnd : null };
 }

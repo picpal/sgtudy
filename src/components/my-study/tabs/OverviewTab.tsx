@@ -54,13 +54,15 @@ export function MyPersonalLine({ tree, userId, roundId, slug }: { tree: Tree; us
 }
 
 /** roundId = 개인 목표 "이번 회차"(thisRoundId — /tasks 와 같은 규칙). 모집·진행 중이 아닌 방이면 null → 내 개인 목표 줄 없음 */
-export function OverviewTab({ room, tree, roundId, onGoCurriculum }: { room: StudyRoom; tree: Tree; roundId: string | null; onGoCurriculum: () => void }) {
+export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning }: { room: StudyRoom; tree: Tree; roundId: string | null; onGoCurriculum: () => void; periodWarning?: React.ReactNode }) {
   const cur = room.cur;
   const hasTasks = cur.tasks.length > 0;
   // 참가 중인 나(그룹장 포함) + 이번 회차가 있을 때만 내 개인 목표 줄
   const meRow = room.members.find((m) => m.me && !m.left && !m.pending);
   return (
     <>
+      {/* 방 기간을 벗어난 회차 경고 (PeriodWarning — 진행목표와 같은 줄) */}
+      {periodWarning && <div className="mt-[22px]">{periodWarning}</div>}
       {/* 이번 회차 */}
       <div className="mt-[22px] flex flex-col gap-[14px] rounded-[18px] border border-line px-5 py-[18px]">
         <div className="flex flex-wrap items-center justify-between gap-3">

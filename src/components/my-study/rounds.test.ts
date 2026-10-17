@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, visibleNodes, type LeafNode, type ParentNode, type TreeNode } from "./model";
-import { currentRoundId, dropPlan, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
+import { currentRoundId, dropPlan, roundsOutsidePeriod, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -225,5 +225,27 @@ describe("개인 목표 — 순서·드래그·추가 줄", () => {
     // 내 항목이 있는 회차는 안내 없음
     const mine = withEmptyRounds(withPersonalAddRows(visibleNodes(tree.roots, {}, { ...sc, mineOnly: true }), tree.roots, {}, false, CHULSU), {});
     expect(mine.map(label).filter((k) => k.startsWith("e"))).toEqual([]);
+  });
+});
+
+// 방 기간 밖 회차 (서버 PERIOD_OUTSIDE_ROOM 과 같은 판정 — 시작 전 또는 종료 후로 걸치면). 서버는 수정 응답에만 경고를 실어 화면이 직접 본다
+describe("roundsOutsidePeriod", () => {
+  it("모든 회차가 기간 안이면 null", () => expect(roundsOutsidePeriod(tree, { start: "2026-10-01", end: "2026-11-04" })).toBeNull());
+  it("종료일 뒤로 넘친 회차 → 개수·문구, 종료일만 늘리면 맞는다(fitEnd = 보관 제외 전체 노드의 마지막 마감)", () => {
+    expect(roundsOutsidePeriod(tree, { start: "2026-10-01", end: "2026-10-23" })).toEqual({
+      count: 2,
+      text: "회차 2개가 스터디 기간(10.01 – 10.23)을 벗어나요",
+      fitEnd: "2026-11-04",
+    });
+  });
+  it("시작일 앞에 걸친 회차가 있으면 종료일로는 못 맞춘다 (fitEnd null — 시작일은 진행중에 잠김)", () => {
+    expect(roundsOutsidePeriod(tree, { start: "2026-10-15", end: "2026-10-23" })).toEqual({ count: 4, text: "회차 4개가 스터디 기간(10.15 – 10.23)을 벗어나요", fitEnd: null });
+  });
+  it("늘린 종료일이 1년 상한을 넘으면 fitEnd null, 해를 넘는 기간은 끝을 YYYY.MM.DD 로", () => {
+    expect(roundsOutsidePeriod(tree, { start: "2025-10-20", end: "2026-10-10" })).toEqual({ count: 4, text: "회차 4개가 스터디 기간(10.20 – 2026.10.10)을 벗어나요", fitEnd: null });
+  });
+  it("보관된 회차는 세지 않는다", () => {
+    const t = buildTree({ ...AWS, nodes: AWS.nodes.map((n) => (n.roundId === "1" ? { ...n, archived: true } : n)) }, EMPTY_OVERRIDES, REF_DAY);
+    expect(roundsOutsidePeriod(t, { start: "2026-10-08", end: "2026-11-04" })).toBeNull();
   });
 });

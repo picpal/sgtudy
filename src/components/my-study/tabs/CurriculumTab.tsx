@@ -7,7 +7,7 @@ import { addDays, md } from "@/lib/date";
 import { mmdd } from "@/lib/api/format";
 import { allParentsClosed, findNode, isDirty, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
-import { dropPlan, movedPlan, roundOf, withAddRows, withEmptyRounds, withPersonalAddRows } from "../rounds";
+import { dropPlan, movedPlan, roundOf, roundsOutsidePeriod, withAddRows, withEmptyRounds, withPersonalAddRows } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import type { RoomStatus } from "../submission";
 import type { ToastMsg } from "@/components/ui/Toast";
@@ -16,6 +16,7 @@ import { othersHeading } from "../personal";
 import { DetailView } from "./DetailView";
 import { EditView } from "./EditView";
 import { InlineConfirm } from "./InlineConfirm";
+import { PeriodWarning } from "./PeriodWarning";
 import { AddRow, QuickAdd } from "./QuickAdd";
 import { TreeRow } from "./TreeRow";
 import { useRowDrag } from "./useRowDrag";
@@ -79,6 +80,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   const lastRoot = tree.roots[tree.roots.length - 1];
   // 다음 회차는 마지막 회차 다음 날부터 7일 — 방 종료일을 넘기면 미리 알려 준다 (E4, Q2-21)
   const nextRoundOut = !!lastRoot && addDays(lastRoot.e, 7) > period.end;
+  // 방 기간을 벗어난 회차 (지금 시작으로 기간이 바뀐 방 등) — 종료·보관된 방은 고칠 수 없어 보이지 않는다
+  const gap = roomStatus === "ended" ? null : roundsOutsidePeriod(tree, period);
 
   // 목록 행의 삭제 확인이 열린 항목 (아래 목록 삭제)
   const [ask, setAsk] = useState<string | null>(null);
@@ -269,6 +272,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
           담당자가 지정되지 않은 과제 {warn}개 · 스터디 시작 전에 배정해 주세요
         </div>
       )}
+
+      {gap && <PeriodWarning gap={gap} slug={slug} canEdit={canEdit} isLeader={isLeader} onEditRounds={isEdit ? undefined : () => setMode("edit")} toast={toast} />}
 
       {/* 모서리 행은 컨테이너 안쪽 반경(16-1px)을 따라가야 선택 링(inset)이 둥근 클립에 잘리지 않는다.
           role="tree" 안에는 treeitem 만 — "회차 추가"·종료일 안내는 같은 테두리 상자 안, 트리 밖 (편집 모드에서는 그쪽이 맨 아래라 마지막 행을 둥글리지 않는다) */}
