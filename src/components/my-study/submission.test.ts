@@ -84,6 +84,11 @@ describe("submitBlocker", () => {
   });
 });
 
+describe("SUBMISSION_EMPTY (0022 팀 과제 빈 제출 서버 거부)", () => {
+  it("서버 문구 그대로 토스트 — 화면 EMPTY_BLOCKER 와 같은 문구", () =>
+    expect(submitErrorAction({ code: "SUBMISSION_EMPTY", message: "내용·링크·파일 중 하나는 있어야 해요" } as never)).toEqual({ kind: "toast", text: "내용·링크·파일 중 하나는 있어야 해요" }));
+});
+
 describe("emptyAllowed — 빈 저장은 이미 완료한 개인 목표 기록만 (Q1-2)", () => {
   it("개인 + 내 기록 있음만 true", () => {
     expect(emptyAllowed(true, sub())).toBe(true);
