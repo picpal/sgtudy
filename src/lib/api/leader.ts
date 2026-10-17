@@ -1,4 +1,5 @@
-import { rpc, type Db } from "@/lib/api/errors";
+import { rpc, type ApiError, type Db } from "@/lib/api/errors";
+import { ymd } from "@/lib/api/format";
 import type { MembershipResult, Person, RoomDetail, RoomStatusDto } from "@/lib/api/types";
 
 /* 그룹장 패널(plan 06 P0) — 상태 액션 · 초대 링크 · 승인 대기. 모든 RPC 는 그룹장 전용(NOT_LEADER) */
@@ -14,6 +15,9 @@ export const fetchInvite = (slug: string, client?: Db) => rpc<InviteLink>("invit
 export const rotateInvite = (slug: string, client?: Db) => rpc<InviteLink>("invite_rotate", { p_slug: slug }, client);
 export const fetchApplications = (slug: string, client?: Db) => rpc<Applications>("room_applications", { p_slug: slug }, client);
 export const approveApplicant = (slug: string, userId: string, client?: Db) => rpc<MembershipResult>("room_approve", { p_slug: slug, p_user: userId }, client);
+/** 종료일만 바꾼다(room_update, 그룹장 전용). 모집 전·중엔 1년 상한, 진행중엔 오늘·마지막 과제 마감 이후만 — 서버가 검사 */
+export const updateRoomEndDate = (slug: string, endDate: string, client?: Db) =>
+  rpc<RoomDetail & { warnings: { code: string; nodeId: string }[] }>("room_update", { p_slug: slug, p_patch: { endDate } }, client);
 export const rejectApplicant = (slug: string, userId: string, client?: Db) => rpc<MembershipResult>("room_reject", { p_slug: slug, p_user: userId }, client);
 
 export type StatusAction = "openRecruit" | "start";
@@ -58,4 +62,14 @@ export function leaderErrorText(code: string, message: string): string {
     default:
       return message || "처리하지 못했어요 · 잠시 후 다시 시도해 주세요";
   }
+}
+
+/**
+ * "지금 시작"이 기간 1년 상한에 막혔나 (0016: 예정보다 일찍 시작하면 시작일이 오늘로 당겨져 기간이 늘어난다 → PERIOD_TOO_LONG).
+ * 막혔으면 전용 문구와 줄여야 할 종료일 상한(서버 detail.maxEndDate) — 그룹장 패널이 종료일 바꾸기로 잇는다. 그 밖의 오류는 null
+ */
+export function startBlockOf(err: ApiError): { text: string; maxEndDate: string | null } | null {
+  if (err.code !== "PERIOD_TOO_LONG") return null;
+  const max = err.details?.maxEndDate ?? null;
+  return { text: `지금 시작하면 기간이 1년을 넘어요 · 종료일을 ${max ? `${ymd(max)}까지로 ` : ""}앞당긴 뒤 시작해 주세요`, maxEndDate: max };
 }

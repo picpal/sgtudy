@@ -6,6 +6,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
+import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
+import { ymd } from "@/lib/api/format";
 import {
   absoluteUrl,
   approveApplicant,
@@ -17,14 +19,16 @@ import {
   rejectApplicant,
   rotateInvite,
   showApplications,
+  startBlockOf,
   startRoom,
   statusActionOf,
   statusStepLabel,
   type Applicant,
 } from "@/lib/api/leader";
 import type { MembershipResult, RoomDetail } from "@/lib/api/types";
+import { EndDateForm } from "./EndDateForm";
 
-type Detail = Pick<RoomDetail, "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite">;
+type Detail = Pick<RoomDetail, "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite" | "startDate" | "endDate">;
 /** onDetail/onMembership: 화면이 RoomDetail 을 state 로 들고 있으면(방 화면) 응답으로 바로 교체. 어느 쪽이든 끝나면 router.refresh */
 type Props = { detail: Detail; toast: (m: ToastMsg) => void; onDetail?: (d: RoomDetail) => void; onMembership?: (r: MembershipResult) => void };
 
@@ -38,6 +42,14 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"start" | "rotate" | null>(null);
   const [inviteUrl, setInviteUrl] = useState(detail.invite?.url ?? null);
+  // "지금 시작"이 1년 상한에 막힘(0016 — 일찍 시작하면 시작일이 오늘로 당겨진다): 전용 안내를 패널에 남기고 종료일 바꾸기로 잇는다
+  const [block, setBlock] = useState<{ text: string; maxEndDate: string | null } | null>(null);
+  const [editEnd, setEditEnd] = useState(false);
+  const refocusEnd = useRefocusOnClose(editEnd);
+  const cancelEnd = () => {
+    refocusEnd(() => document.querySelector<HTMLButtonElement>("[data-start-block] [data-edit-end]"));
+    setEditEnd(false);
+  };
 
   const runStatus = async () => {
     if (!action || busy) return;
@@ -53,11 +65,22 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
       router.refresh(); // 상태 배지(준비중→모집중→진행중)·사이드바·탭 재동기화
     } catch (e) {
       const err = toApiError(e);
-      toast({ text: leaderErrorText(err.code, err.message), tone: "bad" });
+      const b = action === "start" ? startBlockOf(err) : null;
+      if (b) {
+        setBlock(b);
+        setEditEnd(false);
+      } else toast({ text: leaderErrorText(err.code, err.message), tone: "bad" });
     } finally {
       setBusy(false);
       setConfirm(null);
     }
+  };
+  const onEndSaved = (d: RoomDetail) => {
+    onDetail?.(d);
+    setBlock(null);
+    setEditEnd(false);
+    toast({ text: "종료일을 바꿨어요 · 이제 지금 시작할 수 있어요", tone: "ok" });
+    router.refresh();
   };
 
   const copyInvite = async () => {
@@ -113,7 +136,26 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
           <button type="button" onClick={() => setConfirm("start")} disabled={busy} className={`${PRIMARY} bg-mint`}>
             지금 시작
           </button>
-          <span className="text-[12px] leading-[1.5] text-muted">시작일을 오늘로 당기고 진행중으로 바꿔요</span>
+          <span className="text-[12px] leading-[1.5] text-muted">진행중으로 바꿔요 · 예정 시작일 전이면 시작일을 오늘로 당겨요</span>
+          {block && (
+            <div data-start-block role="alert" className="mt-1 flex flex-col gap-2 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-3 text-[13px] font-medium leading-[1.5] text-[#6B4700]">
+              <span>{block.text}</span>
+              {editEnd ? (
+                <EndDateForm
+                  slug={detail.slug}
+                  initial={block.maxEndDate && block.maxEndDate < detail.endDate ? block.maxEndDate : detail.endDate}
+                  max={block.maxEndDate ?? undefined}
+                  hint={`지금 종료일 ${ymd(detail.endDate)}`}
+                  onSaved={onEndSaved}
+                  onCancel={cancelEnd}
+                />
+              ) : (
+                <button type="button" data-edit-end onClick={() => setEditEnd(true)} className="h-11 self-start rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink">
+                  종료일 바꾸기
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -146,7 +188,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
         title={confirm === "start" ? "지금 스터디를 시작할까요?" : "초대 링크를 새로 만들까요?"}
         body={
           confirm === "start"
-            ? "시작일이 오늘로 바뀌고 진행중이 돼요. 이후에는 새 참가를 받지 않고, 승인 대기 중인 신청은 만료돼요."
+            ? "진행중이 되고, 예정 시작일 전이면 시작일이 오늘로 당겨져요. 이후에는 새 참가를 받지 않고, 승인 대기 중인 신청은 만료돼요."
             : "지금 링크는 더 이상 열리지 않아요. 이미 참가한 사람에게는 영향이 없어요."
         }
         confirmLabel={confirm === "start" ? "지금 시작" : "새 링크 만들기"}

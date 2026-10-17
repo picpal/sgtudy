@@ -11,8 +11,10 @@ import {
   rejectApplicant,
   rotateInvite,
   showApplications,
+  startBlockOf,
   startRoom,
   statusActionOf,
+  updateRoomEndDate,
   statusStepLabel,
 } from "./leader";
 
@@ -62,6 +64,7 @@ describe("leader RPC wiring", () => {
     await fetchApplications("r1", client);
     await approveApplicant("r1", "u9", client);
     await rejectApplicant("r1", "u9", client);
+    await updateRoomEndDate("r1", "2027-03-01", client);
     expect(calls).toEqual([
       ["room_open_recruit", { p_slug: "r1" }],
       ["room_start", { p_slug: "r1" }],
@@ -70,6 +73,7 @@ describe("leader RPC wiring", () => {
       ["room_applications", { p_slug: "r1" }],
       ["room_approve", { p_slug: "r1", p_user: "u9" }],
       ["room_reject", { p_slug: "r1", p_user: "u9" }],
+      ["room_update", { p_slug: "r1", p_patch: { endDate: "2027-03-01" } }],
     ]);
   });
 });
@@ -83,4 +87,18 @@ describe("helpers", () => {
     expect(leaderErrorText("INVALID_PERIOD", "종료일이 이미 지났어요")).toBe("종료일이 이미 지났어요");
     expect(leaderErrorText("X", "")).toBe("처리하지 못했어요 · 잠시 후 다시 시도해 주세요");
   });
+});
+
+// 0016: 예정보다 일찍 "지금 시작"하면 시작일이 오늘로 당겨져 1년 상한을 넘을 수 있다 → PERIOD_TOO_LONG(detail.maxEndDate)
+describe("startBlockOf (지금 시작 — 기간 1년 초과)", () => {
+  it("PERIOD_TOO_LONG 은 전용 문구 + 줄여야 할 종료일 상한", () => {
+    expect(startBlockOf({ code: "PERIOD_TOO_LONG", message: "기간은 최대 1년이에요", details: { field: "endDate", maxEndDate: "2027-10-16" } })).toEqual({
+      text: "지금 시작하면 기간이 1년을 넘어요 · 종료일을 2027.10.16까지로 앞당긴 뒤 시작해 주세요",
+      maxEndDate: "2027-10-16",
+    });
+  });
+  it("상한이 안 오면 날짜 없이", () => {
+    expect(startBlockOf({ code: "PERIOD_TOO_LONG", message: "x" })).toEqual({ text: "지금 시작하면 기간이 1년을 넘어요 · 종료일을 앞당긴 뒤 시작해 주세요", maxEndDate: null });
+  });
+  it("다른 오류는 null (일반 토스트)", () => expect(startBlockOf({ code: "ROOM_STATUS_INVALID", message: "x" })).toBeNull());
 });
