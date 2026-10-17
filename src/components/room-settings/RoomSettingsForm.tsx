@@ -216,8 +216,8 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
           </Section>
 
           {serverError && <p role="alert" className="m-0 text-[13px] text-warn">{serverError}</p>}
-          {/* 저장 막대 — 긴 폼에서도 늘 보이게 화면 아래에 붙는다 */}
-          <div className="sticky bottom-0 z-10 -mx-7 flex flex-wrap items-center justify-end gap-2 border-t border-line-2 bg-surface px-7 py-3 max-sm:-mx-5 max-sm:px-5">
+          {/* 저장 막대 — 바뀐 게 있으면 긴 폼에서도 보이게 화면 아래에 붙는다 */}
+          <div className={`${dirtyCount ? "sticky bottom-0 z-10 shadow-[0_-8px_20px_rgba(27,34,48,.06)]" : ""} -mx-7 flex flex-wrap items-center justify-end gap-2 border-t border-line-2 bg-surface px-7 py-3 max-sm:-mx-5 max-sm:px-5`}>
             <span aria-live="polite" className="mr-auto text-[13px] text-muted">
               {dirtyCount ? `바뀐 항목 ${dirtyCount}개` : "바뀐 내용이 없어요"}
             </span>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
@@ -26,6 +27,7 @@ import {
   type Applicant,
 } from "@/lib/api/leader";
 import type { MembershipResult, RoomDetail } from "@/lib/api/types";
+import { routes } from "@/lib/routes";
 import { EndDateForm } from "./EndDateForm";
 
 type Detail = Pick<RoomDetail, "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite" | "startDate" | "endDate">;
@@ -40,7 +42,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
   const router = useRouter();
   const action = statusActionOf(detail);
   const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState<"start" | "rotate" | null>(null);
+  const [confirm, setConfirm] = useState<"open" | "start" | "rotate" | null>(null);
   const [inviteUrl, setInviteUrl] = useState(detail.invite?.url ?? null);
   // "지금 시작"이 1년 상한에 막힘(0016 — 일찍 시작하면 시작일이 오늘로 당겨진다): 전용 안내를 패널에 남기고 종료일 바꾸기로 잇는다
   const [block, setBlock] = useState<{ text: string; maxEndDate: string | null } | null>(null);
@@ -118,12 +120,22 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
         <h3 id="leader-panel-title" className="m-0 text-[14px] font-bold">
           그룹장 패널
         </h3>
-        <span className="rounded-[7px] bg-bg px-2 py-[2px] text-[12px] font-semibold text-ink-3">지금 {statusStepLabel(detail.status)}</span>
+        <span className="flex items-center gap-1">
+          <span className="rounded-[7px] bg-bg px-2 py-[2px] text-[12px] font-semibold text-ink-3">지금 {statusStepLabel(detail.status)}</span>
+          {/* 방 정보·태그·기간 수정, 삭제·보관 (Q3-1·Q2-2) */}
+          <Link href={routes.roomSettings(detail.slug)} className="-mr-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[13px] font-semibold text-ink-3 hover:text-ink">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+            </svg>
+            방 설정
+          </Link>
+        </span>
       </div>
 
       {action === "openRecruit" && (
         <div className="flex flex-col gap-[6px]">
-          <button type="button" onClick={() => void runStatus()} disabled={busy} className={`${PRIMARY} bg-navy`}>
+          <button type="button" onClick={() => setConfirm("open")} disabled={busy} className={`${PRIMARY} bg-navy`}>
             모집 시작
           </button>
           <span className="text-[12px] leading-[1.5] text-muted">
@@ -185,16 +197,18 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
 
       <ConfirmDialog
         open={confirm !== null}
-        title={confirm === "start" ? "지금 스터디를 시작할까요?" : "초대 링크를 새로 만들까요?"}
+        title={confirm === "open" ? "모집을 시작할까요?" : confirm === "start" ? "지금 스터디를 시작할까요?" : "초대 링크를 새로 만들까요?"}
         body={
-          confirm === "start"
-            ? "진행중이 되고, 예정 시작일 전이면 시작일이 오늘로 당겨져요. 이후에는 새 참가를 받지 않고, 승인 대기 중인 신청은 만료돼요."
-            : "지금 링크는 더 이상 열리지 않아요. 이미 참가한 사람에게는 영향이 없어요."
+          confirm === "open"
+            ? `모집을 시작하면 ${openRecruitNote(detail)}. 모집중에도 방 설정에서 공개 여부·참가 방식을 바꿀 수 있어요.`
+            : confirm === "start"
+              ? "진행중이 되고, 예정 시작일 전이면 시작일이 오늘로 당겨져요. 이후에는 새 참가를 받지 않고, 승인 대기 중인 신청은 만료돼요."
+              : "지금 링크는 더 이상 열리지 않아요. 이미 참가한 사람에게는 영향이 없어요."
         }
-        confirmLabel={confirm === "start" ? "지금 시작" : "새 링크 만들기"}
+        confirmLabel={confirm === "open" ? "모집 시작" : confirm === "start" ? "지금 시작" : "새 링크 만들기"}
         busy={busy}
         onCancel={() => setConfirm(null)}
-        onConfirm={() => void (confirm === "start" ? runStatus() : rotate())}
+        onConfirm={() => void (confirm === "rotate" ? rotate() : runStatus())}
       />
     </section>
   );

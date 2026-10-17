@@ -7,7 +7,7 @@ import { ApiException } from "@/lib/api/errors";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
-const api = vi.hoisted(() => ({ startRoom: vi.fn(), updateRoomEndDate: vi.fn() }));
+const api = vi.hoisted(() => ({ startRoom: vi.fn(), updateRoomEndDate: vi.fn(), openRecruit: vi.fn() }));
 vi.mock("@/lib/api/leader", async (orig) => ({ ...(await orig<typeof import("@/lib/api/leader")>()), ...api }));
 
 const { LeaderPanel } = await import("./LeaderPanel");
@@ -67,6 +67,35 @@ describe("LeaderPanel 지금 시작 — 기간 1년 초과", () => {
     await flush();
     expect(toast).toHaveBeenCalledWith({ text: "방 상태가 바뀌었어요 · 새로고침해 주세요", tone: "bad" });
     expect(host.querySelector("[data-start-block]")).toBeNull();
+    act(() => root.unmount());
+  });
+});
+
+// Q3-3: "모집 시작"은 공개된다는 안내와 함께 확인을 받는다
+describe("LeaderPanel 모집 시작 — 확인 단계", () => {
+  it("버튼은 확인 대화상자를 열고, 확인해야 room_open_recruit", async () => {
+    api.openRecruit.mockResolvedValue({ ...detail, status: "recruit" });
+    const toast = vi.fn();
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(LeaderPanel, { detail: { ...detail, status: "draft" as const }, toast })));
+    act(() => btn(host, "모집 시작")[0].click());
+    expect(api.openRecruit).not.toHaveBeenCalled();
+    const dialog = host.querySelector('[role="dialog"], [role="alertdialog"]')!;
+    expect(dialog.textContent).toContain("모집을 시작할까요?");
+    expect(dialog.textContent).toContain("전체 공개 방 목록에 보이고 누구나 바로 참가할 수 있어요");
+    await act(async () => btn(host, "모집 시작").at(-1)!.click());
+    await flush();
+    expect(api.openRecruit).toHaveBeenCalledWith("r1");
+    expect(toast).toHaveBeenCalledWith({ text: "모집을 시작했어요", tone: "ok" });
+    act(() => root.unmount());
+  });
+
+  it("방 설정 링크", () => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(LeaderPanel, { detail, toast: vi.fn() })));
+    expect(host.querySelector<HTMLAnchorElement>('a[href="/rooms/r1/settings"]')?.textContent).toContain("방 설정");
     act(() => root.unmount());
   });
 });
