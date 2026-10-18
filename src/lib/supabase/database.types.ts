@@ -128,6 +128,7 @@ export type Database = {
         Row: {
           archived_at: string | null
           created_at: string
+          created_by: string | null
           depth: number
           description_md: string
           end_date: string
@@ -146,6 +147,7 @@ export type Database = {
         Insert: {
           archived_at?: string | null
           created_at?: string
+          created_by?: string | null
           depth: number
           description_md?: string
           end_date: string
@@ -164,6 +166,7 @@ export type Database = {
         Update: {
           archived_at?: string | null
           created_at?: string
+          created_by?: string | null
           depth?: number
           description_md?: string
           end_date?: string
@@ -180,6 +183,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "goal_nodes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "goal_nodes_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "goal_nodes_owner_id_fkey"
             columns: ["owner_id"]
@@ -441,12 +458,15 @@ export type Database = {
       room_members: {
         Row: {
           applied_at: string | null
+          apply_message: string | null
           can_edit_curriculum: boolean
           created_at: string
           decided_at: string | null
           decided_by: string | null
           id: number
           joined_at: string | null
+          leave_request_reason: string | null
+          leave_requested_at: string | null
           left_at: string | null
           role: string
           room_id: number
@@ -456,12 +476,15 @@ export type Database = {
         }
         Insert: {
           applied_at?: string | null
+          apply_message?: string | null
           can_edit_curriculum?: boolean
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
           id?: never
           joined_at?: string | null
+          leave_request_reason?: string | null
+          leave_requested_at?: string | null
           left_at?: string | null
           role: string
           room_id: number
@@ -471,12 +494,15 @@ export type Database = {
         }
         Update: {
           applied_at?: string | null
+          apply_message?: string | null
           can_edit_curriculum?: boolean
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
           id?: never
           joined_at?: string | null
+          leave_request_reason?: string | null
+          leave_requested_at?: string | null
           left_at?: string | null
           role?: string
           room_id?: number
@@ -1003,7 +1029,10 @@ export type Database = {
       }
       invite_ensure: { Args: { p_by: string; p_room: number }; Returns: string }
       invite_get: { Args: { p_slug: string }; Returns: Json }
-      invite_join: { Args: { p_token: string }; Returns: Json }
+      invite_join: {
+        Args: { p_message?: string; p_token: string }
+        Returns: Json
+      }
       invite_preview: { Args: { p_token: string }; Returns: Json }
       invite_resolve: {
         Args: { p_token: string }
@@ -1053,6 +1082,7 @@ export type Database = {
       job_deadline_reminder: { Args: never; Returns: number }
       job_draft_blocked: { Args: never; Returns: number }
       job_round_started: { Args: never; Returns: number }
+      job_submission_digest: { Args: never; Returns: number }
       kst_deadline: { Args: { p_end: string }; Returns: string }
       kst_today: { Args: never; Returns: string }
       leader_room: {
@@ -1098,6 +1128,10 @@ export type Database = {
         }
         Returns: string
       }
+      leave_requests_json: {
+        Args: { r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: Json
+      }
       like_escape: { Args: { p_text: string }; Returns: string }
       me_get: { Args: never; Returns: Json }
       me_schedule: { Args: { p_from: string; p_to: string }; Returns: Json }
@@ -1115,7 +1149,7 @@ export type Database = {
           title: string
         }[]
       }
-      me_studies: { Args: never; Returns: Json }
+      me_studies: { Args: { p_include_archived?: boolean }; Returns: Json }
       me_tasks: { Args: never; Returns: Json }
       me_update: {
         Args: { p_nickname?: string; p_optional_mail_enabled?: boolean }
@@ -1141,6 +1175,15 @@ export type Database = {
         Returns: Json
       }
       member_deactivate_preview: {
+        Args: { p_slug: string; p_user: string }
+        Returns: Json
+      }
+      member_leave_request: {
+        Args: { p_reason?: string; p_slug: string }
+        Returns: Json
+      }
+      member_leave_request_cancel: { Args: { p_slug: string }; Returns: Json }
+      member_leave_request_dismiss: {
         Args: { p_slug: string; p_user: string }
         Returns: Json
       }
@@ -1215,6 +1258,7 @@ export type Database = {
         Returns: {
           archived_at: string | null
           created_at: string
+          created_by: string | null
           depth: number
           description_md: string
           end_date: string
@@ -1287,6 +1331,7 @@ export type Database = {
       notifications_read: { Args: { p_id: number }; Returns: undefined }
       notifications_read_all: { Args: never; Returns: Json }
       notifications_unread_count: { Args: never; Returns: Json }
+      notify_date: { Args: { p_d: string; p_today: string }; Returns: string }
       notify_enabled: {
         Args: { p_kind: string; p_model: Json; p_room: number }
         Returns: boolean
@@ -1306,6 +1351,10 @@ export type Database = {
           p_room: number
         }
         Returns: number
+      }
+      notify_range: {
+        Args: { p_e: string; p_s: string; p_today: string }
+        Returns: string
       }
       notify_render: {
         Args: {
@@ -1367,6 +1416,7 @@ export type Database = {
         Returns: {
           archived_at: string | null
           created_at: string
+          created_by: string | null
           depth: number
           description_md: string
           end_date: string
@@ -1428,6 +1478,7 @@ export type Database = {
         Returns: {
           archived_at: string | null
           created_at: string
+          created_by: string | null
           depth: number
           description_md: string
           end_date: string
@@ -1473,7 +1524,7 @@ export type Database = {
       require_user: { Args: never; Returns: string }
       room_applications: { Args: { p_slug: string }; Returns: Json }
       room_apply: {
-        Args: { p_invite_token?: string; p_slug: string }
+        Args: { p_invite_token?: string; p_message?: string; p_slug: string }
         Returns: Json
       }
       room_approve: { Args: { p_slug: string; p_user: string }; Returns: Json }
@@ -1509,12 +1560,15 @@ export type Database = {
         }
         Returns: {
           applied_at: string | null
+          apply_message: string | null
           can_edit_curriculum: boolean
           created_at: string
           decided_at: string | null
           decided_by: string | null
           id: number
           joined_at: string | null
+          leave_request_reason: string | null
+          leave_requested_at: string | null
           left_at: string | null
           role: string
           room_id: number
@@ -1563,12 +1617,15 @@ export type Database = {
         }
         Returns: {
           applied_at: string | null
+          apply_message: string | null
           can_edit_curriculum: boolean
           created_at: string
           decided_at: string | null
           decided_by: string | null
           id: number
           joined_at: string | null
+          leave_request_reason: string | null
+          leave_requested_at: string | null
           left_at: string | null
           role: string
           room_id: number
@@ -1599,6 +1656,7 @@ export type Database = {
         }[]
       }
       room_leave: { Args: { p_slug: string }; Returns: Json }
+      room_leave_requests: { Args: { p_slug: string }; Returns: Json }
       room_lock: {
         Args: { p_slug: string }
         Returns: {
@@ -1681,7 +1739,7 @@ export type Database = {
           title: string
         }[]
       }
-      room_start: { Args: { p_slug: string }; Returns: Json }
+      room_start: { Args: { p_shift?: boolean; p_slug: string }; Returns: Json }
       room_start_date_repair: { Args: never; Returns: Json }
       room_tags_get: { Args: { p_slug: string }; Returns: Json }
       room_tags_json: { Args: { p_room: number }; Returns: Json }
@@ -1730,6 +1788,7 @@ export type Database = {
         Returns: {
           archived_at: string | null
           created_at: string
+          created_by: string | null
           depth: number
           description_md: string
           end_date: string

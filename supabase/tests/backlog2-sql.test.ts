@@ -197,7 +197,7 @@ cases("backlog2", db, [
     const want = await Promise.all(["지은", "철수", "하나"].map((n) => uidOf(q, n)));
     assertEquals(rows.map((x) => x.u), [...want].sort());
     assertEquals(rows[0].title, "AWS SAA 자격증 3개월 완주 기간이 변경됐어요");
-    assertEquals(rows[0].body, "26.10.01 – 26.12.31 → 26.10.01 – 27.01.15");          // 해를 넘기면 연도까지
+    assertEquals(rows[0].body, "10.01 – 12.31 → 10.01 – 2027.01.15");          // 0024: format.ts rangeShort — 끝이 시작과 다른 해면 YYYY.MM.DD
     assertEquals(rows[0].link, "/my-study/aws");
     assertEquals(rows[0].actor, minsu);
     assert(new RegExp(`^ROOM_PERIOD_CHANGED:${aws}:\\d+:`).test(rows[0].dedupe_key), rows[0].dedupe_key);

@@ -59,7 +59,7 @@ sqlTest("me_studies: 모집중 방은 PENDING 뿐 아니라 ACTIVE 멤버도, DR
 
 sqlTest("privileges: me_studies — authenticated 는 실행, anon 은 permission denied", withCase(db, async (q) => {
   const can = async (role: string) =>
-    (await q(`select has_function_privilege($1, 'public.me_studies()', 'execute') as ok`, [role]))[0].ok as boolean;
+    (await q(`select has_function_privilege($1, 'public.me_studies(boolean)', 'execute') as ok`, [role]))[0].ok as boolean;
   assertEquals([await can("authenticated"), await can("anon")], [true, false]);
   await setToday(q, TODAY);
   await asUser(q, await uid(q, "철수"));

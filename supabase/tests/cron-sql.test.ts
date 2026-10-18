@@ -6,7 +6,7 @@ const db = await openDb();
 await applySeed(db);
 
 cases("cron+seed", db, [
-  { name: "0010 registers 7 jobs with 02 §7 schedules (UTC)", run: async (q) => {
+  { name: "0010 registers 7 jobs with 02 §7 schedules (UTC) + 0024 submission_digest", run: async (q) => {
     const jobs = await q("select jobname, schedule, command from cron.job order by jobname");
     assertEquals(jobs.map((j) => [j.jobname, j.schedule, j.command]), [
       ["cleanup",            "0 19 * * *",  "select public.job_cleanup()"],
@@ -16,6 +16,7 @@ cases("cron+seed", db, [
       ["member_count_audit", "32 19 * * *", "select public.member_count_audit()"],
       ["room_tick",          "*/5 * * * *", "select public.room_tick()"],
       ["round_started",      "1 15 * * *",  "select public.job_round_started()"],
+      ["submission_digest",  "0 0 * * *",   "select public.job_submission_digest()"],   // 0024 — completion_digest 와 같은 09:00 KST
     ]);
   } },
 

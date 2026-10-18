@@ -386,7 +386,7 @@ export const ROOM_CASES: Case[] = [
     run: async (q) => {
       const fnCan = async (role: string, fn: string) =>
         (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
-      for (const f of ["room_open_recruit(text)", "room_start(text)", "room_archive(text)", "room_unarchive(text)", "room_delete(text)", "room_update(text,jsonb)"]) {
+      for (const f of ["room_open_recruit(text)", "room_start(text,boolean)", "room_archive(text)", "room_unarchive(text)", "room_delete(text)", "room_update(text,jsonb)"]) {
         assertEquals(await fnCan("authenticated", `public.${f}`), true, `authenticated ${f}`);
         assertEquals(await fnCan("anon", `public.${f}`), false, `anon ${f}`);
       }
@@ -575,9 +575,9 @@ export const ROOM_CASES: Case[] = [
       assertEquals(await slugs({ q: "_" }), []);
       assertEquals(await slugs({ tags: ["cloud", "certificate"] }), ["aws", "jcg", "sqld", "docker"]);          // OR
       assertEquals(await slugs({ tags: ["cloud"], status: "recruit" }), ["docker"]);
-      // 상태·검색·태그 필터는 tabCounts·facets 에 영향 없음
+      // 0024(#19): tabCounts 는 상태·검색·태그 조건을 적용한 수(현재 scope 의 totalElements 와 같다). facets 는 영향 없음
       const f = await listRooms(q, { tags: ["cloud"], status: "recruit", q: "Docker" });
-      assertEquals([f.totalElements, f.tabCounts.public, f.tagFacets.length], [1, 8, 16]);
+      assertEquals([f.totalElements, f.tabCounts.public, f.tagFacets.length], [1, 1, 16]);
       // 페이지
       const p1 = await listRooms(q, { size: 3, page: 1 });
       assertEquals([p1.page, p1.size, p1.totalElements, p1.items.map((x: any) => x.slug)], [1, 3, 8, ["cs", "sqld", "toeic"]]);
@@ -783,13 +783,13 @@ export const ROOM_CASES: Case[] = [
       ];
       const AUTH = [
         ...ANON,
-        "invite_get(text)", "invite_join(text)", "invite_rotate(text)", "is_my_task(bigint)",
-        "me_get()", "me_schedule(date,date)", "me_studies()", "me_update(text,boolean)", "nickname_check(text)",
+        "invite_get(text)", "invite_join(text,text)", "invite_rotate(text)", "is_my_task(bigint)",
+        "me_get()", "me_schedule(date,date)", "me_studies(boolean)", "me_update(text,boolean)", "nickname_check(text)",
         "node_archive(text,bigint)", "node_create(text,bigint,text,text,text,date,date,integer)", "node_delete(text,bigint)", "node_move(text,bigint,bigint,integer)", "node_unarchive(text,bigint)", "node_update(text,bigint,jsonb)",
-        "room_apply(text,text)", "room_approve(text,uuid)", "room_applications(text)", "room_archive(text)",
+        "room_apply(text,text,text)", "room_approve(text,uuid)", "room_applications(text)", "room_archive(text)",
         "room_cancel_application(text)", "room_create(text,text,date,date,integer,boolean,text,text,text,integer,boolean,uuid,text[])",
         "room_delete(text)", "room_join(text,text)", "room_leave(text)", "room_members_get(text)",
-        "room_open_recruit(text)", "room_reject(text,uuid)", "room_start(text)", "room_unarchive(text)", "room_update(text,jsonb)",
+        "room_open_recruit(text)", "room_reject(text,uuid)", "room_start(text,boolean)", "room_unarchive(text)", "room_update(text,jsonb)",
         "submission_upsert(bigint,text,text[],uuid[])", "file_register(bigint,text,text,text,bigint)", "file_discard(uuid)",
         "notifications_list(text,integer)", "notifications_unread_count()", "notifications_read(bigint)", "notifications_read_all()",
         "settings_get(text)", "settings_put(text,jsonb)",
@@ -797,6 +797,8 @@ export const ROOM_CASES: Case[] = [
         "room_tags_put(text,text[],text[])", "room_tags_suggest(text)",
         "personal_create(text,bigint,text,date,date,text)", "personal_update(text,bigint,jsonb)", "personal_archive(text,bigint,boolean)",
         "personal_delete(text,bigint)", "personal_complete(text,bigint,boolean)", "me_tasks()",
+        // 0024: 탈퇴 요청
+        "member_leave_request(text,text)", "member_leave_request_cancel(text)", "member_leave_request_dismiss(text,uuid)", "room_leave_requests(text)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);
@@ -804,7 +806,7 @@ export const ROOM_CASES: Case[] = [
       for (const fn of ["public.rooms_list(text,text,text,text[],integer,integer,text)", "public.room_get(text,text)", "public.invite_preview(text)"]) {
         assertEquals(await can("anon", fn), true, fn);
       }
-      for (const fn of ["public.room_join(text,text)", "public.room_update(text,jsonb)", "public.invite_join(text)"]) {
+      for (const fn of ["public.room_join(text,text)", "public.room_update(text,jsonb)", "public.invite_join(text,text)"]) {
         assertEquals(await can("anon", fn), false, fn);
         assertEquals(await can("authenticated", fn), true, fn);
       }

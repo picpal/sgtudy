@@ -262,7 +262,7 @@ export const MEMBERSHIP_CASES: Case[] = [
       const can = async (role: string, fn: string) =>
         (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
       for (const fn of [
-        "public.room_join(text,text)", "public.room_apply(text,text)", "public.room_leave(text)",
+        "public.room_join(text,text)", "public.room_apply(text,text,text)", "public.room_leave(text)",
         "public.room_cancel_application(text)", "public.room_approve(text,uuid)", "public.room_reject(text,uuid)",
         "public.room_applications(text)", "public.room_members_get(text)",
       ]) {
@@ -391,7 +391,7 @@ export const MEMBERSHIP_CASES: Case[] = [
         (await q("select has_function_privilege($1, $2, 'execute') as ok", [role, fn]))[0].ok as boolean;
       assertEquals(await can("anon", "public.invite_preview(text)"), true);
       assertEquals(await can("authenticated", "public.invite_preview(text)"), true);
-      for (const fn of ["public.invite_get(text)", "public.invite_rotate(text)", "public.invite_join(text)"]) {
+      for (const fn of ["public.invite_get(text)", "public.invite_rotate(text)", "public.invite_join(text,text)"]) {
         assertEquals(await can("authenticated", fn), true, fn);
         assertEquals(await can("anon", fn), false, fn);
       }

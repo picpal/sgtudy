@@ -388,11 +388,12 @@ sqlTest("node_update: ACTIVE 방 기간 변경·담당자 교체가 notify_publi
   assertEquals(spy.map((x) => [x.kind, x.n, x.first]), [["SCHEDULE_CHANGED", 1, 지은], ["TASK_ASSIGNED", 1, 지은], ["TASK_UNASSIGNED", 1, 하나]]);
   for (const x of spy) assertEquals(new RegExp(`^${x.kind}:${aws}:${s3}:\\d+$`).test(x.prefix as string), true, String(x.prefix));
   assertEquals(spy.map((x) => x.actor), [await uid(q, "민수"), await uid(q, "민수"), await uid(q, "민수")]);   // M6: 행위자
-  // M6: ACTIVE 가 아닌 방은 아무것도 publish 하지 않는다
+  // M6: ACTIVE 가 아닌 방은 일정 변경을 publish 하지 않는다. 0024(#13): 모집 중에도 지정 담당 지정·해제는 알린다
   await q("truncate spy");
   await q("update public.rooms set status = 'RECRUIT' where id = $1", [aws]);
   await upd(q, "aws", s3, { endDate: "2026-10-14", assigneeIds: [하나] });
-  assertEquals((await q("select count(*)::int as n from spy"))[0].n, 0);
+  assertEquals((await q("select kind, rcpt[1]::text as first from spy order by kind")).map((x) => [x.kind, x.first]),
+    [["TASK_ASSIGNED", 하나], ["TASK_UNASSIGNED", 지은]]);
 }));
 
 sqlTest("node_update: 보관된 노드는 변경 전에 거부된다(리프 TASK_ARCHIVED · 비리프 PARENT_ARCHIVED), 배정·알림 불변", withCase(db, async (q) => {

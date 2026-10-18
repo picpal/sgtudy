@@ -35,10 +35,10 @@ cases("schedule diff (0023)", db, [
     await save(q, ec2, { startDate: "2026-10-09", endDate: "2026-10-20" });
     assertEquals(await bodyFor(q, ec2), '"EC2 인스턴스 유형 정리" 기간 10.08 – 10.14 → 10.09 – 10.20');
   } },
-  { name: "notify_render: 날짜가 해를 넘기면 YY.MM.DD, 옛 날짜가 없는 모델(0023 이전 호출)은 새 기간만", run: async (q) => {
+  { name: "notify_render: 오늘과 다른 해 날짜는 YYYY.MM.DD(0024 format.ts 규칙), 옛 날짜가 없는 모델(0023 이전 호출)은 새 기간만", run: async (q) => {
     const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
     assertEquals((await render(q, ec2, { oldStartDate: "2026-12-20", oldEndDate: "2026-12-28", startDate: "2026-12-20", endDate: "2027-01-03" })).body,
-                 '"EC2 인스턴스 유형 정리" 마감 26.12.28 → 27.01.03');
+                 '"EC2 인스턴스 유형 정리" 마감 12.28 → 2027.01.03');   // 0024: 오늘과 다른 해만 YYYY.MM.DD
     assertEquals((await render(q, ec2, { startDate: "2026-10-13", endDate: "2026-10-19" })).body,
                  '"EC2 인스턴스 유형 정리" 10.13 – 10.19');
     assertEquals((await render(q, ec2, { oldStartDate: "2026-10-08", oldEndDate: "2026-10-14", startDate: "2026-10-08", endDate: "2026-10-17" })).title,

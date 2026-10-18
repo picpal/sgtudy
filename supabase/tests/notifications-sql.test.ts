@@ -106,9 +106,9 @@ cases("notifications", db, [
     assertEquals(c[1].body, "고가용성 아키텍처");                               // 회차 시작 본문 = 회차 제목
     const m = await rowsOf(q, minsu);
     assertEquals(m.map((r) => [r.kind, r.title, r.link]), [
-      ["JOIN_REQUESTED", "가은님이 AWS SAA 자격증 3개월 완주 참가를 신청했어요", "/my-study/aws"],
+      ["JOIN_REQUESTED", "가은님이 AWS SAA 자격증 3개월 완주 참가를 신청했어요", "/my-study/aws#applications"],   // 0024 딥링크
       ["TASK_COMPLETION_DIGEST", "어제 3개 과제가 전원 제출됐어요", "/my-study/aws"],
-      ["TASK_ALL_SUBMITTED", '"EC2 인스턴스 유형 정리" 과제를 전원 제출했어요', `/my-study/aws?task=${ec2}`],
+      ["TASK_ALL_SUBMITTED", '"EC2 인스턴스 유형 정리" 과제를 전원 제출했어요', `/my-study/aws?task=${ec2}#submissions`],
       ["ROOM_START_BLOCKED", "AWS SAA 자격증 3개월 완주 시작일이 지났지만 말단 과제가 없어 시작하지 못했어요", "/my-study/aws"],
     ]);
     const g = await rowsOf(q, gaeun);
