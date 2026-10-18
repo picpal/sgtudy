@@ -9,7 +9,7 @@ import { useToday } from "@/lib/today";
 import { rangeShort } from "@/lib/api/format";
 import { Seg } from "../bits";
 import { dropFieldOv, isDirty, isPersonal, leafLocks, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
-import { designatedHint, moveNote, movedPeriod, reorderIndex, roundOf, roundOptions } from "../rounds";
+import { designatedHint, moveNote, movedPeriod, reorderIndex, roundOf, roundOptions, shiftAskOf, shiftAskText, type ShiftAsk } from "../rounds";
 import { patchOv, type Leave, type ScreenState, type Update } from "../state";
 import type { RoomStatus } from "../submission";
 import type { CurriculumApi } from "../useCurriculumApi";
@@ -178,13 +178,23 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     if (wasLeave.current && !S.leave) heading.current?.focus({ preventScroll: true });
     wasLeave.current = S.leave;
   }, [S.leave]);
-  const leaveSave = async () => {
-    const to = S.leave;
-    if (to && (await api.save(n, S.ov))) {
+  // 회차·묶음 시작일을 옮겼으면 저장 전에 "하위도 같은 날수만큼 옮길까요?" (시나리오 QA D2). then = 저장 뒤 이동할 곳(떠나기 전 저장)
+  const [shiftAsk, setShiftAsk] = useState<{ ask: ShiftAsk; then: typeof S.leave } | null>(null);
+  const doSave = async (shift: boolean, then: typeof S.leave) => {
+    setShiftAsk(null);
+    if (await api.save(n, S.ov, { shift })) {
       update({ fresh: null });
-      go(to);
-    } else update({ leave: null });
+      if (then) go(then);
+    } else if (then) update({ leave: null });
   };
+  const trySave = (then: typeof S.leave) => {
+    const ask = shiftAskOf(n, nodes);
+    if (ask) {
+      if (then) update({ leave: null });
+      setShiftAsk({ ask, then });
+    } else void doSave(false, then);
+  };
+  const leaveSave = () => trySave(S.leave);
   const leaveDiscard = () => {
     const to = S.leave;
     update((p) => ({ ov: dropFieldOv(p.ov, id) }));
@@ -225,7 +235,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
               {removeLabel}
             </button>
           )}
-          <button type="button" disabled={n.temp} onClick={() => void api.save(n, S.ov).then((ok) => ok && update({ fresh: null }))} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
+          <button type="button" disabled={n.temp || !!shiftAsk} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
             저장
           </button>
         </div>
@@ -233,6 +243,17 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           <div role="status" className="rounded-[10px] bg-mint-soft px-3 py-2 text-[13px] font-semibold text-mint-deep">
             {S.saved}
           </div>
+        )}
+        {shiftAsk && (
+          <InlineConfirm
+            text={shiftAskText(shiftAsk.ask)}
+            cancelLabel="계속 편집"
+            onCancel={() => setShiftAsk(null)}
+            actions={[
+              { label: "함께 옮기기", tone: "primary", onClick: () => void doSave(true, shiftAsk.then) },
+              { label: kind === "회차" ? "회차만 바꾸기" : "이 묶음만 바꾸기", onClick: () => void doSave(false, shiftAsk.then) },
+            ]}
+          />
         )}
         {S.leave && (
           <InlineConfirm

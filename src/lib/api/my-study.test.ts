@@ -4,7 +4,7 @@ import { EMPTY_OVERRIDES, buildTree } from "@/components/my-study/model";
 import { roomStatusLabel } from "@/lib/types";
 import type { Curriculum, MeStudies, RoomDetail } from "./types";
 import type { Db } from "./errors";
-import { canEditCurriculumOf, recheckCurriculumEdit, filterSidebarGroups, firstStudySlug, myStudyHrefOf, nodeCreate, nodeMove, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
+import { canEditCurriculumOf, fetchMyStudies, recheckCurriculumEdit, filterSidebarGroups, firstStudySlug, myStudyHrefOf, nodeCreate, nodeMove, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
 
 const TODAY = "2026-10-12";
 const P = (userId: string, nickname: string, tone: RoomDetail["leader"]["tone"]) => ({ userId, nickname, tone });
@@ -81,6 +81,21 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
     };
     expect([label("draft"), label("recruit"), label("active"), label("ended")]).toEqual(["준비중", "모집중", "진행중", "종료"]);
   });
+  // 시나리오 QA #6: 보관된 방을 주소로 열면 "종료" 와 "진행중·마감 D-6" 이 섞이지 않고 모두 "보관된 스터디"
+  it("archived room → 보관됨 표기로 통일 (#6)", () => {
+    const r = toStudyRoom({ ...aws, archived: true }, tree, TODAY, "u1");
+    expect(r).toMatchObject({ archived: true, dday: "보관됨", ddayLong: "보관된 스터디 · 기록만 볼 수 있어요", action: "closed" });
+    expect(r.cur).toMatchObject({ pill: "보관됨", title: "보관된 스터디예요", tasks: [] });
+    expect(r.rounds.every((x) => !x.current && x.state === "보관됨")).toBe(true);
+    expect(toStudyRoom({ ...aws, archived: true, me: { state: "leader" } }, tree, TODAY, "u2").action).toBe("owner");
+    expect(toStudyRoom(aws, tree, TODAY, "u1").archived).toBe(false);
+  });
+  // 시나리오 QA D3: 탈퇴 요청 중이면 참가 카드가 요청 날짜·사유와 "요청 취소" 를 보인다
+  it("leaveRequest — 진행 중 참가자의 탈퇴 요청", () => {
+    const r = toStudyRoom({ ...aws, me: { state: "active", leaveRequest: { requestedAt: "2026-10-12T01:00:00.000Z", reason: "이사" } } }, tree, TODAY, "u1");
+    expect(r.leaveRequest).toEqual({ on: "10.12", reason: "이사" });
+    expect(toStudyRoom(aws, tree, TODAY, "u1").leaveRequest).toBeNull();
+  });
   it("ended + member → closed; no minMembers → empty minText", () => {
     expect(toStudyRoom({ ...aws, status: "ended", minMembers: null }, tree, TODAY, "u1")).toMatchObject({ action: "closed", minText: "", minOk: true });
   });
@@ -111,7 +126,7 @@ describe("toSidebarGroups (mystudy §1.1)", () => {
     ] };
     expect(toSidebarGroups(ms, TODAY)).toEqual([
       { label: "진행중", items: [{ id: "aws", title: "AWS", intro: "a", when: "10.14 마감", left: 2 }, { id: "spring", title: "Spring", intro: "s", when: "10.18 마감", left: 6 }] },
-      { label: "모집중 · 신청한 방", items: [{ id: "sqld", title: "SQLD", intro: "q", when: "10.26 시작" }] },
+      { label: "모집중 · 승인 대기중", items: [{ id: "sqld", title: "SQLD", intro: "q", when: "10.26 시작" }] },
       { label: "종료", items: [{ id: "algo", title: "알고", intro: "l", when: "09.30 종료" }] },
     ]);
     expect(toSidebarGroups({ today: TODAY, groups: [{ kind: "ended", items: [] }] }, TODAY)).toEqual([]);
@@ -125,8 +140,26 @@ describe("toSidebarGroups (mystudy §1.1)", () => {
     ] };
     expect(toSidebarGroups(ms, TODAY)).toEqual([
       { label: "내가 만든 방 · 시작 전", items: [{ id: "mine", title: "내 방", intro: "m", when: "11.01 시작" }] },
-      { label: "모집중 · 신청한 방", items: [{ id: "sqld", title: "SQLD", intro: "q", when: "10.26 시작" }] },
+      { label: "모집중 · 승인 대기중", items: [{ id: "sqld", title: "SQLD", intro: "q", when: "10.26 시작" }] },
     ]);
+  });
+  // 시나리오 QA #17: 승인된 방을 "신청한 방" 이라 부르면 아직 승인 전으로 오해한다 → 참가 중 / 승인 대기로 나눈다
+  it("모집중 그룹은 참가 중과 승인 대기를 나눈다 (#17)", () => {
+    const ms: MeStudies = { today: TODAY, groups: [
+      { kind: "recruit", items: [
+        { slug: "cs", title: "CS", intro: "c", membership: "joined", when: { kind: "start", date: "2026-10-19" } },
+        { slug: "sqld", title: "SQLD", intro: "q", membership: "pending", when: { kind: "start", date: "2026-10-26" } },
+      ] },
+    ] };
+    expect(toSidebarGroups(ms, TODAY).map((g) => g.label)).toEqual(["모집중 · 참가중", "모집중 · 승인 대기중"]);
+  });
+  // 시나리오 QA #5: 보관된 방도 내 스터디 목록 끝 "보관됨" 그룹에 남는다
+  it("보관된 방은 보관됨 그룹 (#5)", () => {
+    const ms: MeStudies = { today: TODAY, groups: [
+      { kind: "active", items: [] },
+      { kind: "archived", items: [{ slug: "algo8", title: "알고 8주", intro: "a", membership: "joined", archived: true, when: { kind: "end", date: "2027-01-09" } }] },
+    ] };
+    expect(toSidebarGroups(ms, TODAY)).toEqual([{ label: "보관됨", items: [{ id: "algo8", title: "알고 8주", intro: "a", when: "2027.01.09 종료" }] }]);
   });
   it("올해가 아닌 날짜는 연도까지 (Q2-13 — 날짜 표기 규칙 dateShort)", () => {
     const ms: MeStudies = { today: TODAY, groups: [{ kind: "active", items: [{ slug: "aws", title: "AWS", intro: "a", membership: "joined", when: { kind: "end", date: "2027-02-01" } }] }] };
@@ -216,6 +249,13 @@ describe("node RPC wrappers (goal subtasks)", () => {
       ["node_create", { p_slug: "aws", p_parent_id: "1", p_title: "정리" }],
     ]);
   });
+  it("fetchMyStudies(includeArchived) → me_studies p_include_archived (#5)", async () => {
+    const calls: [string, Record<string, unknown>][] = [];
+    const client = { rpc: (name: string, args: Record<string, unknown>) => { calls.push([name, args]); return Promise.resolve({ data: { today: TODAY, groups: [] }, error: null }); } } as unknown as Db;
+    await fetchMyStudies(client);
+    await fetchMyStudies(client, true);
+    expect(calls).toEqual([["me_studies", {}], ["me_studies", { p_include_archived: true }]]);
+  });
   it("nodeMove sends parent and index (null = append)", async () => {
     const f = fakeDb();
     await nodeMove("aws", "11", "2", 0, f.client);
@@ -233,6 +273,12 @@ describe("myStudyHrefOf — /my-study 진입 규칙(그룹 순서대로 첫 항�
     const s: MeStudies = { today: TODAY, groups: [{ kind: "active", items: [] }, { kind: "recruit", items: [item("b"), item("c")] }, { kind: "ended", items: [item("a")] }] };
     expect(myStudyHrefOf(s)).toBe("/my-study/b");
     expect(firstStudySlug(s)).toBe("b");
+  });
+  it("보관된 방은 다른 스터디가 없을 때만 고른다 (#5)", () => {
+    const arch = { ...item("z"), archived: true };
+    expect(firstStudySlug({ today: TODAY, groups: [{ kind: "ended", items: [item("a")] }, { kind: "archived", items: [arch] }] })).toBe("a");
+    expect(firstStudySlug({ today: TODAY, groups: [{ kind: "archived", items: [arch] }, { kind: "active", items: [item("b")] }] })).toBe("b");
+    expect(firstStudySlug({ today: TODAY, groups: [{ kind: "active", items: [] }, { kind: "archived", items: [arch] }] })).toBe("z");
   });
   it("스터디가 하나도 없으면 /my-study (빈 화면) 그대로", () => {
     const s: MeStudies = { today: TODAY, groups: [{ kind: "active", items: [] }, { kind: "recruit", items: [] }, { kind: "ended", items: [] }] };

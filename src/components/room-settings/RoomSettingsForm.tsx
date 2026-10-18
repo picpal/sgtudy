@@ -19,6 +19,7 @@ import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
 import { useLeaveConfirm } from "@/lib/useLeaveConfirm";
 import { archiveRoom, buildPatch, dangerOf, deleteRoom, lockReason, lockedOf, saveSteps, updateRoom, validateSettings, valuesOf } from "./settings";
+import { NotifySettingsSection } from "./NotifySettings";
 
 type Errors = Partial<Record<keyof NewRoomValues, string>>;
 
@@ -243,6 +244,9 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
           </div>
         </form>
 
+        {/* 알림 설정 — 바로 저장(위 폼 저장과 따로). 끝났거나 보관된 방은 보낼 알림이 없다 */}
+        {!d.archived && d.status !== "ended" && <NotifySettingsSection slug={d.slug} toast={setToast} />}
+
         <DangerZone detail={d} onDetail={setD} toast={setToast} dirty={dirtyCount > 0} />
       </main>
       <Toast msg={toast} onClose={closeToast} />
@@ -313,7 +317,7 @@ function DangerZone({ detail: d, onDetail, toast, dirty }: { detail: RoomDetail;
         {kind === "delete"
           ? "모집을 시작하기 전·모집 중인 방만 지울 수 있어요. 진행목표·제출·참가 기록이 모두 지워지고 되돌릴 수 없어요."
           : kind === "archive"
-            ? "진행중이거나 종료된 방은 지울 수 없고 보관할 수 있어요. 보관하면 모든 참가자의 내 스터디·내 과제·일정과 방 목록에서 빠지고, 제출과 수정이 멈춰요. 보관은 언제든 이 화면에서 풀 수 있어요."
+            ? "진행중이거나 종료된 방은 지울 수 없고 보관할 수 있어요. 보관하면 참가자에게 알림이 가고, 방 목록·내 과제·일정에서 빠지며 제출과 수정이 멈춰요. 내 스터디의 '보관됨'에서 기록은 계속 볼 수 있어요. 보관은 언제든 이 화면에서 풀 수 있어요."
             : "보관을 풀면 참가자들의 내 스터디·일정과 방 목록에 다시 보이고, 방 정보·진행목표를 고칠 수 있어요."}
       </p>
       {dirty && <p className="m-0 text-[12px] text-muted">저장하지 않은 수정은 이 동작과 함께 저장되지 않아요</p>}
@@ -362,7 +366,7 @@ function DangerZone({ detail: d, onDetail, toast, dirty }: { detail: RoomDetail;
         title={kind === "archive" ? "방을 보관할까요?" : "보관을 풀까요?"}
         body={
           kind === "archive"
-            ? `${d.status === "active" ? "진행 중인 스터디예요. " : ""}모든 참가자 목록에서 빠지고 제출·수정이 멈춰요${d.status === "active" ? " · 보관된 동안은 종료일이 지나도 자동으로 종료되지 않아요" : ""}. 언제든 방 설정에서 풀 수 있어요.`
+            ? `${d.status === "active" ? "진행 중인 스터디예요. " : ""}참가자에게 알림이 가고, 제출·수정이 멈춰요${d.status === "active" ? " · 보관된 동안은 종료일이 지나도 자동으로 종료되지 않아요" : ""}. 기록은 내 스터디의 '보관됨'에서 볼 수 있고, 언제든 방 설정에서 풀 수 있어요.`
             : `방 기간 ${ymd(d.startDate)} – ${ymd(d.endDate)} 그대로 다시 보여요.`
         }
         confirmLabel={kind === "archive" ? "보관" : "보관 풀기"}

@@ -106,6 +106,9 @@ describe("myCardStateOf — 판정 순서 (Review Focus 2)", () => {
   it("ended room", () => {
     expect(S(detail({ mySubmission: sub() }), "ended")).toEqual({ kind: "readonly", note: "종료된 스터디라 더 고칠 수 없어요" });
     expect(S(detail(), "ended")).toEqual({ kind: "blocked", note: "종료된 스터디라 제출할 수 없어요" });
+    // 시나리오 QA #6: 보관된 방은 "종료된" 이 아니라 "보관된" 스터디
+    expect(myCardStateOf(detail({ mySubmission: sub() }), "ended", true)).toEqual({ kind: "readonly", note: "보관된 스터디라 더 고칠 수 없어요" });
+    expect(myCardStateOf(detail(), "ended", true)).toEqual({ kind: "blocked", note: "보관된 스터디라 제출할 수 없어요" });
   });
   it("room not started", () => expect(S(detail(), "recruit")).toEqual({ kind: "blocked", note: "스터디가 시작되면 제출할 수 있어요" }));
   it("archived task", () => {

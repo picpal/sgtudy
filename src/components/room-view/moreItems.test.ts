@@ -29,6 +29,22 @@ describe("studyMoreItems — 내 스터디 더보기", () => {
   });
 });
 
+// 시나리오 QA D3 (#4 — 은지가 더보기에서 나가기를 찾았다): 진행 중 참가자는 더보기에서도 탈퇴 요청·요청 취소
+describe("studyMoreItems — 진행 중 탈퇴 요청", () => {
+  it("참가 중이면 탈퇴 요청, 요청 중이면 요청 취소", () => {
+    expect(studyMoreItems("joined", { canRequestLeave: true })).toEqual(["room", "leaveRequest"]);
+    expect(studyMoreItems("joined", { canRequestLeave: true, leaveRequested: true })).toEqual(["room", "leaveRequestCancel"]);
+    expect(studyMoreItems("closed", { canRequestLeave: false })).toEqual(["room"]);
+  });
+  it("메뉴 항목 — 탈퇴 요청은 위험 동작, 요청 취소는 일반", () => {
+    const picked: string[] = [];
+    const items = menuItemsOf(["leaveRequest", "leaveRequestCancel"], "aws", (k) => picked.push(k));
+    expect(items.map((i) => [i.label, !!i.danger])).toEqual([["탈퇴 요청", true], ["탈퇴 요청 취소", false]]);
+    items.forEach((i) => i.onSelect?.());
+    expect(picked).toEqual(["leaveRequest", "leaveRequestCancel"]);
+  });
+});
+
 describe("menuItemsOf — 메뉴 항목으로 (링크는 href, 취소는 확인 대화상자)", () => {
   it("내 스터디·방 정보·방 설정은 링크, 참가/신청 취소는 위험 동작", () => {
     const picked: string[] = [];

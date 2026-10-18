@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CODE_COLOR, EMPTY_OVERRIDES, buildTree, type LeafNode, type ParentNode } from "./model";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { personalLineText, cardSync, formScrollNeeded, groupOthers, isDone, othersHeading, ownerOf, personalErrorText, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusColor, statusText } from "./personal";
+import { archiveOthersText, personalLineText, cardSync, formScrollNeeded, groupOthers, isDone, othersHeading, ownerOf, personalErrorText, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusColor, statusText } from "./personal";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const leaf = (id: string) => tree.nodes.find((n) => n.id === id) as LeafNode;
@@ -227,5 +227,12 @@ describe("personalLineText — 개요 내 개인 목표 줄 (시나리오 QA #14
   });
   it("회차를 모르면 이번 회차", () => {
     expect(personalLineText({ done: 0, total: 0 }, null, "2026-10-12").text).toBe("이번 회차 개인 목표가 아직 없어요");
+  });
+});
+
+// 시나리오 QA #7: 그룹장이 팀원의 개인 목표를 보관할 때는 한 번 묻고, 당사자에게 알림이 간다고 알린다
+describe("archiveOthersText", () => {
+  it("이름을 넣어 확인 문구", () => {
+    expect(archiveOthersText("윤호")).toBe("윤호 님의 개인 목표를 보관할까요? 윤호 님에게 알림이 가요 · 보관을 풀면 다시 보여요.");
   });
 });

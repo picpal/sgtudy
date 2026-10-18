@@ -12,10 +12,13 @@ import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
 import { canEditCurriculumOf, toSidebarGroups, toStudyRoom } from "@/lib/api/my-study";
 import { cancelApplication, leaveRoom } from "@/lib/api/room-view";
+import { cancelLeaveRequest, leaveErrorText, requestLeave } from "@/lib/api/leave";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { setScreenKey } from "@/lib/leaveGuard";
+import { OVERVIEW_ANCHORS, useHashAnnounce } from "@/lib/hashTarget";
+import { useRefetchOnFocus } from "@/lib/useRefetchOnFocus";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
 import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, isPersonal, stripFieldOv, thisRoundId } from "./model";
@@ -25,13 +28,26 @@ import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { PeriodWarning } from "./tabs/PeriodWarning";
-import { JoinInfoCard } from "./tabs/JoinInfoCard";
+import { JoinInfoCard, type JoinCardAction } from "./tabs/JoinInfoCard";
+import { ReasonField } from "@/components/ui/ReasonField";
 import { CurriculumTab } from "./tabs/CurriculumTab";
 import { BoardTab } from "./tabs/BoardTab";
 import { CalendarTab } from "./tabs/CalendarTab";
 import { MemberAdminCard } from "./tabs/MemberAdminCard";
 import { GanttTab } from "./tabs/GanttTab";
 import { useCurriculumApi } from "./useCurriculumApi";
+import { RoomArchivedProvider } from "./roomArchived";
+
+const CONFIRM_TEXT: Record<JoinCardAction, { title: string; body: string; label: string }> = {
+  leave: { title: "참가를 취소할까요?", body: "모집 기간에는 다시 참가할 수 있어요. 지정 과제 담당에서도 빠져요.", label: "참가 취소" },
+  cancel: { title: "신청을 취소할까요?", body: "취소해도 모집 중이면 다시 신청할 수 있어요.", label: "신청 취소" },
+  leaveRequest: {
+    title: "그룹장에게 탈퇴를 요청할까요?",
+    body: "그룹장이 맡은 과제를 다른 팀원에게 넘긴 뒤 처리해요. 처리되기 전에는 요청을 취소할 수 있고, 지금까지 낸 제출 기록은 남아요.",
+    label: "탈퇴 요청",
+  },
+  leaveRequestCancel: { title: "탈퇴 요청을 취소할까요?", body: "취소하면 지금처럼 계속 참가해요.", label: "요청 취소" },
+};
 
 type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string; initialItem?: string };
 
@@ -76,6 +92,14 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // 이 화면의 key(page.tsx: task·tab) — 이탈 가드가 "같은 화면 주소" 를 같은 규칙으로 판정한다 (E 리뷰 minor 1)
   useEffect(() => setScreenKey({ tab: initialTab, task: initialLeaf ?? "" }), [initialTab, initialLeaf]);
   const api = useCurriculumApi(detail.slug, setCur, update, setToast, detail.me);
+  // 같은 화면에서 알림(#applications · #leave-requests)을 누르면 Next 는 화면을 그대로 둔다 — 다른 탭에 있었으면 개요로 (시나리오 QA #8)
+  const onAnnounce = useCallback(
+    (h: string) => (OVERVIEW_ANCHORS as readonly string[]).includes(h) && update((p) => tabPatch(p, "overview", canEdit)),
+    [update, canEdit],
+  );
+  useHashAnnounce(onAnnounce);
+  // 승인 대기 중에 열어 둔 화면 — 다른 탭에서 돌아오면 다시 불러 승인(참가 확정)을 반영한다 (시나리오 QA #9)
+  useRefetchOnFocus(detail.me?.state === "pending", router.refresh);
   const closeToast = useCallback(() => setToast(null), []);
 
   // 편집 화면·보기 상세(?item=) ↔ 주소 동기화 — 열면 push(뒤로 가기 = 목록), 닫으면 쌓았던 기록을 back. 새로고침하면 다시 열린다.
@@ -183,12 +207,37 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 열린 편집 항목이 바뀔 때만
   }, [editOpen]);
 
-  // 참가 취소(모집 기간) · 신청 취소(승인 대기) — 확인 대화상자 + 처리 중 가드 (Q1-01, Q1-12)
-  const [confirm, setConfirm] = useState<"leave" | "cancel" | null>(null);
+  // 참가 취소(모집 기간) · 신청 취소(승인 대기) · 탈퇴 요청/요청 취소(진행 중, D3) — 확인 대화상자 + 처리 중 가드 (Q1-01, Q1-12)
+  const [confirm, setConfirmRaw] = useState<JoinCardAction | null>(null);
+  const [reason, setReason] = useState("");
+  const setConfirm = useCallback((k: JoinCardAction | null) => {
+    setConfirmRaw(k);
+    if (k === "leaveRequest") setReason("");
+  }, []);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const closeConfirm = useCallback(() => setConfirm(null), []);
-  const runCancel = async (kind: "leave" | "cancel") => {
+  const closeConfirm = useCallback(() => setConfirmRaw(null), []);
+  // 탈퇴 요청·취소는 이 화면에 그대로 남는다 — 서버 값으로 다시 그린다(참가 카드·더보기)
+  const runLeaveRequest = async (kind: "leaveRequest" | "leaveRequestCancel") => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await (kind === "leaveRequest" ? requestLeave(detail.slug, reason) : cancelLeaveRequest(detail.slug));
+      setToast({ text: kind === "leaveRequest" ? "탈퇴를 요청했어요 · 그룹장이 처리하면 알려 드려요" : "탈퇴 요청을 취소했어요 · 계속 참가해요", tone: "ok" });
+      router.refresh();
+    } catch (e) {
+      const err = toApiError(e);
+      setToast({ text: leaveErrorText(err.code, err.message), tone: "bad" });
+      router.refresh();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+      setConfirmRaw(null);
+    }
+  };
+  const runCancel = async (kind: JoinCardAction) => {
+    if (kind === "leaveRequest" || kind === "leaveRequestCancel") return runLeaveRequest(kind);
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
@@ -216,7 +265,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     }
   };
   // 더보기: 방 정보(공개 방 화면) · 방 설정(그룹장) · 참가/신청 취소 (참가 카드와 같은 확인 대화상자)
-  const more: MoreMenuItem[] = menuItemsOf(studyMoreItems(room.action), detail.slug, setConfirm);
+  const more: MoreMenuItem[] = menuItemsOf(studyMoreItems(room.action, { canRequestLeave: room.action === "joined", leaveRequested: !!room.leaveRequest }), detail.slug, setConfirm);
 
   // "내 과제 보기" → 보드 탭으로 바꾼 뒤 탭 목록이 보이게 (Q3-18)
   const [tabJump, setTabJump] = useState(0);
@@ -244,6 +293,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
 
   return (
     <TodayProvider today={today}>
+      <RoomArchivedProvider value={detail.archived}>
       {/* 한 페이지 스크롤 — 화면 높이에 가두지 않고 카드는 내용만큼 자라며 문서 하나가 스크롤된다(편집 화면의 저장 막대는 화면 위에 붙는다).
           옆 목록은 화면에 다 들어갈 때만 붙는다(useStickyFit) */}
       <div className="flex min-h-screen flex-col p-4">
@@ -273,7 +323,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                   goLeaf={goLeaf}
                   onCancel={setConfirm}
                   busy={busy}
-                  admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} tree={savedTree} roundId={personalRoundId} onShowOthers={showOthers} /></> : undefined}
+                  admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} tree={savedTree} roundId={personalRoundId} onShowOthers={showOthers}
+                    leave={detail.status === "active" && !detail.archived ? { today, leaderDoesTasks: detail.leaderDoesTasks, leaveRequestCount: detail.leaveRequestCount ?? 0 } : undefined} /></> : undefined}
                 />
               )}
             </div>
@@ -282,15 +333,18 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         <Toast msg={toast} onClose={closeToast} />
         <ConfirmDialog
           open={confirm !== null}
-          title={confirm === "leave" ? "참가를 취소할까요?" : "신청을 취소할까요?"}
-          body={confirm === "leave" ? "모집 기간에는 다시 참가할 수 있어요. 지정 과제 담당에서도 빠져요." : "취소해도 모집 중이면 다시 신청할 수 있어요."}
-          confirmLabel={confirm === "leave" ? "참가 취소" : "신청 취소"}
-          danger
+          title={CONFIRM_TEXT[confirm ?? "leave"].title}
+          body={CONFIRM_TEXT[confirm ?? "leave"].body}
+          confirmLabel={CONFIRM_TEXT[confirm ?? "leave"].label}
+          danger={confirm !== "leaveRequestCancel"}
           busy={busy}
           onConfirm={() => confirm && void runCancel(confirm)}
           onCancel={closeConfirm}
-        />
+        >
+          {confirm === "leaveRequest" && <ReasonField value={reason} onChange={setReason} label="사유 (선택)" placeholder="그룹장에게 남길 말이 있으면 적어 주세요" />}
+        </ConfirmDialog>
       </div>
+      </RoomArchivedProvider>
     </TodayProvider>
   );
 }

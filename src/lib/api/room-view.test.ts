@@ -156,3 +156,21 @@ describe("sidebar", () => {
     expect(g.map((x) => [x.key, x.label, x.status, x.items.map((i) => i.id)])).toEqual([["draft", "준비중", "recruit", ["d"]], ["recruit", "모집중", "recruit", ["toeic"]], ["ended", "종료", "ended", ["algo"]]]);
   });
 });
+
+// 시나리오 QA D4: 참가 신청 한마디 (0024 room_apply·invite_join p_message — 다듬고 빈 값은 null)
+describe("참가 신청 한마디", () => {
+  it("applyRoom·joinByInvite 가 p_message 를 넘긴다", async () => {
+    const calls: [string, Record<string, unknown>][] = [];
+    const client = { rpc: (name: string, args: Record<string, unknown>) => { calls.push([name, args]); return Promise.resolve({ data: {}, error: null }); } } as unknown as import("./errors").Db;
+    const { applyRoom } = await import("./room-view");
+    const { joinByInvite } = await import("./invite");
+    await applyRoom("r1", undefined, "  잘 부탁드려요 ", client);
+    await applyRoom("r1", "tok", "   ", client);
+    await joinByInvite("tok", "안녕하세요", client);
+    expect(calls).toEqual([
+      ["room_apply", { p_slug: "r1", p_invite_token: null, p_message: "잘 부탁드려요" }],
+      ["room_apply", { p_slug: "r1", p_invite_token: "tok", p_message: null }],
+      ["invite_join", { p_token: "tok", p_message: "안녕하세요" }],
+    ]);
+  });
+});

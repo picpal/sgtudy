@@ -21,8 +21,14 @@ export const TABS: [TabId, string][] = [
 
 const STATUS_BG: Record<RoomStatus, string> = { recruit: "#2F5BC2", active: "#0D7A64", ended: "#5B6675" };
 
-/** draft(모집 시작 전)는 방 목록 카드와 같은 "준비중" 회색 배지 (Q2-03) */
-export function StatusBadge({ status, draft }: { status: RoomStatus; draft?: boolean }) {
+/** draft(모집 시작 전)는 방 목록 카드와 같은 "준비중" 회색 배지 (Q2-03). archived 는 "보관됨" 회색 (시나리오 QA #6) */
+export function StatusBadge({ status, draft, archived }: { status: RoomStatus; draft?: boolean; archived?: boolean }) {
+  if (archived)
+    return (
+      <Badge bg="#E9EEF0" fg="#4A5563" height={26} px={10} radius={8} fontSize={12} weight={600}>
+        보관됨
+      </Badge>
+    );
   if (draft)
     return (
       <Badge bg="#E9EEF0" fg="#4A5563" height={26} px={10} radius={8} fontSize={12} weight={600}>
@@ -76,11 +82,11 @@ export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: Stu
           <Dt icon={ic(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>)}>기간</Dt>
           <dd className="m-0 flex flex-wrap items-center gap-2 font-medium">
             {room.period}
-            <span className="rounded-[7px] bg-mint-soft px-2 py-[2px] text-[12px] font-semibold text-mint">{room.draft ? `모집 전 · ${room.dday}` : room.dday}</span>
+            <span className={`rounded-[7px] px-2 py-[2px] text-[12px] font-semibold ${room.archived ? "bg-slate-soft text-ink-3" : "bg-mint-soft text-mint"}`}>{room.draft ? `모집 전 · ${room.dday}` : room.dday}</span>
           </dd>
           <Dt icon={ic(<path d="M4 21V4M4 4h12l-2 4 2 4H4" />)}>상태</Dt>
           <dd className="m-0">
-            <StatusBadge status={room.status} draft={room.draft} />
+            <StatusBadge status={room.status} draft={room.draft} archived={room.archived} />
           </dd>
           <Dt icon={ic(<><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" /><path d="m9 12 2 2 4-4" /></>)}>참가 방식</Dt>
           <dd className="m-0 font-medium">{room.joinMode}</dd>

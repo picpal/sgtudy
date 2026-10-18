@@ -10,7 +10,7 @@ import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
 import { EMPTY_OVERRIDES, dropFieldOv, tempId, type Overrides, type TreeNode } from "./model";
 import { personalErrorText } from "./personal";
-import type { DatePlan } from "./rounds";
+import { shiftedText, type DatePlan } from "./rounds";
 import type { Update } from "./state";
 
 export type CurriculumApi = {
@@ -24,7 +24,8 @@ export type CurriculumApi = {
   /** from: "list" — 결과를 편집 화면 문구 대신 토스트로 */
   archive: (id: string, on: boolean, from?: "edit" | "list") => Promise<void>;
   /** 성공(또는 바뀐 것 없음)이면 true */
-  save: (n: TreeNode, ov: Overrides) => Promise<boolean>;
+  /** opts.shift: 회차·묶음 시작일 변경을 하위(과제·개인 목표)에도 같은 날수만큼 (D2) */
+  save: (n: TreeNode, ov: Overrides, opts?: { shift?: boolean }) => Promise<boolean>;
   /** node_move 후 dates(서브트리의 바뀌는 기간, movedPlan)를 노드마다 node_update 로 맞춘다. okText = 성공 토스트. 옮겨졌으면 true */
   move: (id: string, parentId: string, index?: number, dates?: DatePlan, okText?: string) => Promise<boolean>;
   /** 커리큘럼만 다시 받는다 — 제출 뒤 보드·간트·개요의 사람별 코드 갱신. 실패는 조용히 */
@@ -146,8 +147,10 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const save = useCallback(
-    async (n: TreeNode, ov: Overrides) => {
+    async (n: TreeNode, ov: Overrides, opts: { shift?: boolean } = {}) => {
       const patch: NodePatch = patchOf(n, ov);
+      // 회차·묶음 시작일을 옮기면서 "하위도 함께" 를 골랐을 때 (시나리오 QA D2) — 시작일이 바뀐 패치에만
+      if (opts.shift && patch.startDate && !n.leaf) patch.shiftDescendants = true;
       if (Object.keys(patch).length === 0) {
         // 고쳤다가 원래 값으로 되돌린 오버라이드도 지운다 — 남으면 계속 "미저장"(회차 선택 비활성·이동 확인)
         update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: "바뀐 내용이 없어요" }));
@@ -158,7 +161,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         setCur(cur);
         // 태그가 실제로 바뀌었는지 여기서는 알 수 없다 → "다시 골랐어요" 문구는 쓰지 않는다 (Q1-17). 이전 오류 토스트는 닫는다 (Q2-09)
         toast(null);
-        update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: "저장했어요" }));
+        update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: shiftedText(cur.shifted) }));
         router.refresh(); // 자동 태그가 바뀌었을 수 있다(D9)
         return true;
       } catch (e) {

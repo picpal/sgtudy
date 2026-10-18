@@ -8,6 +8,7 @@ import { toApiError } from "@/lib/api/errors";
 import { setCurriculumEditor } from "@/lib/api/my-study";
 import type { RoomMemberDto } from "@/lib/api/types";
 import { editorErrorText, editorRows } from "../editors";
+import { LeaveAdmin } from "./LeaveAdmin";
 import { personalStats, type Tree } from "../model";
 
 type Props = {
@@ -20,10 +21,12 @@ type Props = {
   roundId: string | null;
   /** "팀원 개인 목표 보기 →" — 진행목표 보기 + 팀원 목표 칩 켜기 */
   onShowOthers: () => void;
+  /** 진행중·미보관 방만 — 탈퇴 요청 처리·내보내기 (시나리오 QA D3) */
+  leave?: { today: string; leaderDoesTasks: boolean; leaveRequestCount: number };
 };
 
 /** 그룹장 전용 "멤버 관리" — 참가 중인 팀원에게 커리큘럼 편집 권한을 주고 거둔다 (기본은 그룹장만 편집) */
-export function MemberAdminCard({ slug, members, meId, toast, tree, roundId, onShowOthers }: Props) {
+export function MemberAdminCard({ slug, members, meId, toast, tree, roundId, onShowOthers, leave }: Props) {
   const router = useRouter();
   // 낙관적 값 — 응답이 실패하면 지운다(원래 값으로). 성공하면 서버 값과 같으므로 그대로 둔다
   const [ov, setOv] = useState<Record<string, boolean>>({});
@@ -115,6 +118,7 @@ export function MemberAdminCard({ slug, members, meId, toast, tree, roundId, onS
           </svg>
         </button>
       )}
+      {leave && <LeaveAdmin slug={slug} members={members} toast={toast} {...leave} />}
     </section>
   );
 }

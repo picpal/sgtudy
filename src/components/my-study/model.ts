@@ -84,6 +84,10 @@ type NodeBase = {
   desc: string;
   s: string;
   e: string;
+  /** 저장된(서버) 시작일 — 편집 중 오버라이드와 비교해 "하위도 함께 옮길까요" 를 묻는다 (시나리오 QA D2) */
+  s0?: string;
+  /** 만든 사람 닉네임 (0024 createdBy — 그 이전·시드 노드는 null) — 상세에 "OO 님이 추가" (시나리오 QA #13) */
+  by?: string | null;
   archived: boolean;
   /** 자기는 보관이 아니고 상위가 보관돼 함께 숨겨진 상태 — 이 노드에서는 "보관 해제" 를 할 수 없다 */
   archivedByParent: boolean;
@@ -183,7 +187,7 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
     const d = n.depth - 2;
     const roundId = d === 0 ? n.id : n.roundId;
     const kidsRaw = [...(byParent.get(n.id) ?? []), ...(ov.added[n.id] ?? []).map((t, i) => tempChild(n, t, i))];
-    const base = { id: n.id, parentId: n.parentId, roundId, d, title, desc, s, e, archived, archivedByParent, crumb: crumbs.join(" › "), temp };
+    const base = { id: n.id, parentId: n.parentId, roundId, d, title, desc, s, e, s0: n.startDate, by: n.createdBy?.nickname ?? null, archived, archivedByParent, crumb: crumbs.join(" › "), temp };
 
     if (n.task && kidsRaw.length === 0) {
       const personal = n.task.type === "personal";

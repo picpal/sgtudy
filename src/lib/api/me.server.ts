@@ -43,8 +43,9 @@ export const getMe = cache(async (): Promise<Me | null> => {
   return rpc<Me>("me_get", {}, await getServerClient());
 });
 
-/** me_studies 요청 단위 메모 — 루트 layout(헤더 "내 스터디" 링크)과 /my-study 페이지가 한 요청에서 같이 불러도 한 번만 나간다. 실패 시 throw */
-export const getMyStudies = cache(async (): Promise<MeStudies> => fetchMyStudies(await getServerClient()));
+/** me_studies 요청 단위 메모 — 루트 layout(헤더 "내 스터디" 링크)과 /my-study 페이지가 한 요청에서 같이 불러도 한 번만 나간다. 실패 시 throw.
+ *  보관된 방도 받는다(옆 목록 "보관됨" 그룹 — 시나리오 QA #5). 첫 스터디 고르기(firstStudySlug)는 보관된 방을 뒤로 미룬다 */
+export const getMyStudies = cache(async (): Promise<MeStudies> => fetchMyStudies(await getServerClient(), true));
 
 /** 서버 KST 오늘(meta_get). 실패 시 throw — 폴백 여부는 호출자가 정한다 */
 export const getToday = cache(async (): Promise<string> => (await rpc<MetaDto>("meta_get", {}, await getServerClient())).today);

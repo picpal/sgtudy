@@ -114,12 +114,14 @@ export type MyCardState =
 const ARCHIVED_NOTE = "보관된 과제라 제출·수정할 수 없어요";
 
 /** 내 제출 카드 상태 — 스펙 §2.2 표, 위에서부터 첫 일치 (Review Focus 2) */
-export function myCardStateOf(d: TaskDetail, room: RoomStatus): MyCardState {
+/** roomArchived: 보관된 방(화면은 room="ended" 로 넘긴다) — 문구만 "보관된 스터디" (시나리오 QA #6) */
+export function myCardStateOf(d: TaskDetail, room: RoomStatus, roomArchived = false): MyCardState {
   const mine = d.mySubmission;
   // 리프를 보관하면 배정이 풀려(isAssignee=false) 아래 "담당에서 빠져" 로 떨어지므로 보관을 먼저 본다
   if (d.node.archived && mine && !d.isAssignee) return { kind: "readonly", note: ARCHIVED_NOTE };
   if (!d.isAssignee) return mine ? { kind: "readonly", note: "담당에서 빠져 더 고칠 수 없어요 · 제출물은 남아 있어요" } : { kind: "hidden" };
-  if (room === "ended") return mine ? { kind: "readonly", note: "종료된 스터디라 더 고칠 수 없어요" } : { kind: "blocked", note: "종료된 스터디라 제출할 수 없어요" };
+  const ended = roomArchived ? "보관된 스터디라" : "종료된 스터디라";
+  if (room === "ended" || roomArchived) return mine ? { kind: "readonly", note: `${ended} 더 고칠 수 없어요` } : { kind: "blocked", note: `${ended} 제출할 수 없어요` };
   if (room !== "active") return { kind: "blocked", note: "스터디가 시작되면 제출할 수 있어요" };
   if (d.node.archived) return mine ? { kind: "readonly", note: ARCHIVED_NOTE } : { kind: "blocked", note: ARCHIVED_NOTE };
   // 개인 목표는 본인이 기간을 정하므로 시작일 전에도 제출할 수 있다 (서버 0017 submission_upsert 와 같은 규칙)

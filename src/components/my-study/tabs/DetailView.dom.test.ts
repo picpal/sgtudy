@@ -56,6 +56,16 @@ describe("DetailView 개인 목표 머리 버튼 (스펙 §4.6)", () => {
   });
 });
 
+// 시나리오 QA #13: 팀원이 추가한 과제 — 누가 추가했는지 보인다 (0024 createdBy). 알림은 담당자에게만(서버)
+describe("DetailView 작성자 표시", () => {
+  it("createdBy 가 있으면 'OO 님이 추가', 없으면 표시 없음", () => {
+    const t = buildTree({ ...AWS, nodes: AWS.nodes.map((n) => (n.id === "21" ? { ...n, createdBy: { userId: "u3", nickname: "지은", tone: "peach" as const } } : n)) }, EMPTY_OVERRIDES, REF_DAY);
+    const withBy = t.nodes.find((n) => n.id === "21") as LeafNode;
+    expect(render(withBy, LEADER, true).querySelector("[data-created-by]")?.textContent).toBe("지은 님이 추가");
+    expect(render(leaf("22"), LEADER, true).querySelector("[data-created-by]")).toBeNull();
+  });
+});
+
 describe("개인 목표 편집 폼 — 저장 안 한 수정이면 앱 안 링크 이동 전에 묻는다 (최종 리뷰 Minor 8)", () => {
   it("편집 중 제목을 고친 뒤 헤더 링크 → 이동을 막고 '저장하지 않은 수정이 있어요'", async () => {
     const { act } = await import("react");

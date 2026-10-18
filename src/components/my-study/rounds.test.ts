@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, REF_DAY } from "./fixtures";
-import { EMPTY_OVERRIDES, buildTree, visibleNodes, type LeafNode, type ParentNode, type TreeNode } from "./model";
-import { currentRoundId, designatedHint, dropPlan, roundsOutsidePeriod, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, rowMoves, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
+import { EMPTY_OVERRIDES, buildTree, findNode, visibleNodes, type LeafNode, type ParentNode, type TreeNode } from "./model";
+import { currentRoundId, shiftAskOf, shiftAskText, shiftedText, designatedHint, dropPlan, roundsOutsidePeriod, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, rowMoves, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -297,5 +297,32 @@ describe("designatedHint — 모집 전 지정 과제 안내 (시나리오 QA #1
     expect(designatedHint("recruit")).toMatch(/공통 과제는/);
     expect(designatedHint("active")).toBeNull();
     expect(designatedHint("ended")).toBeNull();
+  });
+});
+
+// 시나리오 QA D2: 회차 시작일을 바꾸면 하위 과제·개인 목표도 같은 날수만큼 옮길지 묻는다 (0024 node_update shiftDescendants)
+describe("shiftAskOf · shiftAskText · shiftedText", () => {
+  const withStart = (id: string, s: string) => buildTree(AWS, { ...EMPTY_OVERRIDES, dates: { [id]: { s } } }, REF_DAY);
+  it("시작일이 바뀐 회차 → 날수와 하위(보관 제외) 과제·개인 목표·묶음 수", () => {
+    const t = withStart("3", "2026-10-22");
+    expect(shiftAskOf(findNode(t.nodes, "3")!, t.nodes)).toEqual({ days: 7, tasks: 1, personal: 2, groups: 1 });
+  });
+  it("시작일이 그대로(종료일만)·리프·하위 없음이면 묻지 않는다", () => {
+    const t = buildTree(AWS, { ...EMPTY_OVERRIDES, dates: { "3": { e: "2026-10-28" } } }, REF_DAY);
+    expect(shiftAskOf(findNode(t.nodes, "3")!, t.nodes)).toBeNull();
+    const t2 = withStart("311", "2026-10-16");
+    expect(shiftAskOf(findNode(t2.nodes, "311")!, t2.nodes)).toBeNull();
+  });
+  it("보관된 하위는 세지 않는다", () => {
+    const t = buildTree(AWS, { ...EMPTY_OVERRIDES, dates: { "2": { s: "2026-10-06" } }, archived: { "22": true } }, REF_DAY);
+    expect(shiftAskOf(findNode(t.nodes, "2")!, t.nodes)).toEqual({ days: -2, tasks: 1, personal: 0, groups: 0 });
+  });
+  it("문구 — 방향·개수", () => {
+    expect(shiftAskText({ days: 7, tasks: 1, personal: 2, groups: 1 })).toBe("시작일을 7일 뒤로 옮겨요. 과제 1개·개인 목표 2개도 같은 날수만큼 옮길까요?");
+    expect(shiftAskText({ days: -2, tasks: 3, personal: 0, groups: 0 })).toBe("시작일을 2일 앞으로 옮겨요. 과제 3개도 같은 날수만큼 옮길까요?");
+    expect(shiftAskText({ days: 3, tasks: 0, personal: 0, groups: 2 })).toBe("시작일을 3일 뒤로 옮겨요. 묶음 2개도 같은 날수만큼 옮길까요?");
+    expect(shiftedText({ days: 7, tasks: 1, personal: 2, groups: 1, archived: 0 })).toBe("저장했어요 · 과제 1개·개인 목표 2개도 7일 뒤로 옮겼어요");
+    expect(shiftedText({ days: 0, tasks: 0, personal: 0, groups: 0, archived: 0 })).toBe("저장했어요");
+    expect(shiftedText(undefined)).toBe("저장했어요");
   });
 });

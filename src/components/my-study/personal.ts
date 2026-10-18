@@ -60,6 +60,8 @@ export function statusText(n: LeafNode, today: string): string {
 export const statusColor = (c: Code): string | undefined => (isDone(c) || c === "M" ? CODE_COLOR[c] : undefined);
 
 /** 삭제 확인 문구 (스펙 §4.6) — 그룹장·제출 있음은 삭제 자체가 없다(보관만) */
+/** 그룹장이 남의 개인 목표를 보관할 때 확인 문구 — 서버가 소유자에게 PERSONAL_ARCHIVED 알림을 보낸다 (0024, 시나리오 QA #7) */
+export const archiveOthersText = (name: string): string => `${name} 님의 개인 목표를 보관할까요? ${name} 님에게 알림이 가요 · 보관을 풀면 다시 보여요.`;
 export const removeText = (n: LeafNode): string => (n.subAll > 0 ? "완료 기록과 제출 내용까지 함께 지워져요. 삭제할까요?" : "이 목표를 삭제할까요? 되돌릴 수 없어요.");
 
 /** 편집 폼 값 */

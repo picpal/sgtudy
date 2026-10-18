@@ -14,7 +14,7 @@ import { useStickyOffset } from "@/lib/useStickyOffset";
 import { MarkdownView } from "../MarkdownView";
 import { ArchivedBadge, TypeBadge } from "../bits";
 import { roundStatus, type LeafNode, type ParentNode, type TreeNode } from "../model";
-import { cardSync, isDone, ownerCode, ownerOf, personalActions, removeText, roundWarning, statusColor, statusText, type CardSkip, type PersonalActions } from "../personal";
+import { archiveOthersText, cardSync, isDone, ownerCode, ownerOf, personalActions, removeText, roundWarning, statusColor, statusText, type CardSkip, type PersonalActions } from "../personal";
 import type { RoomStatus } from "../submission";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { ChildList } from "./ChildList";
@@ -210,8 +210,12 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
     await api.completePersonal(pn.id, !done);
     setBusy(false);
   };
+  // 그룹장이 남의 목표를 보관하면 한 번 묻는다(소유자에게 알림이 간다 — 시나리오 QA #7). 내 목표·보관 해제는 바로
+  const [askArchive, setAskArchive] = useState(false);
   const archive = () => {
-    if (pn) void api.archivePersonal(pn.id, !pn.archived);
+    if (!pn) return;
+    if (!isOwner && !pn.archived) return setAskArchive(true);
+    void api.archivePersonal(pn.id, !pn.archived);
   };
   const remove = async () => {
     if (!pn) return;
@@ -328,6 +332,25 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
         </div>
       )}
 
+      {askArchive && pn && (
+        <div className="pt-3">
+          <InlineConfirm
+            text={archiveOthersText(owner?.name ?? "팀원")}
+            onCancel={() => setAskArchive(false)}
+            actions={[
+              {
+                label: "보관",
+                tone: "danger",
+                onClick: () => {
+                  setAskArchive(false);
+                  void api.archivePersonal(pn.id, true);
+                },
+              },
+            ]}
+          />
+        </div>
+      )}
+
       {asking && pn && (
         <div className="pt-3">
           <InlineConfirm text={removeText(pn)} onCancel={() => setAsking(false)} actions={[{ label: "삭제", tone: "danger", onClick: () => void remove() }]} />
@@ -367,6 +390,12 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
                 roundStatus(n, today)
               )}
             </span>
+            {n.by && !pn && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span data-created-by>{n.by} 님이 추가</span>
+              </>
+            )}
           </p>
           {acts?.note && (
             <p role="note" className="m-0 rounded-[12px] bg-surface-2 px-[14px] py-[10px] text-[13px] text-ink-3">

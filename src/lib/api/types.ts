@@ -11,7 +11,9 @@ export type Membership = {
   status: "active" | "pending" | "inactive" | "rejected" | "canceled" | "expired";
 } | null;
 export type RoomTagDto = { slug: string; label: string; tone: Tone; auto: boolean };
-export type MeState = { state: "none" | "pending" | "active" | "inactive" | "leader" } | null;
+/** 탈퇴 요청(0024 D3) — ACTIVE 멤버가 요청 중일 때만 키가 있다(방이 진행중·미보관일 때만) */
+export type LeaveRequest = { requestedAt: string; reason: string | null };
+export type MeState = { state: "none" | "pending" | "active" | "inactive" | "leader"; leaveRequest?: LeaveRequest } | null;
 
 export type MetaDto = { today: string; serverTime: string };
 
@@ -114,6 +116,8 @@ export type RoomMemberAdminDto = Person & {
   status: "active" | "pending" | "inactive" | "rejected" | "canceled" | "expired";
   joinedAt: string | null;
   canEditCurriculum: boolean;
+  /** 0024 — 진행중 방 ACTIVE 멤버의 탈퇴 요청 시각(없으면 null) */
+  leaveRequestedAt?: string | null;
 };
 export type RoomDetail = {
   today: string;
@@ -157,6 +161,8 @@ export type RoomDetail = {
   } | null;
   invite: { url: string } | null;
   pendingCount: number;
+  /** 0024 — 처리할 탈퇴 요청 수(그룹장에게만 실제 수, 그 외 0) */
+  leaveRequestCount?: number;
   myPermissions: MyPermissions;
 };
 
@@ -202,6 +208,8 @@ export type NodeDto = {
   archived: boolean;
   /** 개인 목표의 소유자 userId — 서버는 항상 보내고 팀 노드는 null (옛 픽스처만 생략) */
   ownerId?: string | null;
+  /** 0024 — node_create 로 만든 사람(그 이전 노드·시드·개인 목표는 null) */
+  createdBy?: Person | null;
   task: {
     type: TaskTypeDto;
     people: (Person & { status: TaskStatus })[];
@@ -232,7 +240,11 @@ export type NodePatch = {
   label?: string;
   taskType?: TaskTypeDto;
   assigneeIds?: string[];
+  /** 0024 D2 — 하위가 있는 노드에서만: 시작일이 바뀐 날수만큼 모든 자손(보관 포함)을 함께 옮긴다 */
+  shiftDescendants?: boolean;
 };
+/** node_update(shiftDescendants) 응답 — 함께 옮긴 수(보관 제외, archived 는 따로) */
+export type ShiftedCounts = { days: number; tasks: number; personal: number; groups: number; archived: number };
 
 /* ---------- 내 스터디 · 내 일정 ---------- */
 export type StudyItem = {
@@ -241,8 +253,10 @@ export type StudyItem = {
   intro: string;
   membership: "leader" | "joined" | "pending";
   when: { kind: "deadline" | "start" | "end"; date: string };
+  /** 0024 — 보관된 방(me_studies(p_include_archived) 의 archived 그룹) */
+  archived?: boolean;
 };
-export type MeStudies = { today: string; groups: { kind: "active" | "recruit" | "ended"; items: StudyItem[] }[] };
+export type MeStudies = { today: string; groups: { kind: "active" | "recruit" | "ended" | "archived"; items: StudyItem[] }[] };
 
 export type ScheduleTask = { id: string; slug: string; title: string; s: string; e: string; st: TaskStatus | null; round: string; personal?: boolean };
 export type ScheduleResponse = {
@@ -301,12 +315,14 @@ export type MeTasks = {
 };
 
 /* ---------- 알림 ---------- */
-/** 서버 notification_kinds() (0008 + 0012 CURRICULUM_EDITOR_* + 0018 ROOM_PERIOD_CHANGED). 제목·링크는 서버가 렌더하므로 화면은 kind 로 분기하지 않는다 */
+/** 서버 notification_kinds() (0008 + 0012 CURRICULUM_EDITOR_* + 0018 ROOM_PERIOD_CHANGED + 0024). 제목·링크는 서버가 렌더하므로 화면은 kind 로 분기하지 않는다 */
 export const NOTIFICATION_KINDS = [
   "ROUND_STARTED", "TASK_ALL_SUBMITTED", "TASK_COMPLETION_DIGEST", "JOIN_REQUESTED", "JOIN_APPROVED", "JOIN_REJECTED",
   "JOIN_EXPIRED", "DEADLINE_REMINDER", "TASK_ASSIGNED", "TASK_UNASSIGNED", "SCHEDULE_CHANGED", "ROOM_STARTED",
   "ROOM_ENDED", "ROOM_START_BLOCKED", "MEMBER_DEACTIVATED", "CURRICULUM_EDITOR_GRANTED", "CURRICULUM_EDITOR_REVOKED",
   "ROOM_PERIOD_CHANGED",
+  // 0024
+  "ROUND_SCHEDULE_CHANGED", "ROOM_ARCHIVED", "PERSONAL_ARCHIVED", "LEAVE_REQUESTED", "LEAVE_REQUEST_DISMISSED", "SUBMISSION_DIGEST",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export type NotificationDto = {

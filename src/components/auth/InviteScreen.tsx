@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { ReasonField } from "@/components/ui/ReasonField";
 import { toApiError } from "@/lib/api/errors";
 import { inviteActionOf, joinByInvite, type InviteAction } from "@/lib/api/invite";
 import type { InvitePreview } from "@/lib/api/types";
@@ -20,6 +21,7 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
   const [p, setP] = useState(preview);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState(""); // 참가 신청 한마디 (승인제 — D4)
   const act: InviteAction = inviteActionOf(p);
   const r = p.room;
 
@@ -27,7 +29,7 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
     setBusy(true);
     setError("");
     try {
-      const res = await joinByInvite(token);
+      const res = await joinByInvite(token, act === "apply" ? message : undefined);
       setP((prev) => ({ ...prev, me: res.me, room: { ...prev.room, memberCount: res.memberCount } }));
       if (res.me?.state === "active") router.push(routes.myStudy(r.slug));
       else router.refresh();
@@ -59,9 +61,12 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
       case "join":
       case "apply":
         return (
+          <>
+            {act === "apply" && <ReasonField value={message} onChange={setMessage} label="그룹장에게 한마디 (선택)" placeholder="자기소개나 참여 계획을 짧게 남겨 주세요" />}
           <button type="button" onClick={go} disabled={busy} className={`${primary} bg-navy disabled:bg-slate-soft disabled:text-muted`}>
             {busy ? "처리 중…" : act === "join" ? "참가하기" : "참가 신청"}
           </button>
+          </>
         );
       default: {
         const text = act === "inactive" ? "이탈 처리된 멤버예요" : act === "full" ? "정원 마감" : act === "ended" ? "종료된 스터디예요" : "이미 진행 중인 스터디예요";

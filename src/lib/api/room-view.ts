@@ -9,7 +9,9 @@ export const fetchRoomDetail = (slug: string, client?: Db, inviteToken?: string)
   rpc<RoomDetail>("room_get", { p_slug: slug, p_invite_token: inviteToken ?? null }, client);
 /** 비공개 방은 room_join_precheck 가 초대 토큰을 검사한다 → ?invite= 로 연 방이면 토큰을 그대로 넘긴다 */
 export const joinRoom = (slug: string, inviteToken?: string) => rpc<MembershipResult>("room_join", { p_slug: slug, p_invite_token: inviteToken ?? null });
-export const applyRoom = (slug: string, inviteToken?: string) => rpc<MembershipResult>("room_apply", { p_slug: slug, p_invite_token: inviteToken ?? null });
+/** message: 참가 신청 한마디(선택, 200자 — 0024 D4). 다듬고 빈 값은 null */
+export const applyRoom = (slug: string, inviteToken?: string, message?: string, client?: Db) =>
+  rpc<MembershipResult>("room_apply", { p_slug: slug, p_invite_token: inviteToken ?? null, p_message: message?.trim() || null }, client);
 
 /** 로그인/온보딩 뒤 돌아올 방 주소. 초대 토큰을 유지해야 비공개 방이 다시 열린다 (safeReturnTo 통과: 원문에 %2f·%2e 없음) */
 export const roomReturnTo = (slug: string, inviteToken?: string): string =>

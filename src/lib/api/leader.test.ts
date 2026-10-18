@@ -13,6 +13,12 @@ import {
   showApplications,
   startBlockOf,
   startRoom,
+  fetchNotifySettings,
+  putNotifySettings,
+  NOTIFY_ROWS,
+  earlyStartDays,
+  startDoneText,
+  shiftChoiceText,
   statusActionOf,
   updateRoomEndDate,
   statusStepLabel,
@@ -58,7 +64,8 @@ describe("leader RPC wiring", () => {
   it("passes slug / user to the right RPCs", async () => {
     const { calls, client } = fake();
     await openRecruit("r1", client);
-    await startRoom("r1", client);
+    await startRoom("r1", {}, client);
+    await startRoom("r1", { shift: true }, client);
     await fetchInvite("r1", client);
     await rotateInvite("r1", client);
     await fetchApplications("r1", client);
@@ -68,6 +75,7 @@ describe("leader RPC wiring", () => {
     expect(calls).toEqual([
       ["room_open_recruit", { p_slug: "r1" }],
       ["room_start", { p_slug: "r1" }],
+      ["room_start", { p_slug: "r1", p_shift: true }],
       ["invite_get", { p_slug: "r1" }],
       ["invite_rotate", { p_slug: "r1" }],
       ["room_applications", { p_slug: "r1" }],
@@ -101,4 +109,43 @@ describe("startBlockOf (지금 시작 — 기간 1년 초과)", () => {
     expect(startBlockOf({ code: "PERIOD_TOO_LONG", message: "x" })).toEqual({ text: "지금 시작하면 기간이 1년을 넘어요 · 종료일을 앞당긴 뒤 시작해 주세요", maxEndDate: null });
   });
   it("다른 오류는 null (일반 토스트)", () => expect(startBlockOf({ code: "ROOM_STATUS_INVALID", message: "x" })).toBeNull());
+});
+
+// 시나리오 QA D1 — 예정보다 일찍 "지금 시작" 하면 일정을 당길지 고른다 (0024 room_start p_shift, 0025 종료일도 함께)
+describe("지금 시작 — 일정 당기기", () => {
+  it("earlyStartDays: 모집중이고 오늘이 예정 시작일 전이면 남은 날수, 아니면 0", () => {
+    expect(earlyStartDays({ status: "recruit", today: "2026-10-12", startDate: "2026-10-19" })).toBe(7);
+    expect(earlyStartDays({ status: "recruit", today: "2026-10-19", startDate: "2026-10-19" })).toBe(0);
+    expect(earlyStartDays({ status: "recruit", today: "2026-10-20", startDate: "2026-10-19" })).toBe(0);
+    expect(earlyStartDays({ status: "draft", today: "2026-10-12", startDate: "2026-10-19" })).toBe(0);
+  });
+  it("shiftChoiceText: 당기기는 종료일까지 n일, 그대로는 첫 회차까지 진행 중인 회차가 없다", () => {
+    const t = shiftChoiceText(7, "2026-10-19");
+    expect(t.shift.label).toBe("일정을 오늘부터 당기기");
+    expect(t.shift.note).toBe("모든 회차·과제·개인 목표와 종료일도 7일 당겨져요 · 전체 기간은 그대로예요");
+    expect(t.keep.label).toBe("일정 그대로");
+    expect(t.keep.note).toBe("시작일만 오늘로 바뀌어요 · 10.19 전까지는 진행 중인 회차가 없어요");
+  });
+  it("startDoneText: 당긴 날수와 담당자 없는 과제 수(기간 밖 경고는 세지 않는다)", () => {
+    const w = [{ code: "UNASSIGNED_TASK", nodeId: "1" }, { code: "PERIOD_OUTSIDE_ROOM", nodeId: "2" }] as never;
+    expect(startDoneText({ warnings: w, shift: { days: 7, nodes: 12 } })).toBe("스터디를 시작했어요 · 일정을 7일 당겼어요 · 담당자 없는 과제 1개");
+    expect(startDoneText({ warnings: [], shift: { days: 0, nodes: 0 } })).toBe("스터디를 시작했어요");
+    expect(startDoneText({ warnings: [] })).toBe("스터디를 시작했어요");
+  });
+});
+
+// 0025 — 방 알림 설정(settings_get/put). 제출 하루 요약(submissionDigest)을 끌 수 있다 (오케스트레이터 결정)
+describe("방 알림 설정", () => {
+  it("settings_get / settings_put — 전체 값을 넘긴다", async () => {
+    const { calls, client } = fake();
+    const s = { reminderD1: true, reminderD3: false, taskAssigned: true, scheduleChanged: true, roomStartEnd: true, completionMode: "daily" as const, submissionDigest: false };
+    await fetchNotifySettings("r1", client);
+    await putNotifySettings("r1", s, client);
+    expect(calls).toEqual([["settings_get", { p_slug: "r1" }], ["settings_put", { p_slug: "r1", p_settings: s }]]);
+  });
+  it("NOTIFY_ROWS: 제출 하루 요약 줄이 있고 그룹장에게만 간다고 알린다", () => {
+    const row = NOTIFY_ROWS.find((r) => r.key === "submissionDigest")!;
+    expect(row.title).toBe("팀원 제출 하루 요약");
+    expect(row.desc).toBe("어제 들어온 팀원 제출을 매일 오전 9시에 그룹장에게 한 번에 알려요");
+  });
 });

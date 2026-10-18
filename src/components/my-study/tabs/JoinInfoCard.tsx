@@ -9,7 +9,9 @@ import { toneOfName } from "../bits";
 import { memberStats, overallPct, type Tree } from "../model";
 import { StatusBadge } from "../StudyHeaderInfo";
 
-type Props = { room: StudyRoom; tree: Tree; onMyTasks: () => void; goLeaf: (id: string) => void; onCancel: (kind: "leave" | "cancel") => void; busy: boolean; admin?: ReactNode };
+/** onCancel: 확인 대화상자 열기 — 참가 취소(모집 기간)·신청 취소·탈퇴 요청/요청 취소(진행 중, 시나리오 QA D3) */
+export type JoinCardAction = "leave" | "cancel" | "leaveRequest" | "leaveRequestCancel";
+type Props = { room: StudyRoom; tree: Tree; onMyTasks: () => void; goLeaf: (id: string) => void; onCancel: (kind: JoinCardAction) => void; busy: boolean; admin?: ReactNode };
 
 /** 우측 aside "참가 정보" + "내 다음 마감" */
 export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, admin }: Props) {
@@ -21,7 +23,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
     <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px] @max-[788px]:grid @max-[788px]:max-w-none @max-[788px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] @max-[788px]:items-start">
       <div className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
         <div className="flex items-center justify-between">
-          <StatusBadge status={room.status} draft={room.draft} />
+          <StatusBadge status={room.status} draft={room.draft} archived={room.archived} />
           <span className="text-[13px] font-semibold text-ink">{room.ddayLong}</span>
         </div>
 
@@ -112,8 +114,35 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
                 참가 취소
               </button>
             )}
+            {/* 진행 중 참가자는 그룹장에게 탈퇴를 요청한다 — 그룹장이 담당 과제를 넘기고 처리한다 (시나리오 QA D3) */}
+            {room.action === "joined" && room.leaveRequest && (
+              <div data-leave-request role="status" className="flex flex-col gap-1 rounded-[12px] bg-amber-soft px-[14px] py-[10px] text-[13px] leading-[1.5] text-amber-text">
+                <span className="font-semibold">{room.leaveRequest.on}에 탈퇴를 요청했어요 · 그룹장이 처리하면 알려 드려요</span>
+                {room.leaveRequest.reason && <span className="break-words">사유: {room.leaveRequest.reason}</span>}
+              </div>
+            )}
+            {room.action === "joined" && (
+              <button
+                type="button"
+                onClick={() => onCancel(room.leaveRequest ? "leaveRequestCancel" : "leaveRequest")}
+                disabled={busy}
+                className="h-11 rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink disabled:opacity-60"
+              >
+                {room.leaveRequest ? "탈퇴 요청 취소" : "탈퇴 요청"}
+              </button>
+            )}
             <span className="text-center text-[12px] text-muted">
-              {room.action === "leave" ? "모집 기간에만 참가를 취소할 수 있어요" : room.action === "owner" ? (room.draft ? "내가 만든 방이에요 · 아직 모집을 시작하지 않았어요" : "내가 만든 방이에요") : "진행 중에는 참가 취소를 할 수 없어요"}
+              {room.action === "leave"
+                ? "모집 기간에만 참가를 취소할 수 있어요"
+                : room.action === "owner"
+                  ? room.archived
+                    ? "내가 만든 방이에요 · 보관됨 — 방 설정에서 보관을 풀 수 있어요"
+                    : room.draft
+                      ? "내가 만든 방이에요 · 아직 모집을 시작하지 않았어요"
+                      : "내가 만든 방이에요"
+                  : room.leaveRequest
+                    ? "요청을 취소하면 계속 참가해요"
+                    : "진행 중에는 그룹장이 탈퇴를 처리해요 · 제출 기록은 남아요"}
             </span>
           </div>
         )}
@@ -133,9 +162,12 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
           </div>
         )}
         {room.action === "closed" && (
-          <button type="button" disabled className="h-12 rounded-[24px] bg-slate-soft text-[15px] font-semibold text-muted">
-            모집 종료
-          </button>
+          <div className="flex flex-col gap-[6px]">
+            <button type="button" disabled className="h-12 rounded-[24px] bg-slate-soft text-[15px] font-semibold text-muted">
+              {room.archived ? "보관된 스터디" : "모집 종료"}
+            </button>
+            {room.archived && <span className="text-center text-[12px] text-muted">그룹장이 보관했어요 · 기록만 볼 수 있어요</span>}
+          </div>
         )}
       </div>
 

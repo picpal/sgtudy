@@ -31,7 +31,8 @@ export function SubmissionStatusList({ rows, sub, asg, note, archived = false, p
       return n;
     });
   return (
-    <section aria-labelledby="sub-status-title" className="flex flex-col gap-2">
+    // id="submissions": 알림 딥링크 앵커(TASK_ALL_SUBMITTED·SUBMISSION_DIGEST → ?task=…#submissions, 0024 계약 §7)
+    <section id="submissions" tabIndex={-1} aria-labelledby="sub-status-title" className="flex scroll-mt-20 flex-col gap-2 outline-none">
       <h3 id="sub-status-title" ref={headingRef} tabIndex={-1} className="m-0 scroll-mt-20 text-[15px] font-bold text-ink outline-none">
         {statusHeadOf(personal, sub, asg)}
       </h3>

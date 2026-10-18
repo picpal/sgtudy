@@ -5,6 +5,7 @@
 import { addDays, diffDays, md } from "@/lib/date";
 import { endPart, mmdd } from "@/lib/api/format";
 import { maxEndDate } from "@/components/room-new/validate";
+import type { ShiftedCounts } from "@/lib/api/types";
 import { isPersonal, type ParentNode, type TreeNode } from "./model";
 
 const live = (roots: ParentNode[]) => roots.filter((r) => !r.archived && !r.temp);
@@ -265,3 +266,42 @@ export function roundsOutsidePeriod(nodes: PeriodNode[], period: { start: string
  */
 export const designatedHint = (status: "draft" | "recruit" | "active" | "ended"): string | null =>
   status === "draft" || status === "recruit" ? "시작 전이라 참가자가 아직 다 모이지 않았어요 · 지정 과제의 담당은 참가자가 들어온 뒤 정해 주세요 · 공통 과제는 들어오는 사람에게 자동으로 배정돼요" : null;
+
+/* ---------- 회차 날짜 변경 시 하위 동반 이동 (시나리오 QA D2 — node_update shiftDescendants, 0024) ---------- */
+
+export type ShiftAsk = { days: number; tasks: number; personal: number; groups: number };
+
+/**
+ * 하위가 있는 노드(회차·묶음)의 시작일을 바꿨으면 이동 날수와 함께 옮길 하위 수(보관·임시 제외). 묻지 않아도 되면 null.
+ * 서버도 시작일 차이만큼만 옮긴다(종료일만 바꾸면 하위는 그대로).
+ */
+export function shiftAskOf(n: TreeNode, nodes: TreeNode[]): ShiftAsk | null {
+  if (n.leaf || n.temp) return null;
+  const days = diffDays(n.s0 ?? n.s, n.s);
+  if (days === 0) return null;
+  const under = new Set([n.id]);
+  const c = { tasks: 0, personal: 0, groups: 0 };
+  // 전위 순회 순서라 부모가 먼저 나온다
+  for (const x of nodes) {
+    if (!x.parentId || !under.has(x.parentId)) continue;
+    under.add(x.id);
+    if (x.archived || x.temp) continue;
+    if (!x.leaf) c.groups++;
+    else if (x.personal) c.personal++;
+    else c.tasks++;
+  }
+  return c.tasks + c.personal + c.groups === 0 ? null : { days, ...c };
+}
+
+const way = (days: number) => `${Math.abs(days)}일 ${days > 0 ? "뒤로" : "앞으로"}`;
+const whatOf = (c: { tasks: number; personal: number; groups: number }) =>
+  [c.tasks > 0 ? `과제 ${c.tasks}개` : "", c.personal > 0 ? `개인 목표 ${c.personal}개` : "", c.tasks + c.personal === 0 && c.groups > 0 ? `묶음 ${c.groups}개` : ""].filter(Boolean).join("·");
+
+export const shiftAskText = (a: ShiftAsk): string => `시작일을 ${way(a.days)} 옮겨요. ${whatOf(a)}도 같은 날수만큼 옮길까요?`;
+
+/** 저장 결과 문구 — 함께 옮긴 수(서버 shifted, 보관 제외) */
+export function shiftedText(s: ShiftedCounts | undefined): string {
+  if (!s || s.days === 0) return "저장했어요";
+  const what = whatOf(s);
+  return what ? `저장했어요 · ${what}도 ${way(s.days)} 옮겼어요` : "저장했어요";
+}

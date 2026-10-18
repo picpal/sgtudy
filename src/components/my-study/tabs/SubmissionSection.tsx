@@ -4,10 +4,12 @@ import { useEffect, useRef } from "react";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { fileUrl } from "@/lib/api/submission";
 import type { FileMeta, Submission } from "@/lib/api/types";
+import { useHashTarget } from "@/lib/hashTarget";
 import { useMe } from "@/lib/me";
 import { CODE_STATUS, type LeafNode } from "../model";
 import { focusTargetOf, myBadgeOf, myCardStateOf, notAssignedText, showAllSubmitted, statusRows, type RoomStatus, type StatusRow } from "../submission";
 import { useTaskDetail } from "../useTaskDetail";
+import { useRoomArchived } from "../roomArchived";
 import { MySubmissionCard } from "./MySubmissionCard";
 import { SubmissionStatusList } from "./SubmissionStatusList";
 
@@ -36,12 +38,15 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
   const mineRef = useRef<HTMLHeadingElement>(null);
   const statusRef = useRef<HTMLHeadingElement>(null);
 
-  const card = detail ? myCardStateOf(detail, roomStatus) : null;
+  const roomArchived = useRoomArchived();
+  const card = detail ? myCardStateOf(detail, roomStatus, roomArchived) : null;
   // 응답이 오면(또는 실패하면) 한 번만 제출 영역으로 — 그 뒤 viewFocus 를 지운다 (Review Focus 6)
   const settled = !!detail || !!error;
+  // 알림 딥링크 #submissions(전원 제출·제출 요약): 내 카드가 아니라 제출 현황으로 (시나리오 QA D4)
+  const toStatus = useHashTarget("submissions", settled);
   useEffect(() => {
     if (focus !== "submission" || !settled) return;
-    const target = card && focusTargetOf(card) === "mine" ? mineRef.current : statusRef.current;
+    const target = !toStatus && card && focusTargetOf(card) === "mine" ? mineRef.current : statusRef.current;
     const el = target ?? statusRef.current;
     el?.scrollIntoView({ block: "start" });
     el?.focus({ preventScroll: true });

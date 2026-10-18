@@ -4,14 +4,17 @@ import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { ChoiceList } from "@/components/ui/ChoiceList";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
+import { useHashTarget } from "@/lib/hashTarget";
 import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
-import { ymd } from "@/lib/api/format";
+import { mmdd, ymd } from "@/lib/api/format";
 import {
   absoluteUrl,
   approveApplicant,
+  earlyStartDays,
   fetchApplications,
   fetchInvite,
   leaderErrorText,
@@ -19,7 +22,9 @@ import {
   openRecruitNote,
   rejectApplicant,
   rotateInvite,
+  shiftChoiceText,
   showApplications,
+  startDoneText,
   startBlockOf,
   startRoom,
   statusActionOf,
@@ -30,7 +35,7 @@ import type { MembershipResult, RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { EndDateForm } from "./EndDateForm";
 
-type Detail = Pick<RoomDetail, "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite" | "startDate" | "endDate">;
+type Detail = Pick<RoomDetail, "today" | "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite" | "startDate" | "endDate">;
 /** onDetail/onMembership: 화면이 RoomDetail 을 state 로 들고 있으면(방 화면) 응답으로 바로 교체. 어느 쪽이든 끝나면 router.refresh */
 type Props = { detail: Detail; toast: (m: ToastMsg) => void; onDetail?: (d: RoomDetail) => void; onMembership?: (r: MembershipResult) => void };
 
@@ -44,6 +49,9 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"open" | "start" | "rotate" | null>(null);
   const [inviteUrl, setInviteUrl] = useState(detail.invite?.url ?? null);
+  // 예정보다 일찍 시작 — 일정을 오늘로 당길지 (시나리오 QA D1, 기본 당기기). 0 이면 묻지 않는다
+  const early = earlyStartDays(detail);
+  const [shift, setShift] = useState<"shift" | "keep">("shift");
   // "지금 시작"이 1년 상한에 막힘(0016 — 일찍 시작하면 시작일이 오늘로 당겨진다): 전용 안내를 패널에 남기고 종료일 바꾸기로 잇는다
   const [block, setBlock] = useState<{ text: string; maxEndDate: string | null } | null>(null);
   const [editEnd, setEditEnd] = useState(false);
@@ -57,13 +65,15 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
     if (!action || busy) return;
     setBusy(true);
     try {
-      const d = action === "openRecruit" ? await openRecruit(detail.slug) : await startRoom(detail.slug);
-      onDetail?.(d);
-      const unassigned = "warnings" in d ? (d as { warnings: unknown[] }).warnings.length : 0;
-      toast({
-        text: action === "openRecruit" ? "모집을 시작했어요" : unassigned > 0 ? `스터디를 시작했어요 · 담당자 없는 과제 ${unassigned}개` : "스터디를 시작했어요",
-        tone: "ok",
-      });
+      if (action === "openRecruit") {
+        const d = await openRecruit(detail.slug); // onDetail?.(await …) 로 쓰면 onDetail 이 없을 때 호출 자체가 빠진다
+        onDetail?.(d);
+        toast({ text: "모집을 시작했어요", tone: "ok" });
+      } else {
+        const d = await startRoom(detail.slug, { shift: early > 0 && shift === "shift" });
+        onDetail?.(d);
+        toast({ text: startDoneText(d), tone: "ok" });
+      }
       router.refresh(); // 상태 배지(준비중→모집중→진행중)·사이드바·탭 재동기화
     } catch (e) {
       const err = toApiError(e);
@@ -148,7 +158,9 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
           <button type="button" onClick={() => setConfirm("start")} disabled={busy} className={`${PRIMARY} bg-mint`}>
             지금 시작
           </button>
-          <span className="text-[12px] leading-[1.5] text-muted">진행중으로 바꿔요 · 예정 시작일 전이면 시작일을 오늘로 당겨요</span>
+          <span className="text-[12px] leading-[1.5] text-muted">
+            {early > 0 ? `진행중으로 바꿔요 · 예정 시작일(${mmdd(detail.startDate)})보다 ${early}일 일찍이라 일정을 당길지 골라요` : "진행중으로 바꿔요"}
+          </span>
           {block && (
             <div data-start-block role="alert" className="mt-1 flex flex-col gap-2 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-3 text-[13px] font-medium leading-[1.5] text-[#6B4700]">
               <span>{block.text}</span>
@@ -202,14 +214,23 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
           confirm === "open"
             ? `모집을 시작하면 ${openRecruitNote(detail)}. 모집중에도 방 설정에서 공개 여부·참가 방식을 바꿀 수 있어요.`
             : confirm === "start"
-              ? "진행중이 되고, 예정 시작일 전이면 시작일이 오늘로 당겨져요. 이후에는 새 참가를 받지 않고, 승인 대기 중인 신청은 만료돼요."
+              ? `${early > 0 ? `예정 시작일 ${mmdd(detail.startDate)}보다 ${early}일 일찍 시작해요. ` : ""}진행중이 되면 새 참가를 받지 않고, 승인 대기 중인 신청은 만료돼요.`
               : "지금 링크는 더 이상 열리지 않아요. 이미 참가한 사람에게는 영향이 없어요."
         }
         confirmLabel={confirm === "open" ? "모집 시작" : confirm === "start" ? "지금 시작" : "새 링크 만들기"}
         busy={busy}
         onCancel={() => setConfirm(null)}
         onConfirm={() => void (confirm === "rotate" ? rotate() : runStatus())}
-      />
+      >
+        {confirm === "start" && early > 0 && (
+          <ChoiceList
+            legend="일정을 어떻게 할까요"
+            value={shift}
+            onChange={setShift}
+            choices={(["shift", "keep"] as const).map((k) => ({ key: k, ...shiftChoiceText(early, detail.startDate)[k] }))}
+          />
+        )}
+      </ConfirmDialog>
     </section>
   );
 }
@@ -255,8 +276,10 @@ function Applications({ slug, initialCount, toast, onMembership }: { slug: strin
   };
 
   const count = items?.length ?? initialCount;
+  // 참가 신청 알림 딥링크 /my-study/{slug}#applications — 목록이 오면 여기로 (시나리오 QA #8)
+  useHashTarget("applications", items !== null || !!error);
   return (
-    <div className="flex flex-col gap-2 border-t border-line-2 pt-4">
+    <div id="applications" tabIndex={-1} className="flex scroll-mt-4 flex-col gap-2 border-t border-line-2 pt-4 outline-none">
       <div className="flex items-center gap-2">
         <h4 className="m-0 text-[13px] font-bold">승인 대기</h4>
         <span aria-label={`승인 대기 ${count}명`} className={`flex h-5 min-w-5 items-center justify-center rounded-[10px] px-[6px] text-[11px] font-bold ${count > 0 ? "bg-danger text-white" : "bg-slate-soft text-ink-3"}`}>
@@ -269,17 +292,19 @@ function Applications({ slug, initialCount, toast, onMembership }: { slug: strin
       {items && items.length > 0 && (
         <ul className="m-0 flex list-none flex-col p-0">
           {items.map((a) => (
-            <li key={a.userId} className="flex min-h-11 flex-wrap items-center gap-[10px] border-t border-line py-1 first:border-t-0">
+            <li key={a.userId} data-applicant={a.userId} className="flex min-h-11 flex-wrap items-center gap-[10px] border-t border-line py-1 first:border-t-0">
               <Avatar name={a.nickname} size={28} tone={a.tone} id={a.userId} />
               <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{a.nickname}</span>
               <span className="flex gap-[6px]">
-                <button type="button" aria-label={`${a.nickname} 승인`} onClick={() => void decide(a, true)} disabled={!!busy[a.userId]} className="h-9 rounded-[18px] bg-navy px-3 text-[13px] font-semibold text-white disabled:opacity-60">
+                <button type="button" aria-label={`${a.nickname} 승인`} onClick={() => void decide(a, true)} disabled={!!busy[a.userId]} className="h-11 rounded-[22px] bg-navy px-4 text-[13px] font-semibold text-white disabled:opacity-60">
                   승인
                 </button>
-                <button type="button" aria-label={`${a.nickname} 거절`} onClick={() => void decide(a, false)} disabled={!!busy[a.userId]} className="h-9 rounded-[18px] border border-line-3 bg-surface px-3 text-[13px] font-medium text-ink disabled:opacity-60">
+                <button type="button" aria-label={`${a.nickname} 거절`} onClick={() => void decide(a, false)} disabled={!!busy[a.userId]} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[13px] font-medium text-ink disabled:opacity-60">
                   거절
                 </button>
               </span>
+              {/* 참가 신청 한마디 (D4 — 선택, 200자) */}
+              {a.message && <p data-apply-message className="m-0 mb-1 basis-full whitespace-pre-wrap break-words rounded-[10px] bg-surface-2 px-3 py-2 text-[13px] leading-[1.5] text-ink-2">{a.message}</p>}
             </li>
           ))}
         </ul>

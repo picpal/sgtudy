@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { announceHash } from "@/lib/hashTarget";
 import { guardNavigate } from "@/lib/leaveGuard";
 import { useRouter } from "next/navigation";
 import type { MouseEvent as ReactMouseEvent } from "react";
@@ -103,6 +104,8 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
     // 확인 뒤 "버리기/저장하고 이동"으로 가면 그 이동은 편집 화면이 하므로 이 알림은 안 읽음으로 남는다(작은 대가)
     if (held) return;
     markItemRead(n);
+    // 링크 해시(#applications 등)의 영역이 찾아가게 알린다 — 같은 화면이면 Next 가 화면을 그대로 두고, 새 화면이면 마운트 때 받는다 (시나리오 QA #8)
+    announceHash(n.link);
     router.push(n.link);
   };
   const onReadAll = async () => {
