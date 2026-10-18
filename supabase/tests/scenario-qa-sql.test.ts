@@ -348,6 +348,33 @@ cases("scenario-qa (0024)", db, [
     assert((await notes(q, "민수", "LEAVE_REQUESTED"))[0].read_at);
   } },
 
+  // ───────── 0027 내보내기 막힘 없음 ─────────
+  { name: "0027 member_deactivate action 'unassign': 넘길 사람 없이 지정 과제를 담당 미정으로 · 0명 과제는 전원 제출 알림 없음 · unassignedCount", run: async (q) => {
+    const s3 = await nodeId(q, "aws", "S3 스토리지 클래스 발표자료");     // 하나 혼자 담당
+    const dyn = await nodeId(q, "aws", "DynamoDB 설계 퀴즈");            // 지은·하나
+    const hana = await uidOf(q, "하나");
+    await as(q, "민수");
+    const d = (await one(q, "select public.settings_get('aws') as s")).s as Row;
+    await q("select public.settings_put('aws', $1::jsonb)", [JSON.stringify({ ...d, completionMode: "immediate" })]);
+    const before = (await one(q, "select public.room_get('aws') as r")).r.stats.unassignedCount as number;
+    await expectFail(q("select public.member_deactivate('aws', $1::uuid, $2::jsonb)",
+      [hana, JSON.stringify([{ nodeId: s3, action: "exclude" }, { nodeId: dyn, action: "exclude" }])]), "REASSIGN_REQUIRED");
+    await expectFail(q("select public.member_deactivate('aws', $1::uuid, $2::jsonb)",
+      [hana, JSON.stringify([{ nodeId: s3, action: "unassign", assigneeIds: [await uidOf(q, "지은")] }, { nodeId: dyn, action: "exclude" }])]), "VALIDATION_FAILED");
+    await q("select public.member_deactivate('aws', $1::uuid, $2::jsonb)",
+      [hana, JSON.stringify([{ nodeId: s3, action: "unassign" }, { nodeId: dyn, action: "unassign" }])]);
+    const asg = async (node: string) => (await one(q, "select count(*)::int as n from public.task_assignments where node_id = $1::bigint and released_at is null", [node])).n;
+    assertEquals([await asg(s3), await asg(dyn)], [0, 1]);                // 다른 담당자가 있으면 unassign = 빼기만
+    const r = (await one(q, "select public.room_get('aws') as r")).r as Row;
+    assertEquals(r.stats.unassignedCount, before + 1);
+    assertEquals((await q("select 1 from public.notifications where kind = 'TASK_ALL_SUBMITTED' and node_id = $1::bigint", [s3])).length, 0);
+    const p = (await one(q, "select asg, sub from public.room_progress($1::bigint) where node_id = $2::bigint", [await roomId(q, "aws"), s3]));
+    assertEquals([p.asg, p.sub], [0, 0]);
+    await setToday(q, "2026-10-13");
+    await q("select public.job_completion_digest()");
+    assertEquals((await q("select 1 from public.notifications where kind = 'TASK_COMPLETION_DIGEST' and created_at >= now()")).length, 0);
+  } },
+
   // ───────── #19 탭 개수 ─────────
   { name: "#19 rooms_list tabCounts 는 범위마다 현재 상태·검색어·태그 조건을 적용한 수", run: async (q) => {
     await as(q, "철수");
