@@ -65,7 +65,12 @@ export function useHashTarget(id: string, ready: boolean): boolean {
   const [hit, setHit] = useState<{ on: boolean; seq: number }>({ on: false, seq: 0 });
   useEffect(() => {
     // 다른 화면에서 넘어오면 주소 갱신이 이 화면 마운트보다 늦을 수 있어 잠깐 뒤에 한 번 더 본다
-    const first = () => (hashOf(window.location.hash) === id || takePending(id)) && setHit((p) => (p.on ? p : { on: true, seq: p.seq + 1 }));
+    // 해시와 pending 을 둘 다 본다(단락 평가로 pending 이 남지 않게) — 남으면 늦은 재확인·재마운트가 다시 찾아간다 (재리뷰 Minor A)
+    const first = () => {
+      const byHash = hashOf(window.location.hash) === id;
+      const byPending = takePending(id);
+      if (byHash || byPending) setHit((p) => (p.on ? p : { on: true, seq: p.seq + 1 }));
+    };
     first();
     const late = window.setTimeout(first, 120);
     const on = (e: Event) => {

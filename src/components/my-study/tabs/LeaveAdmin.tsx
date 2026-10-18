@@ -54,6 +54,9 @@ export function LeaveAdmin({ slug, today, members, leaderDoesTasks, leaveRequest
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [busy, setBusy] = useState(false);
   const hit = useHashTarget("leave-requests", items !== null || !!error);
+  // 한 번 딥링크로 찾아온 목록은 남긴다 — 처리된 요청 알림(0건)으로 와도 목록이 사라져 포커스가 body 로 가지 않게 (재리뷰 Minor B)
+  const [stuck, setStuck] = useState(false);
+  if (hit && !stuck) setStuck(true);
 
   useEffect(() => {
     if (leaveRequestCount === 0) return;
@@ -113,7 +116,7 @@ export function LeaveAdmin({ slug, today, members, leaderDoesTasks, leaveRequest
     }
   };
 
-  const showList = leaveRequestCount > 0 || (items?.length ?? 0) > 0 || hit;
+  const showList = leaveRequestCount > 0 || (items?.length ?? 0) > 0 || hit || stuck;
 
   return (
     <div className="flex flex-col gap-3 border-t border-line-2 pt-3">

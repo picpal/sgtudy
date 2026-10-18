@@ -119,6 +119,20 @@ describe("LeaveAdmin — 탈퇴 요청", () => {
     act(() => root.unmount());
   });
 
+  // 재리뷰 Minor B: 이미 처리된 요청 알림(#leave-requests, 0건)으로 들어와도 빈 목록이 남아 포커스가 body 로 가지 않는다
+  it("해시로 들어오면 0건이어도 빈 목록이 남고 포커스를 지킨다", async () => {
+    Element.prototype.scrollIntoView = () => {};
+    window.history.replaceState(null, "", "/my-study/r1#leave-requests");
+    const { host, root } = await mount(0);
+    await flush();
+    const box = host.querySelector("#leave-requests");
+    expect(box).not.toBeNull();
+    expect(box!.textContent).toContain("지금 처리할 탈퇴 요청이 없어요");
+    expect(document.activeElement?.id).toBe("leave-requests");
+    act(() => root.unmount());
+    window.history.replaceState(null, "", "/");
+  });
+
   it("요청이 없어도 [팀원 내보내기] → 팀원 고르기 → 미제출 과제 없으면 바로", async () => {
     api.previewDeactivate.mockResolvedValue({ today: "2026-10-12", tasks: [] });
     api.deactivateMember.mockResolvedValue({ me: { state: "leader" }, memberCount: 2, members, pendingCount: 0 });

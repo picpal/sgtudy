@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { announceHash, hashOf, useHashTarget } from "./hashTarget";
@@ -121,5 +121,26 @@ describe("useHashTarget — 다른 방의 알림", () => {
     act(() => setReady(true));
     expect(scrolled).toEqual(["leave-requests"]);
     act(() => b.root.unmount());
+  });
+});
+
+// 재리뷰 Minor A: 벨로 다른 화면에 들어와 주소 해시로 hit 되면 남은 pending 도 비운다 — 늦은 재확인·재마운트가 다시 찾아가지 않게
+describe("useHashTarget — 해시로 hit 되면 pending 도 비운다", () => {
+  it("주소 해시 + pending 이 함께 있을 때 한 번만 찾아가고, 다시 마운트돼도 안 간다", () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, "", "/my-study/aws?tab=board");
+    announceHash("/my-study/aws#leave-requests");
+    window.history.replaceState(null, "", "/my-study/aws#leave-requests");
+    const first = mount("leave-requests");
+    act(() => setReady(true));
+    expect(scrolled).toEqual(["leave-requests"]);
+    act(() => vi.advanceTimersByTime(200)); // 늦은 재확인
+    expect(scrolled).toEqual(["leave-requests"]);
+    act(() => first.root.unmount());
+    const again = mount("leave-requests");
+    act(() => setReady(true));
+    expect(scrolled).toEqual(["leave-requests"]);
+    act(() => again.root.unmount());
+    vi.useRealTimers();
   });
 });
