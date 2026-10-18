@@ -68,7 +68,7 @@ export function RoomInfo({ room, onShare, more }: { room: Room; onShare: () => v
           {room.period}
           <span
             className="rounded-[7px] px-2 py-[2px] text-[12px] font-semibold"
-            style={recruit ? { color: "#2F5BC2", background: "#E3ECFD" } : { color: "#0D7A64", background: "#DDF4EE" }}
+            style={room.archived ? { color: "#4A5563", background: "#E9EEF0" } : recruit ? { color: "#2F5BC2", background: "#E3ECFD" } : { color: "#0D7A64", background: "#DDF4EE" }}
           >
             {room.dday}
           </span>
@@ -76,7 +76,7 @@ export function RoomInfo({ room, onShare, more }: { room: Room; onShare: () => v
 
         <Dt icon={dtIcon(<path d="M4 21V4M4 4h12l-2 4 2 4H4" />)}>상태</Dt>
         <dd>
-          <StatusBadge status={room.status} draft={room.draft} />
+          <StatusBadge status={room.status} draft={room.draft} archived={room.archived} />
         </dd>
 
         <Dt icon={dtIcon(<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" />, <path d="m9 12 2 2 4-4" />)}>참가 방식</Dt>

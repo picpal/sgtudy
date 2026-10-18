@@ -40,8 +40,13 @@ export function nicknameCandidates(base: string, rand: () => number = Math.rando
   return [...new Set(raw)].filter((x) => x !== b && nicknameProblem(x) === null);
 }
 
-/** 후보 중 쓸 수 있는 것만 순서대로 최대 max 개 — 확인이 실패한 후보는 뺀다 */
+/** 후보 중 쓸 수 있는 것만 순서대로 최대 max 개 — 확인이 실패한 후보는 뺀다. max 개씩 나눠 묻고 다 찾으면 멈춘다(요청 수를 줄인다) */
 export async function pickAvailable(cands: string[], check: (v: string) => Promise<NicknameCheck>, max = 3): Promise<string[]> {
-  const rs = await Promise.all(cands.map((c) => check(c).then((r) => r.available, () => false)));
-  return cands.filter((_, i) => rs[i]).slice(0, max);
+  const out: string[] = [];
+  for (let i = 0; i < cands.length && out.length < max; i += max) {
+    const batch = cands.slice(i, i + max);
+    const rs = await Promise.all(batch.map((c) => check(c).then((r) => r.available, () => false)));
+    out.push(...batch.filter((_, j) => rs[j]));
+  }
+  return out.slice(0, max);
 }

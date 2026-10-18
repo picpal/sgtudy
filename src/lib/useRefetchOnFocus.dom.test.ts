@@ -18,13 +18,20 @@ describe("useRefetchOnFocus", () => {
     const host = document.body.appendChild(document.createElement("div"));
     const root = createRoot(host);
     act(() => root.render(createElement(Probe, { on: true, fn })));
+    const now = vi.spyOn(Date, "now").mockReturnValue(10_000);
     act(() => window.dispatchEvent(new Event("focus")));
     expect(fn).toHaveBeenCalledTimes(1);
+    // 탭으로 돌아오면 focus 와 visibilitychange 가 같이 온다 — 한 번만 (최종 리뷰 Minor 2)
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(fn).toHaveBeenCalledTimes(1);
+    now.mockReturnValue(12_000);
     act(() => document.dispatchEvent(new Event("visibilitychange")));
     expect(fn).toHaveBeenCalledTimes(2);
     act(() => root.render(createElement(Probe, { on: false, fn })));
+    now.mockReturnValue(20_000);
     act(() => window.dispatchEvent(new Event("focus")));
     expect(fn).toHaveBeenCalledTimes(2);
+    now.mockRestore();
     act(() => root.unmount());
   });
 });

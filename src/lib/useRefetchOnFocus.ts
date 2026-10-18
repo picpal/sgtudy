@@ -10,7 +10,15 @@ export function useRefetchOnFocus(on: boolean, fn: () => void): void {
   });
   useEffect(() => {
     if (!on) return;
-    const run = () => document.visibilityState !== "hidden" && ref.current();
+    // 탭으로 돌아오면 focus 와 visibilitychange 가 함께 온다 — 1초 안의 두 번째는 건너뛴다
+    let last = -Infinity;
+    const run = () => {
+      if (document.visibilityState === "hidden") return;
+      const now = Date.now();
+      if (now - last < 1000) return;
+      last = now;
+      ref.current();
+    };
     window.addEventListener("focus", run);
     document.addEventListener("visibilitychange", run);
     return () => {

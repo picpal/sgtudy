@@ -42,6 +42,8 @@ describe("LeaveAdmin — 탈퇴 요청", () => {
     expect(api.fetchLeaveRequests).toHaveBeenCalledWith("r1");
     const box = host.querySelector("#leave-requests")!;
     expect(box.textContent).toContain("탈퇴 요청");
+    // 딥링크로 포커스가 오면 무엇인지 읽힌다 (최종 리뷰 Minor 5)
+    expect(host.querySelector(`#${CSS.escape(box.getAttribute("aria-labelledby") ?? "x")}`)?.textContent).toBe("탈퇴 요청");
     const row = box.querySelector('[data-leave-row="u3"]')!;
     expect(row.textContent).toContain("윤호");
     expect(row.textContent).toContain("10.12 요청 · 미제출 지정 과제 1개");
@@ -78,7 +80,7 @@ describe("LeaveAdmin — 탈퇴 요청", () => {
     const run = dbtn("내보내기")!;
     expect(run.disabled).toBe(true); // 아직 안 고름
     const sel = dialog.querySelector<HTMLSelectElement>("select")!;
-    expect(Array.from(sel.options).map((o) => o.textContent)).toEqual(["맡길 사람 고르기", "은지쌤 님에게 맡기기"]);
+    expect(Array.from(sel.options).map((o) => o.textContent)).toEqual(["맡길 사람 고르기", "담당 미정으로 두기", "은지쌤 님에게 맡기기"]);
     act(() => {
       sel.value = "u4";
       sel.dispatchEvent(new Event("change", { bubbles: true }));
@@ -89,6 +91,31 @@ describe("LeaveAdmin — 탈퇴 요청", () => {
     expect(api.deactivateMember).toHaveBeenCalledWith("r1", "u3", [{ nodeId: "9", action: "reassign", assigneeIds: ["u4"] }]);
     expect(toast).toHaveBeenCalledWith({ text: "윤호 님을 내보냈어요 · 맡은 과제 1개를 정리했어요", tone: "ok" });
     expect(refresh).toHaveBeenCalled();
+    act(() => root.unmount());
+  });
+
+  // 0027: 맡길 팀원이 없으면 "담당 미정으로 두기" 가 기본 — 바로 내보낼 수 있고, 토스트에 담당 미정 수
+  it("맡길 사람이 없으면 담당 미정으로 두기가 기본이고 실행된다", async () => {
+    api.fetchLeaveRequests.mockResolvedValue({ today: "2026-10-12", items: [req] });
+    api.previewDeactivate.mockResolvedValue({ today: "2026-10-12", tasks: [{ nodeId: "9", title: "배열 문제", roundLabel: "1주차", currentAssignees: [] }] });
+    api.deactivateMember.mockResolvedValue({ me: { state: "leader" }, memberCount: 1, members, pendingCount: 0 });
+    const toast = vi.fn();
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(LeaveAdmin, { slug: "r1", today: "2026-10-12", members: [M("lead", "하준", "leader"), M("u3", "윤호")], leaderDoesTasks: false, leaveRequestCount: 1, toast })));
+    await flush();
+    await act(async () => btn("윤호 내보내기")!.click());
+    await flush();
+    const sel = document.querySelector<HTMLSelectElement>('[role="alertdialog"] select')!;
+    expect(Array.from(sel.options).map((o) => o.textContent)).toEqual(["담당 미정으로 두기"]);
+    expect(sel.value).toBe("unassign");
+    expect(document.querySelector('[role="alertdialog"]')!.textContent).toContain("담당 미정으로 남아요 · 내보낸 뒤 진행목표에서 담당자를 정해 주세요");
+    expect(document.querySelector('[role="alertdialog"]')!.textContent).not.toContain("맡길 수 있는 팀원이 없어요");
+    expect(dbtn("내보내기")!.disabled).toBe(false);
+    await act(async () => dbtn("내보내기")!.click());
+    await flush();
+    expect(api.deactivateMember).toHaveBeenCalledWith("r1", "u3", [{ nodeId: "9", action: "unassign" }]);
+    expect(toast).toHaveBeenCalledWith({ text: "윤호 님을 내보냈어요 · 맡은 과제 1개를 정리했어요 · 담당 미정 1개", tone: "ok" });
     act(() => root.unmount());
   });
 

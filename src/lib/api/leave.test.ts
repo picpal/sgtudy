@@ -52,7 +52,7 @@ describe("탈퇴 요청·내보내기 RPC", () => {
 
   it("leaveErrorText: 코드별 문구, 모르는 코드는 서버 문구", () => {
     expect(leaveErrorText("LEAVE_ALREADY_REQUESTED", "x")).toBe("이미 탈퇴를 요청했어요 · 그룹장이 처리할 때까지 기다려 주세요");
-    expect(leaveErrorText("REASSIGN_REQUIRED", "x")).toBe("담당자가 없어지는 과제는 다른 참가자에게 맡겨야 해요");
+    expect(leaveErrorText("REASSIGN_REQUIRED", "x")).toBe("담당자가 없어지는 과제는 다른 참가자에게 맡기거나 담당 미정으로 두기를 골라 주세요");
     expect(leaveErrorText("ROOM_NOT_ACTIVE", "진행 중인 스터디에서만 탈퇴를 요청할 수 있어요")).toBe("진행 중인 스터디에서만 탈퇴를 요청할 수 있어요");
     expect(leaveErrorText("", "")).toBe("처리하지 못했어요 · 잠시 후 다시 시도해 주세요");
   });
@@ -77,6 +77,17 @@ describe("내보내기 — 담당 과제 재배정 결정", () => {
     expect(initialChoices(preview)).toEqual({ "5": "exclude", "6": "" });
     expect(missingChoices(preview, initialChoices(preview))).toEqual(["6"]);
     expect(missingChoices(preview, { "5": "exclude", "6": "u3" })).toEqual([]);
+  });
+  // 0027: 넘길 사람이 없으면 "담당 미정으로 두기"(unassign)를 기본으로 — 내보내기가 막히지 않는다
+  it("initialChoices(candidates): 혼자 맡았는데 맡길 사람이 없으면 unassign", () => {
+    expect(initialChoices(preview, () => [])).toEqual({ "5": "exclude", "6": "unassign" });
+    expect(initialChoices(preview, () => [{ userId: "u4", nickname: "u4", tone: "mint" }])).toEqual({ "5": "exclude", "6": "" });
+  });
+  it("decisionsOf: unassign 은 assigneeIds 없이", () => {
+    expect(decisionsOf(preview, { "5": "exclude", "6": "unassign" })).toEqual([
+      { nodeId: "5", action: "exclude" },
+      { nodeId: "6", action: "unassign" },
+    ]);
   });
   it("decisionsOf: exclude 그대로, 사람을 고르면 reassign", () => {
     expect(decisionsOf(preview, { "5": "exclude", "6": "u3" })).toEqual([

@@ -51,6 +51,7 @@ describe("useHashTarget", () => {
     act(() => root.unmount());
   });
   it("같은 화면에서 알림을 눌러도(announceHash) 다시 찾아간다", () => {
+    window.history.replaceState(null, "", "/my-study/aws");
     const { root } = mount("leave-requests");
     act(() => setReady(true));
     expect(scrolled).toEqual([]);
@@ -66,7 +67,8 @@ describe("useHashTarget", () => {
 
 describe("useHashTarget — 알림으로 다른 화면을 열 때", () => {
   it("주소 해시가 없어도 방금 알린 해시면 마운트 때 찾아간다(한 번만)", () => {
-    announceHash("/my-study/aws#leave-requests"); // 아직 그 화면이 없다
+    window.history.replaceState(null, "", "/my-study/aws?tab=board");
+    announceHash("/my-study/aws#leave-requests"); // 아직 그 화면이 없다(주소가 바뀌기 전)
     const { root } = mount("leave-requests");
     act(() => setReady(true));
     expect(scrolled).toEqual(["leave-requests"]);
@@ -76,5 +78,48 @@ describe("useHashTarget — 알림으로 다른 화면을 열 때", () => {
     act(() => setReady(true));
     expect(scrolled).toEqual([]);
     act(() => again.root.unmount());
+  });
+});
+
+// 최종 리뷰 I1: 해시는 한 번 쓰면 주소에서 지운다 — 탭을 갔다 와서 다시 마운트돼도 또 스크롤·포커스하지 않는다
+describe("useHashTarget — 한 번만", () => {
+  it("찾아간 뒤 주소 해시를 지우고, 다시 마운트되면 아무것도 안 한다", () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=overview#applications");
+    const first = mount("applications");
+    act(() => setReady(true));
+    expect(scrolled).toEqual(["applications"]);
+    expect(window.location.hash).toBe("");
+    expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=overview");
+    act(() => first.root.unmount());
+    const again = mount("applications");
+    act(() => setReady(true));
+    expect(scrolled).toEqual(["applications"]);
+    expect(again.host.querySelector("section")!.dataset.hit).toBe("false");
+    act(() => again.root.unmount());
+  });
+  it("찾아간 뒤에는 hit 를 끈다 — ?task=N#submissions 뒤 다른 과제는 내 카드로", () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=3#submissions");
+    const { host, root } = mount("submissions");
+    expect(host.querySelector("section")!.dataset.hit).toBe("true");
+    act(() => setReady(true));
+    expect(host.querySelector("section")!.dataset.hit).toBe("false");
+    act(() => root.unmount());
+  });
+});
+
+// 최종 리뷰 Minor 1: 다른 방 화면이 알린 해시를 가로채지 않는다
+describe("useHashTarget — 다른 방의 알림", () => {
+  it("지금 화면 경로와 다른 링크의 알림은 무시하고, 그 방 화면이 마운트될 때 쓴다", () => {
+    window.history.replaceState(null, "", "/my-study/a");
+    const a = mount("leave-requests");
+    act(() => setReady(true));
+    act(() => announceHash("/my-study/b#leave-requests"));
+    expect(scrolled).toEqual([]);
+    act(() => a.root.unmount());
+    window.history.replaceState(null, "", "/my-study/b");
+    const b = mount("leave-requests");
+    act(() => setReady(true));
+    expect(scrolled).toEqual(["leave-requests"]);
+    act(() => b.root.unmount());
   });
 });

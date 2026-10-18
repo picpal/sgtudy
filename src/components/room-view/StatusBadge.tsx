@@ -3,7 +3,14 @@ import { roomStatusLabel, type RoomStatus } from "@/lib/types";
 import { STATUS_BADGE } from "@/data/room-view";
 
 /** 모집중/진행중/종료 흰 글씨 배지 — 정보 dl 과 참가 카드 공용. draft(모집 시작 전)는 방 카드·내 스터디와 같은 "준비중" 회색 배지 */
-export function StatusBadge({ status, draft }: { status: RoomStatus; draft?: boolean }) {
+export function StatusBadge({ status, draft, archived }: { status: RoomStatus; draft?: boolean; archived?: boolean }) {
+  // 보관된 방은 "보관됨" 회색 (내 스터디와 같은 표기 — 최종 수정 4)
+  if (archived)
+    return (
+      <Badge bg="#E9EEF0" fg="#4A5563" height={26} px={10} radius={8}>
+        보관됨
+      </Badge>
+    );
   if (draft)
     return (
       <Badge bg="#E9EEF0" fg="#4A5563" height={26} px={10} radius={8}>

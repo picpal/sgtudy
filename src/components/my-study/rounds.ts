@@ -305,3 +305,7 @@ export function shiftedText(s: ShiftedCounts | undefined): string {
   const what = whatOf(s);
   return what ? `저장했어요 · ${what}도 ${way(s.days)} 옮겼어요` : "저장했어요";
 }
+
+/** 띄운 확인(a)이 지금 편집 값으로 다시 계산한 질문(b)과 같은가 — 다르면 확인을 닫는다 (최종 리뷰 Minor 4) */
+export const sameShiftAsk = (a: ShiftAsk, b: ShiftAsk | null): boolean =>
+  !!b && a.days === b.days && a.tasks === b.tasks && a.personal === b.personal && a.groups === b.groups;

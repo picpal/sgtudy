@@ -35,7 +35,7 @@ import type { MembershipResult, RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { EndDateForm } from "./EndDateForm";
 
-type Detail = Pick<RoomDetail, "today" | "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite" | "startDate" | "endDate">;
+type Detail = Pick<RoomDetail, "today" | "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite" | "startDate" | "endDate"> & { stats?: Pick<RoomDetail["stats"], "unassignedCount"> };
 /** onDetail/onMembership: 화면이 RoomDetail 을 state 로 들고 있으면(방 화면) 응답으로 바로 교체. 어느 쪽이든 끝나면 router.refresh */
 type Props = { detail: Detail; toast: (m: ToastMsg) => void; onDetail?: (d: RoomDetail) => void; onMembership?: (r: MembershipResult) => void };
 
@@ -131,7 +131,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
           그룹장 패널
         </h3>
         <span className="flex items-center gap-1">
-          <span className="rounded-[7px] bg-bg px-2 py-[2px] text-[12px] font-semibold text-ink-3">지금 {statusStepLabel(detail.status)}</span>
+          <span className="rounded-[7px] bg-bg px-2 py-[2px] text-[12px] font-semibold text-ink-3">지금 {detail.archived ? "보관됨" : statusStepLabel(detail.status)}</span>
           {/* 방 정보·태그·기간 수정, 삭제·보관 (Q3-1·Q2-2) */}
           <Link href={routes.roomSettings(detail.slug)} className="-mr-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[13px] font-semibold text-ink-3 hover:text-ink">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -181,6 +181,16 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
             </div>
           )}
         </div>
+      )}
+
+      {/* 담당 미정 과제(지정 과제 담당 0명 — 내보내기 "담당 미정으로 두기" 등, 0027) → 진행목표 편집으로 */}
+      {!detail.archived && detail.status !== "ended" && (detail.stats?.unassignedCount ?? 0) > 0 && (
+        <p data-unassigned role="note" className="m-0 flex flex-wrap items-center gap-x-2 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-1 text-[13px] font-medium leading-[1.5] text-[#6B4700]">
+          <span className="py-2">담당 미정 과제 {detail.stats!.unassignedCount}개 · 담당자를 정해 주세요</span>
+          <Link href={routes.myStudyEdit(detail.slug)} className="inline-flex min-h-11 items-center font-semibold text-[#6B4700] underline underline-offset-2">
+            진행목표 편집 →
+          </Link>
+        </p>
       )}
 
       <div className="flex flex-col gap-[6px]">
@@ -279,9 +289,9 @@ function Applications({ slug, initialCount, toast, onMembership }: { slug: strin
   // 참가 신청 알림 딥링크 /my-study/{slug}#applications — 목록이 오면 여기로 (시나리오 QA #8)
   useHashTarget("applications", items !== null || !!error);
   return (
-    <div id="applications" tabIndex={-1} className="flex scroll-mt-4 flex-col gap-2 border-t border-line-2 pt-4 outline-none">
+    <div id="applications" role="region" tabIndex={-1} aria-labelledby="applications-title" className="flex scroll-mt-4 flex-col gap-2 border-t border-line-2 pt-4 outline-none">
       <div className="flex items-center gap-2">
-        <h4 className="m-0 text-[13px] font-bold">승인 대기</h4>
+        <h4 id="applications-title" className="m-0 text-[13px] font-bold">승인 대기</h4>
         <span aria-label={`승인 대기 ${count}명`} className={`flex h-5 min-w-5 items-center justify-center rounded-[10px] px-[6px] text-[11px] font-bold ${count > 0 ? "bg-danger text-white" : "bg-slate-soft text-ink-3"}`}>
           {count}
         </span>

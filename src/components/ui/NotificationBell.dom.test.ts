@@ -78,3 +78,33 @@ describe("NotificationBell 이탈 가드 (최종 리뷰 Minor 2)", () => {
     expect(api.read.length).toBe(1);
   });
 });
+
+// 최종 리뷰 I2: 깨끗한 편집 화면(가드 = EditView 와 같은 규칙)이 같은 화면 해시 알림을 삼키지 않는다 — 이동·앵커 알림·읽음까지
+describe("NotificationBell 해시 알림 + 편집 화면 가드", () => {
+  it("같은 화면 #applications 알림은 편집만 닫고 이동·읽음·앵커 알림을 이어 간다", async () => {
+    const { holdSamePage, samePage, setScreenKey } = await import("@/lib/leaveGuard");
+    api.read = [];
+    api.pushed = [];
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum&item=3&mode=edit");
+    const offKey = setScreenKey({ tab: "overview", task: "" });
+    const closed: string[] = [];
+    const off = setLeaveGuard((href) => {
+      if (!samePage(href)) return false;
+      closed.push(href);
+      return holdSamePage(href);
+    });
+    const heard: string[] = [];
+    const onHash = (e: Event) => heard.push((e as CustomEvent<{ hash: string }>).detail.hash);
+    window.addEventListener("sgtudy:hash", onHash);
+    const host = await open([{ ...item("c", "2026-10-15T03:00:00Z"), kind: "JOIN_REQUESTED", link: "/my-study/aws#applications" }]);
+    await act(async () => host.querySelector<HTMLAnchorElement>("a[href='/my-study/aws#applications']")!.click());
+    expect(closed).toEqual(["/my-study/aws#applications"]);
+    expect(api.pushed).toEqual(["/my-study/aws#applications"]);
+    expect(api.read).toEqual(["c"]);
+    expect(heard).toEqual(["applications"]);
+    window.removeEventListener("sgtudy:hash", onHash);
+    off();
+    offKey();
+    window.history.replaceState(null, "", "/");
+  });
+});

@@ -4,12 +4,12 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { TaskType } from "@/data/my-study";
-import { samePage, setLeaveGuard } from "@/lib/leaveGuard";
+import { holdSamePage, samePage, setLeaveGuard } from "@/lib/leaveGuard";
 import { useToday } from "@/lib/today";
 import { rangeShort } from "@/lib/api/format";
 import { Seg } from "../bits";
 import { dropFieldOv, isDirty, isPersonal, leafLocks, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
-import { designatedHint, moveNote, movedPeriod, reorderIndex, roundOf, roundOptions, shiftAskOf, shiftAskText, type ShiftAsk } from "../rounds";
+import { designatedHint, moveNote, movedPeriod, reorderIndex, roundOf, roundOptions, sameShiftAsk, shiftAskOf, shiftAskText, type ShiftAsk } from "../rounds";
 import { patchOv, type Leave, type ScreenState, type Update } from "../state";
 import type { RoomStatus } from "../submission";
 import type { CurriculumApi } from "../useCurriculumApi";
@@ -101,9 +101,10 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
       // 같은 방 주소(헤더 "내 스터디" 등 task·tab 없는 주소)는 화면이 다시 그려지지 않는다 — 이동 대신 목록으로 닫고,
       // (?task=·?tab= 이 있는 같은 방 알림 링크는 화면이 다시 마운트되니 아래로 가서 지우고 이동한다, N-1)
       // 빈 새 회차는 MyStudyScreen 정리가 상태째 지운다(서버만 지우면 지워진 회차의 편집 화면이 남는다, 최종 리뷰 Minor 1)
+      // 해시 알림 링크(#applications 등)는 편집만 닫고 이동은 막지 않는다 — 벨이 이동·앵커·읽음까지 이어 간다 (최종 리뷰 I2)
       if (samePage(href)) {
         go({ sel: null });
-        return true;
+        return holdSamePage(href);
       }
       api.discard(id);
       return false;
@@ -195,6 +196,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     } else void doSave(false, then);
   };
   const leaveSave = () => trySave(S.leave);
+  // 확인을 띄운 뒤 날짜를 또 바꿨거나 다른 이동 확인(S.leave)이 떴으면 그 질문은 낡았다 — 숨기고 다시 "저장" 으로 묻는다 (최종 리뷰 Minor 4)
+  const askShown = shiftAsk && !S.leave && sameShiftAsk(shiftAsk.ask, shiftAskOf(n, nodes)) ? shiftAsk : null;
   const leaveDiscard = () => {
     const to = S.leave;
     update((p) => ({ ov: dropFieldOv(p.ov, id) }));
@@ -235,7 +238,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
               {removeLabel}
             </button>
           )}
-          <button type="button" disabled={n.temp || !!shiftAsk} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
+          <button type="button" disabled={n.temp || !!askShown} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
             저장
           </button>
         </div>
@@ -244,14 +247,14 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             {S.saved}
           </div>
         )}
-        {shiftAsk && (
+        {askShown && (
           <InlineConfirm
-            text={shiftAskText(shiftAsk.ask)}
+            text={shiftAskText(askShown.ask)}
             cancelLabel="계속 편집"
             onCancel={() => setShiftAsk(null)}
             actions={[
-              { label: "함께 옮기기", tone: "primary", onClick: () => void doSave(true, shiftAsk.then) },
-              { label: kind === "회차" ? "회차만 바꾸기" : "이 묶음만 바꾸기", onClick: () => void doSave(false, shiftAsk.then) },
+              { label: "함께 옮기기", tone: "primary", onClick: () => void doSave(true, askShown.then) },
+              { label: kind === "회차" ? "회차만 바꾸기" : "이 묶음만 바꾸기", onClick: () => void doSave(false, askShown.then) },
             ]}
           />
         )}

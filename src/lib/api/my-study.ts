@@ -1,6 +1,6 @@
 import { rpc, type Db } from "@/lib/api/errors";
 import { requestedOn } from "@/lib/api/leave";
-import { curIndexOf, curOf, dateShort, ddayOf, mmdd, periodLong, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
+import { ARCHIVED_CUR, ARCHIVED_DDAY, ARCHIVED_ROUND_STATE, curIndexOf, curOf, dateShort, foldArchived, ddayOf, mmdd, periodLong, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
 import type { Curriculum, MeState, MeStudies, MyPermissions, NodePatch, RoomDetail, RoomMemberAdminDto, ShiftedCounts } from "@/lib/api/types";
 import { dday, diffDays, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
@@ -73,7 +73,6 @@ export type StudyAction = "owner" | "leave" | "joined" | "pending" | "closed";
 /** archived: 보관된 방(시나리오 QA #6 — 모든 표기를 "보관된 스터디" 로). leaveRequest: 진행 중 내 탈퇴 요청(D3) */
 export type StudyRoom = Omit<Room, "action"> & { action: StudyAction; draft: boolean; archived: boolean; leaveRequest: { on: string; reason: string | null } | null };
 
-const ARCHIVED_CUR = { pill: "보관됨", title: "보관된 스터디예요", meta: "기록만 볼 수 있어요 · 제출·편집은 할 수 없어요", tasks: [] };
 
 function studyActionOf(d: RoomDetail): StudyAction {
   const st = d.me?.state;
@@ -87,8 +86,8 @@ function studyActionOf(d: RoomDetail): StudyAction {
 /** room_get → 내 스터디 Room (mystudy §1.2–1.4). 숫자 집계(members done/total, rounds sub/total)는 화면이 tree 로 덮어쓴다. */
 export function toStudyRoom(dto: RoomDetail, tree: Tree, today: string, meId: string): StudyRoom {
   // 보관된 방은 회차·일정 표기를 종료와 같은 규칙으로(진행중·마감 D-n 이 섞이지 않게), 문구는 "보관" 으로 (#6)
-  const d: RoomDetail = dto.archived && (dto.status === "active" || dto.status === "recruit" || dto.status === "draft") ? { ...dto, status: "ended" } : dto;
-  const dd = dto.archived ? { short: "보관됨", long: "보관된 스터디 · 기록만 볼 수 있어요" } : ddayOf(d.status, today, d.startDate, d.endDate);
+  const d: RoomDetail = foldArchived(dto);
+  const dd = dto.archived ? ARCHIVED_DDAY : ddayOf(d.status, today, d.startDate, d.endDate);
   const cur = dto.archived ? ARCHIVED_CUR : curOf(d, today);
   const win = roundsWindow(d.rounds, d.status, today);
   const ci = curIndexOf(d.rounds, today);
@@ -103,7 +102,7 @@ export function toStudyRoom(dto: RoomDetail, tree: Tree, today: string, meId: st
   const rounds: RoundRow[] = win.rows.map((r) => {
     const rr = roundRow(r, d.status, today, r.id === curId);
     // 보관된 방은 회차를 "완료" 라 부르지 않는다(끝나지 않은 회차도 있다) (#6)
-    const row: RoundRow = { label: rr.label, title: rr.title, dates: rr.dates, state: dto.archived ? "보관됨" : recruit ? "예정" : rr.state, sub: rr.sub ?? 0, total: rr.total ?? 0, current: rr.current, roundId: r.id };
+    const row: RoundRow = { label: rr.label, title: rr.title, dates: rr.dates, state: dto.archived ? ARCHIVED_ROUND_STATE : recruit ? "예정" : rr.state, sub: rr.sub ?? 0, total: rr.total ?? 0, current: rr.current, roundId: r.id };
     if (recruit) row.alt = rr.state;
     return row;
   });

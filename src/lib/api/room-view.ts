@@ -1,5 +1,5 @@
 import { rpc, type Db } from "@/lib/api/errors";
-import { curIndexOf, curOf, ddayOf, glanceOf, periodLong, periodShort, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
+import { ARCHIVED_CUR, ARCHIVED_DDAY, ARCHIVED_ROUND_STATE, curIndexOf, curOf, foldArchived, ddayOf, glanceOf, periodLong, periodShort, roundRow, roundsWindow, rulesOf, uiStatus } from "@/lib/api/format";
 import type { MembershipResult, RoomCardDto, RoomDetail, RoomTagDto } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { roomStatusLabel, type RoomStatus } from "@/lib/types";
@@ -22,7 +22,7 @@ export const firstParam = (v: string | string[] | undefined): string | undefined
 export const leaveRoom = (slug: string) => rpc<MembershipResult>("room_leave", { p_slug: slug });
 export const cancelApplication = (slug: string) => rpc<MembershipResult>("room_cancel_application", { p_slug: slug });
 
-type ActionInput = Pick<RoomDetail, "status" | "joinMode" | "memberCount" | "maxMembers" | "me">;
+type ActionInput = Pick<RoomDetail, "status" | "joinMode" | "memberCount" | "maxMembers" | "me"> & { archived?: boolean };
 
 /** 지금 참가할 수 없는 방 상태 — 비로그인도 로그인 전에 알 수 있게 먼저 보여 준다 (Q2-11) */
 export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "maxMembers">): "ended" | "activeClosed" | "full" | null {
@@ -35,6 +35,8 @@ export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "max
 /** 03-api §3: 비로그인→(종료·진행중·정원 마감이면 그 상태, 아니면 login) · leader→owner · active&recruit→leave · active&(active|ended)→joined · pending→pending · inactive→inactive · ended→ended · active→activeClosed · full→full · approval→apply · direct→join */
 export function actionOf(d: ActionInput): Action {
   const st = d.me?.state;
+  // 보관된 방: 그룹장은 관리, 참가자는 내 스터디(기록 보기), 그 밖에는 참가할 수 없다는 안내 (최종 수정 4)
+  if (d.archived) return st === "leader" ? "owner" : st === "active" ? "joined" : "archived";
   if (!d.me) return closedAction(d) ?? "login";
   if (st === "leader") return "owner";
   const recruiting = d.status === "recruit" || d.status === "draft";
@@ -47,8 +49,9 @@ export function actionOf(d: ActionInput): Action {
 
 const baseOf = (act: Action): BaseAction => (act === "join" || act === "apply" || act === "leave" || act === "pending" || act === "login" ? "recruit" : act);
 
-export function toRoom(d: RoomDetail, today: string, meId: string | null): Room {
-  const dd = ddayOf(d.status, today, d.startDate, d.endDate);
+export function toRoom(dto: RoomDetail, today: string, meId: string | null): Room {
+  const d = foldArchived(dto);
+  const dd = dto.archived ? ARCHIVED_DDAY : ddayOf(d.status, today, d.startDate, d.endDate);
   const win = roundsWindow(d.rounds, d.status, today);
   const ci = curIndexOf(d.rounds, today);
   // 서버 currentRound 는 공백 구간에서 직전 회차를 준다(room_current_round_id) → 오늘을 포함하는 회차만 현재 (preflight C2)
@@ -58,14 +61,15 @@ export function toRoom(d: RoomDetail, today: string, meId: string | null): Room 
     .map((m) => ({ userId: m.userId, name: m.nickname, tone: m.tone, leader: m.role === "leader", me: m.userId === meId }));
   const myPending = d.members.find((m) => m.status === "pending" && m.userId === meId);
   if (myPending) members.push({ userId: myPending.userId, name: myPending.nickname, tone: myPending.tone, leader: false, me: true, pending: true });
-  const cur = curOf(d, today);
+  const cur = dto.archived ? ARCHIVED_CUR : curOf(d, today);
   return {
     id: d.slug,
+    archived: dto.archived,
     title: d.title,
     intro: d.intro,
     status: uiStatus(d.status),
     draft: d.status === "draft",
-    base: baseOf(actionOf(d)),
+    base: baseOf(actionOf(dto)),
     approval: d.joinMode === "approval",
     pub: d.isPublic,
     period: periodLong(d.startDate, d.endDate),
@@ -83,9 +87,9 @@ export function toRoom(d: RoomDetail, today: string, meId: string | null): Room 
     cur: { pill: cur.pill, title: cur.title, meta: cur.meta, tasks: cur.tasks.map((t) => ({ title: t.title, type: t.type, dates: t.dates, people: t.people.map((p) => ({ name: p.name, status: p.status, tone: p.tone, userId: p.userId })) })) },
     about: d.descriptionMd,
     rules: rulesOf(d.rulesMd),
-    rounds: win.rows.map((r) => roundRow(r, d.status, today, r.id === curId)),
+    rounds: win.rows.map((r) => (dto.archived ? { ...roundRow(r, d.status, today, false), state: ARCHIVED_ROUND_STATE } : roundRow(r, d.status, today, r.id === curId))),
     moreRounds: win.more,
-    glance: glanceOf(d.stats, d.status),
+    glance: dto.archived ? { ...glanceOf(d.stats, d.status), rounds: `${d.stats.roundCount}회차 · 보관됨` } : glanceOf(d.stats, d.status),
   };
 }
 

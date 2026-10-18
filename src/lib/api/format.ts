@@ -164,3 +164,10 @@ export const rulesOf = (md: string): string[] =>
     .split(/\r?\n/)
     .map((l) => l.replace(/^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/, "").trim())
     .filter(Boolean);
+
+/** 보관된 방 표기 — 내 스터디·방 화면 공통 (시나리오 QA #6). 회차·기간 계산은 종료와 같은 규칙으로 접는다 */
+export const ARCHIVED_DDAY = { short: "보관됨", long: "보관된 스터디 · 기록만 볼 수 있어요" } as const;
+export const ARCHIVED_CUR: CurView = { pill: "보관됨", title: "보관된 스터디예요", meta: "기록만 볼 수 있어요 · 제출·편집은 할 수 없어요", tasks: [] };
+export const ARCHIVED_ROUND_STATE = "보관됨";
+/** 보관된 방이면 상태를 ended 로 접는다(진행중·D-n 이 섞이지 않게) */
+export const foldArchived = <T extends { archived: boolean; status: RoomStatusDto }>(d: T): T => (d.archived && d.status !== "ended" ? { ...d, status: "ended" } : d);

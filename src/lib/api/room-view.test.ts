@@ -174,3 +174,23 @@ describe("참가 신청 한마디", () => {
     ]);
   });
 });
+
+// 최종 수정 4: 방 화면(/rooms/[slug])도 보관 방은 "보관된 스터디" 로 — 종료·진행중·D-n 이 섞이지 않게 (내 스터디와 같은 규칙)
+describe("toRoom · actionOf — 보관된 방", () => {
+  const active = detail({ status: "active", archived: true, stats: stats({ roundCount: 4 }), startDate: "2026-10-01", endDate: "2026-12-31", rounds: weekly(4, "2026-10-01"), currentRound: weekly(4, "2026-10-01")[1] });
+  it("표기를 보관으로 통일", () => {
+    const r = toRoom(active, TODAY, "u-x");
+    expect(r).toMatchObject({ archived: true, dday: "보관됨", ddayLong: "보관된 스터디 · 기록만 볼 수 있어요" });
+    expect(r.cur).toMatchObject({ pill: "보관됨", title: "보관된 스터디예요", tasks: [] });
+    expect(r.rounds.every((x) => x.state === "보관됨" && !x.current)).toBe(true);
+    expect(r.glance.rounds).toBe("4회차 · 보관됨");
+    expect(toRoom(detail(), TODAY, "u-x").archived).toBe(false);
+  });
+  it("참가 버튼 대신 보관 안내 — 그룹장은 관리, 참가자는 내 스터디", () => {
+    expect(actionOf({ ...active, me: { state: "none" } })).toBe("archived");
+    expect(actionOf({ ...active, me: { state: "leader" } })).toBe("owner");
+    expect(actionOf({ ...active, me: { state: "active" } })).toBe("joined");
+    expect(actionOf({ ...detail({ archived: true }), me: { state: "active" } })).toBe("joined"); // 모집 중 보관도 참가 취소 없음
+    expect(actionOf({ ...active, me: null })).toBe("archived");
+  });
+});

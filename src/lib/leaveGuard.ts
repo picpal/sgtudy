@@ -61,3 +61,11 @@ export function samePage(href: string, current: string = window.location.href, k
   const b = key ?? screenKeyOf(here.searchParams);
   return a.tab === b.tab && a.task === b.task;
 }
+
+/**
+ * 편집 화면 가드가 같은 화면 이동을 "편집만 닫고 보류" 할지 — 해시 없는 같은 화면 주소만.
+ * 해시가 있는 알림 링크(#applications·#leave-requests·#submissions)는 막지 않아야 벨이 이동·앵커·읽음까지 이어 간다 (최종 리뷰 I2)
+ */
+export function holdSamePage(href: string, current: string = window.location.href, key: ScreenKey | null = mounted): boolean {
+  return samePage(href, current, key) && !new URL(href, current).hash;
+}

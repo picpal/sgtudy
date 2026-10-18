@@ -73,7 +73,8 @@ export function LeaveAdmin({ slug, today, members, leaderDoesTasks, leaveRequest
     setDialog({ kind: "plan", user, preview: null, choices: {} });
     try {
       const preview = await previewDeactivate(slug, user.userId);
-      setDialog({ kind: "plan", user, preview, choices: initialChoices(preview) });
+      const all = reassignCandidates(members, user.userId, leaderDoesTasks);
+      setDialog({ kind: "plan", user, preview, choices: initialChoices(preview, (t) => candidatesFor(all, t)) });
     } catch (e) {
       const err = toApiError(e);
       setDialog(null);
@@ -93,7 +94,8 @@ export function LeaveAdmin({ slug, today, members, leaderDoesTasks, leaveRequest
         await deactivateMember(slug, dialog.user.userId, decisionsOf(dialog.preview, dialog.choices));
         setItems((list) => list?.filter((x) => x.userId !== dialog.user.userId) ?? list);
         const n = dialog.preview.tasks.length;
-        toast({ text: `${dialog.user.nickname} 님을 내보냈어요${n > 0 ? ` · 맡은 과제 ${n}개를 정리했어요` : ""}`, tone: "ok" });
+        const un = Object.values(dialog.choices).filter((v) => v === "unassign").length;
+        toast({ text: `${dialog.user.nickname} 님을 내보냈어요${n > 0 ? ` · 맡은 과제 ${n}개를 정리했어요` : ""}${un > 0 ? ` · 담당 미정 ${un}개` : ""}`, tone: "ok" });
       }
       setDialog(null);
       router.refresh(); // 참가자 목록(이탈)·담당·요청 수
@@ -116,9 +118,9 @@ export function LeaveAdmin({ slug, today, members, leaderDoesTasks, leaveRequest
   return (
     <div className="flex flex-col gap-3 border-t border-line-2 pt-3">
       {showList && (
-        <div id="leave-requests" tabIndex={-1} className="flex scroll-mt-4 flex-col gap-2 outline-none">
+        <div id="leave-requests" role="region" tabIndex={-1} aria-labelledby="leave-requests-title" className="flex scroll-mt-4 flex-col gap-2 outline-none">
           <div className="flex items-center gap-2">
-            <h4 className="m-0 text-[13px] font-bold">탈퇴 요청</h4>
+            <h4 id="leave-requests-title" className="m-0 text-[13px] font-bold">탈퇴 요청</h4>
             <span className={`flex h-5 min-w-5 items-center justify-center rounded-[10px] px-[6px] text-[11px] font-bold ${(items?.length ?? leaveRequestCount) > 0 ? "bg-danger text-white" : "bg-slate-soft text-ink-3"}`}>
               {items?.length ?? leaveRequestCount}
             </span>
@@ -203,39 +205,45 @@ export function LeaveAdmin({ slug, today, members, leaderDoesTasks, leaveRequest
   );
 }
 
+/** 이 과제를 맡길 수 있는 사람 — 이미 함께 맡은 사람은 뺀다 */
+const candidatesFor = (all: Person[], t: { currentAssignees: Person[] }) => all.filter((c) => !t.currentAssignees.some((o) => o.userId === c.userId));
+
 /** 미제출 지정 과제마다 처리 방법 — 다른 담당이 있으면 빼기만 해도 되고, 혼자 맡았으면 맡길 사람을 고른다 */
 function PlanList({ dialog, members, leaderDoesTasks, onChoose }: { dialog: Extract<Dialog, { kind: "plan" }>; members: RoomMemberDto[]; leaderDoesTasks: boolean; onChoose: (nodeId: string, v: string) => void }) {
   if (!dialog.preview) return <p className="m-0 text-[13px] text-muted">맡은 과제를 확인하는 중…</p>;
   if (dialog.preview.tasks.length === 0) return <p className="m-0 rounded-[12px] bg-surface-2 px-3 py-[10px] text-[13px] text-ink-2">미제출 지정 과제가 없어요 · 바로 내보낼 수 있어요</p>;
   const all = reassignCandidates(members, dialog.user.userId, leaderDoesTasks);
+  const UNASSIGN_NOTE = "담당 미정으로 남아요 · 내보낸 뒤 진행목표에서 담당자를 정해 주세요";
   return (
     <div className="flex flex-col gap-2">
       <p className="m-0 text-[13px] font-semibold text-ink-2">맡은 미제출 지정 과제 {dialog.preview.tasks.length}개</p>
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
         {dialog.preview.tasks.map((t) => {
           const others = t.currentAssignees;
-          const cands = all.filter((c) => !others.some((o) => o.userId === c.userId));
+          const cands = candidatesFor(all, t);
           const id = `leave-plan-${t.nodeId}`;
           return (
             <li key={t.nodeId} className="flex flex-col gap-[6px] rounded-[12px] border border-line px-3 py-[10px]">
               <label htmlFor={id} className="text-[14px] font-semibold text-ink">
                 {t.roundLabel ? `${t.roundLabel} · ${t.title}` : t.title}
               </label>
-              <span className="text-[12px] text-muted">{others.length > 0 ? `다른 담당 ${others.map((o) => o.nickname).join(", ")}` : "혼자 맡은 과제예요 · 다른 팀원에게 맡겨야 해요"}</span>
+              <span className="text-[12px] text-muted">{others.length > 0 ? `다른 담당 ${others.map((o) => o.nickname).join(", ")}` : "혼자 맡은 과제예요 · 다른 팀원에게 맡기거나 담당 미정으로 둘 수 있어요"}</span>
               <select
                 id={id}
                 value={dialog.choices[t.nodeId] ?? ""}
                 onChange={(e) => onChoose(t.nodeId, e.target.value)}
                 className="h-11 rounded-[10px] border border-line bg-surface px-3 text-[14px] text-ink"
               >
-                {others.length > 0 ? <option value="exclude">담당에서 빼기</option> : <option value="">맡길 사람 고르기</option>}
+                {others.length > 0 ? <option value="exclude">담당에서 빼기</option> : cands.length > 0 && <option value="">맡길 사람 고르기</option>}
+                {/* 0027: 혼자 맡은 과제는 담당 미정으로 둘 수 있다 */}
+                {others.length === 0 && <option value="unassign">담당 미정으로 두기</option>}
                 {cands.map((c) => (
                   <option key={c.userId} value={c.userId}>
                     {c.nickname} 님에게 맡기기
                   </option>
                 ))}
               </select>
-              {others.length === 0 && cands.length === 0 && <span className="text-[12px] text-warn">맡길 수 있는 팀원이 없어요 · 과제를 지우거나 공통 과제로 바꾼 뒤 내보내 주세요</span>}
+              {dialog.choices[t.nodeId] === "unassign" && <span className="text-[12px] text-amber-text">{UNASSIGN_NOTE}</span>}
             </li>
           );
         })}

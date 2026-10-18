@@ -163,8 +163,38 @@ describe("LeaderPanel 승인 대기 — 한마디·앵커", () => {
     await flush();
     const box = host.querySelector("#applications")!;
     expect(box).not.toBeNull();
+    expect(host.querySelector(`#${CSS.escape(box.getAttribute("aria-labelledby") ?? "x")}`)?.textContent).toBe("승인 대기");
     expect(box.querySelector('[data-applicant="u7"] [data-apply-message]')?.textContent).toBe("주말에도 참여할게요");
     expect(box.querySelector('[data-applicant="u8"] [data-apply-message]')).toBeNull();
     act(() => root.unmount());
+  });
+});
+
+// 0027: 내보내기 등으로 담당 미정이 된 과제 — 그룹장 패널에서 "담당 미정 과제 n개" + 진행목표 편집으로
+describe("LeaderPanel 담당 미정 안내", () => {
+  const mount = (d: object) => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(LeaderPanel, { detail: { ...detail, ...d } as never, toast: vi.fn() })));
+    return { host, root };
+  };
+  it("unassignedCount > 0 이면 안내와 편집 링크", () => {
+    const { host, root } = mount({ status: "active", stats: { unassignedCount: 2 } });
+    const note = host.querySelector("[data-unassigned]")!;
+    expect(note.textContent).toContain("담당 미정 과제 2개");
+    expect(note.querySelector<HTMLAnchorElement>("a")?.getAttribute("href")).toBe("/my-study/r1?tab=curriculum&mode=edit");
+    act(() => root.unmount());
+  });
+  it("보관된 방은 단계 표시도 '지금 보관됨'", () => {
+    const { host, root } = mount({ status: "active", archived: true });
+    expect(host.textContent).toContain("지금 보관됨");
+    act(() => root.unmount());
+  });
+  it("0 이거나 보관·종료면 없다", () => {
+    for (const d of [{ status: "active", stats: { unassignedCount: 0 } }, { status: "ended", stats: { unassignedCount: 2 } }, { status: "active", archived: true, stats: { unassignedCount: 2 } }]) {
+      const { host, root } = mount(d);
+      expect(host.querySelector("[data-unassigned]")).toBeNull();
+      act(() => root.unmount());
+    }
   });
 });

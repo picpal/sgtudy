@@ -67,3 +67,19 @@ describe("nicknameCandidates / pickAvailable — 닉네임 중복 시 대안 (�
     expect(await pickAvailable(["a1", "boom", "a2", "a_3", "a.4", "a5"], check)).toEqual(["a2", "a_3", "a.4"]);
   });
 });
+
+// 최종 리뷰 Minor 6: 후보를 한꺼번에 다 묻지 않는다 — max 개씩 나눠 묻고 다 찾으면 멈춘다
+describe("pickAvailable — 요청 수", () => {
+  it("앞의 3개가 모두 쓸 수 있으면 3번만 묻는다", async () => {
+    const asked: string[] = [];
+    const check = async (v: string): Promise<NicknameCheck> => (asked.push(v), { available: true });
+    expect(await pickAvailable(["a1", "a2", "a3", "a4", "a5", "a6"], check)).toEqual(["a1", "a2", "a3"]);
+    expect(asked).toEqual(["a1", "a2", "a3"]);
+  });
+  it("모자라면 다음 묶음을 더 묻는다", async () => {
+    const asked: string[] = [];
+    const check = async (v: string): Promise<NicknameCheck> => (asked.push(v), { available: v !== "a2" });
+    expect(await pickAvailable(["a1", "a2", "a3", "a4", "a5", "a6"], check)).toEqual(["a1", "a3", "a4"]);
+    expect(asked).toEqual(["a1", "a2", "a3", "a4", "a5", "a6"]);
+  });
+});

@@ -11,7 +11,8 @@ export type LeaveRequestItem = Person & { requestedAt: string; reason: string | 
 export type LeaveRequests = { today: string; items: LeaveRequestItem[] };
 export type DeactivateTask = { nodeId: string; title: string; roundLabel: string | null; currentAssignees: Person[] };
 export type DeactivatePreview = { today: string; tasks: DeactivateTask[] };
-export type LeaveDecision = { nodeId: string; action: "exclude" } | { nodeId: string; action: "reassign"; assigneeIds: string[] };
+/** 0027: unassign = 이 사람만 빼고 재지정하지 않는다(담당 0명 = 담당 미정 허용) */
+export type LeaveDecision = { nodeId: string; action: "exclude" | "unassign" } | { nodeId: string; action: "reassign"; assigneeIds: string[] };
 
 const reasonOf = (r?: string | null) => r?.trim() || null;
 
@@ -36,17 +37,22 @@ export const reassignCandidates = (members: RoomMemberDto[], target: string, lea
     .sort((a, b) => (a.role === b.role ? 0 : a.role === "leader" ? -1 : 1))
     .map(({ userId, nickname, tone }) => ({ userId, nickname, tone }));
 
-/** 과제별 선택 값: "exclude"(담당에서 빼기) | userId(이 사람에게 맡기기) | ""(아직 안 고름) */
+/** 과제별 선택 값: "exclude"(담당에서 빼기) | "unassign"(담당 미정으로 두기) | userId(이 사람에게 맡기기) | ""(아직 안 고름) */
 export type LeaveChoices = Record<string, string>;
 
-/** 다른 담당자가 있으면 빼기만 해도 된다 → 기본 "exclude". 혼자 맡은 과제는 맡길 사람을 골라야 한다(REASSIGN_REQUIRED) */
-export const initialChoices = (p: DeactivatePreview): LeaveChoices =>
-  Object.fromEntries(p.tasks.map((t) => [t.nodeId, t.currentAssignees.length > 0 ? "exclude" : ""]));
+/**
+ * 다른 담당자가 있으면 빼기만 해도 된다 → 기본 "exclude". 혼자 맡은 과제는 맡길 사람을 고르게 비워 두고,
+ * 맡길 사람이 아예 없으면 "unassign"(담당 미정, 0027)을 기본으로 — 내보내기가 막히지 않게
+ */
+export const initialChoices = (p: DeactivatePreview, candidatesOf: (t: DeactivateTask) => Person[] = () => [{} as Person]): LeaveChoices =>
+  Object.fromEntries(p.tasks.map((t) => [t.nodeId, t.currentAssignees.length > 0 ? "exclude" : candidatesOf(t).length === 0 ? "unassign" : ""]));
 
 export const missingChoices = (p: DeactivatePreview, c: LeaveChoices): string[] => p.tasks.filter((t) => !c[t.nodeId]).map((t) => t.nodeId);
 
 export const decisionsOf = (p: DeactivatePreview, c: LeaveChoices): LeaveDecision[] =>
-  p.tasks.map((t) => (c[t.nodeId] === "exclude" ? { nodeId: t.nodeId, action: "exclude" } : { nodeId: t.nodeId, action: "reassign", assigneeIds: [c[t.nodeId]] }));
+  p.tasks.map((t) =>
+    c[t.nodeId] === "exclude" || c[t.nodeId] === "unassign" ? { nodeId: t.nodeId, action: c[t.nodeId] as "exclude" | "unassign" } : { nodeId: t.nodeId, action: "reassign", assigneeIds: [c[t.nodeId]] },
+  );
 
 /** 탈퇴 요청·내보내기 RPC 오류 → 토스트 문구 */
 export function leaveErrorText(code: string, message: string): string {
@@ -54,7 +60,7 @@ export function leaveErrorText(code: string, message: string): string {
     case "LEAVE_ALREADY_REQUESTED":
       return "이미 탈퇴를 요청했어요 · 그룹장이 처리할 때까지 기다려 주세요";
     case "REASSIGN_REQUIRED":
-      return "담당자가 없어지는 과제는 다른 참가자에게 맡겨야 해요";
+      return "담당자가 없어지는 과제는 다른 참가자에게 맡기거나 담당 미정으로 두기를 골라 주세요";
     case "LEAVE_DECISION_MISSING":
       return "미제출 과제마다 처리 방법을 골라 주세요 · 그새 과제가 바뀌었을 수 있어요";
     case "ASSIGNEE_NOT_MEMBER":

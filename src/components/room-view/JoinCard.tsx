@@ -14,6 +14,7 @@ const DISABLED: Partial<Record<Action, [label: string, note: string]>> = {
   activeClosed: ["모집 종료", "이미 진행 중인 스터디는 참가할 수 없어요"],
   ended: ["모집 종료", "종료된 스터디예요 · 기록은 계속 볼 수 있어요"],
   inactive: ["참가할 수 없어요", "이탈 처리된 멤버예요 · 그룹장에게 문의해 주세요"],
+  archived: ["보관된 스터디", "그룹장이 보관했어요 · 기록만 볼 수 있어요"],
 };
 
 const PRIMARY = "flex h-[50px] items-center justify-center gap-2 rounded-[25px] font-semibold text-white hover:text-white disabled:opacity-60";
@@ -131,7 +132,7 @@ export function JoinCard(props: Props) {
   return (
     <div className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
       <div className="flex items-center justify-between">
-        <StatusBadge status={room.status} draft={room.draft} />
+        <StatusBadge status={room.status} draft={room.draft} archived={room.archived} />
         <span className="text-[13px] font-semibold text-ink">{room.ddayLong}</span>
       </div>
 

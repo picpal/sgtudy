@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, findNode, visibleNodes, type LeafNode, type ParentNode, type TreeNode } from "./model";
-import { currentRoundId, shiftAskOf, shiftAskText, shiftedText, designatedHint, dropPlan, roundsOutsidePeriod, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, rowMoves, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
+import { currentRoundId, sameShiftAsk, shiftAskOf, shiftAskText, shiftedText, designatedHint, dropPlan, roundsOutsidePeriod, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, rowMoves, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -324,5 +324,15 @@ describe("shiftAskOf · shiftAskText · shiftedText", () => {
     expect(shiftedText({ days: 7, tasks: 1, personal: 2, groups: 1, archived: 0 })).toBe("저장했어요 · 과제 1개·개인 목표 2개도 7일 뒤로 옮겼어요");
     expect(shiftedText({ days: 0, tasks: 0, personal: 0, groups: 0, archived: 0 })).toBe("저장했어요");
     expect(shiftedText(undefined)).toBe("저장했어요");
+  });
+});
+
+// 최종 리뷰 Minor 4: 확인이 떠 있는 동안 날짜를 또 바꾸면 그 확인(n일)은 낡았다 — 같은 질문일 때만 그대로 둔다
+describe("sameShiftAsk", () => {
+  it("날수·개수가 같을 때만 같다", () => {
+    const a = { days: 7, tasks: 1, personal: 2, groups: 1 };
+    expect(sameShiftAsk(a, { ...a })).toBe(true);
+    expect(sameShiftAsk(a, { ...a, days: 8 })).toBe(false);
+    expect(sameShiftAsk(a, null)).toBe(false);
   });
 });
