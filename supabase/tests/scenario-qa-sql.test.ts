@@ -88,7 +88,7 @@ cases("scenario-qa (0024)", db, [
     const got = await notes(q, "지은", "ROUND_SCHEDULE_CHANGED");
     assertEquals(got.map((n) => [n.title, n.body, n.link]), [[
       "AWS SAA 자격증 3개월 완주 회차 일정이 변경됐어요",
-      '3주차 "고가용성 아키텍처" 기간 10.15 – 10.21 → 10.22 – 10.28 · 과제 2개도 함께 옮겼어요',
+      '3주차 "고가용성 아키텍처" 기간 10.15 – 10.21 → 10.22 – 10.28 · 과제 1개·개인 목표 1개도 함께 옮겼어요',   // 0026: 과제·목표 나눠서
       "/my-study/aws?tab=curriculum"]]);
     assertEquals((await notes(q, "철수", "ROUND_SCHEDULE_CHANGED")).length, 1);
     assertEquals((await notes(q, "민수", "ROUND_SCHEDULE_CHANGED")).length, 0);   // 행위자
@@ -268,6 +268,84 @@ cases("scenario-qa (0024)", db, [
     const link = (await one(q, "select public.notify_link('TASK_ALL_SUBMITTED', $1::bigint, $2::bigint, $3::uuid) as l",
       [await roomId(q, "aws"), ec2, await uidOf(q, "민수")])).l;
     assertEquals(link, `/my-study/aws?task=${ec2}#submissions`);
+  } },
+
+  // ───────── 0026 리뷰 수정 ─────────
+  { name: "0026 Critical: 탈퇴 사유·요청 시각·신청 한마디는 테이블 직접 조회로 본인·그 방 그룹장만(비로그인·외부인·다른 멤버 안 보임)", run: async (q) => {
+    await as(q, "철수");
+    await q("select public.member_leave_request('aws', '비밀 사유')");
+    await as(q, "지은");
+    await q("select public.room_apply('sqld', null, '비밀 한마디')");
+    // 호스팅 기본값 흉내: Supabase 는 public 테이블 SELECT 를 anon/authenticated 에 준다 → RLS 만이 막는다
+    await q("grant select on public.member_requests, public.room_members to anon, authenticated");
+    await q("grant usage on schema public, auth to anon, authenticated");             // Supabase 와 같은 스키마 접근(personal-goals 테스트와 같은 흉내)
+    await q("grant execute on all functions in schema auth to anon, authenticated");
+    const peek = async (role: string, nick: string | null) => {
+      if (nick) await as(q, nick); else await q("select set_config('app.uid', '', true)");
+      await q(`set local role ${role}`);
+      const req = await q("select u.nickname as who, r.leave_request_reason as reason, r.apply_message as msg from public.member_requests r join public.public_profiles u on u.id = r.user_id order by 1");
+      const leak = await q(`select count(*)::int as n from public.room_members
+                            where apply_message is not null or leave_requested_at is not null or leave_request_reason is not null`);
+      await q("reset role");
+      return { req: req.map((x) => [x.who, x.reason, x.msg]), leak: leak[0].n };
+    };
+    assertEquals(await peek("anon", null), { req: [], leak: 0 });
+    assertEquals(await peek("authenticated", "하나"), { req: [], leak: 0 });         // 같은 방 다른 멤버
+    assertEquals(await peek("authenticated", "도현"), { req: [], leak: 0 });         // 외부인
+    assertEquals(await peek("authenticated", "철수"), { req: [["철수", "비밀 사유", null]], leak: 0 });
+    assertEquals(await peek("authenticated", "민수"), { req: [["철수", "비밀 사유", null]], leak: 0 });   // aws 그룹장: sqld 신청은 안 보임
+    assertEquals(await peek("authenticated", "가은"), { req: [["지은", null, "비밀 한마디"]], leak: 0 });
+    // 쓰기는 RPC 만
+    await as(q, "철수");
+    await q("set local role authenticated");
+    await expectFail(q("update public.member_requests set leave_request_reason = 'x'"), "permission denied");
+    await q("reset role");
+    // RPC 계약은 그대로
+    await as(q, "민수");
+    assertEquals((await one(q, "select public.room_leave_requests('aws') as r")).r.items.map((i: Row) => i.reason), ["비밀 사유"]);
+    await as(q, "가은");
+    assertEquals((await one(q, "select public.room_applications('sqld') as r")).r.items.map((i: Row) => i.message), [null, "비밀 한마디"]);
+  } },
+  { name: "0026 Important: 묶음(depth≥3)을 shiftDescendants 로 옮기면 하위 팀 과제 담당자에게 SCHEDULE_CHANGED(과제당 1건, 회차 알림 없음)", run: async (q) => {
+    const grp = await nodeId(q, "aws", "로드밸런서 비교");
+    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");
+    await as(q, "민수");
+    const u = (await one(q, "select public.node_update('aws', $1::bigint, $2::jsonb) as r",
+      [grp, JSON.stringify({ startDate: "2026-10-17", endDate: "2026-10-23", shiftDescendants: true })])).r as Row;
+    assertEquals(u.shifted.tasks, 1);
+    for (const nick of ["지은", "철수", "하나"]) {
+      assertEquals((await notes(q, nick, "SCHEDULE_CHANGED")).map((n) => [n.node_id, n.body]),
+        [[alb, '"ALB vs NLB 실습" 기간 10.15 – 10.21 → 10.17 – 10.23']], nick);
+    }
+    assertEquals((await notes(q, "민수", "SCHEDULE_CHANGED")).length, 0);
+    assertEquals((await notes(q, "지은", "ROUND_SCHEDULE_CHANGED")).length, 0);
+  } },
+  { name: "0026 minor: 회차 알림 꼬리는 과제·개인 목표를 나눠 말한다 · 이탈한 소유자에게 PERSONAL_ARCHIVED 없음", run: async (q) => {
+    const rid = await roomId(q, "aws");
+    const round = (await one(q, "select id::text as id from public.goal_nodes where room_id = $1::bigint and label = '3주차'", [rid])).id as string;
+    await as(q, "철수");
+    const pc = (await one(q, "select public.personal_create('aws', $1::bigint, '목표') as c", [round])).c.createdId as string;
+    await as(q, "민수");
+    await q("select public.node_update('aws', $1::bigint, $2::jsonb)", [round, JSON.stringify({ startDate: "2026-10-22", endDate: "2026-10-28", shiftDescendants: true })]);
+    assertEquals((await notes(q, "지은", "ROUND_SCHEDULE_CHANGED"))[0].body,
+      '3주차 "고가용성 아키텍처" 기간 10.15 – 10.21 → 10.22 – 10.28 · 과제 1개·개인 목표 1개도 함께 옮겼어요');
+    // 철수 이탈 → resync 가 목표를 보관. 그룹장이 되살릴 수 없으니, 이미 보관된 목표 대신 남은 목표로 확인: 이탈자 소유 목표를 그룹장이 보관해도 알림 없음
+    await as(q, "하나");
+    const hp = (await one(q, "select public.personal_create('aws', $1::bigint, '하나 목표') as c", [round])).c.createdId as string;
+    await q("update public.room_members set status = 'INACTIVE' where user_id = $1::uuid and room_id = $2::bigint", [await uidOf(q, "하나"), rid]);
+    await q("update public.goal_nodes set archived_at = null where id = $1::bigint", [hp]);   // resync 이전 상태 흉내
+    await as(q, "민수");
+    await q("select public.personal_archive('aws', $1::bigint, true)", [hp]);
+    assertEquals((await notes(q, "하나", "PERSONAL_ARCHIVED")).length, 0);
+    assert(pc);
+  } },
+  { name: "0026 minor: 방이 종료·보관되면 그룹장의 LEAVE_REQUESTED 알림은 읽음", run: async (q) => {
+    await as(q, "철수");
+    await q("select public.member_leave_request('aws')");
+    await as(q, "민수");
+    assertEquals((await notes(q, "민수", "LEAVE_REQUESTED"))[0].read_at, null);
+    await q("select public.room_archive('aws')");
+    assert((await notes(q, "민수", "LEAVE_REQUESTED"))[0].read_at);
   } },
 
   // ───────── #19 탭 개수 ─────────

@@ -288,6 +288,41 @@ export type Database = {
           },
         ]
       }
+      member_requests: {
+        Row: {
+          apply_message: string | null
+          leave_request_reason: string | null
+          leave_requested_at: string | null
+          room_id: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          apply_message?: string | null
+          leave_request_reason?: string | null
+          leave_requested_at?: string | null
+          room_id: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          apply_message?: string | null
+          leave_request_reason?: string | null
+          leave_requested_at?: string | null
+          room_id?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_requests_room_id_user_id_fkey"
+            columns: ["room_id", "user_id"]
+            isOneToOne: true
+            referencedRelation: "room_members"
+            referencedColumns: ["room_id", "user_id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           actor_user_id: string | null
