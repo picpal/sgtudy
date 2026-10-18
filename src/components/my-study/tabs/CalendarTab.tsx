@@ -120,7 +120,9 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                     );
                   })}
                 </div>
-                <div className="relative grid grid-cols-7 pb-[10px] pt-[38px]" style={{ gridAutoRows: 26, rowGap: 4 }}>
+                {/* 막대는 보이는 26px 그대로, 누르는 영역은 HIT_Y(44px) — 줄 간격 18(= 44 − 26)이라 위아래 막대 영역이 겹치지 않는다.
+                    위로 9px 나오는 영역은 날짜 숫자(누르는 것 아님) 쪽, 아래 9px 은 pb 10 안이다 */}
+                <div className="relative grid grid-cols-7 pb-[10px] pt-[38px]" style={{ gridAutoRows: 26, rowGap: 18 }}>
                   {segs.map(({ l, col, span, isStart, isEnd, lane }) => {
                     const wc = whoCode(l);
                     const st = wc ? CODE_STATE[wc] : l.state;
@@ -134,7 +136,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                         type="button"
                         title={`${l.personal ? "[개인] " : ""}${l.crumb} · ${l.title} (${md(l.s)}–${md(l.e)})`}
                         onClick={() => update({ calPick: l.id })}
-                        className="relative flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-left text-[12px] transition-shadow duration-100 hover:z-[2] hover:shadow-[0_3px_8px_rgba(27,34,48,.18)]"
+                        className={`${HIT_Y} flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-left text-[12px] transition-shadow duration-100 hover:z-[2] hover:shadow-[0_3px_8px_rgba(27,34,48,.18)]`}
                         style={{
                           gridColumn: `${col + 1} / span ${span}`,
                           gridRow: lane + 1,

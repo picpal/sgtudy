@@ -51,6 +51,17 @@ describe("진행목표 탭 보기·캘린더·간트 토글", () => {
     expect(btns.length).toBeGreaterThanOrEqual(7);
     expect(lacking(btns)).toEqual([]);
   });
+  it("캘린더: 일정 막대 버튼(보이는 26px) — 44px 영역, 줄 간격 18px 이상이라 위아래 막대 영역이 겹치지 않는다", () => {
+    const d = dom(inCtx(createElement(CalendarTab, { tree, S: { ...INITIAL_STATE, tab: "calendar" as const }, update: () => {}, goLeaf: () => {} })));
+    const bars = [...d.querySelectorAll("button[title]")].filter((b) => (b as HTMLElement).style.gridRow);
+    expect(bars.length).toBeGreaterThan(0);
+    expect(lacking(bars)).toEqual([]);
+    const lanes = bars.map((b) => b.parentElement as HTMLElement);
+    for (const g of new Set(lanes)) {
+      expect(parseFloat(g.style.gridAutoRows)).toBe(26);                       // 보이는 높이 그대로
+      expect(parseFloat(g.style.rowGap)).toBeGreaterThanOrEqual(44 - 26);
+    }
+  });
   it("간트: 확대 단위·칩·행 접기 chevron·행 버튼", () => {
     const d = dom(inCtx(createElement(GanttTab, { tree, S: { ...INITIAL_STATE, tab: "gantt" as const }, update: () => {}, goLeaf: () => {}, isLeader: false })));
     const btns = [...d.querySelectorAll("button")];

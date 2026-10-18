@@ -7,6 +7,9 @@ export const TABS: { key: Tab; label: string }[] = [
   { key: "created", label: "내가 만든 방" },
 ];
 
+/** 누르는 영역 44px — 보이는 크기는 그대로, 가상 요소로만 세로를 키운다(my-study/bits.tsx HIT_Y 와 같은 클래스) */
+const HIT = "relative before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-['']";
+
 const STATUSES: { key: StatusFilter; label: string }[] = [
   { key: "all", label: "전체" },
   { key: "recruit", label: "모집중" },
@@ -61,7 +64,8 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
             );
           })}
         </div>
-        <div role="group" aria-label="상태 필터" className="flex flex-wrap gap-[6px] pb-[10px]">
+        {/* 칩은 보이는 34px 그대로, 누르는 영역만 가상 요소로 44px(HIT). 줄바꿈되면 세로 간격 10(= 44 − 34)이라 겹치지 않는다 */}
+        <div role="group" aria-label="상태 필터" className="flex flex-wrap gap-x-[6px] gap-y-[10px] pb-[10px]">
           {STATUSES.map((s) => {
             const on = s.key === status;
             return (
@@ -70,7 +74,7 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
                 type="button"
                 aria-pressed={on}
                 onClick={() => onStatus(s.key)}
-                className={`flex h-[34px] items-center whitespace-nowrap rounded-[17px] border px-[14px] text-[13px] ${
+                className={`${HIT} flex h-[34px] items-center whitespace-nowrap rounded-[17px] border px-[14px] text-[13px] ${
                   on ? "border-ink bg-ink font-semibold text-white" : "border-line-3 bg-surface font-medium text-ink-3"
                 }`}
               >
@@ -81,7 +85,8 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
         </div>
       </div>
 
-      <div role="group" aria-label="태그 필터" className="-mt-2 mb-6 flex flex-wrap items-center gap-2">
+      {/* 태그 칩·초기화는 보이는 32px, 누르는 영역 44px — 줄 간격 12(= 44 − 32). 위 상태 칩과는 구분선·여백 26px 이라 겹치지 않는다 */}
+      <div role="group" aria-label="태그 필터" className="-mt-2 mb-6 flex flex-wrap items-center gap-x-2 gap-y-3">
         <span className="mr-1 flex items-center gap-1 text-[13px] font-semibold text-ink-2">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" />
@@ -97,7 +102,7 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
               type="button"
               aria-pressed={on}
               onClick={() => onToggleTag(slug)}
-              className={`flex h-8 items-center gap-[6px] whitespace-nowrap rounded-2xl border px-3 text-[13px] ${
+              className={`${HIT} flex h-8 items-center gap-[6px] whitespace-nowrap rounded-2xl border px-3 text-[13px] ${
                 on ? "border-mint bg-mint-soft font-semibold text-mint-deep" : "border-line-3 bg-surface font-medium text-ink-2"
               }`}
             >
@@ -116,7 +121,7 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
           <button
             type="button"
             onClick={onResetTags}
-            className="flex h-8 items-center gap-1 border-0 bg-transparent px-[10px] text-[13px] font-semibold text-mint"
+            className={`${HIT} flex h-8 items-center gap-1 border-0 bg-transparent px-[10px] text-[13px] font-semibold text-mint`}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
               <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
