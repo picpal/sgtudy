@@ -55,3 +55,13 @@ describe("AddPersonalForm — 스터디 칩을 따른다", () => {
     expect(d.textContent).toContain("CS 면접");
   });
 });
+
+describe("AddPersonalForm 회차 표기 — 시작 전 회차는 '(지금 회차)' 가 아니다 (시나리오 QA #15)", () => {
+  it("시작한 현재 회차만 (지금 회차), 시작 전이면 (시작 전)", () => {
+    const m = data();
+    m.rounds.push({ id: "a2", slug: "aws", label: "2주차", title: "VPC", startDate: "2026-10-19", endDate: "2026-10-25", canAdd: true });
+    expect(Array.from(roundOptions(render("aws", m)).options).map((o) => o.textContent)).toEqual(["1주차 IAM (지금 회차)", "2주차 VPC (시작 전)"]);
+    m.today = "2026-10-05"; // 모집 중 — 첫 회차가 아직 시작 전
+    expect(Array.from(roundOptions(render("aws", m)).options).map((o) => o.textContent)).toEqual(["1주차 IAM (시작 전)", "2주차 VPC (시작 전)"]);
+  });
+});

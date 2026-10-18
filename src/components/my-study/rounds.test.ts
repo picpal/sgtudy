@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, visibleNodes, type LeafNode, type ParentNode, type TreeNode } from "./model";
-import { currentRoundId, dropPlan, roundsOutsidePeriod, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, rowMoves, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
+import { currentRoundId, designatedHint, dropPlan, roundsOutsidePeriod, moveNote, movedPeriod, movedPlan, normalizeTitle, reorderIndex, roundOf, roundOptions, rowMoves, shouldSubmitQuickAdd, siblingIndex, withAddRows, withEmptyRounds, withPersonalAddRows, type ListEntry } from "./rounds";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const root = (id: string) => tree.roots.find((r) => r.id === id)!;
@@ -288,5 +288,14 @@ describe("rowMoves (편집 목록 행 메뉴 — 위로·아래로·내어쓰기
     const t = buildTree({ ...AWS, nodes: AWS.nodes.map((n) => (n.id === "11" ? { ...n, archived: true } : n)) }, EMPTY_OVERRIDES, REF_DAY);
     expect(keys("11", t)).toEqual([]);
     expect(keys(tree.personal[0].id)).toEqual([]);
+  });
+});
+
+describe("designatedHint — 모집 전 지정 과제 안내 (시나리오 QA #12)", () => {
+  it("준비·모집 중에만 안내", () => {
+    expect(designatedHint("draft")).toMatch(/참가자가 들어온 뒤/);
+    expect(designatedHint("recruit")).toMatch(/공통 과제는/);
+    expect(designatedHint("active")).toBeNull();
+    expect(designatedHint("ended")).toBeNull();
   });
 });

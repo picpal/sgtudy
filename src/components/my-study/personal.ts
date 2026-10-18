@@ -170,3 +170,14 @@ export const PERSONAL_ERROR_TEXT: Record<string, string> = {
 };
 /** 개인 목표 RPC 실패 문구 — my-study·/tasks 공용 (같은 오류는 같은 문구) */
 export const personalErrorText = (e: { code: string; message: string }): string => PERSONAL_ERROR_TEXT[e.code] ?? e.message;
+
+/**
+ * 개요 내 카드의 개인 목표 줄 문구 — 시작 전 회차(모집 중 첫 회차 등)를 "이번 회차" 라 부르지 않는다 (시나리오 QA #14).
+ * empty = 목표 없음(숫자 없이 문구만). 아니면 text 뒤에 "d/t 완료" 가 붙는다.
+ */
+export function personalLineText(st: { done: number; total: number }, round: { label: string | null; s: string } | null, today: string): { empty: boolean; text: string } {
+  const before = !!round && round.s > today;
+  const name = round?.label ?? "첫 회차";
+  if (st.total === 0) return { empty: true, text: before ? `시작 전이에요 · ${name} 개인 목표를 미리 세워 둘 수 있어요` : "이번 회차 개인 목표가 아직 없어요" };
+  return { empty: false, text: before ? `개인 목표 ${name}(시작 전)` : "개인 목표 이번 회차" };
+}

@@ -121,11 +121,12 @@ export function AddPersonalForm({ data, chosenSlug, onAdd, onClose }: { data: Me
           회차
           <select value={round?.id ?? ""} onChange={(e) => setRoundId(e.target.value)} className={field}>
             {rounds.map((r) => {
-              const cur = currentId === r.id;
+              // 시작 전 회차는 "지금 회차" 라 부르지 않는다 — 모집 중 첫 회차도 (시나리오 QA #15)
+              const tag = r.startDate > data.today ? " (시작 전)" : currentId === r.id ? " (지금 회차)" : "";
               return (
                 <option key={r.id} value={r.id}>
                   {[r.label, r.title].filter(Boolean).join(" ")}
-                  {cur ? " (지금 회차)" : ""}
+                  {tag}
                 </option>
               );
             })}

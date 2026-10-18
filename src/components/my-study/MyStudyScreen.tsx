@@ -15,6 +15,7 @@ import { cancelApplication, leaveRoom } from "@/lib/api/room-view";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
+import { setScreenKey } from "@/lib/leaveGuard";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
 import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, isPersonal, stripFieldOv, thisRoundId } from "./model";
@@ -72,7 +73,9 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const room = useMemo(() => toStudyRoom(detail, savedTree, today, me?.id ?? ""), [detail, savedTree, today, me]);
   const groups = useMemo(() => toSidebarGroups(studies, today), [studies, today]);
   const goLeaf = useCallback((id: string) => update(goLeafPatch(id)), [update]);
-  const api = useCurriculumApi(detail.slug, setCur, update, setToast);
+  // 이 화면의 key(page.tsx: task·tab) — 이탈 가드가 "같은 화면 주소" 를 같은 규칙으로 판정한다 (E 리뷰 minor 1)
+  useEffect(() => setScreenKey({ tab: initialTab, task: initialLeaf ?? "" }), [initialTab, initialLeaf]);
+  const api = useCurriculumApi(detail.slug, setCur, update, setToast, detail.me);
   const closeToast = useCallback(() => setToast(null), []);
 
   // 편집 화면·보기 상세(?item=) ↔ 주소 동기화 — 열면 push(뒤로 가기 = 목록), 닫으면 쌓았던 기록을 back. 새로고침하면 다시 열린다.
@@ -231,7 +234,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const gap = useMemo(() => (periodStatus ? roundsOutsidePeriod(cur.nodes, { start: detail.startDate, end: detail.endDate }) : null), [periodStatus, detail.startDate, detail.endDate, cur.nodes]);
   const periodWarning = (onEditRounds?: () => void) =>
     gap && periodStatus && <PeriodWarning gap={gap} slug={detail.slug} roomStatus={periodStatus} canEdit={canEdit} isLeader={isLeader} onEditRounds={onEditRounds} toast={setToast} />;
-  const editRounds = () => {
+  const editRounds = async () => {
+    if (!(await api.recheckEdit())) return; // 권한 재확인 (시나리오 QA #10)
     update((p) => ({ tab: "curriculum", ...modeSwitchPatch({ ...p, viewSel: null }, "edit") }));
     setTabJump((n) => n + 1);
   };
@@ -252,7 +256,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
             <div className="flex flex-wrap items-start gap-7 @container">
               <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                 <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} />
-                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} onGoCurriculum={() => update({ tab: "curriculum" })} periodWarning={periodWarning(editRounds)} />}
+                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} today={today} onGoCurriculum={() => update({ tab: "curriculum" })} periodWarning={periodWarning(editRounds)} />}
                 {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
                 {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                 {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}

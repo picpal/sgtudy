@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CODE_COLOR, EMPTY_OVERRIDES, buildTree, type LeafNode, type ParentNode } from "./model";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { cardSync, formScrollNeeded, groupOthers, isDone, othersHeading, ownerOf, personalErrorText, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusColor, statusText } from "./personal";
+import { personalLineText, cardSync, formScrollNeeded, groupOthers, isDone, othersHeading, ownerOf, personalErrorText, pickRound, sectionCounts, movePreview, ownerCode, personalActions, personalPatch, removeText, roundWarning, statusColor, statusText } from "./personal";
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
 const leaf = (id: string) => tree.nodes.find((n) => n.id === id) as LeafNode;
@@ -213,4 +213,19 @@ describe("formScrollNeeded — 개인 목표 편집 폼을 열 때 화면으로 
 
 describe("movePreview 날짜 표기 (Q2-13)", () => {
   it("오늘과 다른 해면 연도", () => expect(movePreview("12주차", { s: "2027-01-04", e: "2027-01-10" }, false, "2026-10-12")).toBe("12주차로 옮기면 기간이 2027.01.04 – 01.10 로 바뀌어요"));
+});
+
+describe("personalLineText — 개요 내 개인 목표 줄 (시나리오 QA #14: 시작 전 회차를 '이번 회차' 로 부르지 않는다)", () => {
+  const r = { label: "1주차", s: "2026-10-25" };
+  it("시작한 회차는 이번 회차", () => {
+    expect(personalLineText({ done: 0, total: 0 }, { label: "1주차", s: "2026-10-01" }, "2026-10-12")).toEqual({ empty: true, text: "이번 회차 개인 목표가 아직 없어요" });
+    expect(personalLineText({ done: 1, total: 2 }, { label: "1주차", s: "2026-10-01" }, "2026-10-12")).toEqual({ empty: false, text: "개인 목표 이번 회차" });
+  });
+  it("시작 전 회차는 미리 세우는 안내", () => {
+    expect(personalLineText({ done: 0, total: 0 }, r, "2026-10-12").text).toBe("시작 전이에요 · 1주차 개인 목표를 미리 세워 둘 수 있어요");
+    expect(personalLineText({ done: 0, total: 1 }, r, "2026-10-12").text).toBe("개인 목표 1주차(시작 전)");
+  });
+  it("회차를 모르면 이번 회차", () => {
+    expect(personalLineText({ done: 0, total: 0 }, null, "2026-10-12").text).toBe("이번 회차 개인 목표가 아직 없어요");
+  });
 });

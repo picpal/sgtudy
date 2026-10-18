@@ -8,9 +8,10 @@ import { samePage, setLeaveGuard } from "@/lib/leaveGuard";
 import { useToday } from "@/lib/today";
 import { rangeShort } from "@/lib/api/format";
 import { Seg } from "../bits";
-import { dropFieldOv, isDirty, isPersonal, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
-import { moveNote, movedPeriod, reorderIndex, roundOf, roundOptions } from "../rounds";
+import { dropFieldOv, isDirty, isPersonal, leafLocks, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
+import { designatedHint, moveNote, movedPeriod, reorderIndex, roundOf, roundOptions } from "../rounds";
 import { patchOv, type Leave, type ScreenState, type Update } from "../state";
+import type { RoomStatus } from "../submission";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { ChildList } from "./ChildList";
 import { InlineConfirm } from "./InlineConfirm";
@@ -30,6 +31,8 @@ type Props = {
   go: (to: Leave) => void;
   /** 미저장 수정이 있으면 먼저 묻고 이동 */
   request: (to: Leave) => void;
+  /** 방 상태 — 시작 전 지정 과제 안내 (시나리오 QA #12) */
+  roomStatus?: RoomStatus;
 };
 
 const field = "h-11 rounded-[10px] border border-line-3 text-ink";
@@ -40,7 +43,7 @@ const label = "flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3";
  * 글(설명)이 주인공: 제목 한 줄 → 기간·유형 한 줄 → 남은 높이를 채우는 마크다운 편집기. 저장·삭제는 위쪽 고정 막대에 늘 보인다.
  * 내용 변경은 오버라이드에 모았다가 "저장" 1회(node_update), 삭제·보관은 즉시 RPC.
  */
-export function EditView({ n, parent, nodes, roots, period, members, S, update, api, go, request }: Props) {
+export function EditView({ n, parent, nodes, roots, period, members, S, update, api, go, request, roomStatus = "active" }: Props) {
   const id = n.id;
   const view = useRef<HTMLElement>(null);
   const bar = useRef<HTMLDivElement>(null);
@@ -113,6 +116,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   // 보관된 하위의 제출도 센다 — 서버는 하위 어디에든 제출이 있으면 삭제를 막는다
   const hasSub = n.subAll > 0;
   const isGong = n.leaf && n.type === "공통";
+  // 제출이 있으면 유형 변경·제출한 담당자 빼기를 미리 막는다 (시나리오 QA #11 — 저장 때 서버 거절 토스트 대신)
+  const locks = n.leaf ? leafLocks(n) : null;
   const removeLabel = n.archived ? "보관 해제" : hasSub ? "보관" : "삭제";
   const plan = removePlan(n);
   // 내부 depth("2단계")는 보여 주지 않는다 (Q1-17) — "1주차 · 회차", "1주차 IAM·VPC › 과제". 조상은 누르면 그 편집 화면으로
@@ -140,7 +145,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   // 개인 목표는 편집 모드에 그려지지 않는 전제 — 그래도 들어오면 유형·담당을 바꾸지 않는다(지정으로 떨어지지 않게)
   const isPersonalLeaf = n.leaf && n.personal;
   const setType = (t: TaskType) => {
-    if (isPersonalLeaf) return;
+    if (isPersonalLeaf || locks?.typeReason) return;
     update((p) => ({
       ov: { ...p.ov, typeOv: { ...p.ov.typeOv, [id]: t }, assignOv: t === "지정" ? { ...p.ov.assignOv, [id]: p.ov.assignOv[id] ?? ids } : p.ov.assignOv },
       saved: "",
@@ -148,6 +153,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   };
   const toggleMember = (m: TreeMember) => {
     if (isGong || isPersonalLeaf) return;
+    if (ids.includes(m.userId) && locks?.lockedIds.has(m.userId)) return;
     const next = ids.includes(m.userId) ? ids.filter((x) => x !== m.userId) : [...ids, m.userId];
     update((p) => ({ ...patchOv(p, "assignOv", { ...p.ov.assignOv, [id]: next }), saved: "" }));
   };
@@ -273,7 +279,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             <div className={`${label} min-w-0 flex-[0_1_300px] max-sm:flex-[1_1_100%]`}>
               <span>과제 유형</span>
               <div className="[&_button]:h-11">
-                <Seg<TaskType> label="과제 유형" value={n.type} onChange={setType} grow options={[["공통", "공통 · 참가자 전원"], ["지정", "지정 · 일부 인원"]]} />
+                <Seg<TaskType> label="과제 유형" value={n.type} onChange={setType} grow disabled={!!locks?.typeReason} describedBy={locks?.typeReason ? `type-lock-${id}` : undefined} options={[["공통", "공통 · 참가자 전원"], ["지정", "지정 · 일부 인원"]]} />
               </div>
             </div>
           )}
@@ -321,6 +327,13 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           )}
         </div>
 
+        {/* 제출이 있는 과제 — 유형 잠금 이유 (시나리오 QA #11). 기간·유형 줄의 세로 정렬을 흔들지 않게 줄 밖에 */}
+        {locks?.typeReason && (
+          <p id={`type-lock-${id}`} className="m-0 -mt-1 text-[12px] font-medium text-muted">
+            과제 유형: {locks.typeReason} · 바꾸려면 보관하고 새 과제를 만들어 주세요
+          </p>
+        )}
+
         {/* E4: 기간 경고 — 저장은 막지 않는다 (Q1-10/Q2-21) */}
         {warns.length > 0 && (
           <div role="status" className="flex flex-col gap-[2px] rounded-[9px] bg-[#FDF4E1] px-[10px] py-2 text-[12px] font-semibold text-amber-text">
@@ -339,7 +352,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             edit={{
               busy,
               canAdd: !n.archived && !n.temp,
-              onAdd: (t) => api.create(n.id, { title: t, open: false }),
+              onAdd: (t, ty) => api.create(n.id, { title: t, open: false, taskType: ty === "지정" ? "designated" : "common" }),
+              designatedNote: designatedHint(roomStatus),
               onRemove: (cid) => {
                 const k = n.kids.find((x) => x.id === cid);
                 if (k && removePlan(k).kind === "archive") void api.archive(cid, true, "list");
@@ -363,22 +377,35 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             <div className="flex flex-wrap gap-[6px]">
               {members.map((m) => {
                 const on = ids.includes(m.userId);
+                const locked = !isGong && on && !!locks?.lockedIds.has(m.userId);
                 return (
                   <button
                     key={m.userId}
                     type="button"
                     aria-pressed={on}
-                    aria-disabled={isGong}
+                    aria-disabled={isGong || locked}
+                    aria-describedby={locked ? `assign-lock-${id}` : undefined}
                     onClick={() => toggleMember(m)}
                     className={`inline-flex h-11 items-center gap-[6px] rounded-[22px] border py-0 pl-[8px] pr-[14px] text-[13px] text-ink ${on ? "border-[#3FB89C] bg-[#E8F7F2] font-semibold" : "border-line-3 bg-surface font-medium"}`}
-                    style={{ opacity: isGong ? 0.7 : 1, cursor: isGong ? "default" : "pointer" }}
+                    style={{ opacity: isGong ? 0.7 : 1, cursor: isGong || locked ? "default" : "pointer" }}
                   >
                     <Avatar name={m.name} size={24} tone={m.tone} />
                     {m.name}
+                    {locked && <span className="text-[11px] font-medium text-muted">제출함</span>}
                   </button>
                 );
               })}
             </div>
+            {!isGong && locks && locks.lockedIds.size > 0 && (
+              <span id={`assign-lock-${id}`} className="text-[12px] font-medium text-muted">
+                {locks.assignReason} · 담당을 바꾸려면 과제를 보관해 주세요
+              </span>
+            )}
+            {!isGong && designatedHint(roomStatus) && (
+              <span role="note" className="rounded-[9px] bg-surface-2 px-[10px] py-2 text-[12px] text-ink-2">
+                {designatedHint(roomStatus)}
+              </span>
+            )}
             {!isGong && ids.length === 0 && (
               <span role="status" className="rounded-[9px] bg-[#FDF4E1] px-[10px] py-2 text-[12px] font-semibold text-amber-text">
                 담당자 미정 · 시작 전에 한 명 이상 지정해 주세요

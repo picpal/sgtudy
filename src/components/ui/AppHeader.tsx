@@ -8,7 +8,8 @@ import { Logo } from "./Logo";
 import { signOut } from "@/lib/api/me";
 import { useMe, useMyStudyHref } from "@/lib/me";
 import { AVATAR_PAL } from "@/lib/palette";
-import { routes, safeReturnTo } from "@/lib/routes";
+import { anonAuthLinks } from "./headerAuth";
+import { routes } from "@/lib/routes";
 
 // 현재 쿼리(?invite= 등)를 returnTo 에 싣기 위해 읽는다. useSearchParams 는 정적 화면(404 등)에서 Suspense 를 요구해 피한다.
 // Next 의 소프트 이동은 popstate 를 내지 않지만, pathname 이 바뀌면 다시 렌더되며 스냅숏을 새로 읽는다.
@@ -235,9 +236,17 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
       ) : (
         // returnTo 는 허용 접두사(/rooms/·/my-study·/schedule·/tasks·/invite/)만 남긴다 — /zzz 같은 없는 최상위 주소의 404 는 일부러 / 로,
         // /rooms/nope 처럼 접두사 안의 404 는 그 주소 그대로 간다(로그인 뒤 비공개 방이 열릴 수 있다). pathname 문제가 아니다 (V1-03)
-        <Link href={routes.login(safeReturnTo(pathname + search))} className={`flex h-11 items-center ${round} bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white`}>
-          로그인
-        </Link>
+        <span className="flex shrink-0 items-center gap-2">
+          {anonAuthLinks(pathname + search).map((l) => (
+            <Link
+              key={l.key}
+              href={l.href}
+              className={`flex h-11 items-center whitespace-nowrap ${round} px-[16px] text-[14px] font-semibold ${l.primary ? "bg-navy text-white hover:text-white" : "border border-line-3 bg-surface text-ink hover:text-ink"}`}
+            >
+              {l.label}
+            </Link>
+          ))}
+        </span>
       )}
     </>
   );

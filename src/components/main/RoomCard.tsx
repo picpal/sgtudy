@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DEFAULT_FILTERS, roomHrefWith, type HomeFilters } from "./homeUrl";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -23,16 +24,18 @@ const SLOT_TONE: Record<CardStatus, { bg: string; label: string; bar: string; tr
 };
 
 /** anonymous: 비로그인이면 카드를 누를 때 로그인부터 — 로그인 뒤 그 방으로 돌아온다 */
-type Props = { room: Room; selectedTags: string[]; anonymous?: boolean };
+/** filters: 지금 둘러보기 필터 — 상세 화면 왼쪽 목록이 이어받는다 (시나리오 QA #19) */
+type Props = { room: Room; selectedTags: string[]; anonymous?: boolean; filters?: HomeFilters };
 
-export function RoomCard({ room, selectedTags, anonymous = false }: Props) {
+export function RoomCard({ room, selectedTags, anonymous = false, filters = DEFAULT_FILTERS }: Props) {
+  const href = roomHrefWith(room.id, filters);
   const badge = STATUS_BADGE[room.status];
   const tone = SLOT_TONE[room.status];
   const isFull = room.cur >= room.max;
 
   return (
     <Link
-      href={anonymous ? routes.login(routes.room(room.id)) : routes.room(room.id)}
+      href={anonymous ? routes.login(routes.room(room.id)) : href}
       className="flex flex-col overflow-hidden rounded-[18px] border border-line bg-surface text-ink no-underline transition-[transform,box-shadow] duration-[180ms] ease-[ease] hover:-translate-y-1.5 hover:text-ink hover:shadow-[0_14px_28px_rgba(27,34,48,0.10)]"
     >
       <div className="flex flex-[1_1_auto] flex-col gap-[10px] px-[18px] pb-4 pt-[18px]">

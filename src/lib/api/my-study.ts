@@ -13,8 +13,9 @@ export const fetchMyStudies = (client?: Db) => rpc<MeStudies>("me_studies", {}, 
 export const firstStudySlug = (studies: MeStudies): string | null => studies.groups.flatMap((g) => g.items)[0]?.slug ?? null;
 /** 헤더 "내 스터디" 링크 — 첫 스터디로 바로(리다이렉트 왕복 없이). 없으면 /my-study(빈 화면) */
 export const myStudyHrefOf = (studies: MeStudies): string => routes.myStudy(firstStudySlug(studies) ?? undefined);
-export const nodeCreate = (slug: string, parentId: string | null, title?: string, client?: Db) =>
-  rpc<Curriculum>("node_create", { p_slug: slug, p_parent_id: parentId, ...(title ? { p_title: title } : {}) }, client);
+/** taskType: 하위 과제의 유형 — 서버 기본은 common 이라 designated 일 때만 보낸다 (빠른 추가 공통/지정, 시나리오 QA #12·D4) */
+export const nodeCreate = (slug: string, parentId: string | null, title?: string, client?: Db, taskType?: "common" | "designated") =>
+  rpc<Curriculum>("node_create", { p_slug: slug, p_parent_id: parentId, ...(title ? { p_title: title } : {}), ...(taskType === "designated" ? { p_task_type: "designated" } : {}) }, client);
 /** 다른 부모(회차)로 옮기기 · 같은 부모 안 순서. index = 자기를 뺀 새 형제 기준, 없으면 끝 */
 export const nodeMove = (slug: string, nodeId: string, parentId: string, index?: number, client?: Db) =>
   rpc<Curriculum>("node_move", { p_slug: slug, p_node_id: nodeId, p_parent_id: parentId, p_index: index ?? null }, client);
@@ -28,6 +29,23 @@ export const setCurriculumEditor = (slug: string, userId: string, allow: boolean
 /** 호출자가 커리큘럼을 편집할 수 있나 — RoomDetail·Curriculum 의 myPermissions. 없으면(구 응답) 그룹장만 */
 export const canEditCurriculumOf = (d: { myPermissions?: MyPermissions; me?: MeState }): boolean =>
   d.myPermissions?.canEditCurriculum ?? d.me?.state === "leader";
+
+/**
+ * 편집 모드에 들어가기 전에 권한을 다시 묻는다 — 화면을 연 뒤 그룹장이 권한을 거뒀을 수 있다 (시나리오 QA #10).
+ * 조회가 실패하면 막지 않는다(저장 때 서버가 NOT_CURRICULUM_EDITOR 로 다시 막는다).
+ */
+export async function recheckCurriculumEdit(
+  slug: string,
+  me: MeState | undefined,
+  fetcher: (slug: string) => Promise<Curriculum> = fetchCurriculum,
+): Promise<{ allowed: boolean; cur: Curriculum | null }> {
+  try {
+    const cur = await fetcher(slug);
+    return { allowed: canEditCurriculumOf({ myPermissions: cur.myPermissions, me }), cur };
+  } catch {
+    return { allowed: true, cur: null };
+  }
+}
 
 function minTextOf(d: RoomDetail): { minText: string; minOk: boolean } {
   if (d.minMembers === null) return { minText: "", minOk: true };

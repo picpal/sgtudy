@@ -20,14 +20,44 @@ export function guardNavigate(href: string, e: { preventDefault: () => void }): 
   if (guard?.(href)) e.preventDefault();
 }
 
+/** 내 스터디 화면 key 의 탭 — app/my-study/[id]/page.tsx 와 같은 목록 */
+const SCREEN_TABS = ["overview", "curriculum", "board", "calendar", "gantt"] as const;
+
+export type ScreenKey = { tab: string; task: string };
+
 /**
- * href 로 가도 지금 화면이 그대로 남는가 — Next 는 같은 경로 이동에서 화면을 다시 마운트하지 않아, 편집 화면이 남는다.
- * 단 내 스터디 화면은 key 에 ?task=·?tab= 을 넣어(app/my-study/[id]/page.tsx) 그 둘이 있는 주소(같은 방 알림 링크)로 가면
- * 다시 마운트되고 그 과제·탭이 열린다 — 그러니 "경로 같음 + href 에 task·tab 없음"일 때만 같은 화면으로 본다(최종 재리뷰 N-1).
+ * 내 스터디 화면 key 정규화 — page.tsx 가 key(`${id}:${task}:${tab}`)를 만드는 규칙의 단일 출처.
+ * 모르는 탭은 overview, 숫자가 아닌 task 는 빈 값.
+ */
+export function screenKeyOf(sp: URLSearchParams | { tab?: string; task?: string }): ScreenKey {
+  const get = (k: "tab" | "task") => (sp instanceof URLSearchParams ? sp.get(k) : sp[k]) ?? "";
+  const tab = get("tab");
+  const task = get("task");
+  return { tab: (SCREEN_TABS as readonly string[]).includes(tab) ? tab : "overview", task: /^\d+$/.test(task) ? task : "" };
+}
+
+let mounted: ScreenKey | null = null;
+
+/** 마운트된 내 스터디 화면이 자기 key(initialTab·initialLeaf)를 알린다. 돌려준 함수로 푼다 */
+export function setScreenKey(k: ScreenKey): () => void {
+  mounted = k;
+  return () => {
+    if (mounted === k) mounted = null;
+  };
+}
+
+/**
+ * href 로 가도 지금 화면이 그대로 남는가 — Next 는 같은 경로 이동에서 화면을 다시 마운트하지 않는다.
+ * 내 스터디 화면은 key 에 task·tab 을 넣어(page.tsx) 둘 중 하나라도 바뀌면 다시 마운트된다 —
+ * 그러니 "경로 같음 + 정규화한 (task, tab ?? overview) 가 지금 화면 key 와 같음" 일 때만 같은 화면으로 본다 (E 리뷰 minor 1).
+ * 지금 화면 key 는 마운트된 화면이 알린 값(setScreenKey — 탭을 옮겨도 key 는 그대로), 없으면 지금 주소에서 읽는다.
  * 그 밖의 쿼리(item·mode)·해시는 무시한다.
  */
-export function samePage(href: string, current: string = window.location.href): boolean {
+export function samePage(href: string, current: string = window.location.href, key: ScreenKey | null = mounted): boolean {
+  const here = new URL(current);
   const to = new URL(href, current);
-  if (to.pathname !== new URL(current).pathname) return false;
-  return !to.searchParams.has("task") && !to.searchParams.has("tab");
+  if (to.pathname !== here.pathname) return false;
+  const a = screenKeyOf(to.searchParams);
+  const b = key ?? screenKeyOf(here.searchParams);
+  return a.tab === b.tab && a.task === b.task;
 }

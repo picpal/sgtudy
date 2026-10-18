@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, codeLabel, descendantCount, dropFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope, type LeafNode } from "./model";
+import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, leafLocks, codeLabel, descendantCount, dropFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope, type LeafNode } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -313,5 +313,23 @@ describe("periodWarnings 날짜 표기 (Q2-13 — 연도가 다르면 연도)", 
     const room = { start: "2026-10-25", end: "2027-01-10" };
     expect(periodWarnings({ s: "2027-01-11", e: "2027-01-17" }, null, room, "2026-10-12")).toEqual(["방 기간(10.25 – 2027.01.10)을 벗어났어요"]);
     expect(periodWarnings({ s: "2027-01-11", e: "2027-01-20" }, { s: "2027-01-11", e: "2027-01-17" }, room, "2026-10-12")[0]).toBe("상위 항목 기간(2027.01.11 – 01.17)을 벗어났어요");
+  });
+});
+
+describe("leafLocks — 제출이 있는 과제의 유형·담당 잠금 (시나리오 QA #11, 서버 0023 node_update 규칙)", () => {
+  const leaf = (subAll: number, codes: Record<string, "D" | "L" | "O" | "P" | "M">) =>
+    ({ subAll, personal: false, people: Object.entries(codes).map(([userId, c]) => ({ userId, name: userId, tone: "mint", c })) }) as unknown as LeafNode;
+  it("제출이 없으면 잠그지 않는다", () => {
+    const l = leafLocks(leaf(0, { a: "O", b: "P" }));
+    expect(l.typeReason).toBeNull();
+    expect(l.lockedIds.size).toBe(0);
+  });
+  it("제출이 있으면 유형은 잠그고 이유를 준다", () => {
+    expect(leafLocks(leaf(1, { a: "D", b: "O" })).typeReason).toBe("제출물이 있는 과제는 유형을 바꿀 수 없어요");
+  });
+  it("제출한 담당자(기한내·지각)는 뺄 수 없다", () => {
+    const l = leafLocks(leaf(2, { a: "D", b: "L", c: "O" }));
+    expect([...l.lockedIds].sort()).toEqual(["a", "b"]);
+    expect(l.assignReason).toBe("이미 제출한 담당자는 뺄 수 없어요");
   });
 });

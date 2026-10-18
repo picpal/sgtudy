@@ -9,6 +9,7 @@ import type { StudyRoom } from "@/lib/api/my-study";
 import { routes } from "@/lib/routes";
 import { RingedStatus, TypeBadge, toneOfName } from "../bits";
 import { personalStats, type Tree } from "../model";
+import { personalLineText } from "../personal";
 import { Inline, MarkdownView } from "../MarkdownView";
 
 const MAX_PEOPLE = 4;
@@ -46,17 +47,20 @@ const LEGEND: [TaskStatus, string][] = [
 ];
 
 /** 참가자 내 카드 줄 — "개인 목표 이번 회차 d/t 완료 · 내 과제에서 보기 →" (팀 수치와 따로) */
-export function MyPersonalLine({ tree, userId, roundId, slug }: { tree: Tree; userId: string; roundId: string; slug: string }) {
+export function MyPersonalLine({ tree, userId, roundId, slug, today }: { tree: Tree; userId: string; roundId: string; slug: string; today?: string }) {
   const { done, total } = personalStats(tree.personal, userId, roundId);
+  const round = tree.roots.find((r) => r.id === roundId) ?? null;
+  // 시작 전 회차(모집 중 첫 회차)는 "이번 회차" 라 부르지 않는다 (시나리오 QA #14)
+  const line = personalLineText({ done, total }, today && round ? { label: round.label, s: round.s } : null, today ?? "");
   return (
     <div data-my-personal className="flex flex-wrap items-center gap-x-2 rounded-[12px] bg-personal-bg px-[14px] text-[13px] text-ink-2">
       <TypeBadge type="개인" />
       <span>
-        {total === 0 ? (
-          "이번 회차 개인 목표가 아직 없어요"
+        {line.empty ? (
+          line.text
         ) : (
           <>
-            개인 목표 이번 회차 <b className="font-bold text-ink">{done}/{total}</b> 완료
+            {line.text} <b className="font-bold text-ink">{done}/{total}</b> 완료
           </>
         )}
       </span>
@@ -68,7 +72,7 @@ export function MyPersonalLine({ tree, userId, roundId, slug }: { tree: Tree; us
 }
 
 /** roundId = 개인 목표 "이번 회차"(thisRoundId — /tasks 와 같은 규칙). 모집·진행 중이 아닌 방이면 null → 내 개인 목표 줄 없음 */
-export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning }: { room: StudyRoom; tree: Tree; roundId: string | null; onGoCurriculum: () => void; periodWarning?: React.ReactNode }) {
+export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning, today }: { room: StudyRoom; tree: Tree; roundId: string | null; onGoCurriculum: () => void; periodWarning?: React.ReactNode; today?: string }) {
   const cur = room.cur;
   const hasTasks = cur.tasks.length > 0;
   // 참가 중인 나(그룹장 포함) + 이번 회차가 있을 때만 내 개인 목표 줄
@@ -152,7 +156,7 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning
             </div>
           </>
         )}
-        {meRow?.userId && roundId && <MyPersonalLine tree={tree} userId={meRow.userId} roundId={roundId} slug={room.id} />}
+        {meRow?.userId && roundId && <MyPersonalLine tree={tree} userId={meRow.userId} roundId={roundId} slug={room.id} today={today} />}
       </div>
 
       <H3 mt={30} icon={<><path d="M12 11v6" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.4" fill="#FFFFFF" /></>}>스터디 소개</H3>

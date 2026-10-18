@@ -3,7 +3,7 @@ import type { Submission, TaskDetail } from "@/lib/api/types";
 import {
   SUB_LIMITS, addLink, checkFile, extOf, focusTargetOf, metaLine, mimeOf, myBadgeOf, myCardStateOf, emptyDescText, objectKey,
   sizeText, stampKst, statusRows, submitBlocker, submitErrorAction, submitLabel,
-  composerHint, emptyAllowed, lateNote, savedToast, notAssignedText, rowStatusText, showAllSubmitted, statusHeadOf,
+  composerHint, emptyAllowed, lateNote, withPendingLink, savedToast, notAssignedText, rowStatusText, showAllSubmitted, statusHeadOf,
 } from "./submission";
 
 const sub = (o: Partial<Submission> = {}): Submission =>
@@ -288,5 +288,26 @@ describe("개인 목표 카드 남은 문구 (시안 A-6·A-7) — 팀 과제는
     expect(savedToast(false, false, false)).toBe("제출했어요");
     expect(savedToast(false, true, false)).toBe("지각 제출했어요");
     expect(savedToast(true, true, false)).toBe("수정했어요");
+  });
+});
+
+describe("withPendingLink — 추가 안 누른 입력칸 링크 (시나리오 QA #3)", () => {
+  it("빈 입력이면 목록 그대로", () => {
+    expect(withPendingLink("  ", ["https://a"])).toEqual({ links: ["https://a"], error: null, included: false });
+  });
+  it("유효하면 목록 끝에 포함", () => {
+    expect(withPendingLink(" https://b ", ["https://a"])).toEqual({ links: ["https://a", "https://b"], error: null, included: true });
+  });
+  it("이미 넣은 링크면 그대로(오류 아님)", () => {
+    expect(withPendingLink("https://a", ["https://a"])).toEqual({ links: ["https://a"], error: null, included: false });
+  });
+  it("형식이 틀리면 제출을 막는 오류", () => {
+    const r = withPendingLink("naver.com", []);
+    expect(r.links).toEqual([]);
+    expect(r.error).toMatch(/http/);
+  });
+  it("빈 본문이어도 유효한 입력칸 링크가 있으면 빈 제출이 아니다", () => {
+    const eff = withPendingLink("https://b", []);
+    expect(submitBlocker({ body: "", links: eff.links, files: [] }, true)).toBeNull();
   });
 });

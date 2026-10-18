@@ -21,3 +21,27 @@ export function nicknameHint(value: string, result: NicknameCheck | null, checki
   if (result.reason === "reserved") return { tone: "bad", text: "사용할 수 없는 닉네임이에요" };
   return { tone: "bad", text: NICK_RULE };
 }
+
+/** "a.b" 처럼 붙인 뒤에도 규칙(nicknameProblem)에 맞게 — 앞부분을 글자 단위로 줄이고 끝 공백은 뺀다 */
+const fit = (base: string, suffix: string): string => {
+  const room = NICK_MAX - [...suffix].length;
+  return [...base].slice(0, room).join("").trimEnd() + suffix;
+};
+
+/**
+ * 닉네임이 이미 쓰일 때 내놓을 후보 (시나리오 QA D4·#22) — 숫자·_숫자·.숫자 를 붙인다. 규칙에 맞는 것만, 서로 다르게.
+ * 쓸 수 있는지는 pickAvailable 이 기존 nickname_check 로 확인한다. rand 는 테스트용.
+ */
+export function nicknameCandidates(base: string, rand: () => number = Math.random): string[] {
+  const b = base.trim().normalize("NFC");
+  if (nicknameProblem(b)) return [];
+  const n2 = () => String(10 + Math.floor(rand() * 90)); // 10~99
+  const raw = [fit(b, String(2 + Math.floor(rand() * 8))), fit(b, `_${n2()}`), fit(b, `.${n2()}`), fit(b, n2()), fit(b, `_${n2()}`), fit(b, `.${n2()}`)];
+  return [...new Set(raw)].filter((x) => x !== b && nicknameProblem(x) === null);
+}
+
+/** 후보 중 쓸 수 있는 것만 순서대로 최대 max 개 — 확인이 실패한 후보는 뺀다 */
+export async function pickAvailable(cands: string[], check: (v: string) => Promise<NicknameCheck>, max = 3): Promise<string[]> {
+  const rs = await Promise.all(cands.map((c) => check(c).then((r) => r.available, () => false)));
+  return cands.filter((_, i) => rs[i]).slice(0, max);
+}

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { AWS } from "@/components/my-study/fixtures";
 import { EMPTY_OVERRIDES, buildTree } from "@/components/my-study/model";
 import { roomStatusLabel } from "@/lib/types";
-import type { MeStudies, RoomDetail } from "./types";
+import type { Curriculum, MeStudies, RoomDetail } from "./types";
 import type { Db } from "./errors";
-import { canEditCurriculumOf, filterSidebarGroups, firstStudySlug, myStudyHrefOf, nodeCreate, nodeMove, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
+import { canEditCurriculumOf, recheckCurriculumEdit, filterSidebarGroups, firstStudySlug, myStudyHrefOf, nodeCreate, nodeMove, patchOf, setCurriculumEditor, toSidebarGroups, toStudyRoom } from "./my-study";
 
 const TODAY = "2026-10-12";
 const P = (userId: string, nickname: string, tone: RoomDetail["leader"]["tone"]) => ({ userId, nickname, tone });
@@ -207,6 +207,15 @@ describe("node RPC wrappers (goal subtasks)", () => {
       ["node_create", { p_slug: "aws", p_parent_id: null }],
     ]);
   });
+  it("nodeCreate 빠른 추가 지정 과제는 p_task_type designated 를 보낸다 (시나리오 QA #12·D4)", async () => {
+    const f = fakeDb();
+    await nodeCreate("aws", "1", "발표", f.client, "designated");
+    await nodeCreate("aws", "1", "정리", f.client, "common");
+    expect(f.calls).toEqual([
+      ["node_create", { p_slug: "aws", p_parent_id: "1", p_title: "발표", p_task_type: "designated" }],
+      ["node_create", { p_slug: "aws", p_parent_id: "1", p_title: "정리" }],
+    ]);
+  });
   it("nodeMove sends parent and index (null = append)", async () => {
     const f = fakeDb();
     await nodeMove("aws", "11", "2", 0, f.client);
@@ -229,5 +238,27 @@ describe("myStudyHrefOf — /my-study 진입 규칙(그룹 순서대로 첫 항�
     const s: MeStudies = { today: TODAY, groups: [{ kind: "active", items: [] }, { kind: "recruit", items: [] }, { kind: "ended", items: [] }] };
     expect(myStudyHrefOf(s)).toBe("/my-study");
     expect(firstStudySlug(s)).toBeNull();
+  });
+});
+
+describe("recheckCurriculumEdit — 편집 모드 진입 전 권한 재확인 (시나리오 QA #10)", () => {
+  const cur = (can: boolean | undefined) => ({ nodes: [], members: [], ...(can === undefined ? {} : { myPermissions: { canEditCurriculum: can } }) }) as unknown as Curriculum;
+  it("서버가 권한을 거뒀으면 막고 새 커리큘럼을 돌려준다", async () => {
+    const r = await recheckCurriculumEdit("aws", { state: "active" }, async () => cur(false));
+    expect(r.allowed).toBe(false);
+    expect(r.cur?.myPermissions?.canEditCurriculum).toBe(false);
+  });
+  it("권한이 있으면 들어간다", async () => {
+    expect((await recheckCurriculumEdit("aws", { state: "active" }, async () => cur(true))).allowed).toBe(true);
+  });
+  it("myPermissions 가 없는 응답은 그룹장만", async () => {
+    expect((await recheckCurriculumEdit("aws", { state: "active" }, async () => cur(undefined))).allowed).toBe(false);
+    expect((await recheckCurriculumEdit("aws", { state: "leader" }, async () => cur(undefined))).allowed).toBe(true);
+  });
+  it("조회가 실패하면 막지 않는다(서버가 저장 때 다시 막는다)", async () => {
+    const r = await recheckCurriculumEdit("aws", { state: "active" }, async () => {
+      throw new Error("offline");
+    });
+    expect(r).toEqual({ allowed: true, cur: null });
   });
 });

@@ -8,7 +8,7 @@ import { discardUnattached, registerFile, roomIdOfNode, upsertSubmission } from 
 import type { Submission, TaskDetail } from "@/lib/api/types";
 import { uploadAttachment, uploadErrorText, type UploadFailure } from "@/lib/api/upload";
 import { routes } from "@/lib/routes";
-import { addLink as addLinkRule, checkFile, emptyAllowed, objectKey, isPersonalDetail, savedToast, submitBlocker, submitErrorAction, submitLabel } from "./submission";
+import { addLink as addLinkRule, checkFile, emptyAllowed, objectKey, isPersonalDetail, savedToast, submitBlocker, submitErrorAction, submitLabel, withPendingLink } from "./submission";
 import { clearDraft, draftDiffers, draftKey, readDraft, writeDraft, type Draft } from "./submissionDraft";
 import { fromSaved, readyIds, removePlanOf, slotsLeft, uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
 
@@ -275,14 +275,26 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
   /* ---------- 제출 ---------- */
   const personal = isPersonalDetail(detail);
   // 완료한 개인 기록은 모두 비워도 저장된다 (QA Q1-2) — 팀 과제는 하나는 있어야
-  const blocker = submitBlocker({ body, links, files: rows }, online, { allowEmpty: emptyAllowed(personal, mine) });
+  // 입력칸에 남은 링크 — 유효하면 제출에 포함한다 (시나리오 QA #3)
+  const pendingLink = withPendingLink(linkInput, links);
+  const blocker = submitBlocker({ body, links: pendingLink.links, files: rows }, online, { allowEmpty: emptyAllowed(personal, mine) });
   const label = submitLabel(mine, detail.today, detail.node.endDate, personal);
   const submit = async () => {
     if (busyRef.current || blocker) return;
+    if (pendingLink.error) {
+      // 틀린 주소를 조용히 버리지 않는다 — 고치거나 지운 뒤 다시 누르게
+      setLinkError({ index: null, text: `${pendingLink.error} · 고치거나 지운 뒤 다시 제출해 주세요` });
+      return;
+    }
+    const sendLinks = pendingLink.links;
     busyRef.current = true;
     setBusy(true);
     try {
-      const sub = await upsertSubmission(nodeId, { body, links, fileIds: readyIds(rowsRef.current) });
+      const sub = await upsertSubmission(nodeId, { body, links: sendLinks, fileIds: readyIds(rowsRef.current) });
+      if (pendingLink.included) {
+        setLinks(sendLinks);
+        setLinkInput("");
+      }
       clearDraft(store(), key);
       setPending(null);
       setDirty(false);
@@ -298,7 +310,8 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
         dispatch({ type: "markError", fileId: a.fileId, error: a.text });
         toast({ text: "다시 올려야 하는 파일이 있어요", tone: "bad" });
       } else if (a.kind === "link") {
-        setLinkError({ index: a.index, text: a.text });
+        // 입력칸에서 함께 보낸 링크(목록 밖 index)는 입력칸 오류로
+        setLinkError({ index: a.index < links.length ? a.index : null, text: a.text });
       } else if (a.kind === "login") {
         toast({ text: a.text, tone: "bad" });
         router.push(routes.login(window.location.pathname + window.location.search));

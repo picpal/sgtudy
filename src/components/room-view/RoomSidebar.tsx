@@ -9,6 +9,7 @@ import type { RoomStatus } from "@/lib/types";
 import { MARK } from "@/data/room-view";
 import { groupSidebar, type SidebarRoom } from "@/lib/api/room-view";
 import { stickyAside, useStickyFit } from "@/lib/useStickyFit";
+import { DEFAULT_FILTERS, filtersNote, homeHref, roomHrefWith, type HomeFilters } from "@/components/main/homeUrl";
 
 type Filter = "all" | RoomStatus;
 const CHIPS: { id: Filter; label: string }[] = [
@@ -18,10 +19,15 @@ const CHIPS: { id: Filter; label: string }[] = [
   { id: "ended", label: "종료" },
 ];
 
-type Props = { selected: string; items: SidebarRoom[]; total: number };
+/** filters: 둘러보기에서 이어받은 조건 — items 는 그 조건으로 받은 목록, found = 그 조건의 전체 개수 (시나리오 QA #19) */
+type Props = { selected: string; items: SidebarRoom[]; total: number; filters?: HomeFilters; found?: number; tagLabels?: string[] };
 
-export function RoomSidebar({ selected, items, total }: Props) {
-  const [st, setSt] = useState<Filter>("all");
+const SCOPE_HEADING: Record<HomeFilters["scope"], string> = { public: "공개 스터디", mine: "참가한 스터디", created: "만든 스터디" };
+
+export function RoomSidebar({ selected, items, total, filters = DEFAULT_FILTERS, found, tagLabels = [] }: Props) {
+  const [st, setSt] = useState<Filter>(filters.status);
+  const note = filtersNote(filters, tagLabels);
+  const carried = filters.scope !== "public" || !!note;
   const [q, setQ] = useState("");
   // ≤900 에서는 상세 아래에 접힌 채로 둔다 — 넓은 화면에선 항상 펼침
   const [open, setOpen] = useState(false);
@@ -30,8 +36,9 @@ export function RoomSidebar({ selected, items, total }: Props) {
   const fold = open ? "" : "max-[901px]:hidden";
   const query = q.trim().toLowerCase();
 
-  const heading = items.length < total ? "공개 스터디" : "전체 스터디";
-  const count = items.length < total ? items.length : total;
+  // 검색어·태그·범위를 이어받았으면 그 조건의 개수 (범위 탭 숫자는 검색·태그와 무관한 전체라 쓰지 않는다)
+  const heading = carried ? SCOPE_HEADING[filters.scope] : items.length < total ? "공개 스터디" : "전체 스터디";
+  const count = carried ? (found ?? items.length) : items.length < total ? items.length : total;
   const groups = groupSidebar(items.filter((r) => !query || `${r.title} ${r.tags.map((t) => t.label).join(" ")}`.toLowerCase().includes(query))).filter((g) => st === "all" || st === g.status);
 
   return (
@@ -40,7 +47,7 @@ export function RoomSidebar({ selected, items, total }: Props) {
       ref={ref}
       className={`${stickyAside(fits)} flex flex-[1_1_300px] max-w-[380px] flex-col gap-[14px] rounded-[20px] bg-surface px-5 pb-5 pt-[22px] max-[901px]:max-w-none max-sm:px-4`}
     >
-      <HomeLink className="inline-flex min-h-7 items-center gap-[6px] text-[13px] font-medium text-ink-3 hover:text-ink">
+      <HomeLink href={homeHref(filters)} className="inline-flex min-h-7 items-center gap-[6px] text-[13px] font-medium text-ink-3 hover:text-ink">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M19 12H5M11 6l-6 6 6 6" />
         </svg>
@@ -68,6 +75,14 @@ export function RoomSidebar({ selected, items, total }: Props) {
         </span>
       </h2>
       <div id="room-sidebar-list" className={`flex flex-col gap-[14px] ${fold}`}>
+        {note && (
+          <p className="m-0 flex flex-wrap items-center gap-x-2 text-[13px] text-ink-2">
+            <span className="min-w-0 [overflow-wrap:anywhere]">{note}</span>
+            <Link href={routes.room(selected)} className="inline-flex min-h-11 items-center font-semibold text-mint hover:text-mint-dark">
+              조건 풀기
+            </Link>
+          </p>
+        )}
         <label className="flex h-[42px] items-center gap-2 rounded-[21px] border border-line px-[14px]">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6675" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <circle cx="11" cy="11" r="7" />
@@ -110,7 +125,7 @@ export function RoomSidebar({ selected, items, total }: Props) {
                 return (
                   <Link
                     key={r.id}
-                    href={routes.room(r.id)}
+                    href={roomHrefWith(r.id, filters)}
                     aria-current={on ? "page" : undefined}
                     title={r.title}
                     className={`flex w-full flex-col rounded-2xl border px-4 py-[14px] text-left text-ink transition-[border-color,background-color,box-shadow] duration-150 hover:text-ink ${

@@ -149,7 +149,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const empty = emptyKind(data, filter, items);
   const noStudy = empty === "noStudy";
   const pieces = [
-    sum.left > 0 && <Fragment key="l">남은 과제 {sum.left}개</Fragment>,
+    sum.left > 0 && <Fragment key="l">남은 팀 과제 {sum.left}개</Fragment>,
     sum.dueToday > 0 && (
       <strong key="t" className="font-semibold text-warn">
         오늘 마감 {sum.dueToday}개

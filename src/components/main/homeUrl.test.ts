@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { homeHref, parseHomeFilters, sameFilters, urlStep, type HomeFilters } from "./homeUrl";
+import { DEFAULT_FILTERS, filtersNote, homeHref, parseHomeFilters, roomHrefWith, sameFilters, urlStep, type HomeFilters } from "./homeUrl";
 
 const D: HomeFilters = { scope: "public", status: "all", q: "", tags: [] };
 
@@ -49,5 +49,22 @@ describe("urlStep", () => {
     expect(urlStep(D, { ...D, q: "aws" })).toBe("replace");
     expect(urlStep(D, { ...D, scope: "mine" })).toBe("push");
     expect(urlStep(D, { ...D, q: "a", tags: ["x"] })).toBe("push");
+  });
+});
+
+describe("roomHrefWith / filtersNote — 방 상세 왼쪽 목록이 둘러보기 필터를 이어받는다 (시나리오 QA #19)", () => {
+  const f = { scope: "public" as const, status: "recruit" as const, q: "코딩", tags: ["algo"] };
+  it("방 주소에 둘러보기 필터를 그대로 붙인다(기본값은 뺀다)", () => {
+    expect(roomHrefWith("algo-8", f)).toBe("/rooms/algo-8?status=recruit&q=%EC%BD%94%EB%94%A9&tag=algo");
+    expect(roomHrefWith("algo-8", DEFAULT_FILTERS)).toBe("/rooms/algo-8");
+  });
+  it("방 상세 주소에서 다시 읽으면 같은 필터 (invite 등 다른 키는 무시)", () => {
+    expect(parseHomeFilters(new URLSearchParams("status=recruit&q=코딩&tag=algo&invite=x"))).toEqual(f);
+  });
+  it("검색어·태그가 있을 때만 안내 문구", () => {
+    expect(filtersNote(DEFAULT_FILTERS, [])).toBeNull();
+    expect(filtersNote({ ...DEFAULT_FILTERS, status: "recruit" }, [])).toBeNull();
+    expect(filtersNote(f, ["알고리즘"])).toBe("‘코딩’ · #알고리즘 로 거른 목록");
+    expect(filtersNote({ ...f, q: "" }, ["알고리즘", "CS"])).toBe("#알고리즘 #CS 로 거른 목록");
   });
 });

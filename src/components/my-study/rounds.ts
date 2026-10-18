@@ -258,3 +258,10 @@ export function roundsOutsidePeriod(nodes: PeriodNode[], period: { start: string
   const fitEnd = lastEnd > period.end && lastEnd <= maxEndDate(period.start) ? lastEnd : null;
   return { count: out.length, text, fitEnd, before: out.some((n) => n.startDate < period.start) };
 }
+
+/**
+ * 시작 전(준비·모집) 지정 과제 안내 — 아직 담당으로 고를 참가자가 없거나 적다 (시나리오 QA #12).
+ * 공통 과제는 서버가 들어오는 참가자에게 자동 배정한다.
+ */
+export const designatedHint = (status: "draft" | "recruit" | "active" | "ended"): string | null =>
+  status === "draft" || status === "recruit" ? "시작 전이라 참가자가 아직 다 모이지 않았어요 · 지정 과제의 담당은 참가자가 들어온 뒤 정해 주세요 · 공통 과제는 들어오는 사람에게 자동으로 배정돼요" : null;

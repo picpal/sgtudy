@@ -8,9 +8,8 @@ import { getMyStudies, getServerClient, requireMe } from "@/lib/api/me.server";
 import { fetchCurriculum } from "@/lib/api/my-study";
 import { getRoomDetail, roomMetadata } from "@/lib/api/room-meta.server";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
+import { screenKeyOf } from "@/lib/leaveGuard";
 import { routes } from "@/lib/routes";
-
-const TABS: TabId[] = ["overview", "curriculum", "board", "calendar", "gantt"];
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   return roomMetadata((await params).id);
@@ -36,9 +35,11 @@ export default async function MyStudyPage({ params, searchParams }: { params: Pr
   // 내 스터디는 그룹장·참가자(이탈 포함)·승인 대기만 — 비참가자는 공개 방 화면으로 (T12 ruling, 승인 대기는 대기 카드가 있다)
   const st = detail.me?.state;
   if (st !== "leader" && st !== "active" && st !== "inactive" && st !== "pending") redirect(routes.room(id));
-  const tab = TABS.includes(sp.tab as TabId) ? (sp.tab as TabId) : "overview";
+  // 탭·?task= 정규화는 leaveGuard.screenKeyOf 하나로 — 이탈 가드의 "같은 화면" 판정과 같은 규칙 (E 리뷰 minor 1)
   // ?task= 는 알림(D8) 진입 — 리프 포커스. 숫자 id 가 아니면 무시
-  const task = sp.task && /^\d+$/.test(sp.task) ? sp.task : undefined;
+  const key = screenKeyOf(sp);
+  const tab = key.tab as TabId;
+  const task = key.task || undefined;
   // ?item= 은 그룹장 편집 화면에 열린 항목 — 새로고침하면 다시 연다(없는 id 는 화면이 목록으로 돌린다)
   const item = isUrlItem(sp.item) ? sp.item : undefined;
   // key 로 방 변경 시 화면 상태(탭·편집 오버라이드 등)를 리셋한다. ?tab= 도 넣어, 같은 방에서 알림 링크(?tab=curriculum)를 눌러도 그 탭으로 연다

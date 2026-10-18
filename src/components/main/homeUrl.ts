@@ -51,3 +51,15 @@ export function urlStep(from: HomeFilters, to: HomeFilters): "none" | "replace" 
   if (sameFilters(from, to)) return "none";
   return sameFilters({ ...from, q: to.q }, to) ? "replace" : "push";
 }
+
+/** 둘러보기 필터를 이어받은 방 상세 주소 — 상세 화면 왼쪽 목록이 같은 조건으로 그려진다 (시나리오 QA #19) */
+export function roomHrefWith(slug: string, f: HomeFilters): string {
+  const q = homeHref(f).slice(1); // "/?a=b" → "?a=b", "/" → ""
+  return `/rooms/${slug}${q}`;
+}
+
+/** 왼쪽 목록 머리 아래 안내 — 검색어·태그로 거른 목록일 때만 (상태는 칩이 보여 준다) */
+export function filtersNote(f: HomeFilters, tagLabels: string[]): string | null {
+  const parts = [f.q.trim() ? `‘${f.q.trim()}’` : "", tagLabels.map((t) => `#${t}`).join(" ")].filter(Boolean);
+  return parts.length ? `${parts.join(" · ")} 로 거른 목록` : null;
+}

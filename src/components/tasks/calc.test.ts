@@ -105,7 +105,7 @@ describe("minor 보강", () => {
   it("summary.left 는 종료된 방의 미완료를 세지 않는다", () => {
     const m = fx();
     const all = applyFilter(m, { ...DEFAULT_FILTER, scope: "all" });
-    expect(summary(m, all).left).toBe(3);
+    expect(summary(m, all).left).toBe(2); // 팀 과제만 (개인 목표는 따로 — 시나리오 QA #16)
   });
   it("round 를 못 찾은 항목은 round:null 그룹", () => {
     const m = fx();
@@ -152,7 +152,12 @@ describe("groupByDue", () => {
 describe("summary / statusText", () => {
   it("집계", () => {
     const m = fx();
-    expect(summary(m, applyFilter(m, DEFAULT_FILTER))).toEqual({ left: 3, dueToday: 0, personalDone: 1, personalTotal: 2 });
+    expect(summary(m, applyFilter(m, DEFAULT_FILTER))).toEqual({ left: 2, dueToday: 0, personalDone: 1, personalTotal: 2 });
+  });
+  it("남은 과제는 팀 과제만 센다 — 개인 목표는 '개인 목표 d/t' 로 따로 (시나리오 QA #16)", () => {
+    const m = fx();
+    m.items = m.items.filter((it) => it.type === "personal");
+    expect(summary(m, applyFilter(m, DEFAULT_FILTER)).left).toBe(0);
   });
   it("상태 문구", () => {
     expect(statusText(item({ id: "a", type: "personal", st: "done" }))).toBe("기한내 완료");

@@ -20,9 +20,9 @@ export const HIT_Y = "relative before:absolute before:inset-x-0 before:top-1/2 b
 export const HIT_SQ = "relative before:absolute before:left-1/2 before:top-1/2 before:h-11 before:w-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-['']";
 
 /** 세그먼트 컨트롤 */
-export function Seg<T extends string>({ label, value, options, onChange, grow }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void; grow?: boolean }) {
+export function Seg<T extends string>({ label, value, options, onChange, grow, disabled, describedBy }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void; grow?: boolean; disabled?: boolean; describedBy?: string }) {
   return (
-    <div role="group" aria-label={label} className={`flex rounded-[12px] bg-bg p-[3px] ${grow ? "w-full" : ""}`}>
+    <div role="group" aria-label={label} aria-describedby={describedBy} className={`flex rounded-[12px] bg-bg p-[3px] ${grow ? "w-full" : ""} ${disabled ? "opacity-60" : ""}`}>
       {options.map(([id, text]) => {
         const on = value === id;
         return (
@@ -30,8 +30,9 @@ export function Seg<T extends string>({ label, value, options, onChange, grow }:
             key={id}
             type="button"
             aria-pressed={on}
+            disabled={disabled}
             onClick={() => onChange(id)}
-            className={`${HIT_Y} h-[34px] whitespace-nowrap rounded-[9px] px-3 text-[13px] ${grow ? "flex-1" : ""} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
+            className={`${HIT_Y} h-[34px] whitespace-nowrap disabled:cursor-not-allowed rounded-[9px] px-3 text-[13px] ${grow ? "flex-1" : ""} ${on ? "bg-surface font-semibold text-ink shadow-[0_1px_3px_rgba(27,34,48,.12)]" : "bg-transparent font-medium text-muted"}`}
           >
             {text}
           </button>

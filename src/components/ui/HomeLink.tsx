@@ -13,13 +13,13 @@ import { routes } from "@/lib/routes";
  * 홈에 있을 땐 생략되고, 홈을 떠나는 순간(헤더 로고·"방 둘러보기" 가 새 화면에 또 보인다) 매번 나간다 → 홈 → 내 스터디 이동마다 /?_rsc 가 하나 더.
  * 뷰포트 프리페치를 끄고 의도가 보일 때만 router.prefetch 로 같은 loading 경계를 받아, 홈으로 돌아갈 때 골격은 그대로 즉시 뜬다.
  */
-export function HomeLink({ onPointerEnter, onFocus, onTouchStart, ...props }: Omit<ComponentProps<typeof Link>, "href" | "prefetch">) {
+export function HomeLink({ onPointerEnter, onFocus, onTouchStart, href = routes.home(), ...props }: Omit<ComponentProps<typeof Link>, "href" | "prefetch"> & { href?: string }) {
   const router = useRouter();
-  const warm = () => router.prefetch(routes.home());
+  const warm = () => router.prefetch(href);
   return (
     <Link
       {...props}
-      href={routes.home()}
+      href={href}
       prefetch={false}
       onPointerEnter={(e) => {
         warm();

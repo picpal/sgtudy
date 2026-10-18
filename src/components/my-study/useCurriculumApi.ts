@@ -3,9 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { toApiError } from "@/lib/api/errors";
-import { fetchCurriculum, nodeArchive, nodeCreate, nodeDelete, nodeMove, nodeUpdate, patchOf } from "@/lib/api/my-study";
+import { fetchCurriculum, recheckCurriculumEdit, nodeArchive, nodeCreate, nodeDelete, nodeMove, nodeUpdate, patchOf } from "@/lib/api/my-study";
 import { personalArchive, personalComplete, personalCreate, personalDelete, personalUpdate, type PersonalPatch } from "@/lib/api/personal";
-import type { Curriculum, NodePatch } from "@/lib/api/types";
+import type { Curriculum, MeState, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
 import { EMPTY_OVERRIDES, dropFieldOv, tempId, type Overrides, type TreeNode } from "./model";
@@ -15,7 +15,7 @@ import type { Update } from "./state";
 
 export type CurriculumApi = {
   /** open: 만든 항목의 편집 화면을 연다(기본). false = 목록에 머문다(빠른 추가 — 토스트 없음). 성공하면 true */
-  create: (parentId: string | null, opts?: { title?: string; open?: boolean }) => Promise<boolean>;
+  create: (parentId: string | null, opts?: { title?: string; open?: boolean; taskType?: "common" | "designated" }) => Promise<boolean>;
   /** from: "list" — 진행목표 목록에서 지웠다. 실패해도 편집 화면을 열지 않는다.
    *  "child" — 회차 편집 화면의 과제 섹션에서 지웠다. 열린 편집 화면(editSel)을 그대로 둔다. okText = 성공 토스트(기본 "삭제했어요") */
   remove: (id: string, from?: "edit" | "list" | "child", okText?: string) => Promise<void>;
@@ -38,6 +38,8 @@ export type CurriculumApi = {
   updatePersonal: (id: string, patch: PersonalPatch, okText?: string) => Promise<Curriculum | null>;
   archivePersonal: (id: string, on: boolean) => Promise<boolean>;
   removePersonal: (id: string) => Promise<boolean>;
+  /** 편집 모드 진입 전 권한 재확인 (시나리오 QA #10) — 거뒀으면 토스트 + 보기로 두고 false */
+  recheckEdit: () => Promise<boolean>;
 };
 
 const dropKey = <T,>(rec: Record<string, T>, key: string) => {
@@ -55,7 +57,7 @@ const popOne = (rec: Record<string, string[]>, key: string, label?: string) => {
   return { ...rec, [key]: [...list.slice(0, i), ...list.slice(i + 1)] };
 };
 
-export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<Curriculum>>, update: Update, toast: (m: ToastMsg) => void): CurriculumApi {
+export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<Curriculum>>, update: Update, toast: (m: ToastMsg) => void, me?: MeState): CurriculumApi {
   const router = useRouter();
 
   const fail = useCallback(
@@ -77,7 +79,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const create = useCallback(
-    async (parentId: string | null, opts: { title?: string; open?: boolean } = {}) => {
+    async (parentId: string | null, opts: { title?: string; open?: boolean; taskType?: "common" | "designated" } = {}) => {
       const key = parentId ?? "root";
       const open = opts.open ?? true;
       const label = opts.title ?? (parentId ? "새 과제" : "새 회차");
@@ -91,7 +93,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         };
       });
       try {
-        const cur = await nodeCreate(slug, parentId, opts.title);
+        const cur = await nodeCreate(slug, parentId, opts.title, undefined, opts.taskType);
         const created = cur.nodes.filter((n) => n.parentId === parentId).sort((a, b) => b.sortOrder - a.sortOrder)[0];
         setCur(cur);
         update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key, label) }, ...(open ? { editSel: created?.id ?? null, justAdded: created?.id ?? null } : {}) }));
@@ -240,5 +242,17 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
 
   const removePersonal = useCallback(async (id: string) => !!(await personal(() => personalDelete(slug, id), { text: "삭제했어요", tone: "ok" })), [slug, personal]);
 
-  return { create, remove, discard, archive, save, move, refresh, createPersonal, completePersonal, updatePersonal, archivePersonal, removePersonal };
+  const recheckEdit = useCallback(async () => {
+    const r = await recheckCurriculumEdit(slug, me);
+    if (r.cur) setCur(r.cur);
+    if (!r.allowed) {
+      // 화면을 연 뒤 그룹장이 권한을 거뒀다 — 편집 스위치도 사라진다(새 myPermissions)
+      toast({ text: "진행목표 편집 권한이 없어요 · 그룹장이 권한을 거뒀어요", tone: "bad" });
+      update({ curMode: "view", editSel: null, confirm: false, leave: null });
+      router.refresh();
+    }
+    return r.allowed;
+  }, [slug, me, setCur, toast, update, router]);
+
+  return { create, remove, discard, archive, save, move, refresh, createPersonal, completePersonal, updatePersonal, archivePersonal, removePersonal, recheckEdit };
 }

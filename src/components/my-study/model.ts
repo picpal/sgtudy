@@ -132,6 +132,16 @@ export type Tree = {
 const after = (a: string, b: string) => parseISO(a) > parseISO(b);
 const before = (a: string, b: string) => parseISO(a) < parseISO(b);
 
+/**
+ * 제출이 있는 과제에서 미리 막을 편집 — 저장 때 서버가 거절하는 것을 토글 단계에서 보여 준다 (시나리오 QA #11).
+ * 서버 node_update(0023): 제출물이 있으면 유형 변경 불가(NODE_HAS_SUBMISSIONS), 제출한 담당자는 뺄 수 없음(ASSIGNEE_HAS_SUBMISSION).
+ */
+export function leafLocks(n: Pick<LeafNode, "subAll" | "people" | "personal">): { typeReason: string | null; lockedIds: Set<string>; assignReason: string } {
+  const lockedIds = new Set(n.people.filter((p) => isDoneCode(p.c)).map((p) => p.userId));
+  const has = n.subAll > 0 || lockedIds.size > 0;
+  return { typeReason: has ? "제출물이 있는 과제는 유형을 바꿀 수 없어요" : null, lockedIds, assignReason: "이미 제출한 담당자는 뺄 수 없어요" };
+}
+
 export function leafState(asg: number, sub: number, s: string, e: string, today: string): LeafState {
   if (asg === 0) return "unassigned";
   if (sub === asg) return "complete";

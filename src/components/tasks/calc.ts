@@ -134,7 +134,8 @@ export function summary(m: MeTasks, items: MeTaskItem[]): { left: number; dueTod
   const open = items.filter((it) => !isDone(it.st) && live.has(it.slug));
   const cur = m.items.filter((it) => it.type === "personal" && live.get(it.slug) === it.roundId);
   return {
-    left: open.length,
+    // 팀 과제만 — 개인 목표는 personalDone/personalTotal 로 따로 보인다 (시나리오 QA #16)
+    left: open.filter((it) => it.type !== "personal").length,
     dueToday: open.filter((it) => it.endDate === m.today).length,
     personalDone: cur.filter((it) => isDone(it.st)).length,
     personalTotal: cur.length,

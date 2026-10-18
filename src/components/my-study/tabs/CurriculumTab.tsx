@@ -10,7 +10,7 @@ import { useToday } from "@/lib/today";
 import { samePage } from "@/lib/leaveGuard";
 import { allParentsClosed, findNode, isDirty, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
 import { modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
-import { dropPlan, movedPlan, roundOf, rowMoves, withAddRows, withEmptyRounds, withPersonalAddRows, type RowMove } from "../rounds";
+import { designatedHint, dropPlan, movedPlan, roundOf, rowMoves, withAddRows, withEmptyRounds, withPersonalAddRows, type RowMove } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import type { RoomStatus } from "../submission";
 import type { ToastMsg } from "@/components/ui/Toast";
@@ -95,7 +95,10 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   // 목적지로 바로 이동 — 미저장 수정 확인(leave)을 거친 뒤에도 여기로 온다
   const go = (to: Leave) => {
     setAsk(null);
-    if ("mode" in to) update({ ...modeSwitchPatch(S, to.mode) });
+    if ("mode" in to) {
+      if (to.mode === "edit") void enterEdit();
+      else update({ ...modeSwitchPatch(S, to.mode) });
+    }
     else if ("add" in to) {
       update({ leave: null });
       // 구조 변경은 즉시 RPC (낙관적 임시 노드 → 응답 Curriculum 으로 교체)
@@ -110,6 +113,11 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
       }
     } else update({ editSel: to.sel, quickAdd: null, confirm: false, leave: null, saved: "" });
   };
+  // 편집 모드는 권한을 다시 확인한 뒤에 연다 — 화면을 연 뒤 권한을 거뒀을 수 있다 (시나리오 QA #10)
+  async function enterEdit() {
+    update({ leave: null });
+    if (await api.recheckEdit()) update((p) => modeSwitchPatch(p, "edit"));
+  }
   // 저장하지 않은 수정이 있으면 먼저 묻는다 (Q2-05)
   const request = (to: Leave) => {
     if (isDirty(S.ov, S.editSel) && !("sel" in to && to.sel === S.editSel)) update({ leave: to, confirm: false });
@@ -237,7 +245,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   if (selNode)
     return (
       <div className="mt-[18px] @container">
-        <EditView key={selNode.id} n={selNode} parent={parentNode} nodes={tree.nodes} roots={tree.roots} period={period} members={tree.members} S={S} update={update} api={api} go={go} request={request} />
+        <EditView key={selNode.id} roomStatus={roomStatus} n={selNode} parent={parentNode} nodes={tree.nodes} roots={tree.roots} period={period} members={tree.members} S={S} update={update} api={api} go={go} request={request} />
       </div>
     );
   // 보기 모드에서 항목을 누르면 목록 대신 읽기 전용 상세 화면 (?item=, mode 없음)
@@ -251,7 +259,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
           canEdit={canEdit}
           onOpen={(id) => update({ viewSel: id, viewFocus: null })}
           onBack={() => update({ viewSel: null, viewFocus: null })}
-          onEdit={() => update(modeSwitchPatch(S, "edit"))}
+          onEdit={() => void enterEdit()}
           slug={slug}
           roomStatus={roomStatus}
           focus={S.viewFocus}
@@ -319,7 +327,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
           {entries.map((entry) => {
             if (entry.kind === "add")
               return S.quickAdd === entry.round.id ? (
-                <QuickAdd key={`qa-${entry.round.id}`} round={entry.round} indent={1} onAdd={(t) => api.create(entry.round.id, { title: t, open: false })} onClose={() => closeAdd(entry.round.id)} inTree />
+                <QuickAdd key={`qa-${entry.round.id}`} round={entry.round} indent={1} onAdd={(t, ty) => api.create(entry.round.id, { title: t, open: false, taskType: ty === "지정" ? "designated" : "common" })} onClose={() => closeAdd(entry.round.id)} inTree designatedNote={designatedHint(roomStatus)} />
               ) : (
                 <AddRow key={`add-${entry.round.id}`} round={entry.round} indent={1} onOpen={() => openAdd(entry.round.id)} inTree />
               );

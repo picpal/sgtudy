@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { nicknameHint } from "./nickname";
+import { nicknameCandidates, nicknameHint, pickAvailable } from "./nickname";
+import { nicknameProblem } from "@/lib/api/me";
+import type { NicknameCheck } from "@/lib/api/types";
 
 describe("nicknameHint", () => {
   it("empty → idle rule text", () => {
@@ -29,5 +31,39 @@ describe("nicknameHint", () => {
   });
   it("너무 짧을 때는 기존 안내", () => {
     expect(nicknameHint("가", null, false)).toEqual({ tone: "bad", text: "2~16자로 입력해 주세요" });
+  });
+});
+
+describe("nicknameCandidates / pickAvailable — 닉네임 중복 시 대안 (시나리오 QA D4·#22)", () => {
+  const seq = (...xs: number[]) => {
+    let i = 0;
+    return () => xs[i++ % xs.length];
+  };
+  it("규칙에 맞는 서로 다른 후보 — 숫자·_·. 붙이기", () => {
+    const c = nicknameCandidates("은지쌤", seq(0.27, 0.07, 0.5, 0.91));
+    expect(c.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(c).size).toBe(c.length);
+    for (const x of c) {
+      expect(x.startsWith("은지쌤")).toBe(true);
+      expect(nicknameProblem(x)).toBeNull();
+    }
+  });
+  it("16자를 넘지 않게 앞부분을 줄인다", () => {
+    for (const x of nicknameCandidates("가나다라마바사아자차카타파하가나", seq(0.5))) expect([...x].length).toBeLessThanOrEqual(16);
+  });
+  it("끝 공백·마침표 없이 잘라 규칙을 지킨다", () => {
+    for (const x of nicknameCandidates("study buddy club", seq(0.3))) expect(nicknameProblem(x)).toBeNull();
+  });
+  it("규칙에 안 맞는 입력이면 후보 없음", () => {
+    expect(nicknameCandidates("a", seq(0.1))).toEqual([]);
+    expect(nicknameCandidates("ㅋㅋ", seq(0.1))).toEqual([]);
+  });
+  it("쓸 수 있는 것만 최대 3개, 확인이 실패한 후보는 뺀다", async () => {
+    const free = new Set(["a2", "a_3", "a.4", "a5"]);
+    const check = async (v: string) => {
+      if (v === "boom") throw new Error("x");
+      return { available: free.has(v), reason: free.has(v) ? undefined : "taken" } as NicknameCheck;
+    };
+    expect(await pickAvailable(["a1", "boom", "a2", "a_3", "a.4", "a5"], check)).toEqual(["a2", "a_3", "a.4"]);
   });
 });

@@ -71,6 +71,17 @@ export function addLink(raw: string, links: string[]): LinkAdd {
   return { ok: true, links: [...links, url] };
 }
 
+/**
+ * 제출할 때 입력칸에 남은 링크 — [추가]를 안 눌러도 유효하면 포함하고, 틀렸으면 제출을 막는다 (시나리오 QA #3).
+ * 이미 넣은 링크는 그대로 둔다(오류 아님).
+ */
+export function withPendingLink(raw: string, links: string[]): { links: string[]; error: string | null; included: boolean } {
+  const r = addLink(raw, links);
+  if (r.ok) return { links: r.links, error: null, included: true };
+  if (r.error === "" || links.includes(raw.trim())) return { links, error: null, included: false };
+  return { links, error: r.error, included: false };
+}
+
 export const EMPTY_BLOCKER = "내용·링크·파일 중 하나는 있어야 해요";
 
 /**

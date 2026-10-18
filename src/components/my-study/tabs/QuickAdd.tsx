@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { md } from "@/lib/date";
-import { TypeBadge } from "../bits";
+import type { TaskType } from "@/data/my-study";
+import { Seg, TypeBadge } from "../bits";
 import type { ParentNode } from "../model";
 import { normalizeTitle, shouldSubmitQuickAdd } from "../rounds";
 
@@ -41,10 +42,25 @@ export function AddRow({ round, indent, onOpen, inTree = false, tone = "team" }:
 }
 
 /** 빠른 추가 — Enter 로 만들고 입력은 다음 과제를 위해 비운 채 열어 둔다. Esc·빈 입력에서 포커스가 나가면 닫힘 */
-export function QuickAdd({ round, indent, onAdd, onClose, inTree = false, tone = "team" }: { round: ParentNode; indent: number; onAdd: (title: string) => Promise<boolean>; onClose: () => void; inTree?: boolean; tone?: AddTone }) {
+export function QuickAdd({
+  round, indent, onAdd, onClose, inTree = false, tone = "team", designatedNote = null,
+}: {
+  round: ParentNode;
+  indent: number;
+  /** type: 팀 빠른 추가에서 고른 과제 유형(공통/지정, 시나리오 QA D4). 개인 목표는 늘 undefined */
+  onAdd: (title: string, type?: TaskType) => Promise<boolean>;
+  onClose: () => void;
+  inTree?: boolean;
+  tone?: AddTone;
+  /** 지정을 골랐을 때 보일 안내 — 시작 전 방(rounds.designatedHint) */
+  designatedNote?: string | null;
+}) {
   const personal = tone === "personal";
   const input = useRef<HTMLInputElement>(null);
+  const row = useRef<HTMLDivElement>(null);
   const [text, setText] = useState("");
+  // 팀 과제 유형 — 열려 있는 동안 이어서 추가하는 과제에 그대로 쓴다
+  const [type, setType] = useState<TaskType>("공통");
   const [last, setLast] = useState("");
   // 개인 목표는 낙관적 임시 행 없이 응답을 기다린다 — 그동안 입력에 aria-busy (스펙 §7). 연달아 보내면 마지막 응답까지
   const [pending, setPending] = useState(0);
@@ -55,18 +71,24 @@ export function QuickAdd({ round, indent, onAdd, onClose, inTree = false, tone =
     if (!t) return;
     setText("");
     setPending((c) => c + 1);
-    const ok = await onAdd(t);
+    const ok = await onAdd(t, personal ? undefined : type);
     setPending((c) => c - 1);
     if (ok) setLast(t);
     else setText((cur) => cur || t); // 실패하면 쓴 글자를 되살린다 (그새 새로 쓴 게 있으면 그대로)
   };
   return (
     <div
+      ref={row}
       {...treeItem(inTree, indent, personal ? `${roundName(round)}에 내 목표 빠른 추가` : `${round.title}에 과제 빠른 추가`)}
       className={`flex min-h-11 flex-wrap items-center gap-x-2 border-b border-line-2 py-1 pl-2 pr-3 ${personal ? "bg-personal-field" : "bg-surface-2"}`}
     >
       <span className={indentCls} style={{ "--d": indent } as React.CSSProperties} />
       {personal && <TypeBadge type="개인" />}
+      {!personal && (
+        <span className="shrink-0">
+          <Seg<TaskType> label="추가할 과제 유형" value={type} onChange={(v) => { setType(v); input.current?.focus(); }} options={[["공통", "공통"], ["지정", "지정"]]} />
+        </span>
+      )}
       <input
         ref={input}
         type="text"
@@ -85,13 +107,20 @@ export function QuickAdd({ round, indent, onAdd, onClose, inTree = false, tone =
             void submit();
           }
         }}
-        onBlur={() => {
+        onBlur={(e) => {
+          // 유형 버튼(같은 줄)으로 옮겨 간 포커스는 닫지 않는다
+          if (row.current?.contains(e.relatedTarget as Node | null)) return;
           if (!text.trim()) onClose();
         }}
         className={`h-11 min-w-0 flex-1 rounded-[10px] border bg-surface px-3 text-[14px] text-ink ${personal ? "border-personal-line" : "border-line-3"}`}
       />
       {personal && (
         <span className="shrink-0 whitespace-nowrap text-[12px] text-muted max-sm:hidden">{last ? "다음 목표를 이어서 쓸 수 있어요" : `기간 = 회차 기간 ${md(round.s)} – ${md(round.e)}`}</span>
+      )}
+      {!personal && type === "지정" && (
+        <span className="basis-full pb-1 text-[12px] text-muted">
+          지정 과제는 담당 미정으로 만들어져요 · 과제를 눌러 담당을 골라 주세요{designatedNote ? ` · ${designatedNote}` : ""}
+        </span>
       )}
       {/* 개인 목표는 토스트("내 목표를 추가했어요")가 알리므로 두 번 읽지 않게 팀 빠른 추가에만 */}
       {!personal && (
