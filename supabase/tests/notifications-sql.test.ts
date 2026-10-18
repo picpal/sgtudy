@@ -172,7 +172,7 @@ cases("notifications", db, [
   { name: "settings_get/put: defaults, full replace, NOT_LEADER, VALIDATION_FAILED", run: async (q) => {
     await asUser(q, await uidOf(q, "민수"));
     const d = (await one(q, "select public.settings_get('aws') as s")).s;
-    assertEquals(d, { reminderD1: true, reminderD3: true, taskAssigned: true, scheduleChanged: true, roomStartEnd: true, completionMode: "daily" });
+    assertEquals(d, { reminderD1: true, reminderD3: true, taskAssigned: true, scheduleChanged: true, roomStartEnd: true, completionMode: "daily", submissionDigest: true });   // 0025 submissionDigest
     const put = (s: unknown) => one(q, "select public.settings_put('aws', $1::jsonb) as s", [JSON.stringify(s)]).then((r) => r.s);
     const u = await put({ ...d, reminderD3: false, completionMode: "immediate" });
     assertEquals([u.reminderD3, u.completionMode], [false, "immediate"]);

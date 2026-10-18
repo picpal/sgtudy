@@ -556,6 +556,7 @@ export type Database = {
           room_id: number
           room_start_end: boolean
           schedule_changed: boolean
+          submission_digest: boolean
           task_assigned: boolean
         }
         Insert: {
@@ -565,6 +566,7 @@ export type Database = {
           room_id: number
           room_start_end?: boolean
           schedule_changed?: boolean
+          submission_digest?: boolean
           task_assigned?: boolean
         }
         Update: {
@@ -574,6 +576,7 @@ export type Database = {
           room_id?: number
           room_start_end?: boolean
           schedule_changed?: boolean
+          submission_digest?: boolean
           task_assigned?: boolean
         }
         Relationships: [

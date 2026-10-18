@@ -40,11 +40,11 @@ const recruitRoom = async (q: Q, today: string, s: string, e: string) => {
 
 cases("scenario-qa (0024)", db, [
   // ───────── D1 ─────────
-  { name: "D1 room_start(p_shift=true) 앞당김: 모든 노드(보관·개인 포함) n일 당김, 방 종료일 그대로, ROOM_STARTED 본문", run: async (q) => {
+  { name: "D1 room_start(p_shift=true) 앞당김: 모든 노드(보관·개인 포함) n일 당김, 방 종료일도 n일 당김(0025, 기간 유지), ROOM_STARTED 본문", run: async (q) => {
     const x = await recruitRoom(q, "2026-10-12", "2026-10-20", "2026-11-30");
     await setToday(q, "2026-10-13");
     const r = (await one(q, "select public.room_start($1, true) as r", [x.slug])).r as Row;
-    assertEquals([r.status, r.startDate, r.endDate], ["active", "2026-10-13", "2026-11-30"]);
+    assertEquals([r.status, r.startDate, r.endDate], ["active", "2026-10-13", "2026-11-23"]);
     assertEquals(r.shift, { days: 7, nodes: 5 });
     for (const id of [x.round, x.group, x.leaf, x.arch, x.personal]) assertEquals(await dates(q, id), "2026-10-13~2026-10-19", id);
     const [st] = await notes(q, "철수", "ROOM_STARTED");
@@ -56,10 +56,16 @@ cases("scenario-qa (0024)", db, [
     const x = await recruitRoom(q, "2026-10-12", "2026-10-20", "2026-11-30");
     await setToday(q, "2026-10-13");
     const r = (await one(q, "select public.room_start($1) as r", [x.slug])).r as Row;
-    assertEquals([r.startDate, r.shift], ["2026-10-13", { days: 0, nodes: 0 }]);
+    assertEquals([r.startDate, r.endDate, r.shift], ["2026-10-13", "2026-11-30", { days: 0, nodes: 0 }]);   // p_shift 없음 → 종료일 그대로
     assertEquals(await dates(q, x.leaf), "2026-10-20~2026-10-26");
     assertEquals((await notes(q, "철수", "ROOM_STARTED"))[0].body, null);
     const y = await recruitRoom(q, "2026-10-12", "2026-10-14", "2026-11-30");
+    // 1년 상한: 당기기는 기간을 유지하므로 1년짜리 방도 시작할 수 있다(일정 그대로 시작은 기존처럼 PERIOD_TOO_LONG)
+    const z = await recruitRoom(q, "2026-10-12", "2026-10-20", "2027-10-19");
+    await setToday(q, "2026-10-13");
+    await expectFail(q("select public.room_start($1)", [z.slug]), "PERIOD_TOO_LONG");
+    const rz = (await one(q, "select public.room_start($1, true) as r", [z.slug])).r as Row;
+    assertEquals([rz.startDate, rz.endDate], ["2026-10-13", "2027-10-12"]);
     await setToday(q, "2026-10-16");
     const r2 = (await one(q, "select public.room_start($1, true) as r", [y.slug])).r as Row;
     assertEquals([r2.startDate, r2.shift], ["2026-10-14", { days: 0, nodes: 0 }]);
@@ -188,6 +194,24 @@ cases("scenario-qa (0024)", db, [
     [n] = await notes(q, "민수", "SUBMISSION_DIGEST");
     assertEquals([n.title, n.body], ["어제 제출 3건이 들어왔어요", '"ALB vs NLB 실습" 외 과제 1개']);
     assertEquals((await q("select 1 from cron.job where jobname = 'submission_digest'")).length, 1);
+  } },
+  { name: "0025 제출 요약은 방 알림 설정 submissionDigest(기본 켬)로 끈다 · settings_put 에서 키를 빼면 그대로 둔다", run: async (q) => {
+    await as(q, "민수");
+    const d = (await one(q, "select public.settings_get('aws') as s")).s as Row;
+    assertEquals(d.submissionDigest, true);
+    const put = (s: unknown) => one(q, "select public.settings_put('aws', $1::jsonb) as s", [JSON.stringify(s)]).then((r) => r.s as Row);
+    assertEquals((await put({ ...d, submissionDigest: false })).submissionDigest, false);
+    const { submissionDigest: _omit, ...rest } = d;
+    assertEquals((await put(rest)).submissionDigest, false);                    // 키 없음 → 기존 값 유지(옛 호출 호환)
+    await expectFail(put({ ...d, submissionDigest: "no" }), "VALIDATION_FAILED");
+    await setToday(q, "2026-10-20");
+    await q(`insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late)
+             values ($1::bigint, $2::uuid, 'x', '2026-10-19 21:00+09', false)`, [await nodeId(q, "aws", "ALB vs NLB 실습"), await uidOf(q, "지은")]);
+    await q("select public.job_submission_digest()");
+    assertEquals((await notes(q, "민수", "SUBMISSION_DIGEST")).length, 0);
+    await put({ ...d, submissionDigest: true });
+    await q("select public.job_submission_digest()");
+    assertEquals((await notes(q, "민수", "SUBMISSION_DIGEST")).length, 1);
   } },
 
   // ───────── 알림·작성자·보관 ─────────
