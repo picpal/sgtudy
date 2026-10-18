@@ -95,7 +95,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         update({ leave: { href }, confirm: false });
         return true;
       }
-      // 같은 방 주소(헤더 "내 스터디"·같은 방 알림)는 화면이 다시 그려지지 않는다 — 이동 대신 목록으로 닫고,
+      // 같은 방 주소(헤더 "내 스터디" 등 task·tab 없는 주소)는 화면이 다시 그려지지 않는다 — 이동 대신 목록으로 닫고,
+      // (?task=·?tab= 이 있는 같은 방 알림 링크는 화면이 다시 마운트되니 아래로 가서 지우고 이동한다, N-1)
       // 빈 새 회차는 MyStudyScreen 정리가 상태째 지운다(서버만 지우면 지워진 회차의 편집 화면이 남는다, 최종 리뷰 Minor 1)
       if (samePage(href)) {
         go({ sel: null });

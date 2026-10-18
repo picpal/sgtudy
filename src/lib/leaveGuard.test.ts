@@ -32,9 +32,14 @@ describe("leaveGuard (Q2-1 — 저장하지 않은 편집이 있으면 앱 안 �
 });
 
 describe("samePage (최종 리뷰 Minor 1 — 같은 화면 주소로의 이동은 화면이 다시 그려지지 않는다)", () => {
-  it("경로가 같으면 true(쿼리·해시는 무시), 다르면 false", () => {
+  it("경로가 같고 href 에 task·tab 이 없으면 true(그 밖의 쿼리·해시는 무시), 경로가 다르면 false", () => {
     expect(samePage("/my-study/aws", "http://x/my-study/aws?tab=curriculum&item=3")).toBe(true);
-    expect(samePage("/my-study/aws?tab=board", "http://x/my-study/aws")).toBe(true);
+    expect(samePage("/my-study/aws?item=3#x", "http://x/my-study/aws")).toBe(true);
     expect(samePage("/schedule", "http://x/my-study/aws")).toBe(false);
+  });
+  it("같은 방이라도 href 에 ?task=·?tab= 이 있으면 false — 화면 key 가 바뀌어 다시 마운트되니 이동해야 한다 (N-1)", () => {
+    expect(samePage("/my-study/aws?task=12", "http://x/my-study/aws?tab=curriculum&item=3")).toBe(false);
+    expect(samePage("/my-study/aws?tab=curriculum", "http://x/my-study/aws?tab=curriculum&item=3")).toBe(false);
+    expect(samePage("/my-study/aws?tab=board", "http://x/my-study/aws")).toBe(false);
   });
 });

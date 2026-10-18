@@ -1,6 +1,6 @@
 /**
  * 앱 안 링크 이동 가드 (Q2-1) — 진행목표 편집 화면에 저장하지 않은 수정이 있으면 헤더 메뉴·로고·옆 목록 링크의 이동을 보류하고
- * 편집 화면의 "저장하지 않은 수정이 있어요" 확인을 띄운다. 링크는 <Link onNavigate={(e) => guardNavigate(href, e)}> 로 묻는다
+ * 편집 화면의 "저장하지 않은 수정이 있어요" 확인을 띄운다. 앱 안 링크는 GuardedLink(src/components/ui/GuardedLink)를 쓰고, 그 안에서 guardNavigate 로 묻는다
  * (onNavigate 는 클라이언트 이동에만 불린다 — 새 탭(⌘클릭)·외부 주소는 막지 않는다. 전체 다시 불러오기는 beforeunload 가 맡는다).
  * 가드는 화면에 하나 — 편집 화면이 걸고 떠나며 푼다. 가드가 true 를 돌려주면 이동을 막는다(목적지는 가드가 기억했다가 확인 뒤 이동).
  */
@@ -20,7 +20,14 @@ export function guardNavigate(href: string, e: { preventDefault: () => void }): 
   if (guard?.(href)) e.preventDefault();
 }
 
-/** href 가 지금 화면과 같은 경로인가 — Next 는 같은 경로 이동에서 화면을 다시 마운트하지 않아, 편집 화면이 남는다(쿼리·해시 무시) */
+/**
+ * href 로 가도 지금 화면이 그대로 남는가 — Next 는 같은 경로 이동에서 화면을 다시 마운트하지 않아, 편집 화면이 남는다.
+ * 단 내 스터디 화면은 key 에 ?task=·?tab= 을 넣어(app/my-study/[id]/page.tsx) 그 둘이 있는 주소(같은 방 알림 링크)로 가면
+ * 다시 마운트되고 그 과제·탭이 열린다 — 그러니 "경로 같음 + href 에 task·tab 없음"일 때만 같은 화면으로 본다(최종 재리뷰 N-1).
+ * 그 밖의 쿼리(item·mode)·해시는 무시한다.
+ */
 export function samePage(href: string, current: string = window.location.href): boolean {
-  return new URL(href, current).pathname === new URL(current).pathname;
+  const to = new URL(href, current);
+  if (to.pathname !== new URL(current).pathname) return false;
+  return !to.searchParams.has("task") && !to.searchParams.has("tab");
 }
