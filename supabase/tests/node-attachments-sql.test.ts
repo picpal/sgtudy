@@ -50,6 +50,10 @@ cases("node attachments · helpers & policies", db, [
     assertEquals(await ok(`n/x/2/${u}.pdf`), false);
     assertEquals(await ok(`n/1/2/3/${u}.pdf`), false);
     assertEquals(await ok(`n/1/99999999999999999999/${u}.pdf`), false);   // bigint 넘침 방지(18자리)
+    assertEquals(await ok(`n/1/02/${u}.pdf`), false);          // 앞자리 0 — 캐스트하면 2 지만 글자는 id 와 다르다(리뷰 Minor 1)
+    assertEquals(await ok(`n/01/2/${u}.pdf`), false);
+    assertEquals(await ok(`n/0/2/${u}.pdf`), false);
+    assertEquals(await ok(`n/10/20/${u}.pdf`), true);
   } },
   { name: "readable: team node — leader·ACTIVE·INACTIVE yes, PENDING·outsider no; archived → editors only", run: async (q) => {
     const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF);
@@ -274,5 +278,77 @@ cases("node attachments · RPC", db, [
     assertEquals((await statusOf(q, young)).status, "READY");
     assertEquals((await statusOf(q, kept)).status, "READY");
     assertEquals((await statusOf(q, orphan)).status, "DELETED");
+  } },
+  { name: "list order: attached_at, then created_at (스펙 §6.2)", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF); const minsu = await uidOf(q, "민수");
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, minsu);
+    const a = await staged(q, leaf, aws, minsu); const c = await staged(q, leaf, aws, minsu);
+    await setFiles(q, leaf, [a, c]);
+    const at = (fid: string, col: string, ago: string) =>
+      q(`update public.files set ${col} = now() - $2::interval where id = $1::uuid`, [fid, ago]);
+    await at(c, "attached_at", "2 hours"); await at(a, "attached_at", "1 hour");
+    assertEquals(await list(q, leaf), [c, a]);                                  // 먼저 붙은 것이 앞
+    await at(a, "attached_at", "2 hours");                                      // 붙은 시각이 같으면 올린 순서
+    await at(a, "created_at", "3 hours"); await at(c, "created_at", "4 hours");
+    assertEquals(await list(q, leaf), [c, a]);
+    await at(a, "created_at", "5 hours");
+    assertEquals(await list(q, leaf), [a, c]);
+  } },
+  { name: "register: another editor can't claim someone else's uploaded object → FILE_NOT_READY (리뷰 Minor 2)", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF);
+    const [minsu, jieun] = [await uidOf(q, "민수"), await uidOf(q, "지은")];
+    await memberSet(q, aws, jieun, "can_edit_curriculum = true");
+    await setNow(q, "2026-10-12T03:00:00Z");
+    const path = `n/${aws}/${leaf}/${crypto.randomUUID()}.pdf`;
+    await q("insert into storage.objects (bucket_id, name, owner_id, metadata) values ('attachments', $1, $2, $3::jsonb)",
+            [path, minsu, JSON.stringify({ size: 10, mimetype: "application/pdf" })]);
+    const reg = () => one(q, "select public.node_file_register($1::bigint, $2, 'a.pdf', 'application/pdf', 10) as r", [leaf, path]);
+    await asUser(q, jieun);
+    await expectFail(reg(), "FILE_NOT_READY");
+    await asUser(q, minsu);
+    assertEquals(((await reg()).r as Row).status, "ready");                    // 업로더 본인은 된다
+  } },
+  { name: "set: staged file older than 24h → FILE_NOT_READY (job_cleanup 과 같은 창, 리뷰 Minor 3)", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF); const minsu = await uidOf(q, "민수");
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, minsu);
+    const a = await staged(q, leaf, aws, minsu);
+    await q("update public.files set created_at = now() - interval '25 hours' where id = $1::uuid", [a]);
+    await expectFail(setFiles(q, leaf, [a]), "FILE_NOT_READY");
+    await q("update public.files set created_at = now() - interval '23 hours' where id = $1::uuid", [a]);
+    assertEquals((await setFiles(q, leaf, [a])).map((f) => f.id), [a]);
+  } },
+  { name: "RLS under real roles: editor INSERT n/ key ok, wrong room denied; member sees attached only; anon sees no NODE_DOC (리뷰 Minor 6)", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF);
+    const [minsu, cheolsu] = [await uidOf(q, "민수"), await uidOf(q, "철수")];
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, minsu);
+    const att = await staged(q, leaf, aws, minsu); await setFiles(q, leaf, [att]);
+    const loose = await staged(q, leaf, aws, minsu);                            // 미저장
+    // Supabase 가 기본으로 주는 GRANT 를 흉내(PGlite 에는 없다). 사례 트랜잭션과 함께 롤백된다
+    await q("grant usage on schema storage, auth to anon, authenticated");
+    await q("grant select, insert on storage.objects to anon, authenticated");
+    await q("grant select on all tables in schema public to anon, authenticated");   // 정책이 부르는 비-definer 헬퍼가 읽는 표 포함
+    const put = (path: string) => q("insert into storage.objects (bucket_id, name, owner_id) values ('attachments', $1, $2)", [path, minsu]);
+    const docs = async () => (await q("select id::text as id from public.files where purpose = 'NODE_DOC' order by 1")).map((r) => r.id as string);
+    const objs = async () => (await q("select name from storage.objects where name like 'n/%' order by 1")).map((r) => r.name as string);
+    try {
+      await q("set local role authenticated");
+      await put(`n/${aws}/${leaf}/${crypto.randomUUID()}.pdf`);                // 편집자 업로드
+      await expectFail(put(`n/${Number(aws) + 999}/${leaf}/${crypto.randomUUID()}.pdf`), "row-level security");
+      await asUser(q, cheolsu);
+      await expectFail(put(`n/${aws}/${leaf}/${crypto.randomUUID()}.pdf`), "row-level security");   // 일반 멤버
+      assertEquals(await docs(), [att]);                                        // 붙은 것만 — 미저장(loose) 안 보임
+      assertEquals(await objs(), [`n/${aws}/${leaf}/${att}.pdf`]);              // 객체도 붙은 것만
+      await asUser(q, minsu);
+      assertEquals((await docs()).sort(), [att, loose].sort());                 // 업로더는 자기 미저장 행을 본다(owner 갈래)
+      await q("set local role anon");
+      await asAnon(q);
+      assertEquals(await docs(), []);
+      assertEquals(await objs(), []);
+    } finally {
+      await q("reset role");
+    }
   } },
 ]);

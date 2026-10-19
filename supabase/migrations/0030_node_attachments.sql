@@ -12,10 +12,10 @@ create index ix_files_node_doc on public.files (node_id) where purpose = 'NODE_D
 create or replace function public.node_file_limit() returns int
 language sql immutable set search_path = '' as $$ select 5 $$;
 
--- 업로더 세그먼트 없음(항목 단위 소유). 숫자는 18자리까지(bigint 캐스트 보호). 제출 키(^[0-9]+/…)와 겹치지 않는다
+-- 업로더 세그먼트 없음(항목 단위 소유). 숫자는 앞자리 0 없이 18자리까지(bigint 캐스트 보호, '02' 처럼 id 와 글자가 다른 키 차단). 제출 키(^[0-9]+/…)와 겹치지 않는다
 create or replace function public.node_doc_key_ok(p_name text) returns boolean
 language sql immutable set search_path = '' as $$
-  select coalesce(p_name, '') ~ '^n/[0-9]{1,18}/[0-9]{1,18}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9]{1,10})?$'
+  select coalesce(p_name, '') ~ '^n/[1-9][0-9]{0,17}/[1-9][0-9]{0,17}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\.[a-z0-9]{1,10})?$'
 $$;
 
 -- ───────── ② 권한 헬퍼 (스펙 §5) ─────────
@@ -188,7 +188,12 @@ begin
   if not public.storage_exists('attachments', p_path) then
     perform public.fail('FILE_NOT_READY', '업로드가 아직 끝나지 않았어요', jsonb_build_object('fileId', v_id::text));
   end if;
-  select o.metadata into v_meta from storage.objects o where o.bucket_id = 'attachments' and o.name = p_path;
+  -- 키에 업로더 세그먼트가 없으므로 객체 업로더가 나인지 본다(같은 항목의 다른 편집자가 남의 미등록 객체를 가로채지 못하게)
+  select o.metadata into v_meta from storage.objects o
+   where o.bucket_id = 'attachments' and o.name = p_path and o.owner_id = v_uid::text;
+  if not found then
+    perform public.fail('FILE_NOT_READY', '업로드가 아직 끝나지 않았어요', jsonb_build_object('fileId', v_id::text));
+  end if;
   v_size := coalesce((v_meta ->> 'size')::bigint, p_size);
   v_mime := coalesce(v_meta ->> 'mimetype', p_mime);
   if not (v_mime = any(public.allowed_mime_types())) then
@@ -222,7 +227,7 @@ begin
   return public.file_json(f);
 end $$;
 
--- 항목의 첨부를 목록대로(집합 의미, 멱등). 새로 붙일 id = 내 미저장 READY ∧ 같은 항목 ∧ Storage 실재. 빠진 붙은 파일 → DELETED.
+-- 항목의 첨부를 목록대로(집합 의미, 멱등). 새로 붙일 id = 내 미저장 READY(24h 안) ∧ 같은 항목 ∧ Storage 실재. 빠진 붙은 파일 → DELETED.
 -- 목록이 현재의 부분집합이면 빼기만(그룹장 모더레이션 허용). 그룹장은 미저장 파일을 만들 수 없으므로 잠금 전후 경합에도 추가는 막힌다
 create or replace function public.node_files_set(p_node bigint, p_file_ids uuid[]) returns jsonb
 language plpgsql security definer set search_path = '' as $$
@@ -250,7 +255,9 @@ begin
     continue when v_fid = any(v_cur);
     if not exists (select 1 from public.files f
                    where f.id = v_fid and f.owner_user_id = v_uid and f.node_id = n.id and f.purpose = 'NODE_DOC'
-                     and f.status = 'READY' and f.attached_at is null and public.storage_exists(f.bucket_id, f.object_path)) then
+                     and f.status = 'READY' and f.attached_at is null
+                     and f.created_at > now() - interval '24 hours'          -- 한도·job_cleanup 과 같은 창(정리 직전 경합 방지)
+                     and public.storage_exists(f.bucket_id, f.object_path)) then
       perform public.fail('FILE_NOT_READY', '이 파일을 다시 올려 주세요', jsonb_build_object('fileId', v_fid::text));
     end if;
   end loop;
