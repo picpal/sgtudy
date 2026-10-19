@@ -17,7 +17,7 @@ import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { setScreenKey } from "@/lib/leaveGuard";
-import { OVERVIEW_ANCHORS, useHashAnnounce } from "@/lib/hashTarget";
+import { OVERVIEW_ANCHORS, useHashAnnounce, useItemAnnounce } from "@/lib/hashTarget";
 import { useRefetchOnFocus } from "@/lib/useRefetchOnFocus";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
@@ -186,28 +186,39 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // 같은 화면에서 ?item= 알림(묶음 일정 변경, 0028)을 누르면 key(id·task·tab)가 같아 다시 마운트되지 않는다 — 바뀐 initialItem 을 연다 (백로그 F 리뷰 I1).
   // key 에 item 을 넣지 않는다: 상세는 pushState 로 주소에 item 을 쓰므로 router.refresh 뒤 화면 상태가 날아간다.
   // 이미 열린 항목·없는 항목은 그대로. 저장 안 한 편집은 이탈 가드가 이동을 보류하므로 여기 오지 않지만, 혹시 와도 덮지 않는다.
-  // 열린 기록은 알림 이동이 목록(이전) 기록 위에 쌓은 것 → popstate 분기처럼 pushed 로 두어 닫으면 back
+  // 열린 기록은 알림 이동이 목록(이전) 기록 위에 쌓은 것 → popstate 분기처럼 pushed 로 두어 닫으면 back.
+  // 상세 안에서 다른 항목으로 옮긴 뒤 같은 알림을 다시 누르면 initialItem 이 그대로다 → 벨이 알린 item(announceItem)을 주소가 그 item 이 된 렌더에서 연다 (재리뷰 m1).
+  // 알림과 prop 변경이 같은 렌더에 오면 한 번만 연다 — 매 렌더 한 effect 에서 둘을 함께 본다
   const seenItem = useRef(initialItem);
+  const askedItem = useRef<string | null>(null);
+  const onItemAnnounce = useCallback((id: string) => {
+    askedItem.current = id;
+  }, []);
+  useItemAnnounce(onItemAnnounce);
   useEffect(() => {
     const prev = seenItem.current;
     seenItem.current = initialItem;
-    if (!initialItem || initialItem === prev) return;
+    const url = readItem(window.location.search);
+    const asked = askedItem.current !== null && askedItem.current === url;
+    if (asked) askedItem.current = null;
+    const id = asked ? url : initialItem && initialItem !== prev ? initialItem : null;
+    if (!id) return;
     const { S: s, tree: t, openItem: open, canEdit: ce } = live.current;
-    const n = findNode(t.nodes, initialItem);
-    if (!n || initialItem === open) return;
+    const n = findNode(t.nodes, id);
+    if (!n || id === open) return;
     if (s.curMode === "edit" && open && isDirty(s.ov, s.editSel)) return;
-    const edit = ce && initialMode === "edit" && !isPersonal(n);
-    if (readItem(window.location.search) === initialItem) {
-      pushed.current = initialItem;
+    const edit = ce && (asked ? readMode(window.location.search) : initialMode) === "edit" && !isPersonal(n);
+    if (url === id) {
+      pushed.current = id;
       overView.current = false;
       backTab.current = shownTab.current;
     }
     update(
       edit
-        ? { tab: "curriculum", curMode: "edit", editSel: initialItem, viewSel: null, confirm: false, leave: null, saved: "" }
-        : { tab: "curriculum", curMode: "view", viewSel: initialItem, editSel: null, confirm: false, leave: null, saved: "" },
+        ? { tab: "curriculum", curMode: "edit", editSel: id, viewSel: null, confirm: false, leave: null, saved: "" }
+        : { tab: "curriculum", curMode: "view", viewSel: id, editSel: null, confirm: false, leave: null, saved: "" },
     );
-  }, [initialItem, initialMode, update]);
+  });
 
   // 새로고침·링크로 바로 열린 편집 화면은 아래 기록이 목록이 아니다 — 수정을 시작하면 지금 기록을 목록으로 바꾸고 편집 기록을 쌓아,
   // 브라우저 뒤로 가기가 다른 화면으로 조용히 떠나지 않고 위 popstate 의 "저장하지 않은 수정" 확인을 거치게 한다 (Q2-1)

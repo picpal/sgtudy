@@ -53,6 +53,28 @@ export function useHashAnnounce(fn: (hash: string) => void): void {
   }, [fn]);
 }
 
+const ITEM_EVENT = "sgtudy:item";
+
+/** 알림 벨이 이동할 링크의 ?item= 을 알린다 — 같은 화면에서 같은 item 알림을 다시 누르면 서버 prop(initialItem)이 그대로라
+ *  화면이 모른다(상세 안에서 다른 항목으로 옮긴 뒤 등). 화면은 주소가 그 item 이 된 뒤 연다 (백로그 F 재리뷰 m1) */
+export function announceItem(href: string): void {
+  const u = new URL(href, "http://x");
+  const item = u.searchParams.get("item");
+  if (item) window.dispatchEvent(new CustomEvent<{ item: string; path: string }>(ITEM_EVENT, { detail: { item, path: u.pathname } }));
+}
+
+/** 지금 화면 경로로 알린 item 만 받는다 */
+export function useItemAnnounce(fn: (item: string) => void): void {
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ item: string; path: string }>).detail;
+      if (d.path === window.location.pathname) fn(d.item);
+    };
+    window.addEventListener(ITEM_EVENT, on);
+    return () => window.removeEventListener(ITEM_EVENT, on);
+  }, [fn]);
+}
+
 /** 주소에서 해시만 지운다 (기록은 그대로) */
 const dropHash = () => {
   if (!window.location.hash) return;

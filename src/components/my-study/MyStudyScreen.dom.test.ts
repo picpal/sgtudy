@@ -14,6 +14,7 @@ vi.mock("@/components/ui/NotificationBell", () => ({ NotificationBell: () => nul
 vi.mock("@/components/ui/AppHeader", () => ({ AppHeader: () => null }));
 
 const { MeProvider } = await import("@/lib/me");
+const { announceItem } = await import("@/lib/hashTarget");
 const { MyStudyScreen } = await import("./MyStudyScreen");
 
 const P = (userId: string, nickname: string, tone: RoomDetail["leader"]["tone"]) => ({ userId, nickname, tone });
@@ -47,6 +48,7 @@ const mount = (p: Partial<Props>) => {
   return { host, render };
 };
 const title = (id: string) => AWS.nodes.find((n) => n.id === id)!.title;
+const buttonByText = (el: Element, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.includes(text)) as HTMLButtonElement;
 const detailTitle = (host: HTMLElement) => host.querySelector("#detail-title")?.textContent ?? null;
 
 afterEach(() => {
@@ -73,6 +75,43 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     // 같은 값으로 다시 그려져도(router.refresh) 화면은 그대로
     render({ initialItem: "3" });
     expect(detailTitle(host)).toContain(title("3"));
+  });
+
+  // 재리뷰 m2: 알림으로 연 상세를 닫으면 알림 이동이 쌓은 기록을 back — 원래 목록 주소·탭으로 돌아온다
+  it("알림으로 연 상세를 닫으면 history.back 으로 원래 목록 주소로 돌아온다", async () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
+    const { host, render } = mount({});
+    window.history.pushState(null, "", "/my-study/aws?tab=curriculum&item=31");
+    render({ initialItem: "31" });
+    expect(detailTitle(host)).toContain(title("31"));
+    const back = vi.spyOn(window.history, "back");
+    const popped = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
+    act(() => buttonByText(host.querySelector("#detail-title")!.closest("section")!, "진행목표").click());
+    expect(back).toHaveBeenCalledTimes(1);
+    await act(async () => void (await popped));
+    expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=curriculum");
+    expect(detailTitle(host)).toBeNull();
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("진행목표");
+    back.mockRestore();
+  });
+
+  // 재리뷰 m1: 벨로 item=31 → 상세 안에서 상위(3회차)로 이동 → 같은 알림을 다시 누름. initialItem 은 그대로 31 이지만 벨이 알린 item 을 연다
+  it("상세 안에서 다른 항목으로 옮긴 뒤 같은 알림을 다시 누르면 그 항목이 다시 열린다", () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
+    const { host, render } = mount({});
+    announceItem("/my-study/aws?tab=curriculum&item=31");
+    window.history.pushState(null, "", "/my-study/aws?tab=curriculum&item=31");
+    render({ initialItem: "31" });
+    expect(detailTitle(host)).toContain(title("31"));
+    // 경로의 상위 회차로 — 주소는 replace 로 item=3
+    act(() => buttonByText(host.querySelector('nav[aria-label="경로"]')!, title("3")).click());
+    expect(detailTitle(host)).toContain(title("3"));
+    expect(new URLSearchParams(window.location.search).get("item")).toBe("3");
+    // 같은 알림 — 벨이 알리고 router.push 가 주소를 바꾸며, 서버는 같은 initialItem 을 넘긴다
+    announceItem("/my-study/aws?tab=curriculum&item=31");
+    window.history.pushState(null, "", "/my-study/aws?tab=curriculum&item=31");
+    render({ initialItem: "31" });
+    expect(detailTitle(host)).toContain(title("31"));
   });
 });
 
