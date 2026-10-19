@@ -36,6 +36,7 @@ export type Database = {
     Tables: {
       files: {
         Row: {
+          attached_at: string | null
           bucket_id: string
           completed_at: string | null
           content_type: string
@@ -53,6 +54,7 @@ export type Database = {
           submission_id: number | null
         }
         Insert: {
+          attached_at?: string | null
           bucket_id?: string
           completed_at?: string | null
           content_type: string
@@ -70,6 +72,7 @@ export type Database = {
           submission_id?: number | null
         }
         Update: {
+          attached_at?: string | null
           bucket_id?: string
           completed_at?: string | null
           content_type?: string
@@ -1289,6 +1292,64 @@ export type Database = {
       }
       node_delete: {
         Args: { p_node_id: number; p_slug: string }
+        Returns: Json
+      }
+      node_doc_key_ok: { Args: { p_name: string }; Returns: boolean }
+      node_doc_object_readable: { Args: { p_name: string }; Returns: boolean }
+      node_doc_object_writable: { Args: { p_name: string }; Returns: boolean }
+      node_doc_readable: {
+        Args: { p_node: number; p_uid: string }
+        Returns: boolean
+      }
+      node_doc_readable_me: { Args: { p_node: number }; Returns: boolean }
+      node_doc_target: {
+        Args: { p_node: number; p_remove_only: boolean; p_uid: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          depth: number
+          description_md: string
+          end_date: string
+          id: number
+          label: string | null
+          owner_id: string | null
+          parent_id: number | null
+          room_id: number
+          round_id: number | null
+          sort_order: number
+          start_date: string
+          task_type: string | null
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "goal_nodes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      node_doc_writable: {
+        Args: { p_node: number; p_uid: string }
+        Returns: boolean
+      }
+      node_file_discard: { Args: { p_file: string }; Returns: Json }
+      node_file_limit: { Args: never; Returns: number }
+      node_file_register: {
+        Args: {
+          p_mime: string
+          p_name: string
+          p_node: number
+          p_path: string
+          p_size: number
+        }
+        Returns: Json
+      }
+      node_files: { Args: { p_node: number }; Returns: Json }
+      node_files_json: { Args: { p_node: number }; Returns: Json }
+      node_files_set: {
+        Args: { p_file_ids: string[]; p_node: number }
         Returns: Json
       }
       node_get: {
