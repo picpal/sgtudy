@@ -58,7 +58,7 @@ describe("방 설정 돌아가기 버튼", () => {
     // 오른쪽 버튼은 카드 바깥 레일 끝에 sticky bottom, 좁은 화면에서는 레일째 숨긴다
     expect(side.className).toContain("sticky");
     const rail = document.querySelector('[data-testid="side-back-rail"]')!;
-    expect(rail.className).toContain("left-full");
+    expect(rail.className).toContain("right-full");
     expect(rail.className).toContain("hidden");
     act(() => root.unmount());
   });

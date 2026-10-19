@@ -29,15 +29,15 @@ export function TopBackLink({ href }: { href: string }) {
 }
 
 /**
- * 카드 오른쪽 바깥 여백의 "이전 페이지" — 카드(relative) 높이만큼의 레일 끝에 sticky bottom 으로 붙어, 스크롤해도 화면 아래에 보인다.
- * 위치는 카드 기준(left-full) 이라 카드 폭이 바뀌어도 따라간다. bottom-3 은 저장 막대(카드 안 sticky bottom-0, py-3)의 버튼 높이와 맞춘 값 —
+ * 카드 왼쪽 바깥 여백의 "이전 페이지" — 카드(relative) 높이만큼의 레일 끝에 sticky bottom 으로 붙어, 스크롤해도 화면 아래에 보인다.
+ * 위치는 카드 기준(right-full) 이라 카드 폭이 바뀌어도 따라간다. bottom-3 은 저장 막대(카드 안 sticky bottom-0, py-3)의 버튼 높이와 맞춘 값 —
  * 막대는 카드 안, 이 버튼은 카드 밖이라 겹치지 않는다.
- * 좁은 화면(오른쪽 여백 < 간격 16 + 버튼 ≈ 150px)에서는 숨긴다 — 위쪽 "내 스터디로" 가 같은 곳으로 가고, 떠 있는 버튼이 저장 막대·폼을 가리지 않게.
+ * 좁은 화면(왼쪽 여백 < 간격 16 + 버튼 ≈ 150px)에서는 숨긴다 — 위쪽 "내 스터디로" 가 같은 곳으로 가고, 떠 있는 버튼이 저장 막대·폼을 가리지 않게.
  * 여백 = (화면폭 − 카드폭)/2 이라 기준은 카드 880px 에 맞춘 1200px(여백 160px). 카드 폭을 바꾸면 카드폭 + 2×(16+버튼 ≈ 130) 이상으로 함께 바꾼다.
  */
 export function SideBackRail({ href }: { href: string }) {
   return (
-    <div data-testid="side-back-rail" className="pointer-events-none absolute inset-y-0 left-full hidden w-max flex-col justify-end pl-4 min-[1200px]:flex">
+    <div data-testid="side-back-rail" className="pointer-events-none absolute inset-y-0 right-full hidden w-max flex-col items-end justify-end pr-4 min-[1200px]:flex">
       <Link href={href} className={`${BACK_CLASS} pointer-events-auto sticky bottom-3 z-10 whitespace-nowrap shadow-[0_4px_14px_rgba(27,34,48,.08)]`}>
         <Arrow />
         이전 페이지
