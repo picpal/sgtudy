@@ -18,7 +18,6 @@ describe("toRoomCard (main §3)", () => {
     expect(r.period).toBe("2026.11.02 – 12.27 · 8주");
     expect(r.tags).toEqual(["영어"]);
     expect(r.slot).toEqual({ label: "모집 현황", value: "2/8명", pct: 25, note: "11.02(월) 시작 · 6자리 남음", em: "D-21" });
-    expect(r.mine).toBe(false);
     expect(r.created).toBe(false);
     expect(r.leaderTone).toBe("mint");
   });
@@ -33,7 +32,6 @@ describe("toRoomCard (main §3)", () => {
       progress: { kind: "mine", submitted: 2, assigned: 6, nextTask: { nodeId: "21", title: "EC2 인스턴스 유형 정리", dueDate: "2026-10-14" } } }), TODAY);
     expect(r.status).toBe("active");
     expect(r.approval).toBe(true);
-    expect(r.mine).toBe(true);
     expect(r.period).toBe("2026.10.01 – 12.31 · 13주");
     expect(r.slot).toEqual({ label: "내 진척률", value: "33%", pct: 33, note: "EC2 인스턴스 유형 정리", em: "D-2" });
   });
@@ -68,7 +66,6 @@ describe("toRoomCard (main §3)", () => {
     expect(jcg.slot).toEqual({ label: "모집 현황", value: "4/4명", pct: 100, note: "10.19(월) 시작 · 정원 마감", em: "D-7" });
     const docker = toRoomCard(dto({ slug: "docker", memberCount: 1, maxMembers: 6, startDate: "2026-11-09", endDate: "2026-12-20", membership: { role: "leader", status: "active" } }), TODAY);
     expect(docker.created).toBe(true);
-    expect(docker.mine).toBe(false);
     expect(docker.slot).toEqual({ label: "모집 현황", value: "1/6명", pct: 17, note: "11.09(월) 시작 · 첫 참가자를 기다려요", em: "D-28" });
   });
   it("draft room gets its own badge status (D2)", () => {

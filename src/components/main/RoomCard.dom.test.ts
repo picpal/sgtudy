@@ -8,7 +8,7 @@ import { ROOMS } from "@/data/rooms";
 
 const base = ROOMS[0]; // approval 은 끈다 — 승인제 아이콘의 title="그룹장 승인제" 와 섞이지 않게
 const html = (created: boolean, scope: HomeFilters["scope"]) =>
-  renderToStaticMarkup(createElement(RoomCard, { room: { ...base, approval: false, created, mine: !created }, selectedTags: [], filters: { ...DEFAULT_FILTERS, scope } }));
+  renderToStaticMarkup(createElement(RoomCard, { room: { ...base, approval: false, created }, selectedTags: [], filters: { ...DEFAULT_FILTERS, scope } }));
 
 describe("RoomCard 그룹장 배지 (참가한 스터디에 그룹장 방 포함, 0029)", () => {
   it("참가한 스터디: 내가 그룹장인 방에만 '그룹장' 배지", () => {

@@ -28,7 +28,6 @@ export type Room = {
   /** 그룹장 userId — 아바타 변형(avatarColors) */
   leaderId?: string;
   tags: string[];
-  mine: boolean;
   created: boolean;
   period: string;
   slot: Slot;
@@ -47,7 +46,6 @@ export const ROOMS: Room[] = [
     max: 6,
     leader: "민수",
     tags: ["AWS", "클라우드", "자격증"],
-    mine: true,
     created: false,
     period: "2026.10.01 – 12.31 · 3개월",
     slot: { label: "내 진척률", value: "50%", pct: 50, note: "EC2 인스턴스 유형 정리", em: "D-2" },
@@ -63,7 +61,6 @@ export const ROOMS: Room[] = [
     max: 8,
     leader: "서연",
     tags: ["영어", "토익"],
-    mine: false,
     created: false,
     period: "2026.11.02 – 12.27 · 8주",
     slot: { label: "모집 현황", value: "2/8명", pct: 25, note: "11.02(월) 시작 · 6자리 남음", em: "D-21" },
@@ -79,7 +76,6 @@ export const ROOMS: Room[] = [
     max: 5,
     leader: "지훈",
     tags: ["Spring", "백엔드", "Java"],
-    mine: true,
     created: false,
     period: "2026.10.05 – 2027.01.31 · 17주",
     slot: { label: "내 진척률", value: "33%", pct: 33, note: "섹션 6~7 정리 노트", em: "D-6" },
@@ -95,7 +91,6 @@ export const ROOMS: Room[] = [
     max: 6,
     leader: "현우",
     tags: ["알고리즘", "코딩테스트"],
-    mine: true,
     created: false,
     period: "2026.07.01 – 09.30 · 13주",
     slot: { label: "최종 달성률", value: "87%", pct: 87, note: "13주 완주 · 제출 68/78건", em: "" },
@@ -111,7 +106,6 @@ export const ROOMS: Room[] = [
     max: 4,
     leader: "수민",
     tags: ["자격증", "정보처리기사"],
-    mine: false,
     created: false,
     period: "2026.10.19 – 11.01 · 2주",
     slot: { label: "모집 현황", value: "4/4명", pct: 100, note: "10.19(월) 시작 · 정원 마감", em: "D-7" },
@@ -127,7 +121,6 @@ export const ROOMS: Room[] = [
     max: 6,
     leader: "예린",
     tags: ["CS", "면접"],
-    mine: false,
     created: false,
     period: "2026.10.19 – 11.30 · 6주",
     slot: { label: "모집 현황", value: "3/6명", pct: 50, note: "10.19(월) 시작 · 3자리 남음", em: "D-7" },
@@ -143,7 +136,6 @@ export const ROOMS: Room[] = [
     max: 8,
     leader: "태호",
     tags: ["React", "프론트엔드"],
-    mine: false,
     created: false,
     period: "2026.09.21 – 11.15 · 8주",
     slot: { label: "전체 진행", value: "4/8주", pct: 50, note: "4주차 · 컴포넌트 상태 관리", em: "" },
@@ -159,7 +151,6 @@ export const ROOMS: Room[] = [
     max: 6,
     leader: "철수",
     tags: ["Docker", "Kubernetes", "클라우드"],
-    mine: false,
     created: true,
     period: "2026.11.09 – 12.20 · 6주",
     slot: { label: "모집 현황", value: "0/6명", pct: 0, note: "11.09(월) 시작 · 첫 참가자를 기다려요", em: "D-28" },
@@ -175,7 +166,6 @@ export const ROOMS: Room[] = [
     max: 5,
     leader: "가은",
     tags: ["SQL", "데이터", "자격증"],
-    mine: true,
     created: false,
     period: "2026.10.26 – 11.22 · 4주",
     slot: { label: "모집 현황", value: "1/5명", pct: 20, note: "10.26(월) 시작 · 승인 대기중", em: "D-14" },

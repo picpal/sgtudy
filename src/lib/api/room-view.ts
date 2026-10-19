@@ -108,6 +108,10 @@ function markOf(d: RoomCardDto): SidebarRoom["mark"] {
   return undefined;
 }
 
+/** 만든 스터디 목록에서는 전부 그룹장 방이라 "그룹장" 표시가 정보가 없다 — 홈 카드와 같이 숨긴다 */
+export const markForScope = (mark: SidebarRoom["mark"], scope: "public" | "mine" | "created"): SidebarRoom["mark"] =>
+  scope === "created" && mark === "owner" ? undefined : mark;
+
 export function toSidebarRoom(d: RoomCardDto, today: string): SidebarRoom {
   return {
     id: d.slug,

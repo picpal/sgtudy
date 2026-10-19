@@ -7,7 +7,7 @@ import { routes } from "@/lib/routes";
 import { PAL } from "@/lib/palette";
 import type { RoomStatus } from "@/lib/types";
 import { MARK } from "@/data/room-view";
-import { groupSidebar, type SidebarRoom } from "@/lib/api/room-view";
+import { groupSidebar, markForScope, type SidebarRoom } from "@/lib/api/room-view";
 import { stickyAside, useStickyFit } from "@/lib/useStickyFit";
 import { DEFAULT_FILTERS, filtersNote, homeHref, roomHrefWith, type HomeFilters } from "@/components/main/homeUrl";
 
@@ -120,7 +120,8 @@ export function RoomSidebar({ selected, items, total, filters = DEFAULT_FILTERS,
               <div className="mt-1 text-[12px] font-medium text-muted">{g.label}</div>
               {g.items.map((r) => {
                 const on = r.id === selected;
-                const mark = r.mark ? MARK[r.mark] : undefined;
+                const rm = markForScope(r.mark, filters.scope);
+                const mark = rm ? MARK[rm] : undefined;
                 const first = r.tags[0];
                 return (
                   <Link

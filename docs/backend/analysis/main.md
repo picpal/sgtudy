@@ -30,8 +30,8 @@
 | `max` | number | `rooms.max_members` | `cur >= max` 면 인원 텍스트 빨강 |
 | `leader` | string | `users.nickname` (role = LEADER 멤버) | 푸터 "by 민수" + 아바타 |
 | `tags` | string[] | `room_tags` → `tags.name` 순서대로 | 카드 행 24px 고정, 넘치면 잘림 → 서버 정렬 순서가 곧 노출 우선순위 |
-| `mine` | boolean | 내 `room_members` 행 존재 (`status IN (ACTIVE, PENDING)`), 단 LEADER 제외 | sqld 는 **승인 대기중인데 mine=true** → "내가 참가한 방"에 대기 방 포함 |
-| `created` | boolean | 내 멤버십 `role = LEADER` | docker. 목업에선 mine 과 배타 |
+| `mine` | boolean | 내가 그룹장인 방 + 내 `room_members` MEMBER 행(`status IN (ACTIVE, PENDING)`) — 0029 이후 created ⊂ mine | sqld 는 **승인 대기중인데 mine=true** → "내가 참가한 방"에 대기 방 포함 |
+| `created` | boolean | 내 멤버십 `role = LEADER` | docker. mine 에도 포함된다(0029) |
 | `period` | string | `rooms.start_date`, `end_date` 로 포맷 (§3-5) | "2026.10.01 – 12.31 · 3개월" |
 | `slot.label` | string | 상태·참여 여부로 결정 (§3-2) | 모집 현황 / 내 진척률 / 전체 진행 / 최종 달성률 |
 | `slot.value` | string | 상태별 계산 (§3-2) | "4/6명", "50%", "4/8주", "87%" |
@@ -43,7 +43,7 @@
 
 | 필드 | 타입 | 어디서 오는가 | 비고 |
 |---|---|---|---|
-| `tabCounts.public/mine/created` | number | **필터와 무관한 고정 총계**. 전체 공개 방 수 / 내가 참가(대기 포함)한 방 수 / 내가 만든 방 수 | 8 / 4 / 1 |
+| `tabCounts.public/mine/created` | number | **필터와 무관한 고정 총계**. 전체 공개 방 수 / 내가 참가(대기 포함·그룹장 방 포함)한 방 수 / 내가 만든 방 수 | 8 / 5 / 1 |
 | `tagCounts[]` `{tag, count}` | 배열 | **현재 탭의 방만** 기준 집계 (상태·검색·태그 필터 무시). count 내림차순, 동률 시 `localeCompare(ko)` | public 탭: 자격증 3, 클라우드 2, 나머지 1 |
 | `rooms[]` | `Room[]` | 탭 → 상태 → 검색 → 태그 순 적용 결과. **배열 순서 = 렌더 순서** (정렬 기준 명시 없음) | 초기 8장 (spring 제외) |
 
@@ -170,11 +170,11 @@ N = round(inclusiveDays / 7),  inclusiveDays = end - start + 1
 ### 3-6. 탭 소속 / 카운트
 ```
 public  : is_public = true  (상태 무관 — ended·full 포함, 내 멤버십 무관)
-mine    : 내 멤버십 status IN (ACTIVE, PENDING) AND role != LEADER
+mine    : (내 멤버십 role = LEADER) OR (role = MEMBER AND status IN (ACTIVE, PENDING))   -- 0029: created ⊂ mine
 created : 내 멤버십 role = LEADER
 tabCounts = 각 집합 크기 (필터 미적용)
 ```
-검증: public 8 (spring 제외), mine 4 (aws, spring, algo, sqld — sqld 는 PENDING), created 1 (docker) ✓. 비공개 방은 `mine`/`created` 에서만 보인다.
+검증: public 8 (spring 제외), mine 5 (aws, spring, sqld, docker, algo — sqld 는 PENDING, docker 는 그룹장 방), created 1 (docker) ✓. 비공개 방은 `mine`/`created` 에서만 보인다.
 
 ### 3-7. 태그 facet
 현재 `scope` 집합(상태·검색·태그 미적용)에서 `room_tags` GROUP BY tag → count DESC, name ko-collation ASC. 서버 페이지네이션을 넣으면 **facet 은 반드시 서버 집계**여야 한다 (현재는 클라이언트 전체 배열 기준).
@@ -273,7 +273,7 @@ tabCounts = 각 집합 크기 (필터 미적용)
 | 1 | **방 생성 직후 상태** | 디자인: "말단 과제 1개 이상 있어야 모집 시작 가능" → 생성 직후는 모집중이 아닌 상태가 필요. 화면엔 해당 배지 없음 | `DRAFT` 상태 추가. 내가 만든 방 탭에만 노출, 배지 "준비중". 그룹장 "모집 시작" 액션(커리큘럼 탭)에서 RECRUITING 전환 + 말단 과제 ≥1 검증 |
 | 2 | **docker `cur: 0/6`** vs aws `4/6`(그룹장 포함) | 같은 규칙이면 docker 는 1/6 (철수 본인). 목업 불일치 | 그룹장 포함 카운트(aws 기준). docker 는 1/6, "첫 참가자를 기다려요" 조건은 *그룹장 외 0명* |
 | 3 | **승인 대기 방이 "내가 참가한 방"에 포함** (sqld) | 참가 전인데 mine. 의도적일 수 있음(내 신청 추적) | 포함 유지. `membership.status = PENDING` 으로 "승인 대기중" 표시. 거절/만료는 제외 |
-| 4 | **내가 만든 방이 "내가 참가한 방"에 없음** | 목업에서 mine·created 배타. 그룹장도 과제 수행(기본 ON)인데 내 진척률을 볼 탭이 없음 | 배타 유지(목업 존중). 단 created 탭의 active 방 슬롯은 `leader_participates` 면 "내 진척률", 아니면 "전체 진행" |
+| 4 | **내가 만든 방이 "내가 참가한 방"에 포함 (0029)** | 원래 목업은 mine·created 배타였음. 그룹장도 과제 수행(기본 ON)인데 내 진척률을 볼 탭이 없음 | 0029 로 mine 에 그룹장 방 포함(created ⊂ mine, 배타 아님). created 탭의 active 방 슬롯은 `leader_participates` 면 "내 진척률", 아니면 "전체 진행" |
 | 5 | **종료 방 슬롯 = 팀 달성률 (87% = 68/78)** | mine=true 인데 내 달성률이 아님 | 팀 집계 유지(목업). 내 달성률은 방 상세에서 |
 | 6 | **`period` 의 "3개월"(aws) vs "13주"(algo)** | 둘 다 92일. 규칙 도출 불가 | `round(days/7)주` 통일 → aws "13주" |
 | 7 | **"전체 진행 4/8주"의 "주" 단위** | 회차가 주 단위가 아닐 수 있음 (2단계 노드명 자유) | 단위는 "회차"로 바꾸거나, 회차 수 = 2단계 노드 수로 두고 라벨만 "주" 유지. 결정 필요 |

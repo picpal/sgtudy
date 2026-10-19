@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { addDays } from "@/lib/date";
 import { safeReturnTo } from "@/lib/routes";
 import { roomStatusLabel } from "@/lib/types";
-import { actionOf, applyMembership, firstParam, groupSidebar, roomReturnTo, toRoom, toSidebarRoom } from "./room-view";
+import { actionOf, applyMembership, firstParam, groupSidebar, markForScope, roomReturnTo, toRoom, toSidebarRoom } from "./room-view";
 import type { RoomCardDto, RoomDetail, RoundSummary } from "./types";
 
 const TODAY = "2026-10-12";
@@ -199,5 +199,14 @@ describe("toRoom · actionOf — 보관된 방", () => {
     expect(actionOf(pend)).toBe("pending");
     expect(actionOf({ ...active, me: { state: "pending" } })).toBe("pending");
     expect(toRoom(pend, TODAY, "u-x").base).toBe("archived");
+  });
+});
+
+describe("markForScope", () => {
+  it("hides 그룹장 mark only in the created scope", () => {
+    expect(markForScope("owner", "created")).toBeUndefined();
+    expect(markForScope("owner", "mine")).toBe("owner");
+    expect(markForScope("owner", "public")).toBe("owner");
+    expect(markForScope("pending", "created")).toBe("pending");
   });
 });

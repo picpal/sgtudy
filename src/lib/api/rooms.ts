@@ -73,7 +73,6 @@ export function toRoomCard(d: RoomCardDto, today: string): Room {
     leaderTone: d.leader.tone,
     leaderId: d.leader.userId,
     tags: d.tags.map((t) => t.label),
-    mine: !!m && m.role === "member" && (m.status === "active" || m.status === "pending"),
     created: m?.role === "leader",
     period: periodCard(d.startDate, d.endDate),
     slot: slotOf(d, today),
