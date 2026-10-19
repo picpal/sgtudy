@@ -77,8 +77,8 @@ export type StudyRoom = Omit<Room, "action"> & { action: StudyAction; draft: boo
 function studyActionOf(d: RoomDetail): StudyAction {
   const st = d.me?.state;
   if (st === "leader") return "owner";
+  if (st === "pending") return "pending";   // 보관된 방도 승인 대기 본인은 신청 취소 (백로그 F①)
   if (d.archived) return "closed";
-  if (st === "pending") return "pending";
   if (st === "active") return d.status === "recruit" || d.status === "draft" ? "leave" : d.status === "active" ? "joined" : "closed";
   return "closed";
 }

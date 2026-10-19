@@ -61,3 +61,16 @@ describe("JoinInfoCard — 보관된 방", () => {
     act(() => root.unmount());
   });
 });
+
+// 백로그 F①: 보관된 방에서 승인 대기 중이면 보관 안내와 함께 [신청 취소]
+describe("JoinInfoCard — 보관된 방의 승인 대기", () => {
+  it("보관 안내 + 신청 취소", () => {
+    const { host, root, onCancel } = render({ ...base, archived: true, action: "pending", dday: "보관됨", ddayLong: "보관된 스터디 · 기록만 볼 수 있어요" });
+    expect(btn(host, "보관된 스터디")?.disabled).toBe(true);
+    expect(host.textContent).toContain("그룹장이 보관했어요 · 승인 대기 중인 신청은 취소할 수 있어요");
+    expect(host.textContent).not.toContain("자동 만료");
+    act(() => btn(host, "신청 취소")!.click());
+    expect(onCancel).toHaveBeenCalledWith("cancel");
+    act(() => root.unmount());
+  });
+});

@@ -148,17 +148,26 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
         )}
         {room.action === "pending" && (
           <div className="flex flex-col gap-2">
-            <div className="flex h-12 items-center justify-center gap-2 rounded-[24px] bg-amber-soft text-[15px] font-semibold text-amber-text">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-              {MEMBERSHIP_LABEL.pending}
-            </div>
+            {room.archived ? (
+              // 백로그 F①: 보관된 방에 남은 승인 대기 — 보관 안내와 함께 신청만 취소할 수 있다
+              <button type="button" disabled className="h-12 rounded-[24px] bg-slate-soft text-[15px] font-semibold text-muted">
+                보관된 스터디
+              </button>
+            ) : (
+              <div className="flex h-12 items-center justify-center gap-2 rounded-[24px] bg-amber-soft text-[15px] font-semibold text-amber-text">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
+                {MEMBERSHIP_LABEL.pending}
+              </div>
+            )}
             <button type="button" onClick={() => onCancel("cancel")} disabled={busy} className="h-11 rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink disabled:opacity-60">
               신청 취소
             </button>
-            <span className="text-center text-[12px] text-muted">시작일까지 승인되지 않으면 신청이 자동 만료돼요</span>
+            <span className="text-center text-[12px] text-muted">
+              {room.archived ? "그룹장이 보관했어요 · 승인 대기 중인 신청은 취소할 수 있어요" : "시작일까지 승인되지 않으면 신청이 자동 만료돼요"}
+            </span>
           </div>
         )}
         {room.action === "closed" && (

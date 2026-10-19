@@ -82,6 +82,10 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
     expect([label("draft"), label("recruit"), label("active"), label("ended")]).toEqual(["준비중", "모집중", "진행중", "종료"]);
   });
   // 시나리오 QA #6: 보관된 방을 주소로 열면 "종료" 와 "진행중·마감 D-6" 이 섞이지 않고 모두 "보관된 스터디"
+  // 백로그 F①: 보관된 방의 승인 대기 본인은 신청 취소 카드(closed 가 아니다)
+  it("archived room + 승인 대기 본인 → pending", () => {
+    expect(toStudyRoom({ ...aws, archived: true, me: { state: "pending" } }, tree, TODAY, "u1").action).toBe("pending");
+  });
   it("archived room → 보관됨 표기로 통일 (#6)", () => {
     const r = toStudyRoom({ ...aws, archived: true }, tree, TODAY, "u1");
     expect(r).toMatchObject({ archived: true, dday: "보관됨", ddayLong: "보관된 스터디 · 기록만 볼 수 있어요", action: "closed" });

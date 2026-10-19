@@ -17,6 +17,8 @@ const DISABLED: Partial<Record<Action, [label: string, note: string]>> = {
   archived: ["보관된 스터디", "그룹장이 보관했어요 · 기록만 볼 수 있어요"],
 };
 
+const ARCHIVED_PENDING_NOTE = "그룹장이 보관했어요 · 승인 대기 중인 신청은 취소할 수 있어요";
+
 const PRIMARY = "flex h-[50px] items-center justify-center gap-2 rounded-[25px] font-semibold text-white hover:text-white disabled:opacity-60";
 const SECONDARY = "flex h-11 items-center justify-center gap-[6px] rounded-[22px] border border-line-3 bg-surface text-[14px] font-medium text-ink";
 const NOTE = "text-center text-[12px] text-muted";
@@ -51,8 +53,23 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
           <span className={NOTE}>{act === "join" ? "바로 참가돼요 · 시작 전까지 언제든 취소할 수 있어요" : "그룹장이 승인하면 참가가 확정돼요"}</span>
         </div>
       );
-    case "leave":
-    case "pending": {
+    case "pending":
+      // 백로그 F①: 보관된 방에 남은 승인 대기 — 보관 안내와 함께 신청만 취소할 수 있다
+      if (room.archived) {
+        return (
+          <div className="flex flex-col gap-2">
+            <button type="button" disabled className="h-[50px] rounded-[25px] bg-slate-soft text-[15px] font-semibold text-muted">
+              {DISABLED.archived![0]}
+            </button>
+            <button type="button" onClick={onCancel} disabled={busy} className={SECONDARY}>
+              신청 취소
+            </button>
+            <span className={NOTE}>{ARCHIVED_PENDING_NOTE}</span>
+          </div>
+        );
+      }
+    // fallthrough
+    case "leave": {
       const leave = act === "leave";
       return (
         <div className="flex flex-col gap-2">

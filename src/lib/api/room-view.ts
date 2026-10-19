@@ -35,8 +35,8 @@ export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "max
 /** 03-api §3: 비로그인→(종료·진행중·정원 마감이면 그 상태, 아니면 login) · leader→owner · active&recruit→leave · active&(active|ended)→joined · pending→pending · inactive→inactive · ended→ended · active→activeClosed · full→full · approval→apply · direct→join */
 export function actionOf(d: ActionInput): Action {
   const st = d.me?.state;
-  // 보관된 방: 그룹장은 관리, 참가자는 내 스터디(기록 보기), 그 밖에는 참가할 수 없다는 안내 (최종 수정 4)
-  if (d.archived) return st === "leader" ? "owner" : st === "active" ? "joined" : "archived";
+  // 보관된 방: 그룹장은 관리, 참가자는 내 스터디(기록 보기), 승인 대기 본인은 신청 취소(백로그 F① — 서버도 허용), 그 밖에는 참가할 수 없다는 안내 (최종 수정 4)
+  if (d.archived) return st === "leader" ? "owner" : st === "active" ? "joined" : st === "pending" ? "pending" : "archived";
   if (!d.me) return closedAction(d) ?? "login";
   if (st === "leader") return "owner";
   const recruiting = d.status === "recruit" || d.status === "draft";
@@ -69,7 +69,7 @@ export function toRoom(dto: RoomDetail, today: string, meId: string | null): Roo
     intro: d.intro,
     status: uiStatus(d.status),
     draft: d.status === "draft",
-    base: baseOf(actionOf(dto)),
+    base: dto.archived && actionOf(dto) === "pending" ? "archived" : baseOf(actionOf(dto)),
     approval: d.joinMode === "approval",
     pub: d.isPublic,
     period: periodLong(d.startDate, d.endDate),

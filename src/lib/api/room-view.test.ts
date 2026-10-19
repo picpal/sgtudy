@@ -193,4 +193,11 @@ describe("toRoom · actionOf — 보관된 방", () => {
     expect(actionOf({ ...detail({ archived: true }), me: { state: "active" } })).toBe("joined"); // 모집 중 보관도 참가 취소 없음
     expect(actionOf({ ...active, me: null })).toBe("archived");
   });
+  // 백로그 F①: 보관된 방에서도 승인 대기 본인은 신청을 취소할 수 있다(서버 room_cancel_application 은 보관 여부를 보지 않는다)
+  it("승인 대기 본인은 pending(신청 취소) — base 는 보관", () => {
+    const pend = { ...detail({ archived: true }), me: { state: "pending" as const } };
+    expect(actionOf(pend)).toBe("pending");
+    expect(actionOf({ ...active, me: { state: "pending" } })).toBe("pending");
+    expect(toRoom(pend, TODAY, "u-x").base).toBe("archived");
+  });
 });
