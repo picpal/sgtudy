@@ -36,3 +36,8 @@ describe("helpers", () => {
     expect(removePlanOf({ key: "k", fileId: "c", name: "c", size: 1, status: "error", progress: 0, error: "x" }, saved)).toBe("drop");
   });
 });
+
+it("slotsLeft takes an optional limit", () => {
+  expect(slotsLeft([], 3)).toBe(3);
+  expect(slotsLeft(fromSaved([meta("a")]))).toBe(4);
+});

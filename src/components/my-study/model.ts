@@ -40,16 +40,18 @@ export type Overrides = {
   typeOv: Record<string, TaskType>;
   /** 지정 과제 담당자 userId[] */
   assignOv: Record<string, string[]>;
+  /** 노드 id → 선택된 첨부 id (저장본과 다를 때만) */
+  files: Record<string, string[]>;
   /** 부모 id 또는 'root' → 추가된 제목 배열 (서버 응답으로 교체되기 전까지) */
   added: Record<string, string[]>;
   removed: Record<string, boolean>;
   archived: Record<string, boolean>;
 };
 
-export const EMPTY_OVERRIDES: Overrides = { titles: {}, descs: {}, dates: {}, typeOv: {}, assignOv: {}, added: {}, removed: {}, archived: {} };
+export const EMPTY_OVERRIDES: Overrides = { titles: {}, descs: {}, dates: {}, typeOv: {}, assignOv: {}, files: {}, added: {}, removed: {}, archived: {} };
 
 /** 편집 패널이 "저장" 전까지 모아 두는 필드 — 구조 변경(added/removed/archived)은 즉시 RPC 라 미저장 대상이 아니다 */
-const FIELD_KEYS = ["titles", "descs", "dates", "typeOv", "assignOv"] as const;
+const FIELD_KEYS = ["titles", "descs", "dates", "typeOv", "assignOv", "files"] as const;
 
 /** 그 노드에 저장하지 않은 수정이 있나 (Q2-05) */
 export const isDirty = (ov: Overrides, id: string | null): boolean => !!id && FIELD_KEYS.some((k) => id in ov[k]);
@@ -65,7 +67,7 @@ export function dropFieldOv(ov: Overrides, id: string): Overrides {
 }
 
 /** 구조 오버라이드만 남긴다 — 커리큘럼 편집 패널 밖(개요·보드·캘린더·간트)에는 저장된 값만 보인다 */
-export const stripFieldOv = (ov: Overrides): Overrides => ({ ...ov, titles: {}, descs: {}, dates: {}, typeOv: {}, assignOv: {} });
+export const stripFieldOv = (ov: Overrides): Overrides => ({ ...ov, titles: {}, descs: {}, dates: {}, typeOv: {}, assignOv: {}, files: {} });
 
 /** 추가(미저장) 노드의 임시 id */
 export const tempId = (parentId: string, i: number) => `${parentId}.new${i}`;

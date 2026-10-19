@@ -333,3 +333,12 @@ describe("leafLocks — 제출이 있는 과제의 유형·담당 잠금 (시나
     expect(l.assignReason).toBe("이미 제출한 담당자는 뺄 수 없어요");
   });
 });
+
+it("isDirty counts attachment overrides; dropFieldOv drops them", () => {
+  const ov = { ...EMPTY_OVERRIDES, files: { "21": ["f1"] } };
+  expect(isDirty(ov, "21")).toBe(true);
+  expect(dropFieldOv(ov, "21").files).toEqual({});
+});
+it("stripFieldOv resets attachment overrides", () => {
+  expect(stripFieldOv({ ...EMPTY_OVERRIDES, files: { "21": ["f1"] } }).files).toEqual({});
+});

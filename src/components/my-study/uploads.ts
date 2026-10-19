@@ -49,7 +49,7 @@ export function uploadsReducer(rows: UploadRow[], a: UploadAction): UploadRow[] 
 }
 
 /** 남은 자리 — 올리는 중·실패 줄도 자리를 차지한다 */
-export const slotsLeft = (rows: UploadRow[]) => SUB_LIMITS.files - rows.length;
+export const slotsLeft = (rows: UploadRow[], limit: number = SUB_LIMITS.files) => limit - rows.length;
 
 /** 제출에 실을 파일 id (순서 유지) */
 export const readyIds = (rows: UploadRow[]) => rows.filter((r) => r.status === "ready").map((r) => r.fileId);
