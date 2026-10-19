@@ -9,7 +9,7 @@ import type { FileMeta } from "@/lib/api/types";
 import { uploadAttachment, uploadErrorText, type UploadFailure } from "@/lib/api/upload";
 import { NODE_FILE_LIMITS, nodeObjectKey, nodeRemovePlan, nodeRows } from "./nodeFiles";
 import { checkFile } from "./submission";
-import { slotsLeft, uploadsReducer, type UploadRow } from "./uploads";
+import { slotsLeft, uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
 
 /* 진행목표 항목 첨부 업로드 큐 — useSubmissionComposer 의 업로드 큐와 같은 규칙(동시성 2·abort·미연결 정리).
    목록은 제어형: 붙은 파일 id 는 호출자(selected/onSelect)가 들고, 여기는 메타와 올리는 중·실패 줄만 든다.
@@ -26,6 +26,9 @@ type Args = {
   toast: (m: ToastMsg) => void;
 };
 
+type Act = UploadAction | { type: "reset" };
+const reducer = (rows: UploadRow[], a: Act) => (a.type === "reset" ? [] : uploadsReducer(rows, a));
+
 const CONCURRENCY = 2;
 const isFailure = (e: unknown): e is UploadFailure => typeof e === "object" && e !== null && "status" in e && typeof (e as UploadFailure).status === "number";
 
@@ -37,9 +40,20 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
     for (const f of saved) m.set(f.id, f);
     return m;
   }, [added, saved]);
-  const [pending, dispatch] = useReducer(uploadsReducer, []);
+  const [pending, dispatch] = useReducer(reducer, []);
   // 저장 응답 FILE_NOT_READY 로 표시할 붙은 파일 — fileId → 문구
   const [errs, setErrs] = useState<ReadonlyMap<string, string>>(new Map());
+  // 저장돼 saved 가 바뀌면 그 파일의 오류 표시는 지운다 (렌더 중 state 맞추기 패턴)
+  const [prevSaved, setPrevSaved] = useState(saved);
+  if (prevSaved !== saved) {
+    setPrevSaved(saved);
+    if (saved.some((f) => errs.has(f.id)))
+      setErrs((m) => {
+        const n = new Map(m);
+        for (const f of saved) n.delete(f.id);
+        return n;
+      });
+  }
 
   const rows = useMemo(
     () => nodeRows(selected, metas, pending).map((r) => (r.status === "ready" && errs.has(r.fileId) ? { ...r, status: "error" as const, error: errs.get(r.fileId) } : r)),
@@ -74,8 +88,13 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
     while (running.current < CONCURRENCY && queue.current.length > 0) {
       const k = queue.current.shift()!;
       const item = files.current.get(k);
+      if (!item) continue;
       const node = nodeRef.current;
-      if (!item || !node) continue;
+      if (!node) {
+        // 임시 행으로 바뀌었다 — 올리는 중으로 남지 않게 실패로 떨어뜨린다 (다시 시도 가능)
+        dispatch({ type: "fail", key: k, error: "저장한 뒤 파일을 붙일 수 있어요" });
+        continue;
+      }
       running.current += 1;
       const ac = new AbortController();
       aborts.current.set(k, ac);
@@ -175,7 +194,20 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
 
   const markError = (fileId: string, error: string) => setErrs((m) => new Map(m).set(fileId, error));
 
+  /** 등록됐지만 아직 저장(node_files_set)하지 않은 파일을 버린다 — 취소·떠나기 (useSubmissionComposer.cancel 과 같은 역할).
+      선택 id(ov/폼 상태)는 호출자가 함께 지운다 */
+  const discardUnsaved = () => {
+    queue.current = [];
+    for (const ac of aborts.current.values()) ac.abort(); // 등록 중이던 건 등록 뒤 버려진다
+    for (const id of added.keys()) if (!savedIds.has(id)) void discardNodeUnattached(id);
+    files.current.clear();
+    setAdded(new Map());
+    setErrs(new Map());
+    dispatch({ type: "reset" });
+    rowsRef.current = rowsRef.current.filter((r) => r.status === "ready" && savedIds.has(r.fileId));
+  };
+
   const uploading = pending.some((r) => r.status === "uploading");
 
-  return { rows, pick, remove, retry, canRetry, uploading, markError };
+  return { rows, pick, remove, retry, canRetry, uploading, markError, discardUnsaved };
 }
