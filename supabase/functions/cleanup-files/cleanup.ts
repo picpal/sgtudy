@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "supabase-js";
-import { chunk, CHUNK, type FileRow, groupByBucket, type RemoveResult, splitRemoval, type Summary } from "./logic.ts";
+import {
+  chunk, CHUNK, type FileRow, groupByBucket, type ObjectRow, type OrphanSummary, type RemoveResult, type Report, splitRemoval,
+  type Summary,
+} from "./logic.ts";
 
-export type { Summary };
+export type { OrphanSummary, Report, Summary };
 
 /** DB·Storage 접근 — 테스트는 가짜로, 실행은 service_role 클라이언트(supabaseStore)로 */
 export interface Store {
@@ -10,6 +13,8 @@ export interface Store {
   removeObjects(bucket: string, paths: string[]): Promise<RemoveResult>;
   /** 아직 DELETED 인 행만 지운다(그 사이 READY 가 된 행은 남는다). 지운 수. 실패는 throw */
   deleteRows(ids: string[]): Promise<number>;
+  /** 0031 고아 객체(files 행 없음, 유예 24h 지남, 오래된 순) limit 개 — DB 의 file_orphan_candidates. 실패는 throw */
+  selectOrphans(limit: number): Promise<ObjectRow[]>;
 }
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -26,15 +31,17 @@ async function tryRemove(store: Store, bucket: string, rows: FileRow[]): Promise
   }
 }
 
-export async function runCleanup(store: Store, opts: { limit: number }): Promise<Summary> {
-  const rows = await store.selectDeleted(opts.limit);
+type Removal = { ok: string[]; failed: number; errors: string[] };
+
+/** 버킷별·CHUNK 단위로 remove. 묶음이 실패하면 1개씩 다시 — 영구 오류 하나가 같은 묶음의 정상 행까지 매번 붙잡지 않게
+ *  (1개짜리는 그 결과 그대로). 성공한 row.id 를 돌려준다. purge·고아 정리가 같이 쓴다 */
+async function removeGrouped(store: Store, rows: FileRow[]): Promise<Removal> {
   const ok: string[] = [];
   let failed = 0;
   const errors: string[] = [];
   for (const [bucket, list] of groupByBucket(rows)) {
     for (const part of chunk(list, CHUNK)) {
       const res = await tryRemove(store, bucket, part);
-      // 묶음이 실패하면 1개씩 다시 — 영구 오류 하나가 같은 묶음의 정상 행까지 매번 붙잡지 않게(1개짜리는 그 결과 그대로)
       const tries: [FileRow[], RemoveResult][] = [];
       let skipped: FileRow[] = [];
       if (res.error && part.length > 1) {
@@ -60,6 +67,12 @@ export async function runCleanup(store: Store, opts: { limit: number }): Promise
       }
     }
   }
+  return { ok, failed, errors };
+}
+
+export async function runCleanup(store: Store, opts: { limit: number }): Promise<Summary> {
+  const rows = await store.selectDeleted(opts.limit);
+  const { ok, failed, errors } = await removeGrouped(store, rows);
   let rowsDeleted = 0;
   for (const ids of chunk(ok, CHUNK)) {
     try {
@@ -69,6 +82,33 @@ export async function runCleanup(store: Store, opts: { limit: number }): Promise
     }
   }
   return { selected: rows.length, removed: ok.length, rowsDeleted, failed, errors };
+}
+
+/**
+ * 0031: files 행이 아예 없는 Storage 객체(유예 24h 지난 고아)를 지운다. 행이 없으니 지울 행도 없다.
+ * 실패한 객체는 그대로 남아 다음 실행이 다시 고른다. 후보 조회 실패는 throw 하지 않고 errors 로 — purge 결과는 살린다.
+ */
+export async function runOrphanCleanup(store: Store, opts: { limit: number }): Promise<OrphanSummary> {
+  let objs: ObjectRow[];
+  try {
+    objs = await store.selectOrphans(opts.limit);
+  } catch (e) {
+    return { selected: 0, removed: 0, failed: 0, errors: [`orphan select: ${msg(e)}`] };
+  }
+  const rows: FileRow[] = objs.map((o) => ({ id: `${o.bucket_id}/${o.object_path}`, bucket_id: o.bucket_id, object_path: o.object_path }));
+  const { ok, failed, errors } = await removeGrouped(store, rows);
+  return { selected: objs.length, removed: ok.length, failed, errors: errors.map((e) => `orphan ${e}`) };
+}
+
+/** 한 번 호출 = 기존 purge(DELETED 행) → 고아 객체. 응답·로그는 purge 요약 + orphans 요약, errors 는 합친다 */
+export async function runAll(store: Store, opts: { limit: number }): Promise<Report> {
+  const purge = await runCleanup(store, opts);   // 후보 조회 실패는 기존처럼 throw → 500
+  const orphan = await runOrphanCleanup(store, opts);
+  return {
+    ...purge,
+    errors: [...purge.errors, ...orphan.errors],
+    orphans: { selected: orphan.selected, removed: orphan.removed, failed: orphan.failed },
+  };
 }
 
 export function supabaseStore(db: SupabaseClient): Store {
@@ -81,6 +121,11 @@ export function supabaseStore(db: SupabaseClient): Store {
     async removeObjects(bucket, paths) {
       const { data, error } = await db.storage.from(bucket).remove(paths);
       return { data, error: error ? { message: error.message } : null };
+    },
+    async selectOrphans(limit) {
+      const { data, error } = await db.rpc("file_orphan_candidates", { p_limit: limit });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as ObjectRow[];
     },
     async deleteRows(ids) {
       const { count, error } = await db.from("files").delete({ count: "exact" }).in("id", ids).eq("status", "DELETED");

@@ -58,4 +58,9 @@ Deno.test("responseStatus: 오류 없으면 200, 일부만 실패 207, 하나도
   assertEquals(responseStatus({ selected: 3, removed: 2, rowsDeleted: 2, failed: 1, errors: ["remove attachments: x"] }), 207);
   assertEquals(responseStatus({ selected: 3, removed: 3, rowsDeleted: 0, failed: 0, errors: ["delete rows: x"] }), 207);
   assertEquals(responseStatus({ selected: 2, removed: 0, rowsDeleted: 0, failed: 2, errors: ["remove attachments: x"] }), 500);
+  // 0031 orphans: 고아 실패도 실패로, 고아만 지웠어도 207
+  const z = { selected: 0, removed: 0, rowsDeleted: 0, failed: 0, errors: [] as string[] };
+  assertEquals(responseStatus({ ...z, orphans: { selected: 2, removed: 2, failed: 0 } }), 200);
+  assertEquals(responseStatus({ ...z, errors: ["orphan remove"], orphans: { selected: 2, removed: 1, failed: 1 } }), 207);
+  assertEquals(responseStatus({ ...z, errors: ["orphan remove"], orphans: { selected: 1, removed: 0, failed: 1 } }), 500);
 });

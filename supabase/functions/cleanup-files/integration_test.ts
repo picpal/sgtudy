@@ -4,7 +4,7 @@
 // 만든 행·객체는 끝나면 지운다. 0019 가 로컬 DB 에 적용돼 있어야 한다(file_purge_candidates).
 import { assertEquals } from "@std/assert";
 import { createClient } from "supabase-js";
-import { runCleanup, type Store, supabaseStore } from "./cleanup.ts";
+import { runCleanup, runOrphanCleanup, type Store, supabaseStore } from "./cleanup.ts";
 
 const URL = Deno.env.get("SUPABASE_URL");
 const KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -52,5 +52,26 @@ Deno.test({ name: "integration: DELETED(유예 지남) 객체·행 정리, 이�
   } finally {
     await db.from("files").delete().in("id", [gone.id, missing.id, fresh.id, ready.id]);
     await db.storage.from("attachments").remove([gone, missing, fresh, ready].map(path));
+  }
+} });
+
+// 0031: 실제 Storage 객체의 created_at 은 API 로 과거로 돌릴 수 없다 → 방금 올린 고아(유예 안)는 후보가 아니고,
+//       runOrphanCleanup 이 고른 것만 지운다는 것만 본다(유예 지난 경우는 supabase/tests/orphan-objects-sql.test.ts 가 PGlite 로).
+Deno.test({ name: "integration: file_orphan_candidates RPC 동작, 방금 올린 미등록 객체(유예 24h 안)는 고르지 않고 남긴다", ignore: !(URL && KEY), fn: async () => {
+  const db = createClient(URL!, KEY!, { auth: { persistSession: false, autoRefreshToken: false } });
+  const key = `n/1/1/${crypto.randomUUID()}.txt`;
+  const { error } = await db.storage.from("attachments").upload(key, new Blob(["x"], { type: "text/plain" }), { contentType: "text/plain" });
+  if (error) throw error;
+  const real = supabaseStore(db);
+  try {
+    const cands = await real.selectOrphans(1000);
+    assertEquals(cands.some((c) => c.object_path === key), false);
+    const scoped: Store = { ...real, selectOrphans: async (limit) => (await real.selectOrphans(limit)).filter((c) => c.object_path === key) };
+    const r = await runOrphanCleanup(scoped, { limit: 1000 });
+    assertEquals([r.selected, r.removed, r.errors], [0, 0, []]);
+    const { data } = await db.storage.from("attachments").list(key.slice(0, key.lastIndexOf("/")));
+    assertEquals(data!.some((o) => key.endsWith(o.name)), true);
+  } finally {
+    await db.storage.from("attachments").remove([key]);
   }
 } });

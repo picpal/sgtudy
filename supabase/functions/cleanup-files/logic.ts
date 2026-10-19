@@ -9,6 +9,7 @@ export const MAX_LIMIT = 1000;
 /** Storage remove() 한 번·행 delete 한 번에 넣는 수(실패 범위·URL 길이를 작게) */
 export const CHUNK = 100;
 // 정리 유예(DELETED 후 1시간)는 DB 한 곳 public.file_purge_grace() 에 있다 — 후보는 file_purge_candidates RPC 가 고른다(0019).
+// 고아 객체(files 행 없음) 유예 24시간은 public.file_orphan_grace() — 후보는 file_orphan_candidates RPC(0031).
 
 export function parseLimit(v: unknown): number {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
@@ -52,9 +53,16 @@ export function isAuthorized(secret: string | undefined, header: string | null):
 }
 
 export type Summary = { selected: number; removed: number; rowsDeleted: number; failed: number; errors: string[] };
+/** 0031 고아 객체(files 행 없음) — DB file_orphan_candidates 의 행 */
+export type ObjectRow = { bucket_id: string; object_path: string };
+export type OrphanSummary = { selected: number; removed: number; failed: number; errors: string[] };
+/** 응답 본문: purge 요약 + orphans(errors 는 위 errors 에 "orphan …" 으로 합친다) */
+export type Report = Summary & { orphans: Omit<OrphanSummary, "errors"> };
 
-/** 예약 잡 응답 기록(net._http_response.status_code)으로 실패가 보이게: 오류 없음 200, 일부 실패 207, 하나도 못 지움 500 */
-export function responseStatus(s: Summary): number {
-  if (s.errors.length === 0 && s.failed === 0) return 200;
-  return s.removed > 0 || s.rowsDeleted > 0 ? 207 : 500;
+/** 예약 잡 응답 기록(net._http_response.status_code)으로 실패가 보이게: 오류 없음 200, 일부 실패 207, 하나도 못 지움 500.
+ *  orphans 가 있으면 그 실패·성공도 같이 본다 */
+export function responseStatus(s: Summary & { orphans?: Omit<OrphanSummary, "errors"> }): number {
+  const failed = s.failed + (s.orphans?.failed ?? 0);
+  if (s.errors.length === 0 && failed === 0) return 200;
+  return s.removed > 0 || s.rowsDeleted > 0 || (s.orphans?.removed ?? 0) > 0 ? 207 : 500;
 }

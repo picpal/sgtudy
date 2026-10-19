@@ -1,12 +1,14 @@
 import { assertEquals } from "@std/assert";
-import { MAX_SINGLE_FAILS, runCleanup, type Store } from "./cleanup.ts";
+import { MAX_SINGLE_FAILS, runAll, runCleanup, runOrphanCleanup, type Store } from "./cleanup.ts";
 import { createHandler } from "./handler.ts";
-import type { FileRow, RemoveResult } from "./logic.ts";
+import type { FileRow, ObjectRow, RemoveResult } from "./logic.ts";
 
 const row = (id: string, bucket = "attachments"): FileRow => ({ id, bucket_id: bucket, object_path: `p/${id}` });
 
-function fakeStore(rows: FileRow[], opts: { failBuckets?: string[]; badPaths?: string[]; failDelete?: boolean; failSelect?: boolean } = {}) {
-  const calls = { select: [] as number[], remove: [] as [string, string[]][], del: [] as string[][] };
+function fakeStore(rows: FileRow[], opts: {
+  failBuckets?: string[]; badPaths?: string[]; failDelete?: boolean; failSelect?: boolean; orphans?: ObjectRow[]; failOrphanSelect?: boolean;
+} = {}) {
+  const calls = { select: [] as number[], remove: [] as [string, string[]][], del: [] as string[][], orphanSelect: [] as number[] };
   const store: Store = {
     selectDeleted: (limit) => {
       calls.select.push(limit);
@@ -17,6 +19,11 @@ function fakeStore(rows: FileRow[], opts: { failBuckets?: string[]; badPaths?: s
       calls.remove.push([bucket, paths]);
       const bad = opts.failBuckets?.includes(bucket) || paths.some((p) => opts.badPaths?.includes(p));
       return Promise.resolve(bad ? { data: null, error: { message: "storage down" } } : { data: [], error: null });
+    },
+    selectOrphans: (limit) => {
+      calls.orphanSelect.push(limit);
+      if (opts.failOrphanSelect) return Promise.reject(new Error("orphan select failed"));
+      return Promise.resolve((opts.orphans ?? []).slice(0, limit));
     },
     deleteRows: (ids) => {
       calls.del.push(ids);
@@ -121,9 +128,12 @@ Deno.test("handler: 올바른 시크릿이면 200 + 요약, body.limit 반영(�
   const h = createHandler({ secret: "s3cret", store: () => store });
   const res = await h(post({ "x-cleanup-secret": "s3cret", "content-type": "application/json" }, JSON.stringify({ limit: 1 })));
   assertEquals(res.status, 200);
-  assertEquals(await res.json(), { selected: 1, removed: 1, rowsDeleted: 1, failed: 0, errors: [] });
+  assertEquals(await res.json(), {
+    selected: 1, removed: 1, rowsDeleted: 1, failed: 0, errors: [], orphans: { selected: 0, removed: 0, failed: 0 },
+  });
   await h(post({ "x-cleanup-secret": "s3cret" }));
   assertEquals(calls.select, [1, 500]);
+  assertEquals(calls.orphanSelect, [1, 500]);   // 고아 정리도 같은 limit
 });
 
 Deno.test("handler: 선택 쿼리 실패는 500", async () => {
@@ -143,4 +153,58 @@ Deno.test("handler: 일부 실패 207 + failed 수, 전부 실패 500 (pg_net �
   const res2 = await createHandler({ secret: "s3cret", store: () => all.store })(post({ "x-cleanup-secret": "s3cret" }));
   assertEquals(res2.status, 500);
   assertEquals((await res2.json()).failed, 1);
+});
+
+// ───────── 0031 고아 객체(files 행 없음) ─────────
+const orphan = (name: string, bucket = "attachments"): ObjectRow => ({ bucket_id: bucket, object_path: `o/${name}` });
+
+Deno.test("runOrphanCleanup: file_orphan_candidates 로 고른 객체를 remove 만 한다(지울 행 없음)", async () => {
+  const { store, calls } = fakeStore([], { orphans: [orphan("a"), orphan("b")] });
+  const r = await runOrphanCleanup(store, { limit: 10 });
+  assertEquals(calls.orphanSelect, [10]);
+  assertEquals(calls.remove, [["attachments", ["o/a", "o/b"]]]);
+  assertEquals(calls.del.length, 0);
+  assertEquals(r, { selected: 2, removed: 2, failed: 0, errors: [] });
+});
+
+Deno.test("runOrphanCleanup: 100개 단위, 묶음 실패면 1개씩 재시도(실패 객체는 남아 다음 실행으로)", async () => {
+  const many = Array.from({ length: 150 }, (_, i) => orphan(String(i)));
+  const a = fakeStore([], { orphans: many });
+  assertEquals((await runOrphanCleanup(a.store, { limit: 1000 })).removed, 150);
+  assertEquals(a.calls.remove.map(([, p]) => p.length), [100, 50]);
+
+  const b = fakeStore([], { orphans: [orphan("x"), orphan("bad"), orphan("y")], badPaths: ["o/bad"] });
+  const r = await runOrphanCleanup(b.store, { limit: 10 });
+  assertEquals([r.removed, r.failed], [2, 1]);
+  assertEquals(r.errors, ["orphan remove attachments o/bad: storage down"]);
+});
+
+Deno.test("runOrphanCleanup: 후보 조회 실패는 throw 하지 않고 errors 로", async () => {
+  const { store, calls } = fakeStore([], { failOrphanSelect: true });
+  assertEquals(await runOrphanCleanup(store, { limit: 10 }), { selected: 0, removed: 0, failed: 0, errors: ["orphan select: orphan select failed"] });
+  assertEquals(calls.remove.length, 0);
+});
+
+Deno.test("runAll: purge 먼저, 이어서 고아 — 요약은 purge 필드 그대로 + orphans, errors 합침", async () => {
+  const { store, calls } = fakeStore([row("a")], { orphans: [orphan("z")] });
+  const r = await runAll(store, { limit: 10 });
+  assertEquals(calls.remove, [["attachments", ["p/a"]], ["attachments", ["o/z"]]]);
+  assertEquals(r, { selected: 1, removed: 1, rowsDeleted: 1, failed: 0, errors: [], orphans: { selected: 1, removed: 1, failed: 0 } });
+});
+
+Deno.test("handler: 고아만 일부 실패 207, 고아 조회만 실패(purge 대상 없음) 500, purge 조회 실패면 고아는 건드리지 않고 500", async () => {
+  const h = (s: Store) => createHandler({ secret: "s3cret", store: () => s })(post({ "x-cleanup-secret": "s3cret" }));
+  const part = fakeStore([], { orphans: [orphan("ok"), orphan("bad")], badPaths: ["o/bad"] });
+  const r1 = await h(part.store);
+  assertEquals(r1.status, 207);
+  assertEquals((await r1.json()).orphans, { selected: 2, removed: 1, failed: 1 });
+
+  const sel = fakeStore([], { failOrphanSelect: true });
+  const r2 = await h(sel.store);
+  assertEquals(r2.status, 500);
+  assertEquals((await r2.json()).errors, ["orphan select: orphan select failed"]);
+
+  const purgeDown = fakeStore([], { failSelect: true, orphans: [orphan("z")] });
+  assertEquals((await h(purgeDown.store)).status, 500);
+  assertEquals(purgeDown.calls.orphanSelect.length, 0);
 });

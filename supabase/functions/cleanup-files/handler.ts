@@ -1,4 +1,4 @@
-import { runCleanup, type Store } from "./cleanup.ts";
+import { runAll, type Store } from "./cleanup.ts";
 import { isAuthorized, parseLimit, responseStatus } from "./logic.ts";
 
 /** 호출 보호: 전용 시크릿 헤더. 값은 env(CLEANUP_FILES_SECRET)·Vault 에만 있다 */
@@ -19,7 +19,7 @@ export function createHandler(deps: { secret: string | undefined; store: () => S
       return json(400, { error: "invalid json body" });
     }
     try {
-      const summary = await runCleanup(deps.store(), { limit: parseLimit(limit) });
+      const summary = await runAll(deps.store(), { limit: parseLimit(limit) });
       const status = responseStatus(summary);
       (status === 200 ? console.log : console.error)("cleanup-files", status, JSON.stringify(summary));
       return json(status, summary);
