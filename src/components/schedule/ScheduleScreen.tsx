@@ -99,10 +99,10 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   return (
     // 한 페이지 스크롤 — 화면 높이에 가두지 않는다. 예전에는 넓은 화면을 h-screen 에 가두고 달력·패널에 안쪽 스크롤(overflow-auto +
     // overscroll-behavior: contain)을 두었는데, 넘칠 게 없는 안쪽 스크롤러도 휠·터치를 붙잡고 문서로 넘기지 않아 화면 밖 내용을 볼 수 없었다
-    <div className="box-border flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col">
       <AppHeader active="schedule" bell={<NotificationBell />} />
       <PageBody>
-        <div className="mx-auto flex w-full max-w-[1408px] flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
+        <div className="flex w-full flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
           <main className="flex min-w-0 flex-[999_1_720px] flex-col self-stretch rounded-[20px] bg-surface px-6 pt-6 pb-[18px] max-sm:px-4 max-sm:pt-4" aria-busy={loading}>
             <Toolbar y={y} m={m} view={view} off={off} studies={data.studies} onPrev={() => shift(-1)} onNext={() => shift(1)} onToday={goToday} onToggle={toggle} onView={setView} />
             {view === "month" ? (

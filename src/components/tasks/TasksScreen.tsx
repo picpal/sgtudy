@@ -240,7 +240,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   };
 
   return (
-    <div className="box-border flex min-h-screen flex-col">
+    <div className="flex min-h-screen flex-col">
       <AppHeader active="tasks" bell={<NotificationBell />} />
       <PageBody>
         <main aria-busy={pending > 0} className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 rounded-[20px] bg-surface px-7 pb-[30px] pt-[26px] max-sm:px-2 max-sm:pb-7 max-sm:pt-5">

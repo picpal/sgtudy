@@ -78,7 +78,7 @@ export function HomeSkeleton() {
         <Bar className="h-10 min-w-40 flex-[0_1_280px] rounded-[12px]" />
       </AppHeader>
       <span className="sr-only" role="status">불러오는 중</span>
-      <main aria-hidden="true" className="mx-auto max-w-[1376px] px-8 pb-16 pt-9 max-sm:px-4">
+      <PageBody as="main" aria-hidden="true">
         <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-2">
             <Bar className="h-8 w-40" />
@@ -97,7 +97,7 @@ export function HomeSkeleton() {
             </span>
           ))}
         </div>
-      </main>
+      </PageBody>
     </div>
   );
 }
@@ -106,7 +106,7 @@ export function HomeSkeleton() {
 export function MyStudySkeleton() {
   return (
     <Shell active="myStudy">
-      <div className="mx-auto flex w-full max-w-[1408px] items-start gap-4 max-[901px]:flex-wrap">
+      <div className="flex w-full items-start gap-4 max-[901px]:flex-wrap">
         <SideCard />
         <DetailMain tabs />
       </div>
@@ -118,7 +118,7 @@ export function MyStudySkeleton() {
 export function RoomSkeleton() {
   return (
     <Shell active="home">
-      <div className="mx-auto flex w-full max-w-[1408px] items-start gap-4 max-[901px]:flex-wrap">
+      <div className="flex w-full items-start gap-4 max-[901px]:flex-wrap">
         <SideCard />
         <DetailMain tabs={false} />
       </div>
@@ -130,7 +130,7 @@ export function RoomSkeleton() {
 export function ScheduleSkeleton() {
   return (
     <Shell active="schedule">
-      <div aria-hidden="true" className="mx-auto flex w-full max-w-[1408px] items-start gap-4 max-[901px]:flex-wrap">
+      <div aria-hidden="true" className="flex w-full items-start gap-4 max-[901px]:flex-wrap">
         <main className="flex min-w-0 flex-[999_1_720px] flex-col gap-4 rounded-[20px] bg-surface px-6 pt-6 pb-[18px] max-sm:px-4 max-sm:pt-4">
           <span className="flex items-center gap-3">
             <Bar className="h-8 w-40" />

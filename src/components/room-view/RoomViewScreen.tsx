@@ -86,7 +86,7 @@ export function RoomViewScreen({ detail, list, invite, filters = DEFAULT_FILTERS
       <AppHeader active="home" bell={<NotificationBell />} />
       <PageBody>
         {/* ≤900(포함): 선택한 방이 먼저, 목록은 그 아래에서 접힌다 (Q1-08/Q3-07). Tailwind max-[901px] = width < 901 */}
-        <div className="mx-auto flex w-full max-w-[1408px] flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
+        <div className="flex w-full flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
           <RoomSidebar selected={dto.slug} items={sidebar} total={list.tabCounts.public} filters={filters} found={list.totalElements} tagLabels={filters.tags.map((t) => list.tagFacets.find((f) => f.slug === t)?.label ?? t)} />
           <main className="min-w-0 flex-[999_1_640px] self-stretch rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:order-first max-sm:px-4">
             {/* 정보(460) + 간격(28) + 참가 카드(300) = 788 보다 좁으면 카드가 아래로 떨어진다 — 그땐 360 에 묶지 않고 두 카드를 나란히 (태블릿·좁은 PC) */}

@@ -354,7 +354,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         <AppHeader active="myStudy" bell={<NotificationBell />} />
         <PageBody>
           {/* ≤900 content-start: 내용이 화면보다 짧을 때 줄바꿈된 줄들이 남는 높이를 나눠 갖지 않게 — 접힌 목록 아래 빈 공간 방지 */}
-          <div className="mx-auto flex w-full max-w-[1408px] flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
+          <div className="flex w-full flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
             <StudySidebar selected={detail.slug} groups={groups} collapsed={openItem !== null} />
             <main className="min-w-0 flex-[999_1_640px] self-stretch rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:px-4">
               {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}

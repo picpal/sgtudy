@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
  * 길이가 바뀌면(검색·접기·데이터) ResizeObserver 로, 창 높이가 바뀌면 resize 로 다시 잰다.
  * @param gap 위·아래 여백(px) — sticky top 과 같은 값
  */
-export function useStickyFit<T extends HTMLElement>(gap = 16) {
+export function useStickyFit<T extends HTMLElement>(gap = 36) {
   const ref = useRef<T>(null);
   const [fits, setFits] = useState(false);
   useEffect(() => {
@@ -27,5 +27,5 @@ export function useStickyFit<T extends HTMLElement>(gap = 16) {
   return [ref, fits] as const;
 }
 
-/** >900 에서만 붙인다(≤900 은 옆 열이 위·아래로 쌓인다). top-4 = 16px = useStickyFit 기본 gap */
-export const stickyAside = (fits: boolean) => (fits ? "min-[901px]:sticky min-[901px]:top-4" : "");
+/** >900 에서만 붙인다(≤900 은 옆 열이 위·아래로 쌓인다). top-9 = 36px = useStickyFit 기본 gap(헤더→본문 간격) */
+export const stickyAside = (fits: boolean) => (fits ? "min-[901px]:sticky min-[901px]:top-9" : "");

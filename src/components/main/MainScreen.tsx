@@ -12,6 +12,7 @@ import { routes } from "@/lib/routes";
 import { EmptyState } from "./EmptyState";
 import { FilterBar, type StatusFilter, type Tab } from "./FilterBar";
 import { homeHref, parseHomeFilters, urlStep, type HomeFilters } from "./homeUrl";
+import { PageBody } from "@/components/ui/PageBody";
 import { RoomCard } from "./RoomCard";
 
 /** 지금 주소의 필터 — 비로그인은 공개 방 탭만 */
@@ -111,7 +112,7 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
         </label>
       </AppHeader>
 
-      <main className="mx-auto max-w-[1376px] px-8 pb-16 pt-9 max-sm:px-4">
+      <PageBody as="main">
         <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="m-0 text-[28px] font-bold tracking-[-0.02em]">슥터디 룸</h1>
@@ -161,7 +162,7 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
             <RoomCard key={r.id} room={r} selectedTags={selectedLabels} anonymous={!me} filters={{ scope: tab, status, q: dq, tags }} />
           ))}
         </div>
-      </main>
+      </PageBody>
     </div>
   );
 }
