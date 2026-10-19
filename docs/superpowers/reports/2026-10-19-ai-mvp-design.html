@@ -533,13 +533,13 @@ flowchart TD
       <table>
         <thead><tr><th>마이그레이션</th><th>내용</th></tr></thead>
         <tbody>
-          <tr><td><code>0031_api_tokens.sql</code></td><td>표 <code>api_tokens</code>·<code>api_audit</code>·<code>api_idempotency</code>(RLS on, 정책 없음) · <code>current_user_id()</code> 보조 신원 재정의 · <code>pat_create/list/revoke</code> · 내부 <code>api_authenticate</code>·<code>api_rate_check</code>·<code>api_scope_of</code>·<code>api_limits</code></td></tr>
-          <tr><td><code>0032_curriculum_plan.sql</code></td><td><code>node_create_core</code> 분리(+<code>node_create</code> 재정의, 시그니처 동일) · <code>curriculum_version</code> · <code>plan_flatten/validate</code> · <code>curriculum_plan</code> RPC · 알림 묶기 + <code>CURRICULUM_BULK_UPDATED</code>(kinds/render/link 재정의)</td></tr>
-          <tr><td><code>0033_api_invoke.sql</code></td><td>게이트웨이 <code>api_invoke</code>(anon·authenticated, <code>statement_timeout 15s</code>) · 내부 <code>personal_create_many</code> · <code>api_error_json</code></td></tr>
+          <tr><td><code>0032_api_tokens.sql</code></td><td>표 <code>api_tokens</code>·<code>api_audit</code>·<code>api_idempotency</code>(RLS on, 정책 없음) · <code>current_user_id()</code> 보조 신원 재정의 · <code>pat_create/list/revoke</code> · 내부 <code>api_authenticate</code>·<code>api_rate_check</code>·<code>api_scope_of</code>·<code>api_limits</code></td></tr>
+          <tr><td><code>0033_curriculum_plan.sql</code></td><td><code>node_create_core</code> 분리(+<code>node_create</code> 재정의, 시그니처 동일) · <code>curriculum_version</code> · <code>plan_flatten/validate</code> · <code>curriculum_plan</code> RPC · 알림 묶기 + <code>CURRICULUM_BULK_UPDATED</code>(kinds/render/link 재정의)</td></tr>
+          <tr><td><code>0034_api_invoke.sql</code></td><td>게이트웨이 <code>api_invoke</code>(anon·authenticated, <code>statement_timeout 15s</code>) · 내부 <code>personal_create_many</code> · <code>api_error_json</code></td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note">0001~0030 수정 금지(0030 = 진행목표 항목 첨부, 먼저 배포). 함수 재정의는 최신 판 복사 후 수정(<code>current_user_id</code> ← 0002, <code>node_create</code>·<code>notification_kinds</code> ← 0024, <code>notify_render</code>·<code>notify_link</code> ← 0028). 호스티드 적용(<code>supabase db push</code>)은 사용자가 승인 후 직접.</p>
+    <p class="note">0001~0031 수정 금지(0030 = 진행목표 항목 첨부, 먼저 배포 · 0031 = 미등록 Storage 고아 객체 정리 <code>file_orphan_candidates</code> 추가). 함수 재정의는 최신 판 복사 후 수정(<code>current_user_id</code> ← 0002, <code>node_create</code>·<code>notification_kinds</code> ← 0024, <code>notify_render</code>·<code>notify_link</code> ← 0028). 호스티드 적용(<code>supabase db push</code>)은 사용자가 승인 후 직접.</p>
   </section>
 
   <!-- 8 -->
@@ -567,18 +567,18 @@ flowchart TD
   <!-- 9 -->
   <section id="s9">
     <h2><span class="num">9</span>구현 계획 요약</h2>
-    <p class="sub">DB(Task 1→6, 0032 은 Task 2~5 가 이어 붙임) → 웹(Task 7→9) → 배포 안내 순. 각 Task 는 실패 테스트 먼저(TDD), 커밋 전 게이트 <code>npm run test:db</code> / <code>lint · tsc · vitest</code>.</p>
+    <p class="sub">DB(Task 1→6, 0033 은 Task 2~5 가 이어 붙임) → 웹(Task 7→9) → 배포 안내 순. 각 Task 는 실패 테스트 먼저(TDD), 커밋 전 게이트 <code>npm run test:db</code> / <code>lint · tsc · vitest</code>.</p>
     <div class="tbl wide">
       <table>
         <thead><tr><th>Task</th><th>내용</th><th>산출물</th><th>모델</th></tr></thead>
         <tbody>
           <tr><td>0</td><td>선행 확인: 마이그레이션 번호, 재정의 대상 최신 판, DB 테스트 기준선, SDK·zod 버전, PostgREST 함수 timeout</td><td>노트만</td><td><span class="pill p-model">sonnet</span></td></tr>
-          <tr><td>1</td><td>0031 — 토큰·감사·멱등 표, <code>current_user_id</code> 보조 신원, <code>pat_*</code>, 인증·레이트리밋</td><td>0031 + 테스트 8건</td><td><span class="pill p-model">opus</span></td></tr>
-          <tr><td>2</td><td>0032 ① <code>node_create_core</code> 분리, <code>curriculum_version</code> — 기존 테스트 무수정 통과</td><td>0032 시작</td><td><span class="pill p-model">opus</span></td></tr>
-          <tr><td>3</td><td>0032 ② 계획서 펼치기·정적 검증(모든 오류 수집)</td><td><code>plan_flatten</code>·<code>plan_validate</code></td><td><span class="pill p-model">opus</span></td></tr>
-          <tr><td>4</td><td>0032 ③ <code>curriculum_plan</code> — 서브트랜잭션 dry-run, 원자 적용, planHash·baseVersion·멱등</td><td>공개 RPC</td><td><span class="pill p-model">opus</span></td></tr>
-          <tr><td>5</td><td>0032 ④ 알림 묶기 + <code>CURRICULUM_BULK_UPDATED</code>, <code>types.ts</code> kind 추가</td><td>알림 집계</td><td><span class="pill p-model">opus</span></td></tr>
-          <tr><td>6</td><td>0033 — <code>api_invoke</code> 게이트웨이, <code>personal_create_many</code>, 감사, GUC 정적 검사</td><td>0033 + 테스트</td><td><span class="pill p-model">opus</span></td></tr>
+          <tr><td>1</td><td>0032 — 토큰·감사·멱등 표, <code>current_user_id</code> 보조 신원, <code>pat_*</code>, 인증·레이트리밋</td><td>0032 + 테스트 8건</td><td><span class="pill p-model">opus</span></td></tr>
+          <tr><td>2</td><td>0033 ① <code>node_create_core</code> 분리, <code>curriculum_version</code> — 기존 테스트 무수정 통과</td><td>0033 시작</td><td><span class="pill p-model">opus</span></td></tr>
+          <tr><td>3</td><td>0033 ② 계획서 펼치기·정적 검증(모든 오류 수집)</td><td><code>plan_flatten</code>·<code>plan_validate</code></td><td><span class="pill p-model">opus</span></td></tr>
+          <tr><td>4</td><td>0033 ③ <code>curriculum_plan</code> — 서브트랜잭션 dry-run, 원자 적용, planHash·baseVersion·멱등</td><td>공개 RPC</td><td><span class="pill p-model">opus</span></td></tr>
+          <tr><td>5</td><td>0033 ④ 알림 묶기 + <code>CURRICULUM_BULK_UPDATED</code>, <code>types.ts</code> kind 추가</td><td>알림 집계</td><td><span class="pill p-model">opus</span></td></tr>
+          <tr><td>6</td><td>0034 — <code>api_invoke</code> 게이트웨이, <code>personal_create_many</code>, 감사, GUC 정적 검사</td><td>0034 + 테스트</td><td><span class="pill p-model">opus</span></td></tr>
           <tr><td>7</td><td>웹 순수 모듈 — 인증 헤더 파싱·Origin, 오류 매핑, 트리 v1 변환, 계획서 zod 스키마, SDK 설치</td><td><code>src/lib/mcp/*</code></td><td><span class="pill p-model">sonnet</span></td></tr>
           <tr><td>8</td><td>MCP 도구 5개·서버·Route Handler, <code>proxy.ts</code> matcher 제외</td><td><code>/api/mcp</code></td><td><span class="pill p-model">opus</span></td></tr>
           <tr><td>9</td><td><code>/me</code> 「AI 연결」 토큰 UI(생성·목록·폐기, <code>claude mcp add</code> 명령)</td><td><code>ApiTokens.tsx</code></td><td><span class="pill p-model">sonnet</span></td></tr>
@@ -632,8 +632,8 @@ flowchart TD
       <li><div><strong>인증 실패 무제한</strong> — 실패한 토큰 시도가 레이트리밋·감사에 안 잡히는 것을 MVP 에서 수용할지, 별도 처리할지.</div></li>
       <li><div><strong>표 성장</strong> — <code>api_audit</code>·<code>api_idempotency</code> 행 삭제가 2단계 cron 까지 없는 것 수용 여부.</div></li>
       <li><div><strong>라우트 검증 수준</strong> — Route Handler 는 스모크만, 실 연결 확인은 배포 후 마스터 계정으로 사용자가 직접(dry-run 확인, 적용은 테스트 방) — 이 방식이 괜찮은지.</div></li>
-      <li><div><strong>배포 작업</strong> — <code>supabase db push</code>(0031–0033)와 Vercel <code>MCP_ALLOWED_ORIGINS</code> 설정은 사용자가 승인 후 직접 실행(service role 불필요).</div></li>
-      <li><div><strong>마이그레이션 번호</strong> — 0031~0033 가 다른 작업과 겹치지 않는지(겹치면 Task 0 에서 멈춤).</div></li>
+      <li><div><strong>배포 작업</strong> — <code>supabase db push</code>(0032–0034)와 Vercel <code>MCP_ALLOWED_ORIGINS</code> 설정은 사용자가 승인 후 직접 실행(service role 불필요).</div></li>
+      <li><div><strong>마이그레이션 번호</strong> — 0032~0034 가 다른 작업과 겹치지 않는지(겹치면 Task 0 에서 멈춤).</div></li>
     </ul>
   </section>
 

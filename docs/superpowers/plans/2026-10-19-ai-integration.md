@@ -4,7 +4,7 @@
 
 **Goal:** Claude Code 등 MCP 클라이언트가 사용자 본인의 개인 액세스 토큰(PAT)으로 `/api/mcp` 에 붙어 내 스터디·진행목표를 읽고, 진행목표 계획서(회차→묶음→과제, 일정 이동, 지정 담당)를 dry-run 미리보기 후 원자 적용하고, 개인 목표를 일괄 추가한다. 기존 RPC 권한·검증을 그대로 쓰고, 대량 변경 알림은 수신자당 1건으로 묶는다.
 
-**Architecture:** DB = 마이그레이션 3개(추가형). `0031_api_tokens.sql`(토큰·감사·멱등 표, `current_user_id()` 가 트랜잭션 한정 GUC `sgtudy.api_uid` 를 보조 신원으로 읽음, `pat_*` RPC, 내부 인증·레이트리밋) → `0032_curriculum_plan.sql`(`node_create_core` 분리, `curriculum_version`, `plan_flatten/validate`, `curriculum_plan` = 서브트랜잭션 dry-run/원자 적용, 알림 묶기 + `CURRICULUM_BULK_UPDATED`) → `0033_api_invoke.sql`(anon 이 부르는 게이트웨이 `api_invoke(token, op, args)` = 인증·스코프·레이트리밋·감사·디스패치, `personal_create_many`). 웹 = `src/lib/mcp/**`(순수 변환·스키마·도구 정의) + `src/app/api/mcp/route.ts`(stateless Streamable HTTP, `@modelcontextprotocol/sdk`) + `/me` 「AI 연결」 토큰 UI.
+**Architecture:** DB = 마이그레이션 3개(추가형). `0032_api_tokens.sql`(토큰·감사·멱등 표, `current_user_id()` 가 트랜잭션 한정 GUC `sgtudy.api_uid` 를 보조 신원으로 읽음, `pat_*` RPC, 내부 인증·레이트리밋) → `0033_curriculum_plan.sql`(`node_create_core` 분리, `curriculum_version`, `plan_flatten/validate`, `curriculum_plan` = 서브트랜잭션 dry-run/원자 적용, 알림 묶기 + `CURRICULUM_BULK_UPDATED`) → `0034_api_invoke.sql`(anon 이 부르는 게이트웨이 `api_invoke(token, op, args)` = 인증·스코프·레이트리밋·감사·디스패치, `personal_create_many`). 웹 = `src/lib/mcp/**`(순수 변환·스키마·도구 정의) + `src/app/api/mcp/route.ts`(stateless Streamable HTTP, `@modelcontextprotocol/sdk`) + `/me` 「AI 연결」 토큰 UI.
 
 **Tech Stack:** Supabase Postgres 17(plpgsql, RLS) · Deno + PGlite DB 테스트(`npm run test:db`) · Next.js 16.4 App Router Route Handler · React 19.3 · `@modelcontextprotocol/sdk`(2026-10-19 최신 1.32.1 — 웹 표준 전송 포함) + `zod`(4.x, SDK peer `^3.25 || ^4.0`) — Task 0 에서 버전 고정 · vitest(node, `src/**/*.test.ts`)
 
@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- 마이그레이션은 **`0031_api_tokens.sql`, `0032_curriculum_plan.sql`, `0033_api_invoke.sql` 세 개만** 만든다. 0001~0030 수정 금지(0029_mine_scope_includes_led·0030_node_attachments 는 다른 작업 몫 — 2026-10-19 D7: 항목 첨부를 먼저 배포). 다른 작업이 0031 을 먼저 차지했으면 멈추고 번호를 컨트롤러와 다시 정한다.
+- 마이그레이션은 **`0032_api_tokens.sql`, `0033_curriculum_plan.sql`, `0034_api_invoke.sql` 세 개만** 만든다. 0001~0031 수정 금지(0029_mine_scope_includes_led·0030_node_attachments·0031_orphan_objects 는 다른 작업 몫 — 2026-10-19 D7: 항목 첨부를 먼저 배포, 0031 = 미등록 Storage 고아 객체 정리 `file_orphan_candidates`). 다른 작업이 0032 를 먼저 차지했으면 멈추고 번호를 컨트롤러와 다시 정한다.
 - **추가형·무손실**: 기존 행 UPDATE/DELETE 없음. 함수 재정의는 **최신 판을 복사해 고친다**(Task 0 Step 2 로 최신 판 확인): `current_user_id` ← 0002, `node_create` ← 0024, `notification_kinds` ← 0024, `notify_render` ← 0028, `notify_link` ← 0028. `create or replace` 는 시그니처(이름·인자명·기본값) 동일 → GRANT 유지.
 - 함수 규칙: `security definer set search_path = ''`, 모든 객체 `public.` 접두, 오류는 `public.fail(code, 한국어 문구, detail jsonb)`. 공개 RPC 만 GRANT — `pat_create/pat_list/pat_revoke/curriculum_plan` → `authenticated`, `api_invoke` → `anon, authenticated`. 내부 헬퍼(`api_authenticate`, `api_rate_check`, `api_scope_of`, `api_limits`, `api_token_json`, `api_error_json`, `node_create_core`, `curriculum_version`, `plan_*`, `personal_create_many`)는 GRANT 없음(0002 기본 권한이 막는다).
 - **`sgtudy.api_uid` 를 `set_config` 하는 함수는 `api_authenticate` 하나뿐**이다(Task 6 정적 테스트가 고정).
@@ -49,7 +49,7 @@
 - [ ] **Step 1: 작업 트리·마이그레이션 번호**
 
 Run: `git -C /Users/picpal/Desktop/workspace/sgtudy status --short && ls /Users/picpal/Desktop/workspace/sgtudy/supabase/migrations | tail -3`
-Expected: 마지막이 `0030_node_attachments.sql`(진행목표 항목 첨부, 다른 작업 — 먼저 배포), 그 앞이 `0029_mine_scope_includes_led.sql`(rooms_list mine 스코프 = 내가 그룹장인 방 포함), `0031_*` 없음, 둘 다 커밋됨(`git log --oneline -1 -- supabase/migrations/0030_node_attachments.sql` 결과 있음). `0030` 이 아직 없으면(첨부 작업 미완) 멈추고 컨트롤러에 순서를 묻는다. 아니면 멈추고 보고.
+Expected: 마지막이 `0031_orphan_objects.sql`(미등록 Storage 고아 객체 정리 후보 `file_orphan_candidates`·`file_orphan_grace` 추가, service_role 전용 — 다른 작업), 그 앞이 `0030_node_attachments.sql`(진행목표 항목 첨부, 다른 작업 — 먼저 배포)·`0029_mine_scope_includes_led.sql`(rooms_list mine 스코프 = 내가 그룹장인 방 포함), `0032_*` 없음, 모두 커밋됨(`git log --oneline -1 -- supabase/migrations/0031_orphan_objects.sql` 결과 있음). `0030`·`0031` 이 아직 없으면(첨부·고아 정리 작업 미완) 멈추고 컨트롤러에 순서를 묻는다. 아니면 멈추고 보고.
 
 **0030 이 재정의·추가한 것 확인(공유 객체 충돌 방지):** 0030 은 `files`(purpose `NODE_DOC`·열 `attached_at`), Storage/`files_select` 정책, `goal_nodes` 삭제 트리거, `job_cleanup`, `node_files_*` RPC 를 만들거나 재정의한다. 이 플랜이 무언가를 재정의하기 전에 그 함수·표가 0030 에서 바뀌었는지 본다:
 Run: `cd /Users/picpal/Desktop/workspace/sgtudy && grep -nE "create (or replace )?(function|trigger|policy)|alter table|create table" supabase/migrations/0030_node_attachments.sql`
@@ -79,10 +79,10 @@ Expected: `package/dist/esm/server/webStandardStreamableHttp.js` 존재(1.32.1 �
 
 ---
 
-### Task 1: 0031 — 토큰·감사·멱등 표, `current_user_id` 보조 신원, `pat_*`, 내부 인증·레이트리밋 (opus)
+### Task 1: 0032 — 토큰·감사·멱등 표, `current_user_id` 보조 신원, `pat_*`, 내부 인증·레이트리밋 (opus)
 
 **Files:**
-- Create: `supabase/migrations/0031_api_tokens.sql`
+- Create: `supabase/migrations/0032_api_tokens.sql`
 - Create: `supabase/tests/api-tokens-sql.test.ts`
 
 **Interfaces (공개):**
@@ -94,7 +94,7 @@ Expected: `package/dist/esm/server/webStandardStreamableHttp.js` 존재(1.32.1 �
 - [ ] **Step 1: 실패하는 테스트 작성** — `supabase/tests/api-tokens-sql.test.ts`
 
 ```ts
-// 0031 — 개인 액세스 토큰(PAT) · current_user_id 보조 신원 · 레이트리밋
+// 0032 — 개인 액세스 토큰(PAT) · current_user_id 보조 신원 · 레이트리밋
 import { assert, assertEquals, assertMatch } from "@std/assert";
 import { applySeed, asAnon, asUser, expectFail, openDb } from "./_harness.ts";
 import { cases, one, uidOf, type Q, type Row } from "./_fixtures.ts";
@@ -107,7 +107,7 @@ const clearApi = (q: Q) => q("select set_config('sgtudy.api_uid', '', true)");
 const mk = async (q: Q, scopes = ["read", "curriculum:write", "personal:write"], days = 90) =>
   (await one(q, "select public.pat_create('Claude Code', $1::text[], $2) as t", [`{${scopes.join(",")}}`, days])).t as Row;
 
-cases("api tokens 0031", db, [
+cases("api tokens 0032", db, [
   { name: "pat_create: 원문 1회 · 표에는 sha256 만 · 접두 16자 · 만료 = 지금 + 일수", run: async (q) => {
     await as(q, "민수");
     const t = await mk(q);
@@ -204,10 +204,10 @@ cases("api tokens 0031", db, [
 Run: `cd /Users/picpal/Desktop/workspace/sgtudy && deno test -A --config supabase/tests/deno.json supabase/tests/api-tokens-sql.test.ts 2>&1 | tail -5`
 Expected: FAIL (`function public.pat_create … does not exist`).
 
-- [ ] **Step 3: 마이그레이션 작성** — `supabase/migrations/0031_api_tokens.sql`
+- [ ] **Step 3: 마이그레이션 작성** — `supabase/migrations/0032_api_tokens.sql`
 
 ```sql
--- 0031_api_tokens.sql — 2026-10-19 AI 연동(MCP) 1단계: 개인 액세스 토큰(PAT)·감사·멱등. 배포 후 수정 금지.
+-- 0032_api_tokens.sql — 2026-10-19 AI 연동(MCP) 1단계: 개인 액세스 토큰(PAT)·감사·멱등. 배포 후 수정 금지.
 -- 스펙 docs/superpowers/specs/2026-10-19-ai-integration-design.md §4·§6·§8.
 -- 신원: current_user_id() = coalesce(auth.uid(), GUC sgtudy.api_uid). GUC 는 api_authenticate 만 트랜잭션 한정으로 쓴다.
 -- 재정의: current_user_id ← 0002.
@@ -400,14 +400,14 @@ grant execute on function public.pat_revoke(uuid)              to authenticated;
 
 - [ ] **Step 4: 통과 확인** — Run: `deno test -A --config supabase/tests/deno.json supabase/tests/api-tokens-sql.test.ts 2>&1 | tail -3` → PASS. "만료" 사례가 `app.now` 를 문자열로 받는지(`app_now()` 가 `::timestamptz` 캐스트) 확인.
 - [ ] **Step 5: 전체 회귀** — Run: `npm run test:db 2>&1 | tail -3` → 기준선 N + 8 passed, 0 failed(`current_user_id` 재정의 회귀 없음).
-- [ ] **Step 6: 커밋** — `git commit -- supabase/migrations/0031_api_tokens.sql supabase/tests/api-tokens-sql.test.ts -m "feat(db): 0031 — AI 연동 PAT(해시 저장·스코프·만료·폐기), current_user_id 보조 신원, 감사·멱등 표, 레이트리밋"`
+- [ ] **Step 6: 커밋** — `git commit -- supabase/migrations/0032_api_tokens.sql supabase/tests/api-tokens-sql.test.ts -m "feat(db): 0032 — AI 연동 PAT(해시 저장·스코프·만료·폐기), current_user_id 보조 신원, 감사·멱등 표, 레이트리밋"`
 
 ---
 
-### Task 2: 0032 (1/4) — `node_create_core` 분리 · `curriculum_version` (opus)
+### Task 2: 0033 (1/4) — `node_create_core` 분리 · `curriculum_version` (opus)
 
 **Files:**
-- Create: `supabase/migrations/0032_curriculum_plan.sql` (이 Task 에서 시작, Task 3~5 가 이어 붙인다)
+- Create: `supabase/migrations/0033_curriculum_plan.sql` (이 Task 에서 시작, Task 3~5 가 이어 붙인다)
 - Create: `supabase/tests/curriculum-plan-sql.test.ts`
 
 **Interfaces (내부):**
@@ -417,7 +417,7 @@ grant execute on function public.pat_revoke(uuid)              to authenticated;
 - [ ] **Step 1: 실패하는 테스트**
 
 ```ts
-// 0032 — 진행목표 계획서(curriculum_plan) · node_create_core · curriculum_version · 알림 묶기
+// 0033 — 진행목표 계획서(curriculum_plan) · node_create_core · curriculum_version · 알림 묶기
 import { assert, assertEquals, assertMatch, assertNotEquals } from "@std/assert";
 import { applySeed, asAnon, asUser, expectFail, openDb } from "./_harness.ts";
 import { cases, nodeId, one, roomId, uidOf, type Q, type Row } from "./_fixtures.ts";
@@ -430,7 +430,7 @@ const as = async (q: Q, nick: string) => { await asUser(q, await uidOf(q, nick))
 const ver = async (q: Q, slug: string) => (await one(q, "select public.curriculum_version($1::bigint) as v", [await roomId(q, slug)])).v as string;
 const count = async (q: Q, sql: string, p: unknown[] = []) => Number((await one(q, `select count(*)::int as n from (${sql}) x`, p)).n);
 
-cases("curriculum plan 0032 · core", db, [
+cases("curriculum plan 0033 · core", db, [
   { name: "node_create 는 분리 후에도 같은 결과(회차 기본 라벨·기간, 하위 기본 common, 리프 → 부모 전환)", run: async (q) => {
     const { slug } = await mkRoom(q, "민수");
     const c1 = (await one(q, "select public.node_create($1) as c", [slug])).c as Row;
@@ -468,10 +468,10 @@ cases("curriculum plan 0032 · core", db, [
 
 - [ ] **Step 2: 실패 확인** — Run: `deno test -A --config supabase/tests/deno.json supabase/tests/curriculum-plan-sql.test.ts 2>&1 | tail -5` → FAIL(`node_create_core does not exist`).
 
-- [ ] **Step 3: 마이그레이션 시작** — `supabase/migrations/0032_curriculum_plan.sql`
+- [ ] **Step 3: 마이그레이션 시작** — `supabase/migrations/0033_curriculum_plan.sql`
 
 ```sql
--- 0032_curriculum_plan.sql — 2026-10-19 AI 연동(MCP) 1단계: 진행목표 계획서. 배포 후 수정 금지.
+-- 0033_curriculum_plan.sql — 2026-10-19 AI 연동(MCP) 1단계: 진행목표 계획서. 배포 후 수정 금지.
 -- 스펙 §5·§7·§8. 재정의: node_create ← 0024(본문을 node_create_core 로 옮김, 시그니처·GRANT 동일),
 --                      notification_kinds ← 0024, notify_render ← 0028, notify_link ← 0028 (Task 5).
 
@@ -537,13 +537,13 @@ $$;
 복사 지침: `v_uid` 를 쓰던 자리는 `p_uid`. 원본의 `perform public.assignment_resync(r.id); return public.curriculum_json(...)` 두 줄은 core 에 넣지 않는다.
 
 - [ ] **Step 4: 통과 + 전체 회귀** — Run: `npm run test:db 2>&1 | tail -3` → 0 failed. 기존 curriculum/scenario 테스트가 하나라도 깨지면 복사 누락이다 — 0024 본문과 `diff` 로 비교해 고친다(테스트 기대값을 바꾸지 않는다).
-- [ ] **Step 5: 커밋** — `git commit -- supabase/migrations/0032_curriculum_plan.sql supabase/tests/curriculum-plan-sql.test.ts -m "feat(db): 0032 ① node_create_core 분리(설명 인자), curriculum_version"`
+- [ ] **Step 5: 커밋** — `git commit -- supabase/migrations/0033_curriculum_plan.sql supabase/tests/curriculum-plan-sql.test.ts -m "feat(db): 0033 ① node_create_core 분리(설명 인자), curriculum_version"`
 
 ---
 
-### Task 3: 0032 (2/4) — 계획서 펼치기·정적 검증 (opus)
+### Task 3: 0033 (2/4) — 계획서 펼치기·정적 검증 (opus)
 
-**Files:** Modify `supabase/migrations/0032_curriculum_plan.sql`(뒤에 추가) · Modify `supabase/tests/curriculum-plan-sql.test.ts`(묶음 추가)
+**Files:** Modify `supabase/migrations/0033_curriculum_plan.sql`(뒤에 추가) · Modify `supabase/tests/curriculum-plan-sql.test.ts`(묶음 추가)
 
 **Interfaces (내부):**
 - `plan_err(p_path text, p_code text, p_message text, p_field text default null) → jsonb`
@@ -561,7 +561,7 @@ const plan = (ops: unknown[], extra: Record<string, unknown> = {}) => JSON.strin
 const validate = async (q: Q, slug: string, p: string) =>
   (await one(q, "select public.plan_validate(r, $2::jsonb) as v from public.rooms r where r.slug = $1", [slug, p])).v as Row;
 
-cases("curriculum plan 0032 · validate", db, [
+cases("curriculum plan 0033 · validate", db, [
   { name: "plan_flatten: 전위 순회 경로 · children 제거 · has_children", run: async (q) => {
     const rows = await q("select seq, path, parent_path, has_children, op from public.plan_flatten($1::jsonb) order by seq", [plan([
       { op: "create", title: "R", children: [{ title: "B", children: [{ title: "T" }] }, { title: "T2" }] },
@@ -636,7 +636,7 @@ cases("curriculum plan 0032 · validate", db, [
 
 - [ ] **Step 2: 실패 확인** — 해당 파일 실행 → FAIL(`plan_flatten does not exist`).
 
-- [ ] **Step 3: 구현** (0032 뒤에 추가)
+- [ ] **Step 3: 구현** (0033 뒤에 추가)
 
 ```sql
 -- ───────── 3. 계획서 펼치기·정적 검증 ─────────
@@ -735,13 +735,13 @@ end $$;
 ```
 
 - [ ] **Step 4: 통과 확인** — 파일 실행 PASS → `npm run test:db` 0 failed.
-- [ ] **Step 5: 커밋** — `git commit -- supabase/migrations/0032_curriculum_plan.sql supabase/tests/curriculum-plan-sql.test.ts -m "feat(db): 0032 ② 진행목표 계획서 펼치기·정적 검증(모든 오류 수집, 경로·코드)"`
+- [ ] **Step 5: 커밋** — `git commit -- supabase/migrations/0033_curriculum_plan.sql supabase/tests/curriculum-plan-sql.test.ts -m "feat(db): 0033 ② 진행목표 계획서 펼치기·정적 검증(모든 오류 수집, 경로·코드)"`
 
 ---
 
-### Task 4: 0032 (3/4) — `curriculum_plan` 실행: dry-run 서브트랜잭션 · 원자 적용 · planHash · baseVersion · 멱등 (opus)
+### Task 4: 0033 (3/4) — `curriculum_plan` 실행: dry-run 서브트랜잭션 · 원자 적용 · planHash · baseVersion · 멱등 (opus)
 
-**Files:** Modify `0032_curriculum_plan.sql` · Modify `curriculum-plan-sql.test.ts`
+**Files:** Modify `0033_curriculum_plan.sql` · Modify `curriculum-plan-sql.test.ts`
 
 **Interface (공개, authenticated):**
 `curriculum_plan(p_slug text, p_plan jsonb, p_dry_run boolean default true, p_plan_hash text default null, p_idempotency_key text default null) → jsonb` — 응답 스펙 §7.2. dry-run 의 `diff[].id` 는 null(되감긴 임시 id 를 노출하지 않음), 새 노드의 부모는 `parentPath`. 적용 응답에 `refs {ref: id}`, `version`(적용 후).
@@ -767,7 +767,7 @@ const sample = (base?: string) => plan([
   { op: "create", parent: "@w1", title: "추가 과제", taskType: "common", index: 0 },
 ], base ? { baseVersion: base } : {});
 
-cases("curriculum plan 0032 · run", db, [
+cases("curriculum plan 0033 · run", db, [
   { name: "dry-run: 아무것도 남지 않고 diff·planHash·요약을 준다", run: async (q) => {
     const { slug, id } = await mkRoom(q, "민수");
     const before = await count(q, "select 1 from public.goal_nodes where room_id = $1::bigint", [id]);
@@ -1071,13 +1071,13 @@ grant execute on function public.curriculum_plan(text, jsonb, boolean, text, tex
 
 - [ ] **Step 4: 통과 + 전체 회귀** → 0 failed. 200노드 성능: 아래 일회성 확인을 노트에 기록(목표 < 3s, PGlite 기준):
   `{ name: "perf", run: … run(q, slug, plan([{op:"create", title:"R", children: Array.from({length:199}, …)}])) … }` — 측정 후 이 사례는 커밋하지 않는다.
-- [ ] **Step 5: 커밋** — `-m "feat(db): 0032 ③ curriculum_plan — dry-run 서브트랜잭션 되감기, 원자 적용, planHash·baseVersion·멱등"`
+- [ ] **Step 5: 커밋** — `-m "feat(db): 0033 ③ curriculum_plan — dry-run 서브트랜잭션 되감기, 원자 적용, planHash·baseVersion·멱등"`
 
 ---
 
-### Task 5: 0032 (4/4) — 알림 묶기 + `CURRICULUM_BULK_UPDATED` (opus)
+### Task 5: 0033 (4/4) — 알림 묶기 + `CURRICULUM_BULK_UPDATED` (opus)
 
-**Files:** Modify `0032_curriculum_plan.sql` · Modify `curriculum-plan-sql.test.ts` · Modify `src/lib/api/types.ts`(`NOTIFICATION_KINDS` 끝에 `// 0032` + `"CURRICULUM_BULK_UPDATED"`)
+**Files:** Modify `0033_curriculum_plan.sql` · Modify `curriculum-plan-sql.test.ts` · Modify `src/lib/api/types.ts`(`NOTIFICATION_KINDS` 끝에 `// 0033` + `"CURRICULUM_BULK_UPDATED"`)
 
 **Interface (내부):** `plan_collapse_notifications(p_room bigint, p_actor uuid, p_after_id bigint) → jsonb {recipients, perRecipient:[{userId, nickname, count, collapsed}]}` — 스펙 §5.4.
 
@@ -1089,7 +1089,7 @@ const notes = (q: Q, nick: string, kinds: string[]) => uidOf(q, nick).then((u) =
     [u, `{${kinds.join(",")}}`]));
 const K = ["TASK_ASSIGNED", "SCHEDULE_CHANGED", "ROUND_SCHEDULE_CHANGED", "TASK_UNASSIGNED", "CURRICULUM_BULK_UPDATED"];
 
-cases("curriculum plan 0032 · notify", db, [
+cases("curriculum plan 0033 · notify", db, [
   { name: "지은에게 지정 과제 2개 → 묶음 알림 1건(일정 0·담당 2) · 원래 TASK_ASSIGNED 는 없음", run: async (q) => {
     await as(q, "민수");
     const r2 = await nodeId(q, "aws", "EC2·S3");
@@ -1138,7 +1138,7 @@ cases("curriculum plan 0032 · notify", db, [
 
 - [ ] **Step 2: 실패 확인** → FAIL.
 - [ ] **Step 3: 구현**
-  1. `notification_kinds()` ← 0024 판 복사, 배열 끝에 `-- 0032` `'CURRICULUM_BULK_UPDATED'`.
+  1. `notification_kinds()` ← 0024 판 복사, 배열 끝에 `-- 0033` `'CURRICULUM_BULK_UPDATED'`.
   2. `notify_render()` ← 0028 판 복사. 제목 `case` 에 `when 'CURRICULUM_BULK_UPDATED' then format('%s 진행목표가 한꺼번에 바뀌었어요', v_room)`(방 제목은 따옴표 없음 — 따옴표는 과제 제목에만 쓰는 0008~0028 표기). 본문: `p_kind = 'CURRICULUM_BULK_UPDATED'` 이면 `nullif(concat_ws(' · ', case when (p_model->>'schedule')::int > 0 then '일정 ' || (p_model->>'schedule') || '건' end, case when (p_model->>'assign')::int > 0 then '담당 ' || (p_model->>'assign') || '건' end), '')`. 기존 분기 순서·문구는 건드리지 않는다.
   3. `notify_link()` ← 0028 판 복사, `('CURRICULUM_EDITOR_GRANTED', 'CURRICULUM_EDITOR_REVOKED', 'ROUND_SCHEDULE_CHANGED')` 목록에 `'CURRICULUM_BULK_UPDATED'` 추가.
   4. `notify_enabled` 는 바꾸지 않는다(`else true`).
@@ -1173,17 +1173,17 @@ begin
 end $$;
 ```
   6. `curriculum_plan` 의 `v_notes := …` 자리를 `v_notes := public.plan_collapse_notifications(r.id, v_uid, v_after_id);` 로.
-  7. `src/lib/api/types.ts` `NOTIFICATION_KINDS` 에 추가(주석 `// 0032`).
+  7. `src/lib/api/types.ts` `NOTIFICATION_KINDS` 에 추가(주석 `// 0033`).
 
 - [ ] **Step 4: 통과 + 전체 회귀** — `npm run test:db` 0 failed, `npx tsc --noEmit && npx vitest run` 통과(알림 kind 목록 비교 테스트가 있으면 함께 고친다).
-- [ ] **Step 5: 커밋** — `git commit -- supabase/migrations/0032_curriculum_plan.sql supabase/tests/curriculum-plan-sql.test.ts src/lib/api/types.ts -m "feat(db): 0032 ④ 계획 적용 알림을 수신자당 1건으로 — CURRICULUM_BULK_UPDATED(1건이면 원래 알림)"`
+- [ ] **Step 5: 커밋** — `git commit -- supabase/migrations/0033_curriculum_plan.sql supabase/tests/curriculum-plan-sql.test.ts src/lib/api/types.ts -m "feat(db): 0033 ④ 계획 적용 알림을 수신자당 1건으로 — CURRICULUM_BULK_UPDATED(1건이면 원래 알림)"`
 
 ---
 
-### Task 6: 0033 — 게이트웨이 `api_invoke` · `personal_create_many` · 감사 (opus)
+### Task 6: 0034 — 게이트웨이 `api_invoke` · `personal_create_many` · 감사 (opus)
 
 **Files:**
-- Create: `supabase/migrations/0033_api_invoke.sql`
+- Create: `supabase/migrations/0034_api_invoke.sql`
 - Create: `supabase/tests/api-invoke-sql.test.ts`
 
 **Interfaces:**
@@ -1195,7 +1195,7 @@ end $$;
 - [ ] **Step 1: 실패하는 테스트**
 
 ```ts
-// 0033 — api_invoke 게이트웨이(PAT → 기존 RPC) · personal_create_many · 감사
+// 0034 — api_invoke 게이트웨이(PAT → 기존 RPC) · personal_create_many · 감사
 import { assert, assertEquals } from "@std/assert";
 import { applySeed, asAnon, asUser, expectFail, openDb } from "./_harness.ts";
 import { cases, nodeId, one, uidOf, type Q, type Row } from "./_fixtures.ts";
@@ -1217,7 +1217,7 @@ const call = async (q: Q, token: string | null, op: string, args: unknown = {}) 
   return r;
 };
 
-cases("api invoke 0033", db, [
+cases("api invoke 0034", db, [
   { name: "whoami · me_studies — PAT 주인 기준", run: async (q) => {
     const t = await tokenFor(q, "민수");
     const w = await call(q, t, "whoami");
@@ -1296,7 +1296,7 @@ cases("api invoke 0033", db, [
 마이그레이션 SQL 정적 검사도 추가(같은 파일 끝):
 
 ```ts
-Deno.test("마이그레이션 원문: sgtudy.api_uid 를 set_config 하는 곳은 0031 api_authenticate 뿐", async () => {
+Deno.test("마이그레이션 원문: sgtudy.api_uid 를 set_config 하는 곳은 0032 api_authenticate 뿐", async () => {
   const dir = new URL("../migrations/", import.meta.url);
   const hits: string[] = [];
   for await (const e of Deno.readDir(dir)) {
@@ -1305,15 +1305,15 @@ Deno.test("마이그레이션 원문: sgtudy.api_uid 를 set_config 하는 곳�
     if (/set_config\(\s*'sgtudy\.api_uid'\s*,\s*t\.user_id/i.test(sql)) hits.push(e.name);
     else if (/set_config\(\s*'sgtudy\.api_uid'/i.test(sql)) hits.push(`${e.name}:OTHER`);
   }
-  assertEquals(hits, ["0031_api_tokens.sql"]);
+  assertEquals(hits, ["0032_api_tokens.sql"]);
 });
 ```
 
 - [ ] **Step 2: 실패 확인** → FAIL.
-- [ ] **Step 3: 구현** — `0033_api_invoke.sql`
+- [ ] **Step 3: 구현** — `0034_api_invoke.sql`
 
 ```sql
--- 0033_api_invoke.sql — 2026-10-19 AI 연동(MCP) 1단계: anon 이 부르는 게이트웨이. 배포 후 수정 금지.
+-- 0034_api_invoke.sql — 2026-10-19 AI 연동(MCP) 1단계: anon 이 부르는 게이트웨이. 배포 후 수정 금지.
 -- 스펙 §4.2·§6. PAT → api_authenticate(GUC) → 기존/신규 RPC. 디스패치 오류는 JSON 으로 돌려 감사 행이 남게 한다.
 
 create or replace function public.api_error_json(p_state text, p_code text, p_detail text, p_hint text) returns jsonb
@@ -1434,7 +1434,7 @@ grant execute on function public.api_invoke(text, text, jsonb) to anon, authenti
 주의: `curriculum_get` 이 실패(ROOM_NOT_FOUND)하면 `||` 의 다른 쪽도 평가될 수 있다 — `curriculum_version(null)` 은 `md5('')` 를 돌려 예외가 없으니 무해.
 
 - [ ] **Step 4: 통과 + 전체 회귀** — `npm run test:db` 0 failed.
-- [ ] **Step 5: 커밋** — `git commit -- supabase/migrations/0033_api_invoke.sql supabase/tests/api-invoke-sql.test.ts -m "feat(db): 0033 — api_invoke 게이트웨이(PAT → 기존 RPC, 스코프·레이트리밋·감사), personal_create_many"`
+- [ ] **Step 5: 커밋** — `git commit -- supabase/migrations/0034_api_invoke.sql supabase/tests/api-invoke-sql.test.ts -m "feat(db): 0034 — api_invoke 게이트웨이(PAT → 기존 RPC, 스코프·레이트리밋·감사), personal_create_many"`
 
 ---
 
@@ -1820,7 +1820,7 @@ describe("tokens", () => {
 
 - [ ] **Step 1: 전체 게이트** — `npm run test:db && npm run lint && npx tsc --noEmit && npx vitest run` 모두 통과 출력 확인.
 - [ ] **Step 2: 사용자 실행 목록(에이전트는 실행하지 않음)**
-  1. 호스티드 DB: `supabase db push`(0031·0032·0033).
+  1. 호스티드 DB: `supabase db push`(0032·0033·0034).
   2. Vercel 환경변수: `MCP_ALLOWED_ORIGINS=https://<운영 도메인>`(그 밖의 키는 기존 `NEXT_PUBLIC_SUPABASE_*` 재사용, **service role 불필요**).
   3. 배포 후 마스터 계정으로 배포 URL `/me` → 토큰 생성 → `claude mcp add --transport http sgtudy https://<배포 URL>/api/mcp --header "Authorization: Bearer …"` → Claude Code 에서 "내 스터디 보여 줘" → "aws 에 테스트 회차 추가 미리보기" 로 dry-run 만 확인(적용은 테스트 방에서).
   4. 호스티드 PostgREST 의 함수 `statement_timeout` 반영 확인(Task 0 Step 5 미확인 시) — 200노드 dry-run 이 3초를 넘으면 `api_limits`/`plan_validate` 상한을 100 으로 낮추는 후속 마이그레이션.
