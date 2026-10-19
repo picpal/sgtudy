@@ -65,10 +65,9 @@ describe("useNodeFileUploads", () => {
     expect(out.h.uploading).toBe(false);
   });
 
-  it("discardUnsaved aborts in-flight uploads and discards ones that finish registering afterwards", async () => {
+  it("abort right after upload skips register (N-3)", async () => {
     let finish!: () => void;
     api.upload.mockImplementation(() => new Promise<void>((r) => (finish = r)));
-    api.register.mockResolvedValue({ id: "late", name: "c.pdf", contentType: "application/pdf", size: 3, status: "ready" });
     mount();
     act(() => out.h.pick([file("c.pdf")]));
     await flush();
@@ -77,8 +76,49 @@ describe("useNodeFileUploads", () => {
     expect(out.h.uploading).toBe(false);
     finish();
     await flush();
+    expect(api.register).not.toHaveBeenCalled();
+    expect(out.h.rows.map((r) => r.fileId)).toEqual(["s1"]);
+  });
+
+  it("abort while registering discards the file once registration finishes", async () => {
+    let registered!: (m: FileMeta) => void;
+    api.upload.mockResolvedValue(undefined);
+    api.register.mockImplementation(() => new Promise<FileMeta>((r) => (registered = r)));
+    mount();
+    act(() => out.h.pick([file("c.pdf")]));
+    await flush();
+    expect(api.register).toHaveBeenCalled();
+    act(() => out.h.discardUnsaved());
+    registered({ id: "late", name: "c.pdf", contentType: "application/pdf", size: 3, status: "ready" });
+    await flush();
     expect(api.discard).toHaveBeenCalledWith("late");
     expect(out.h.rows.map((r) => r.fileId)).toEqual(["s1"]);
+  });
+
+  it("discardUnsaved sees a file registered just before, even before re-render (N-2)", async () => {
+    let registered!: (m: FileMeta) => void;
+    api.upload.mockResolvedValue(undefined);
+    api.register.mockImplementation(() => new Promise<FileMeta>((r) => (registered = r)));
+    mount();
+    act(() => out.h.pick([file("d.pdf")]));
+    await flush();
+    const stale = out.h; // 등록 완료 전 렌더의 훅 값
+    await act(async () => {
+      registered({ id: "fresh", name: "d.pdf", contentType: "application/pdf", size: 3, status: "ready" });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      stale.discardUnsaved(); // 같은 act 안 — 아직 다시 그려지지 않았다
+    });
+    expect(api.discard).toHaveBeenCalledWith("fresh");
+  });
+
+  it("an inline saved={[]} literal re-rendered many times does not loop (N-1)", () => {
+    const host = document.createElement("div");
+    root = createRoot(host);
+    for (let i = 0; i < 5; i++) act(() => root!.render(createElement(Harness, { saved: [] })));
+    expect(out.h.rows).toEqual([]);
+    act(() => out.h.markError("x", "다시 올려 주세요"));
+    for (let i = 0; i < 3; i++) act(() => root!.render(createElement(Harness, { saved: [] })));
+    expect(out.h.uploading).toBe(false);
   });
 
   it("a queued file whose node became a temp row fails instead of sticking as uploading", async () => {

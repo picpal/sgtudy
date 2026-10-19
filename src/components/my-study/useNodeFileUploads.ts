@@ -34,7 +34,13 @@ const isFailure = (e: unknown): e is UploadFailure => typeof e === "object" && e
 
 export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }: Args) {
   // 새로 등록된 메타 — saved 와 합쳐 줄을 그린다 (렌더 중 읽으므로 ref 가 아니라 state)
-  const [added, setAdded] = useState<ReadonlyMap<string, FileMeta>>(new Map());
+  const [added, setAddedState] = useState<ReadonlyMap<string, FileMeta>>(new Map());
+  // 렌더 전에 discardUnsaved 가 불려도 방금 등록된 것까지 보이게 하는 동기 미러
+  const addedRef = useRef<ReadonlyMap<string, FileMeta>>(added);
+  const setAdded = (next: ReadonlyMap<string, FileMeta>) => {
+    addedRef.current = next;
+    setAddedState(next);
+  };
   const metas = useMemo(() => {
     const m = new Map(added);
     for (const f of saved) m.set(f.id, f);
@@ -43,10 +49,12 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
   const [pending, dispatch] = useReducer(reducer, []);
   // 저장 응답 FILE_NOT_READY 로 표시할 붙은 파일 — fileId → 문구
   const [errs, setErrs] = useState<ReadonlyMap<string, string>>(new Map());
-  // 저장돼 saved 가 바뀌면 그 파일의 오류 표시는 지운다 (렌더 중 state 맞추기 패턴)
-  const [prevSaved, setPrevSaved] = useState(saved);
-  if (prevSaved !== saved) {
-    setPrevSaved(saved);
+  // 저장돼 saved 가 바뀌면 그 파일의 오류 표시는 지운다 (렌더 중 state 맞추기 패턴).
+  // 참조가 아니라 id 키로 비교 — 호출자가 `saved ?? []` 처럼 매 렌더 새 배열을 넘겨도 루프가 돌지 않게
+  const savedKey = saved.map((f) => f.id).join(",");
+  const [prevSavedKey, setPrevSavedKey] = useState(savedKey);
+  if (prevSavedKey !== savedKey) {
+    setPrevSavedKey(savedKey);
     if (saved.some((f) => errs.has(f.id)))
       setErrs((m) => {
         const n = new Map(m);
@@ -104,13 +112,14 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
           const room = await roomId.current.p;
           const path = nodeObjectKey(room, node, k, item.file.name);
           await uploadAttachment(path, item.file, item.mime, (pct) => dispatch({ type: "progress", key: k, progress: pct }), ac.signal);
+          if (ac.signal.aborted || !alive.current) return; // 올린 직후 빼거나 떠났다 — 등록하지 않는다(files 행이 없어 한도에 안 잡힌다)
           const meta = await registerNodeFile(node, { path, name: item.file.name, mime: item.mime, size: item.file.size });
           if (ac.signal.aborted || !alive.current) {
             // 등록 사이에 빼거나 화면을 떠났다 — 미연결 파일을 한도에서 뺀다(best effort)
             void discardNodeUnattached(meta.id);
             return;
           }
-          setAdded((m) => new Map(m).set(meta.id, meta));
+          setAdded(new Map(addedRef.current).set(meta.id, meta));
           files.current.delete(k);
           select([...selectedRef.current, meta.id]);
           dispatch({ type: "remove", key: k });
@@ -199,7 +208,7 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
   const discardUnsaved = () => {
     queue.current = [];
     for (const ac of aborts.current.values()) ac.abort(); // 등록 중이던 건 등록 뒤 버려진다
-    for (const id of added.keys()) if (!savedIds.has(id)) void discardNodeUnattached(id);
+    for (const id of addedRef.current.keys()) if (!savedIds.has(id)) void discardNodeUnattached(id);
     files.current.clear();
     setAdded(new Map());
     setErrs(new Map());
