@@ -8,6 +8,7 @@ import { fromDto, putRoomTags, sameTags, type TagItem } from "@/components/room-
 import { clampCp, firstErrorKey, maxEndDate, revalidateOnChange, serverFieldError, type NewRoomValues } from "@/components/room-new/validate";
 import { StatusBadge } from "@/components/my-study/StudyHeaderInfo";
 import { AppHeader } from "@/components/ui/AppHeader";
+import { PageBody } from "@/components/ui/PageBody";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { NotificationBell } from "@/components/ui/NotificationBell";
@@ -138,127 +139,129 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
 
   const back = routes.myStudy(d.slug);
   return (
-    <div className="flex min-h-screen flex-col p-4">
-      <AppHeader active="myStudy" variant="card" bell={<NotificationBell />} />
-      <main className="mx-auto w-full max-w-[720px] rounded-[20px] bg-surface p-7 max-sm:p-5">
-        <Link href={back} className="-ml-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[14px] font-medium text-ink-3 hover:text-ink">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-          내 스터디로
-        </Link>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 설정</h1>
-          <StatusBadge status={uiStatus(d.status)} draft={d.status === "draft"} />
-          {d.archived && <span className="rounded-[8px] bg-slate-soft px-[10px] py-[3px] text-[12px] font-semibold text-ink-3">보관됨</span>}
-        </div>
-        <p className="mb-6 mt-[6px] line-clamp-2 break-words text-[14px] text-muted" title={d.title}>
-          {d.title}
-        </p>
-        {reason && (
-          <p role="note" className="mb-6 mt-0 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-3 text-[13px] font-medium leading-[1.5] text-[#6B4700]">
-            {d.status === "active" && !d.archived ? "진행중에는 시작일·최소 인원·공개 여부·참가 방식·그룹장 과제 수행을 바꿀 수 없어요" : reason}
-          </p>
-        )}
-
-        <form ref={formRef} onSubmit={save} className="flex flex-col gap-6" noValidate>
-          <Section title="기본 정보">
-            <Field label="제목 (= 최상위 목표)" required error={errors.title}>
-              <input name="title" className={FIELD_CLASS} value={v.title} disabled={dis("title")} onChange={(e) => set("title", clampCp(e.target.value, 60))} aria-required aria-invalid={!!errors.title} />
-            </Field>
-            <Field label="한 줄 소개" required hint="방 목록 카드에 제목과 함께 보여요 · 100자까지" error={errors.intro}>
-              <input name="intro" className={FIELD_CLASS} value={v.intro} disabled={dis("intro")} onChange={(e) => set("intro", clampCp(e.target.value, 100))} aria-required aria-invalid={!!errors.intro} />
-            </Field>
-            <EditorField id="settings-desc" label="상세 설명">
-              {locked.has("descriptionMd") ? (
-                <div className="rounded-[12px] border border-line bg-surface-2 px-4 py-3 text-[14px] text-muted">{v.descriptionMd ? "고칠 수 없어요 · 개요 탭에서 볼 수 있어요" : "상세 설명이 없어요"}</div>
-              ) : (
-                <MarkdownEditor labelledBy="settings-desc" value={v.descriptionMd} onChange={(x) => set("descriptionMd", x)} placeholder="스터디 목표, 진행 방식, 준비물 등을 적어 주세요" maxHeight="none" />
-              )}
-            </EditorField>
-            <EditorField id="settings-rules" label="운영 규칙 (한 줄에 하나씩 목록으로)">
-              {locked.has("rulesMd") ? (
-                <div className="rounded-[12px] border border-line bg-surface-2 px-4 py-3 text-[14px] text-muted">{v.rulesMd ? "고칠 수 없어요 · 개요 탭에서 볼 수 있어요" : "운영 규칙이 없어요"}</div>
-              ) : (
-                <MarkdownEditor labelledBy="settings-rules" value={v.rulesMd} onChange={(x) => set("rulesMd", x)} placeholder="- 마감은 회차 마지막 날 23:59(KST)예요." minHeight={150} maxHeight="none" tools={RULE_TOOLS} />
-              )}
-            </EditorField>
-          </Section>
-
-          <Section title="태그" desc="진행목표 내용으로 자동으로 붙는 태그(반짝이 표시)와 직접 고른 태그가 함께 보여요">
-            <TagPicker value={tags} onChange={setTags} disabled={tagsLocked || busy} autoNote />
-          </Section>
-
-          <Section title="참가·공개">
-            <SwitchRow title="공개 방" desc={locked.has("isPublic") ? reason : "끄면 초대 링크로만 들어올 수 있어요"} on={v.isPublic} onChange={(x) => set("isPublic", x)} disabled={dis("isPublic")} />
-            <JoinModeRadio value={v.joinMode} onChange={(x) => set("joinMode", x)} disabled={dis("joinMode")} />
-            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-              <Field label="최대 인원" required hint={`2~100명 · 지금 ${d.memberCount}명 참가 중`} error={errors.maxMembers}>
-                <input name="maxMembers" type="number" inputMode="numeric" min={Math.max(2, d.memberCount)} max={100} className={FIELD_CLASS} value={v.maxMembers} disabled={dis("maxMembers")} onChange={(e) => set("maxMembers", e.target.value)} aria-invalid={!!errors.maxMembers} />
-              </Field>
-              <Field label="최소 인원 (선택)" hint={locked.has("minMembers") ? reason : "비우면 제한 없음"} error={errors.minMembers}>
-                <input name="minMembers" type="number" inputMode="numeric" min={1} className={FIELD_CLASS} value={v.minMembers} disabled={dis("minMembers")} onChange={(e) => set("minMembers", e.target.value)} aria-invalid={!!errors.minMembers} />
-              </Field>
-            </div>
-            <SwitchRow
-              title="그룹장도 과제 수행"
-              desc={locked.has("leaderDoesTasks") ? reason : "끄면 공통 과제 담당자에서 빠져요 (시작 후 변경 불가)"}
-              on={v.leaderDoesTasks}
-              onChange={(x) => set("leaderDoesTasks", x)}
-              disabled={dis("leaderDoesTasks")}
-            />
-          </Section>
-
-          <Section
-            title="기간"
-            desc={
-              d.status === "active" && !d.archived
-                ? "진행중에는 종료일만 바꿀 수 있어요 · 오늘과 마지막 과제 마감 이후로. 종료일이 지나면 스터디가 자동으로 종료돼요 — 일찍 끝내려면 종료일을 앞당겨 주세요"
-                : d.status === "draft" || d.status === "recruit"
-                  ? "시작일은 오늘 이후, 기간은 최대 1년이에요"
-                  : undefined
-            }
-          >
-            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-              <Field label="시작일" required hint={locked.has("startDate") && !d.archived && d.status !== "ended" ? reason : undefined} error={errors.startDate}>
-                <input name="startDate" type="date" className={FIELD_CLASS} min={v.startDate === base.startDate ? undefined : today} value={v.startDate} disabled={dis("startDate")} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} aria-invalid={!!errors.startDate} />
-              </Field>
-              <Field label="종료일" required error={errors.endDate}>
-                <input name="endDate" type="date" className={FIELD_CLASS} min={d.status === "active" ? today : v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} disabled={dis("endDate")} onChange={(e) => set("endDate", e.target.value)} onBlur={() => recheck("endDate")} aria-invalid={!!errors.endDate} />
-              </Field>
-            </div>
-          </Section>
-
-          {serverError && <p role="alert" className="m-0 text-[13px] text-warn">{serverError}</p>}
-          {/* 저장 막대 — 바뀐 게 있으면 긴 폼에서도 보이게 화면 아래에 붙는다 */}
-          <div className={`${dirtyCount ? "sticky bottom-0 z-10 shadow-[0_-8px_20px_rgba(27,34,48,.06)]" : ""} -mx-7 flex flex-wrap items-center justify-end gap-2 border-t border-line-2 bg-surface px-7 py-3 max-sm:-mx-5 max-sm:px-5`}>
-            <span aria-live="polite" className="mr-auto text-[13px] text-muted">
-              {dirtyCount ? `바뀐 항목 ${dirtyCount}개` : "바뀐 내용이 없어요"}
-            </span>
-            <button type="button" onClick={reset} disabled={!dirtyCount || busy} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-medium text-ink disabled:opacity-50">
-              되돌리기
-            </button>
-            <button type="submit" disabled={!dirtyCount || busy} className="h-11 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:bg-slate-soft disabled:text-muted">
-              {busy ? "저장하는 중…" : "저장"}
-            </button>
+    <div className="flex min-h-screen flex-col">
+      <AppHeader active="myStudy" bell={<NotificationBell />} />
+      <PageBody>
+        <main className="mx-auto w-full max-w-[720px] rounded-[20px] bg-surface p-7 max-sm:p-5">
+          <Link href={back} className="-ml-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[14px] font-medium text-ink-3 hover:text-ink">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            내 스터디로
+          </Link>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 설정</h1>
+            <StatusBadge status={uiStatus(d.status)} draft={d.status === "draft"} />
+            {d.archived && <span className="rounded-[8px] bg-slate-soft px-[10px] py-[3px] text-[12px] font-semibold text-ink-3">보관됨</span>}
           </div>
-        </form>
+          <p className="mb-6 mt-[6px] line-clamp-2 break-words text-[14px] text-muted" title={d.title}>
+            {d.title}
+          </p>
+          {reason && (
+            <p role="note" className="mb-6 mt-0 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-3 text-[13px] font-medium leading-[1.5] text-[#6B4700]">
+              {d.status === "active" && !d.archived ? "진행중에는 시작일·최소 인원·공개 여부·참가 방식·그룹장 과제 수행을 바꿀 수 없어요" : reason}
+            </p>
+          )}
 
-        {/* 알림 설정 — 바로 저장(위 폼 저장과 따로). 끝났거나 보관된 방은 보낼 알림이 없다 */}
-        {!d.archived && d.status !== "ended" && <NotifySettingsSection slug={d.slug} toast={setToast} />}
+          <form ref={formRef} onSubmit={save} className="flex flex-col gap-6" noValidate>
+            <Section title="기본 정보">
+              <Field label="제목 (= 최상위 목표)" required error={errors.title}>
+                <input name="title" className={FIELD_CLASS} value={v.title} disabled={dis("title")} onChange={(e) => set("title", clampCp(e.target.value, 60))} aria-required aria-invalid={!!errors.title} />
+              </Field>
+              <Field label="한 줄 소개" required hint="방 목록 카드에 제목과 함께 보여요 · 100자까지" error={errors.intro}>
+                <input name="intro" className={FIELD_CLASS} value={v.intro} disabled={dis("intro")} onChange={(e) => set("intro", clampCp(e.target.value, 100))} aria-required aria-invalid={!!errors.intro} />
+              </Field>
+              <EditorField id="settings-desc" label="상세 설명">
+                {locked.has("descriptionMd") ? (
+                  <div className="rounded-[12px] border border-line bg-surface-2 px-4 py-3 text-[14px] text-muted">{v.descriptionMd ? "고칠 수 없어요 · 개요 탭에서 볼 수 있어요" : "상세 설명이 없어요"}</div>
+                ) : (
+                  <MarkdownEditor labelledBy="settings-desc" value={v.descriptionMd} onChange={(x) => set("descriptionMd", x)} placeholder="스터디 목표, 진행 방식, 준비물 등을 적어 주세요" maxHeight="none" />
+                )}
+              </EditorField>
+              <EditorField id="settings-rules" label="운영 규칙 (한 줄에 하나씩 목록으로)">
+                {locked.has("rulesMd") ? (
+                  <div className="rounded-[12px] border border-line bg-surface-2 px-4 py-3 text-[14px] text-muted">{v.rulesMd ? "고칠 수 없어요 · 개요 탭에서 볼 수 있어요" : "운영 규칙이 없어요"}</div>
+                ) : (
+                  <MarkdownEditor labelledBy="settings-rules" value={v.rulesMd} onChange={(x) => set("rulesMd", x)} placeholder="- 마감은 회차 마지막 날 23:59(KST)예요." minHeight={150} maxHeight="none" tools={RULE_TOOLS} />
+                )}
+              </EditorField>
+            </Section>
 
-        <DangerZone detail={d} onDetail={setD} toast={setToast} dirty={dirtyCount > 0} />
-      </main>
-      <Toast msg={toast} onClose={closeToast} />
-      <ConfirmDialog
-        open={leaveAsk.pending !== null}
-        title="저장하지 않은 수정이 있어요"
-        body={`바뀐 항목 ${dirtyCount}개를 저장하지 않고 이동할까요?`}
-        confirmLabel="버리고 이동"
-        danger
-        onConfirm={leaveAsk.leave}
-        onCancel={leaveAsk.stay}
-      />
+            <Section title="태그" desc="진행목표 내용으로 자동으로 붙는 태그(반짝이 표시)와 직접 고른 태그가 함께 보여요">
+              <TagPicker value={tags} onChange={setTags} disabled={tagsLocked || busy} autoNote />
+            </Section>
+
+            <Section title="참가·공개">
+              <SwitchRow title="공개 방" desc={locked.has("isPublic") ? reason : "끄면 초대 링크로만 들어올 수 있어요"} on={v.isPublic} onChange={(x) => set("isPublic", x)} disabled={dis("isPublic")} />
+              <JoinModeRadio value={v.joinMode} onChange={(x) => set("joinMode", x)} disabled={dis("joinMode")} />
+              <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+                <Field label="최대 인원" required hint={`2~100명 · 지금 ${d.memberCount}명 참가 중`} error={errors.maxMembers}>
+                  <input name="maxMembers" type="number" inputMode="numeric" min={Math.max(2, d.memberCount)} max={100} className={FIELD_CLASS} value={v.maxMembers} disabled={dis("maxMembers")} onChange={(e) => set("maxMembers", e.target.value)} aria-invalid={!!errors.maxMembers} />
+                </Field>
+                <Field label="최소 인원 (선택)" hint={locked.has("minMembers") ? reason : "비우면 제한 없음"} error={errors.minMembers}>
+                  <input name="minMembers" type="number" inputMode="numeric" min={1} className={FIELD_CLASS} value={v.minMembers} disabled={dis("minMembers")} onChange={(e) => set("minMembers", e.target.value)} aria-invalid={!!errors.minMembers} />
+                </Field>
+              </div>
+              <SwitchRow
+                title="그룹장도 과제 수행"
+                desc={locked.has("leaderDoesTasks") ? reason : "끄면 공통 과제 담당자에서 빠져요 (시작 후 변경 불가)"}
+                on={v.leaderDoesTasks}
+                onChange={(x) => set("leaderDoesTasks", x)}
+                disabled={dis("leaderDoesTasks")}
+              />
+            </Section>
+
+            <Section
+              title="기간"
+              desc={
+                d.status === "active" && !d.archived
+                  ? "진행중에는 종료일만 바꿀 수 있어요 · 오늘과 마지막 과제 마감 이후로. 종료일이 지나면 스터디가 자동으로 종료돼요 — 일찍 끝내려면 종료일을 앞당겨 주세요"
+                  : d.status === "draft" || d.status === "recruit"
+                    ? "시작일은 오늘 이후, 기간은 최대 1년이에요"
+                    : undefined
+              }
+            >
+              <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+                <Field label="시작일" required hint={locked.has("startDate") && !d.archived && d.status !== "ended" ? reason : undefined} error={errors.startDate}>
+                  <input name="startDate" type="date" className={FIELD_CLASS} min={v.startDate === base.startDate ? undefined : today} value={v.startDate} disabled={dis("startDate")} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} aria-invalid={!!errors.startDate} />
+                </Field>
+                <Field label="종료일" required error={errors.endDate}>
+                  <input name="endDate" type="date" className={FIELD_CLASS} min={d.status === "active" ? today : v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} disabled={dis("endDate")} onChange={(e) => set("endDate", e.target.value)} onBlur={() => recheck("endDate")} aria-invalid={!!errors.endDate} />
+                </Field>
+              </div>
+            </Section>
+
+            {serverError && <p role="alert" className="m-0 text-[13px] text-warn">{serverError}</p>}
+            {/* 저장 막대 — 바뀐 게 있으면 긴 폼에서도 보이게 화면 아래에 붙는다 */}
+            <div className={`${dirtyCount ? "sticky bottom-0 z-10 shadow-[0_-8px_20px_rgba(27,34,48,.06)]" : ""} -mx-7 flex flex-wrap items-center justify-end gap-2 border-t border-line-2 bg-surface px-7 py-3 max-sm:-mx-5 max-sm:px-5`}>
+              <span aria-live="polite" className="mr-auto text-[13px] text-muted">
+                {dirtyCount ? `바뀐 항목 ${dirtyCount}개` : "바뀐 내용이 없어요"}
+              </span>
+              <button type="button" onClick={reset} disabled={!dirtyCount || busy} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-medium text-ink disabled:opacity-50">
+                되돌리기
+              </button>
+              <button type="submit" disabled={!dirtyCount || busy} className="h-11 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:bg-slate-soft disabled:text-muted">
+                {busy ? "저장하는 중…" : "저장"}
+              </button>
+            </div>
+          </form>
+
+          {/* 알림 설정 — 바로 저장(위 폼 저장과 따로). 끝났거나 보관된 방은 보낼 알림이 없다 */}
+          {!d.archived && d.status !== "ended" && <NotifySettingsSection slug={d.slug} toast={setToast} />}
+
+          <DangerZone detail={d} onDetail={setD} toast={setToast} dirty={dirtyCount > 0} />
+        </main>
+        <Toast msg={toast} onClose={closeToast} />
+        <ConfirmDialog
+          open={leaveAsk.pending !== null}
+          title="저장하지 않은 수정이 있어요"
+          body={`바뀐 항목 ${dirtyCount}개를 저장하지 않고 이동할까요?`}
+          confirmLabel="버리고 이동"
+          danger
+          onConfirm={leaveAsk.leave}
+          onCancel={leaveAsk.stay}
+        />
+      </PageBody>
     </div>
   );
 }

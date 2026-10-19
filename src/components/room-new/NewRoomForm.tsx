@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
+import { PageBody } from "@/components/ui/PageBody";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Switch } from "@/components/ui/Switch";
 import { NotificationBell } from "@/components/ui/NotificationBell";
@@ -77,42 +78,44 @@ export function NewRoomForm() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col p-4">
-      <AppHeader variant="card" bell={<NotificationBell />} />
-      <main className="mx-auto w-full max-w-[640px] rounded-[20px] bg-surface p-7 max-sm:p-5">
-        <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 만들기</h1>
-        <p className="mb-6 mt-[6px] text-[14px] text-muted">채팅방 만들듯 30초면 충분해요. 진행목표는 만든 뒤 천천히 채워요.</p>
-        <form ref={formRef} onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          {/* 한도는 서버와 같은 코드 포인트(60/100)로 자른다 — maxLength 는 UTF-16 단위라 이모지에서 어긋난다(Q2-16) */}
-          <Field label="제목 (= 최상위 목표)" required error={errors.title}><input name="title" className={field} value={v.title} onChange={(e) => set("title", clampCp(e.target.value, 60))} placeholder="예) AWS SAA 자격증 3개월 완주" autoFocus aria-required aria-invalid={!!errors.title} /></Field>
-          <Field label="한 줄 소개" required hint="방 목록 카드에 제목과 함께 보여요 · 100자까지" error={errors.intro}><input name="intro" className={field} value={v.intro} onChange={(e) => set("intro", clampCp(e.target.value, 100))} placeholder="예) 매주 한 챕터씩 읽고 기출 20문제를 풀어요" aria-required aria-invalid={!!errors.intro} /></Field>
-          <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-            <Field label="시작일" required hint="오늘 이후" error={errors.startDate}><input name="startDate" aria-required aria-invalid={!!errors.startDate} type="date" className={field} min={today} value={v.startDate} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} /></Field>
-            <Field label="종료일" required hint="시작일부터 최대 1년" error={errors.endDate}><input name="endDate" aria-required aria-invalid={!!errors.endDate} type="date" className={field} min={v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} onChange={(e) => set("endDate", e.target.value)} onBlur={() => recheck("endDate")} /></Field>
-          </div>
-          <Field label="최대 인원" required hint="2~100명 · 그룹장 포함" error={errors.maxMembers}><input name="maxMembers" aria-invalid={!!errors.maxMembers} type="number" inputMode="numeric" min={2} max={100} className={field} value={v.maxMembers} onChange={(e) => set("maxMembers", e.target.value)} /></Field>
-          <SwitchRow title="공개 방" desc="끄면 초대 링크로만 들어올 수 있어요" on={v.isPublic} onChange={(x) => set("isPublic", x)} />
-          <JoinModeRadio value={v.joinMode} onChange={(x) => set("joinMode", x)} />
-          <TagPicker value={tags} onChange={setTags} />
-
-          <button type="button" onClick={() => setMore((m) => !m)} aria-expanded={more} className="h-11 self-start text-[14px] font-semibold text-mint">{more ? "접기" : "더 설정하기"}</button>
-          {/* 편집기는 글만큼 자란다(maxHeight none) — 한 페이지 스크롤, 안쪽 세로 스크롤 없음 */}
-          {more && (
-            <div className="flex flex-col gap-4 rounded-[14px] bg-surface-2 p-4">
-              <EditorField id="new-room-desc" label="상세 설명"><MarkdownEditor labelledBy="new-room-desc" value={v.descriptionMd} onChange={(x) => set("descriptionMd", x)} placeholder="스터디 목표, 진행 방식, 준비물 등을 적어 주세요" maxHeight="none" /></EditorField>
-              <EditorField id="new-room-rules" label="운영 규칙 (한 줄에 하나씩 목록으로)"><MarkdownEditor labelledBy="new-room-rules" value={v.rulesMd} onChange={(x) => set("rulesMd", x)} placeholder="- 마감은 회차 마지막 날 23:59(KST)예요." minHeight={150} maxHeight="none" tools={RULE_TOOLS} /></EditorField>
-              <Field label="최소 인원 (선택)" error={errors.minMembers}><input name="minMembers" aria-invalid={!!errors.minMembers} type="number" inputMode="numeric" min={1} className={field} value={v.minMembers} onChange={(e) => set("minMembers", e.target.value)} /></Field>
-              <div className="flex items-center justify-between">
-                <span><span className="block text-[14px] font-semibold">그룹장도 과제 수행</span><span className="block text-[12px] text-muted">끄면 공통 과제 담당자에서 빠져요 (시작 후 변경 불가)</span></span>
-                <Switch on={v.leaderDoesTasks} onChange={(x) => set("leaderDoesTasks", x)} label="그룹장도 과제 수행" />
-              </div>
+    <div className="flex min-h-screen flex-col">
+      <AppHeader bell={<NotificationBell />} />
+      <PageBody>
+        <main className="mx-auto w-full max-w-[640px] rounded-[20px] bg-surface p-7 max-sm:p-5">
+          <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 만들기</h1>
+          <p className="mb-6 mt-[6px] text-[14px] text-muted">채팅방 만들듯 30초면 충분해요. 진행목표는 만든 뒤 천천히 채워요.</p>
+          <form ref={formRef} onSubmit={submit} className="flex flex-col gap-4" noValidate>
+            {/* 한도는 서버와 같은 코드 포인트(60/100)로 자른다 — maxLength 는 UTF-16 단위라 이모지에서 어긋난다(Q2-16) */}
+            <Field label="제목 (= 최상위 목표)" required error={errors.title}><input name="title" className={field} value={v.title} onChange={(e) => set("title", clampCp(e.target.value, 60))} placeholder="예) AWS SAA 자격증 3개월 완주" autoFocus aria-required aria-invalid={!!errors.title} /></Field>
+            <Field label="한 줄 소개" required hint="방 목록 카드에 제목과 함께 보여요 · 100자까지" error={errors.intro}><input name="intro" className={field} value={v.intro} onChange={(e) => set("intro", clampCp(e.target.value, 100))} placeholder="예) 매주 한 챕터씩 읽고 기출 20문제를 풀어요" aria-required aria-invalid={!!errors.intro} /></Field>
+            <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+              <Field label="시작일" required hint="오늘 이후" error={errors.startDate}><input name="startDate" aria-required aria-invalid={!!errors.startDate} type="date" className={field} min={today} value={v.startDate} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} /></Field>
+              <Field label="종료일" required hint="시작일부터 최대 1년" error={errors.endDate}><input name="endDate" aria-required aria-invalid={!!errors.endDate} type="date" className={field} min={v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} onChange={(e) => set("endDate", e.target.value)} onBlur={() => recheck("endDate")} /></Field>
             </div>
-          )}
+            <Field label="최대 인원" required hint="2~100명 · 그룹장 포함" error={errors.maxMembers}><input name="maxMembers" aria-invalid={!!errors.maxMembers} type="number" inputMode="numeric" min={2} max={100} className={field} value={v.maxMembers} onChange={(e) => set("maxMembers", e.target.value)} /></Field>
+            <SwitchRow title="공개 방" desc="끄면 초대 링크로만 들어올 수 있어요" on={v.isPublic} onChange={(x) => set("isPublic", x)} />
+            <JoinModeRadio value={v.joinMode} onChange={(x) => set("joinMode", x)} />
+            <TagPicker value={tags} onChange={setTags} />
 
-          {serverError && <p role="alert" className="m-0 text-[13px] text-warn">{serverError}</p>}
-          <button type="submit" disabled={busy} className="flex h-12 items-center justify-center rounded-[24px] bg-navy text-[15px] font-semibold text-white disabled:bg-slate-soft disabled:text-muted">{busy ? "만드는 중…" : "방 만들기"}</button>
-        </form>
-      </main>
+            <button type="button" onClick={() => setMore((m) => !m)} aria-expanded={more} className="h-11 self-start text-[14px] font-semibold text-mint">{more ? "접기" : "더 설정하기"}</button>
+            {/* 편집기는 글만큼 자란다(maxHeight none) — 한 페이지 스크롤, 안쪽 세로 스크롤 없음 */}
+            {more && (
+              <div className="flex flex-col gap-4 rounded-[14px] bg-surface-2 p-4">
+                <EditorField id="new-room-desc" label="상세 설명"><MarkdownEditor labelledBy="new-room-desc" value={v.descriptionMd} onChange={(x) => set("descriptionMd", x)} placeholder="스터디 목표, 진행 방식, 준비물 등을 적어 주세요" maxHeight="none" /></EditorField>
+                <EditorField id="new-room-rules" label="운영 규칙 (한 줄에 하나씩 목록으로)"><MarkdownEditor labelledBy="new-room-rules" value={v.rulesMd} onChange={(x) => set("rulesMd", x)} placeholder="- 마감은 회차 마지막 날 23:59(KST)예요." minHeight={150} maxHeight="none" tools={RULE_TOOLS} /></EditorField>
+                <Field label="최소 인원 (선택)" error={errors.minMembers}><input name="minMembers" aria-invalid={!!errors.minMembers} type="number" inputMode="numeric" min={1} className={field} value={v.minMembers} onChange={(e) => set("minMembers", e.target.value)} /></Field>
+                <div className="flex items-center justify-between">
+                  <span><span className="block text-[14px] font-semibold">그룹장도 과제 수행</span><span className="block text-[12px] text-muted">끄면 공통 과제 담당자에서 빠져요 (시작 후 변경 불가)</span></span>
+                  <Switch on={v.leaderDoesTasks} onChange={(x) => set("leaderDoesTasks", x)} label="그룹장도 과제 수행" />
+                </div>
+              </div>
+            )}
+
+            {serverError && <p role="alert" className="m-0 text-[13px] text-warn">{serverError}</p>}
+            <button type="submit" disabled={busy} className="flex h-12 items-center justify-center rounded-[24px] bg-navy text-[15px] font-semibold text-white disabled:bg-slate-soft disabled:text-muted">{busy ? "만드는 중…" : "방 만들기"}</button>
+          </form>
+        </main>
+      </PageBody>
     </div>
   );
 }

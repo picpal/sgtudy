@@ -13,8 +13,7 @@ import { useMe } from "@/lib/me";
 
 const POLL_MS = 60_000;
 
-/** round: 버튼 모서리. Main(flat 헤더)은 rounded-[12px], 나머지 화면은 기본 rounded-full */
-export function NotificationBell({ round = "rounded-full" }: { round?: string }) {
+export function NotificationBell() {
   const me = useMe();
   const router = useRouter();
   const [unread, setUnread] = useState(me?.unreadCount ?? 0);
@@ -129,7 +128,7 @@ export function NotificationBell({ round = "rounded-full" }: { round?: string })
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={onToggle}
-        className={`relative flex h-11 w-11 items-center justify-center ${round} border border-line bg-surface`}
+        className="relative flex h-11 w-11 items-center justify-center rounded-[12px] border border-line bg-surface"
       >
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#1B2230" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M4 12.5V8a5 5 0 0 1 10 0v4.5l1 1.5H3z" />

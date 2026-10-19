@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LeaderPanel } from "@/components/room-view/LeaderPanel";
 import { AppHeader } from "@/components/ui/AppHeader";
+import { PageBody } from "@/components/ui/PageBody";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { MoreMenuItem } from "@/components/ui/MoreMenu";
 import { cancelConfirmBody, menuItemsOf, studyMoreItems } from "@/components/room-view/moreItems";
@@ -349,53 +350,55 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       <RoomArchivedProvider value={detail.archived}>
       {/* 한 페이지 스크롤 — 화면 높이에 가두지 않고 카드는 내용만큼 자라며 문서 하나가 스크롤된다(편집 화면의 저장 막대는 화면 위에 붙는다).
           옆 목록은 화면에 다 들어갈 때만 붙는다(useStickyFit) */}
-      <div className="flex min-h-screen flex-col p-4">
-        <AppHeader active="myStudy" variant="card" bell={<NotificationBell />} />
-        {/* ≤900 content-start: 내용이 화면보다 짧을 때 줄바꿈된 줄들이 남는 높이를 나눠 갖지 않게 — 접힌 목록 아래 빈 공간 방지 */}
-        <div className="mx-auto flex w-full max-w-[1408px] flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
-          <StudySidebar selected={detail.slug} groups={groups} collapsed={openItem !== null} />
-          <main className="min-w-0 flex-[999_1_640px] self-stretch rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:px-4">
-            {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}
-            <div className="flex flex-wrap items-start gap-7 @container">
-              <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
-                <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} />
-                {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} today={today} onGoCurriculum={() => update({ tab: "curriculum" })} periodWarning={periodWarning(editRounds)} />}
-                {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
-                {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
-                {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
-                {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
-              </section>
-              {S.tab === "overview" && (
-                <JoinInfoCard
-                  room={room}
-                  tree={savedTree}
-                  onMyTasks={() => {
-                    update({ tab: "board", bMode: "mine", calPick: null });
-                    setTabJump((n) => n + 1);
-                  }}
-                  goLeaf={goLeaf}
-                  onCancel={setConfirm}
-                  busy={busy}
-                  admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} tree={savedTree} roundId={personalRoundId} onShowOthers={showOthers}
-                    leave={detail.status === "active" && !detail.archived ? { today, leaderDoesTasks: detail.leaderDoesTasks, leaveRequestCount: detail.leaveRequestCount ?? 0 } : undefined} /></> : undefined}
-                />
-              )}
-            </div>
-          </main>
-        </div>
-        <Toast msg={toast} onClose={closeToast} />
-        <ConfirmDialog
-          open={confirm !== null}
-          title={CONFIRM_TEXT[confirm ?? "leave"].title}
-          body={confirm === "cancel" ? cancelConfirmBody(detail.archived) : CONFIRM_TEXT[confirm ?? "leave"].body}
-          confirmLabel={CONFIRM_TEXT[confirm ?? "leave"].label}
-          danger={confirm !== "leaveRequestCancel"}
-          busy={busy}
-          onConfirm={() => confirm && void runCancel(confirm)}
-          onCancel={closeConfirm}
-        >
-          {confirm === "leaveRequest" && <ReasonField value={reason} onChange={setReason} label="사유 (선택)" placeholder="그룹장에게 남길 말이 있으면 적어 주세요" />}
-        </ConfirmDialog>
+      <div className="flex min-h-screen flex-col">
+        <AppHeader active="myStudy" bell={<NotificationBell />} />
+        <PageBody>
+          {/* ≤900 content-start: 내용이 화면보다 짧을 때 줄바꿈된 줄들이 남는 높이를 나눠 갖지 않게 — 접힌 목록 아래 빈 공간 방지 */}
+          <div className="mx-auto flex w-full max-w-[1408px] flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
+            <StudySidebar selected={detail.slug} groups={groups} collapsed={openItem !== null} />
+            <main className="min-w-0 flex-[999_1_640px] self-stretch rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:px-4">
+              {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}
+              <div className="flex flex-wrap items-start gap-7 @container">
+                <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
+                  <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} />
+                  {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} today={today} onGoCurriculum={() => update({ tab: "curriculum" })} periodWarning={periodWarning(editRounds)} />}
+                  {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
+                  {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
+                  {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
+                  {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
+                </section>
+                {S.tab === "overview" && (
+                  <JoinInfoCard
+                    room={room}
+                    tree={savedTree}
+                    onMyTasks={() => {
+                      update({ tab: "board", bMode: "mine", calPick: null });
+                      setTabJump((n) => n + 1);
+                    }}
+                    goLeaf={goLeaf}
+                    onCancel={setConfirm}
+                    busy={busy}
+                    admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} tree={savedTree} roundId={personalRoundId} onShowOthers={showOthers}
+                      leave={detail.status === "active" && !detail.archived ? { today, leaderDoesTasks: detail.leaderDoesTasks, leaveRequestCount: detail.leaveRequestCount ?? 0 } : undefined} /></> : undefined}
+                  />
+                )}
+              </div>
+            </main>
+          </div>
+          <Toast msg={toast} onClose={closeToast} />
+          <ConfirmDialog
+            open={confirm !== null}
+            title={CONFIRM_TEXT[confirm ?? "leave"].title}
+            body={confirm === "cancel" ? cancelConfirmBody(detail.archived) : CONFIRM_TEXT[confirm ?? "leave"].body}
+            confirmLabel={CONFIRM_TEXT[confirm ?? "leave"].label}
+            danger={confirm !== "leaveRequestCancel"}
+            busy={busy}
+            onConfirm={() => confirm && void runCancel(confirm)}
+            onCancel={closeConfirm}
+          >
+            {confirm === "leaveRequest" && <ReasonField value={reason} onChange={setReason} label="사유 (선택)" placeholder="그룹장에게 남길 말이 있으면 적어 주세요" />}
+          </ConfirmDialog>
+        </PageBody>
       </div>
       </RoomArchivedProvider>
     </TodayProvider>

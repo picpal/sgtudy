@@ -79,15 +79,14 @@ const NAV: { key: NavKey; label: string; href: string; authOnly: boolean; icon: 
 type Props = {
   /** 생략하면 어느 메뉴도 강조하지 않는다 (/me, /rooms/new 처럼 nav 키가 없는 화면) */
   active?: NavKey;
-  /** flat: Main 처럼 전폭 흰 바. card: 나머지 화면처럼 둥근 카드 */
-  variant?: "flat" | "card";
   /** nav 와 알림 사이에 끼울 요소 (Main 의 검색창 등) */
   children?: ReactNode;
   /** 알림 벨 (Task 4 의 <NotificationBell/>). 없으면 벨을 그리지 않는다 */
   bell?: ReactNode;
 };
 
-export function AppHeader({ active, variant = "card", children, bell }: Props) {
+/** 모든 화면 공통 헤더 — 전폭 흰 바(아래 경계선). 안쪽 폭·좌우 여백은 본문 틀(PageBody·Main)과 같은 1376px·32px(≤640 16px) */
+export function AppHeader({ active, children, bell }: Props) {
   const me = useMe();
   const myStudyHref = useMyStudyHref();
   const pathname = usePathname();
@@ -165,7 +164,6 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
     router.refresh();
   };
 
-  const round = variant === "flat" ? "rounded-[12px]" : "rounded-full";
   const inner = (
     <>
       <Logo />
@@ -241,7 +239,7 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
             <Link
               key={l.key}
               href={l.href}
-              className={`flex h-11 items-center whitespace-nowrap ${round} px-[16px] text-[14px] font-semibold ${l.primary ? "bg-navy text-white hover:text-white" : "border border-line-3 bg-surface text-ink hover:text-ink"}`}
+              className={`flex h-11 items-center whitespace-nowrap rounded-[12px] px-[16px] text-[14px] font-semibold ${l.primary ? "bg-navy text-white hover:text-white" : "border border-line-3 bg-surface text-ink hover:text-ink"}`}
             >
               {l.label}
             </Link>
@@ -251,16 +249,9 @@ export function AppHeader({ active, variant = "card", children, bell }: Props) {
     </>
   );
 
-  if (variant === "flat") {
-    return (
-      <header className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-[1376px] flex-wrap items-center gap-4 px-8 py-3 max-sm:px-4">{inner}</div>
-      </header>
-    );
-  }
   return (
-    <header className="mx-auto mb-4 flex w-full max-w-[1408px] flex-wrap items-center gap-3 rounded-[18px] bg-surface px-4 py-[10px]">
-      {inner}
+    <header className="border-b border-line bg-surface">
+      <div className="mx-auto flex max-w-[1376px] flex-wrap items-center gap-4 px-8 py-3 max-sm:px-4">{inner}</div>
     </header>
   );
 }

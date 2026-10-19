@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AppHeader, type NavKey } from "./AppHeader";
+import { PageBody } from "./PageBody";
 
 /*
  * 라우트 loading.tsx 용 화면 골격. 메뉴를 누르면 서버 응답(RSC)을 기다리지 않고 바로 이 골격으로 바뀐다(프리페치된 폴백).
@@ -11,16 +12,16 @@ function Bar({ className = "" }: { className?: string }) {
   return <span aria-hidden="true" className={`block rounded-[8px] bg-line-2 motion-safe:animate-pulse ${className}`} />;
 }
 
-function BellSlot({ round = "rounded-full" }: { round?: string }) {
-  return <span aria-hidden="true" className={`block h-11 w-11 ${round} border border-line bg-surface`} />;
+function BellSlot() {
+  return <span aria-hidden="true" className="block h-11 w-11 rounded-[12px] border border-line bg-surface" />;
 }
 
 function Shell({ active, children }: { active?: NavKey; children: ReactNode }) {
   return (
-    <div data-skeleton="" aria-busy="true" className="flex min-h-screen flex-col p-4">
-      <AppHeader active={active} variant="card" bell={<BellSlot />} />
+    <div data-skeleton="" aria-busy="true" className="flex min-h-screen flex-col">
+      <AppHeader active={active} bell={<BellSlot />} />
       <span className="sr-only" role="status">불러오는 중</span>
-      {children}
+      <PageBody>{children}</PageBody>
     </div>
   );
 }
@@ -69,11 +70,11 @@ function DetailMain({ tabs }: { tabs: boolean }) {
   );
 }
 
-/** / — 방 카드 격자 (MainScreen 의 flat 헤더 + 카드 그리드) */
+/** / — 방 카드 격자 (MainScreen 의 헤더 + 카드 그리드) */
 export function HomeSkeleton() {
   return (
     <div data-skeleton="" aria-busy="true" className="min-h-screen bg-bg-main text-ink">
-      <AppHeader active="home" variant="flat" bell={<BellSlot round="rounded-[12px]" />}>
+      <AppHeader active="home" bell={<BellSlot />}>
         <Bar className="h-10 min-w-40 flex-[0_1_280px] rounded-[12px]" />
       </AppHeader>
       <span className="sr-only" role="status">불러오는 중</span>

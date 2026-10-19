@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { AppHeader } from "@/components/ui/AppHeader";
+import { PageBody } from "@/components/ui/PageBody";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
@@ -239,59 +240,61 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   };
 
   return (
-    <div className="box-border flex min-h-screen flex-col p-4">
-      <AppHeader active="tasks" variant="card" bell={<NotificationBell />} />
-      <main aria-busy={pending > 0} className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 rounded-[20px] bg-surface px-7 pb-[30px] pt-[26px] max-sm:px-2 max-sm:pb-7 max-sm:pt-5">
-        <div className="flex items-start gap-3 max-sm:px-2">
-          <div className="min-w-0 flex-1">
-            <h1 ref={title} tabIndex={-1} className="m-0 text-[26px] font-bold focus:outline-none tracking-[-0.02em] max-sm:text-[22px]">내 과제</h1>
-            {pieces.length > 0 && (
-              <p className="m-0 mt-[6px] text-[14px] text-muted max-sm:text-[13px]">
-                {pieces.map((p, i) => (
-                  <Fragment key={i}>
-                    {i > 0 && " · "}
-                    {p}
-                  </Fragment>
-                ))}
-              </p>
+    <div className="box-border flex min-h-screen flex-col">
+      <AppHeader active="tasks" bell={<NotificationBell />} />
+      <PageBody>
+        <main aria-busy={pending > 0} className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 rounded-[20px] bg-surface px-7 pb-[30px] pt-[26px] max-sm:px-2 max-sm:pb-7 max-sm:pt-5">
+          <div className="flex items-start gap-3 max-sm:px-2">
+            <div className="min-w-0 flex-1">
+              <h1 ref={title} tabIndex={-1} className="m-0 text-[26px] font-bold focus:outline-none tracking-[-0.02em] max-sm:text-[22px]">내 과제</h1>
+              {pieces.length > 0 && (
+                <p className="m-0 mt-[6px] text-[14px] text-muted max-sm:text-[13px]">
+                  {pieces.map((p, i) => (
+                    <Fragment key={i}>
+                      {i > 0 && " · "}
+                      {p}
+                    </Fragment>
+                  ))}
+                </p>
+              )}
+            </div>
+            {!noStudy && addable && (
+              <button
+                ref={headBtn}
+                type="button"
+                aria-expanded={formOpen}
+                onClick={() => setFormOpen((o) => !o)}
+                className="h-11 shrink-0 rounded-[12px] bg-navy px-[18px] text-[14px] font-semibold text-white max-sm:px-[14px]"
+              >
+                {formOpen ? (
+                  "닫기"
+                ) : (
+                  <>
+                    <span className="max-sm:hidden">＋ 내 목표 추가</span>
+                    <span className="sm:hidden">＋ 목표</span>
+                  </>
+                )}
+              </button>
             )}
           </div>
-          {!noStudy && addable && (
-            <button
-              ref={headBtn}
-              type="button"
-              aria-expanded={formOpen}
-              onClick={() => setFormOpen((o) => !o)}
-              className="h-11 shrink-0 rounded-[12px] bg-navy px-[18px] text-[14px] font-semibold text-white max-sm:px-[14px]"
-            >
-              {formOpen ? (
-                "닫기"
-              ) : (
-                <>
-                  <span className="max-sm:hidden">＋ 내 목표 추가</span>
-                  <span className="sm:hidden">＋ 목표</span>
-                </>
-              )}
-            </button>
+          {formOpen && (
+            <AddPersonalForm
+              key={filter.study}
+              data={data}
+              chosenSlug={filter.study === "all" ? undefined : filter.study}
+              onClose={closeForm}
+              onAdd={async (slug, roundId, title) => {
+                const ok = await add(slug, roundId, title);
+                if (ok) closeForm();
+                return ok;
+              }}
+            />
           )}
-        </div>
-        {formOpen && (
-          <AddPersonalForm
-            key={filter.study}
-            data={data}
-            chosenSlug={filter.study === "all" ? undefined : filter.study}
-            onClose={closeForm}
-            onAdd={async (slug, roundId, title) => {
-              const ok = await add(slug, roundId, title);
-              if (ok) closeForm();
-              return ok;
-            }}
-          />
-        )}
-        {!noStudy && <TasksToolbar filter={filter} studies={data.studies} onChange={setFilter} />}
-        {renderBody()}
-      </main>
-      <Toast msg={toast} onClose={closeToast} />
+          {!noStudy && <TasksToolbar filter={filter} studies={data.studies} onChange={setFilter} />}
+          {renderBody()}
+        </main>
+        <Toast msg={toast} onClose={closeToast} />
+      </PageBody>
     </div>
   );
 }

@@ -1,0 +1,9 @@
+import type { ReactNode } from "react";
+
+/**
+ * AppHeader 아래 본문 틀 — 방 둘러보기(MainScreen main)와 같은 폭·여백: 안쪽 최대 1376px, 좌우 32px(≤640 16px), 위 36px·아래 64px.
+ * 헤더 안쪽 틀과 같은 폭이라 로고와 본문 왼쪽 끝이 한 줄에 선다. flex-1 flex-col 이라 안쪽 카드가 남는 높이를 채울 수 있다.
+ */
+export function PageBody({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`mx-auto flex w-full max-w-[1376px] flex-1 flex-col px-8 pb-16 pt-9 max-sm:px-4 ${className}`}>{children}</div>;
+}
