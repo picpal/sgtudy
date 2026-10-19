@@ -20,6 +20,7 @@ import type { CurriculumApi } from "../useCurriculumApi";
 import { ChildList } from "./ChildList";
 import { InlineConfirm } from "./InlineConfirm";
 import { LeafBody } from "./LeafBody";
+import { NodeAttachments } from "./NodeAttachments";
 import { PersonalForm } from "./PersonalForm";
 import { PersonalSection } from "./PersonalSection";
 
@@ -224,6 +225,8 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   };
   const round = pn ? (nodes.find((x) => x.id === pn.parentId) ?? null) : null;
   const warn = pn && isOwner ? roundWarning(pn, round, today) : null;
+  // 첨부 빼기(그룹장 모더레이션) — 남의 개인 목표 ∧ 보관 아님 ∧ 방 모집·진행 중 (보관은 acts 가 이미 방 상태를 본다)
+  const canRemoveFiles = !!pn && !isOwner && isLeader && !pn.archived && !!acts?.archive;
   const owner = pn && !isOwner ? ownerOf(pn) : null;
   return (
     <section ref={sectionRef} aria-labelledby={pn && editing ? `pf-${pn.id}` : "detail-title"} onKeyDown={onKey} className="flex flex-col">
@@ -424,6 +427,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
               onUploadingChange={setUploading}
               isLeader={isLeader}
               quietNotAssigned={quietNotAssigned}
+              canRemoveFiles={canRemoveFiles}
             />
           ) : (
             <>
@@ -434,6 +438,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
                 </span>
               </div>
               {n.desc.trim() ? <MarkdownView src={n.desc} className="text-[14px] leading-[1.75]" /> : <p className="m-0 text-[13px] text-muted">{kind} 설명이 아직 없어요</p>}
+              <NodeAttachments nodeId={n.id} canRemove={false} toast={toast} />
               <ChildList parent={n} onOpen={onOpen} />
               {n.d === 0 && <PersonalSection round={n} meId={meId} isLeader={isLeader} roomStatus={roomStatus} personal={personal} api={api} onOpen={(id) => guard(() => onOpen(id))} />}
             </>
