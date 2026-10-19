@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, goLeafPatch, modeSwitchPatch, tabPatch, toggleMinePatch, toggleOthersPatch } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, toggleMinePatch, toggleOthersPatch } from "./state";
 
 describe("goLeafPatch", () => {
   it("opens the task detail view instead of an inline row", () =>
@@ -58,5 +58,17 @@ describe("blocksLeave (헤더 메뉴 등 다른 화면으로 — 미저장 편�
     expect(blocksLeave(S, false)).toBe(false);
     expect(blocksLeave({ ...S, tab: "board" }, true)).toBe(false);
     expect(blocksLeave({ ...S, ov: INITIAL_STATE.ov }, true)).toBe(false);
+  });
+});
+
+describe("editUnsaved — 첨부를 올리는 중이면 수정이 없어도 미저장 (떠나기 전에 묻는다)", () => {
+  it("ov 수정 또는 그 항목의 업로드", () => {
+    const S = { ...INITIAL_STATE, tab: "curriculum" as const, curMode: "edit" as const, editSel: "7" };
+    expect(editUnsaved(S, "7")).toBe(false);
+    expect(editUnsaved({ ...S, uploading: "7" }, "7")).toBe(true);
+    expect(editUnsaved({ ...S, uploading: "8" }, "7")).toBe(false);
+    expect(editUnsaved({ ...S, uploading: "7" }, null)).toBe(false);
+    expect(blocksLeave({ ...S, uploading: "7" }, true)).toBe(true);
+    expect(tabPatch({ ...S, uploading: "7" }, "board", true)).toEqual({ leave: { tab: "board" }, confirm: false });
   });
 });

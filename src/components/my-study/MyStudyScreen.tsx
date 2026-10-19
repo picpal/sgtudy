@@ -22,9 +22,9 @@ import { OVERVIEW_ANCHORS, useHashAnnounce, useItemAnnounce } from "@/lib/hashTa
 import { useRefetchOnFocus } from "@/lib/useRefetchOnFocus";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
-import { EMPTY_OVERRIDES, buildTree, findNode, isDirty, isPersonal, stripFieldOv, thisRoundId } from "./model";
+import { EMPTY_OVERRIDES, buildTree, findNode, isPersonal, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId, roundsOutsidePeriod } from "./rounds";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, goLeafPatch, modeSwitchPatch, tabPatch, type CurMode, type Patch, type ScreenState } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
 import { OverviewTab } from "./tabs/OverviewTab";
@@ -177,7 +177,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         if (target.id === null && ownBack) syncListTab(s.tab);
         return;
       }
-      if (s.curMode === "edit" && open && isDirty(s.ov, s.editSel)) {
+      if (s.curMode === "edit" && open && editUnsaved(s, s.editSel)) {
         // 편집 기록을 되돌려 놓는다 — 뒤로 간 곳이 같은 항목 상세면 여전히 그 위에 쌓인 편집 기록
         const backToView = target.id === open && target.mode === "view";
         window.history.pushState(null, "", withItem(window.location.href, open, "edit"));
@@ -224,7 +224,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     const { S: s, tree: t, openItem: open, canEdit: ce } = live.current;
     const n = findNode(t.nodes, id);
     if (!n || id === open) return;
-    if (s.curMode === "edit" && open && isDirty(s.ov, s.editSel)) return;
+    if (s.curMode === "edit" && open && editUnsaved(s, s.editSel)) return;
     const edit = ce && (asked ? readMode(window.location.search) : initialMode) === "edit" && !isPersonal(n);
     if (url === id) {
       pushed.current = id;
@@ -240,7 +240,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
 
   // 새로고침·링크로 바로 열린 편집 화면은 아래 기록이 목록이 아니다 — 수정을 시작하면 지금 기록을 목록으로 바꾸고 편집 기록을 쌓아,
   // 브라우저 뒤로 가기가 다른 화면으로 조용히 떠나지 않고 위 popstate 의 "저장하지 않은 수정" 확인을 거치게 한다 (Q2-1)
-  const editDirty = !!editOpen && isDirty(S.ov, editOpen);
+  const editDirty = !!editOpen && editUnsaved(S, editOpen);
   useEffect(() => {
     if (!editDirty || !editOpen || pushed.current === editOpen || overView.current) return;
     window.history.replaceState(null, "", withItem(window.location.href, null));

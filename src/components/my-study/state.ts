@@ -31,6 +31,8 @@ export type ScreenState = {
   fresh: string | null;
   confirm: boolean;
   leave: Leave | null;
+  /** 첨부를 올리는 중인 편집 항목 id — ov 수정이 없어도 떠나기 전에 묻는다 (EditView 가 맞춘다) */
+  uploading: string | null;
   saved: string;
   ov: Overrides;
   bMode: BoardMode;
@@ -58,6 +60,7 @@ export const INITIAL_STATE: ScreenState = {
   fresh: null,
   confirm: false,
   leave: null,
+  uploading: null,
   saved: "",
   ov: EMPTY_OVERRIDES,
   bMode: "mine",
@@ -91,8 +94,11 @@ export const SHOW_OTHERS_PATCH: Partial<ScreenState> = { tab: "curriculum", curM
 export const toggleMinePatch = (p: ScreenState): Partial<ScreenState> => ({ mineOnly: !p.mineOnly, othersPersonal: p.mineOnly ? p.othersPersonal : false });
 export const toggleOthersPatch = (p: ScreenState): Partial<ScreenState> => ({ othersPersonal: !p.othersPersonal, mineOnly: p.othersPersonal ? p.mineOnly : false });
 
+/** 그 편집 항목에 저장하지 않은 것이 있나 — ov 수정 또는 올리는 중인 첨부 */
+export const editUnsaved = (S: Pick<ScreenState, "ov" | "uploading">, id: string | null): boolean => isDirty(S.ov, id) || (!!id && S.uploading === id);
+
 /** 진행목표 편집 화면에 저장하지 않은 수정이 열려 있다 — 탭·헤더 메뉴·뒤로 가기로 떠나기 전에 묻는다 (Q2-1) */
-export const blocksLeave = (S: ScreenState, canEdit: boolean): boolean => canEdit && S.tab === "curriculum" && S.curMode === "edit" && isDirty(S.ov, S.editSel);
+export const blocksLeave = (S: ScreenState, canEdit: boolean): boolean => canEdit && S.tab === "curriculum" && S.curMode === "edit" && editUnsaved(S, S.editSel);
 
 /** 방 탭 누름 — 미저장 수정이 있으면 탭은 그대로 두고 목적지를 보류(편집 화면의 "저장하지 않은 수정이 있어요" 확인) */
 export const tabPatch = (S: ScreenState, tab: TabId, canEdit: boolean): Partial<ScreenState> =>

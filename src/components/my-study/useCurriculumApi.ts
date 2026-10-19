@@ -5,10 +5,12 @@ import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { toApiError } from "@/lib/api/errors";
 import { fetchCurriculum, recheckCurriculumEdit, nodeArchive, nodeCreate, nodeDelete, nodeMove, nodeUpdate, patchOf } from "@/lib/api/my-study";
 import { personalArchive, personalComplete, personalCreate, personalDelete, personalUpdate, type PersonalPatch } from "@/lib/api/personal";
-import type { Curriculum, MeState, NodePatch } from "@/lib/api/types";
+import { setNodeFiles } from "@/lib/api/nodeFiles";
+import type { Curriculum, FileMeta, MeState, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
 import { EMPTY_OVERRIDES, dropFieldOv, tempId, type Overrides, type TreeNode } from "./model";
+import { saveSteps } from "./nodeFiles";
 import { personalErrorText } from "./personal";
 import { shiftedText, type DatePlan } from "./rounds";
 import type { Update } from "./state";
@@ -24,8 +26,9 @@ export type CurriculumApi = {
   /** from: "list" — 결과를 편집 화면 문구 대신 토스트로 */
   archive: (id: string, on: boolean, from?: "edit" | "list") => Promise<void>;
   /** 성공(또는 바뀐 것 없음)이면 true */
-  /** opts.shift: 회차·묶음 시작일 변경을 하위(과제·개인 목표)에도 같은 날수만큼 (D2) */
-  save: (n: TreeNode, ov: Overrides, opts?: { shift?: boolean }) => Promise<boolean>;
+  /** opts.shift: 회차·묶음 시작일 변경을 하위(과제·개인 목표)에도 같은 날수만큼 (D2).
+   *  ov.files 가 있으면 node_files_set 을 먼저 — 성공하면 opts.onFiles(새 붙은 목록), 실패하면 ov.files 를 남기고 false */
+  save: (n: TreeNode, ov: Overrides, opts?: { shift?: boolean; onFiles?: (f: FileMeta[]) => void }) => Promise<boolean>;
   /** node_move 후 dates(서브트리의 바뀌는 기간, movedPlan)를 노드마다 node_update 로 맞춘다. okText = 성공 토스트. 옮겨졌으면 true */
   move: (id: string, parentId: string, index?: number, dates?: DatePlan, okText?: string) => Promise<boolean>;
   /** 커리큘럼만 다시 받는다 — 제출 뒤 보드·간트·개요의 사람별 코드 갱신. 실패는 조용히 */
@@ -43,7 +46,7 @@ export type CurriculumApi = {
   recheckEdit: () => Promise<boolean>;
 };
 
-const dropKey = <T,>(rec: Record<string, T>, key: string) => {
+export const dropKey = <T,>(rec: Record<string, T>, key: string) => {
   const { [key]: _omit, ...rest } = rec; // eslint-disable-line @typescript-eslint/no-unused-vars
   return rest;
 };
@@ -147,14 +150,30 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const save = useCallback(
-    async (n: TreeNode, ov: Overrides, opts: { shift?: boolean } = {}) => {
+    async (n: TreeNode, ov: Overrides, opts: { shift?: boolean; onFiles?: (f: FileMeta[]) => void } = {}) => {
       const patch: NodePatch = patchOf(n, ov);
       // 회차·묶음 시작일을 옮기면서 "하위도 함께" 를 골랐을 때 (시나리오 QA D2) — 시작일이 바뀐 패치에만
       if (opts.shift && patch.startDate && !n.leaf) patch.shiftDescendants = true;
-      if (Object.keys(patch).length === 0) {
+      const files = ov.files[n.id];
+      const steps = saveSteps(Object.keys(patch).length === 0, files);
+      if (steps.length === 0) {
         // 고쳤다가 원래 값으로 되돌린 오버라이드도 지운다 — 남으면 계속 "미저장"(회차 선택 비활성·이동 확인)
         update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: "바뀐 내용이 없어요" }));
         return true;
+      }
+      if (steps[0] === "files") {
+        try {
+          opts.onFiles?.(await setNodeFiles(n.id, files!));
+          update((p) => ({ ov: { ...p.ov, files: dropKey(p.ov.files, n.id) } }));
+        } catch (e) {
+          fail(e); // ov.files 는 남긴다 — 고쳐서 다시 저장
+          return false;
+        }
+        if (!steps.includes("node")) {
+          toast(null);
+          update({ saved: "저장했어요" });
+          return true;
+        }
       }
       try {
         const cur = await nodeUpdate(slug, n.id, patch);
@@ -165,7 +184,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         router.refresh(); // 자동 태그가 바뀌었을 수 있다(D9)
         return true;
       } catch (e) {
-        // 실패한 수정은 되돌린다 — 트리에 저장되지 않은 값이 남지 않게 (Q2-09)
+        // 실패한 수정은 되돌린다 — 트리에 저장되지 않은 값이 남지 않게 (Q2-09). 첨부는 이미 저장됐다
         update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: "" }));
         fail(e);
         return false;

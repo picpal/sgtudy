@@ -32,3 +32,6 @@ export const fileBadge = (contentType: string): "PDF" | "ZIP" | "IMG" | "TXT" =>
   if (contentType.startsWith("image/")) return "IMG";
   return "TXT";
 };
+
+/** 팀 항목 저장 순서 — 첨부(node_files_set)를 먼저, 그다음 내용(node_update). 둘 다 없으면 [] ("바뀐 내용이 없어요") */
+export const saveSteps = (patchEmpty: boolean, files: string[] | undefined): ("files" | "node")[] => [...(files ? (["files"] as const) : []), ...(patchEmpty ? [] : (["node"] as const))];

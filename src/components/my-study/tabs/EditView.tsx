@@ -1,19 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import type { ToastMsg } from "@/components/ui/Toast";
 import type { TaskType } from "@/data/my-study";
 import { holdSamePage, samePage, setLeaveGuard } from "@/lib/leaveGuard";
 import { useToday } from "@/lib/today";
 import { rangeShort } from "@/lib/api/format";
+import { fetchNodeFiles } from "@/lib/api/nodeFiles";
+import type { FileMeta } from "@/lib/api/types";
 import { Seg } from "../bits";
 import { dropFieldOv, isDirty, isPersonal, leafLocks, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
+import { NODE_FILE_HINT, sameIds } from "../nodeFiles";
 import { designatedHint, moveNote, movedPeriod, reorderIndex, roundOf, roundOptions, sameShiftAsk, shiftAskOf, shiftAskText, type ShiftAsk } from "../rounds";
 import { patchOv, type Leave, type ScreenState, type Update } from "../state";
 import type { RoomStatus } from "../submission";
-import type { CurriculumApi } from "../useCurriculumApi";
+import { dropKey, type CurriculumApi } from "../useCurriculumApi";
+import { useNodeFileUploads } from "../useNodeFileUploads";
 import { ChildList } from "./ChildList";
+import { FileUploadList } from "./FileUploadList";
 import { InlineConfirm } from "./InlineConfirm";
 
 type Props = {
@@ -33,7 +39,11 @@ type Props = {
   request: (to: Leave) => void;
   /** 방 상태 — 시작 전 지정 과제 안내 (시나리오 QA #12) */
   roomStatus?: RoomStatus;
+  /** 첨부 업로드 안내·오류 */
+  toast: (m: ToastMsg) => void;
 };
+
+const NO_FILES: FileMeta[] = [];
 
 const field = "h-11 rounded-[10px] border border-line-3 text-ink";
 const label = "flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3";
@@ -43,7 +53,7 @@ const label = "flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3";
  * 글(설명)이 주인공: 제목 한 줄 → 기간·유형 한 줄 → 남은 높이를 채우는 마크다운 편집기. 저장·삭제는 위쪽 고정 막대에 늘 보인다.
  * 내용 변경은 오버라이드에 모았다가 "저장" 1회(node_update), 삭제·보관은 즉시 RPC.
  */
-export function EditView({ n, parent, nodes, roots, period, members, S, update, api, go, request, roomStatus = "active" }: Props) {
+export function EditView({ n, parent, nodes, roots, period, members, S, update, api, go, request, roomStatus = "active", toast }: Props) {
   const id = n.id;
   const view = useRef<HTMLElement>(null);
   const bar = useRef<HTMLDivElement>(null);
@@ -75,26 +85,48 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     return () => ro.disconnect();
   }, []);
 
+  // 첨부 — 붙은 목록은 서버(node_files), 고친 선택은 ov.files 에 모았다가 "저장" 때 node_files_set. 임시 행은 저장한 뒤에 붙인다
+  const [savedFiles, setSavedFiles] = useState<FileMeta[] | null>(null);
+  useEffect(() => {
+    if (!n.temp) void fetchNodeFiles(id).then(setSavedFiles).catch(() => setSavedFiles([]));
+  }, [id, n.temp]);
+  const saved = savedFiles ?? NO_FILES; // 같은 참조 — 훅이 saved 바뀜을 참조로 본다
+  const savedIds = useMemo(() => saved.map((f) => f.id), [saved]);
+  const up = useNodeFileUploads({
+    nodeId: n.temp ? null : id,
+    saved,
+    selected: S.ov.files[id] ?? savedIds,
+    toast,
+    onSelect: (ids) => update((p) => ({ ...patchOv(p, "files", sameIds(ids, savedIds) ? dropKey(p.ov.files, id) : { ...p.ov.files, [id]: ids }), saved: "" })),
+  });
+  // 올리는 중이면 ov 수정이 없어도 떠나기 전에 묻는다 (CurriculumTab·MyStudyScreen 은 S.uploading 을 본다)
+  useEffect(() => {
+    if (!up.uploading) return;
+    update({ uploading: id });
+    return () => update((p) => (p.uploading === id ? { uploading: null } : {}));
+  }, [up.uploading, id, update]);
+
   // 저장하지 않은 수정이 있는 채로 새로고침·탭 닫기·다른 문서로 이동(전체 다시 불러오기가 되는 뒤로 가기 포함) → 브라우저 확인.
   // 앱 안 이동은 아래 "저장하지 않은 수정이 있어요" 확인이 맡는다
   const dirty = isDirty(S.ov, id);
+  const unsaved = dirty || up.uploading;
   useEffect(() => {
-    if (!dirty) return;
+    if (!unsaved) return;
     const warn = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = ""; // 옛 Safari·Chrome 은 returnValue 가 있어야 묻는다
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  }, [unsaved]);
 
   // 앱 안 링크(헤더 메뉴·로고·옆 목록)로 다른 화면에 가려 하면 — 미저장 수정은 아래 확인으로 보류(Q2-1),
   // 저장한 적 없는 새 회차(빈 채)는 지우고 그대로 보낸다(Q2-8 — 화면이 사라져 MyStudyScreen 의 정리가 돌지 않는다)
   const fresh = S.fresh === id && !n.leaf && n.kids.every(isPersonal);
   useEffect(() => {
-    if (!dirty && !fresh) return;
+    if (!unsaved && !fresh) return;
     return setLeaveGuard((href) => {
-      if (dirty) {
+      if (unsaved) {
         update({ leave: { href }, confirm: false });
         return true;
       }
@@ -109,7 +141,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
       api.discard(id);
       return false;
     });
-  }, [dirty, fresh, id, api, update, go]);
+  }, [unsaved, fresh, id, api, update, go]);
 
   const today = useToday();
   const warns = periodWarnings(n, parent, period, today);
@@ -183,7 +215,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   const [shiftAsk, setShiftAsk] = useState<{ ask: ShiftAsk; then: typeof S.leave } | null>(null);
   const doSave = async (shift: boolean, then: typeof S.leave) => {
     setShiftAsk(null);
-    if (await api.save(n, S.ov, { shift })) {
+    if (await api.save(n, S.ov, { shift, onFiles: setSavedFiles })) {
       update({ fresh: null });
       if (then) go(then);
     } else if (then) update({ leave: null });
@@ -200,6 +232,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   const askShown = shiftAsk && !S.leave && sameShiftAsk(shiftAsk.ask, shiftAskOf(n, nodes)) ? shiftAsk : null;
   const leaveDiscard = () => {
     const to = S.leave;
+    // 올린 채 저장하지 않은 첨부도 버린다 — 선택 id(ov.files)는 dropFieldOv 가 함께 지운다
+    up.discardUnsaved();
     update((p) => ({ ov: dropFieldOv(p.ov, id) }));
     // 다른 화면으로 가면 이 화면이 사라진다 — 저장한 적 없는 새 회차는 여기서 지운다(앱 안 이동은 MyStudyScreen 이 맡는다)
     if (to && "href" in to && fresh && !samePage(to.href)) api.discard(id);
@@ -238,8 +272,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
               {removeLabel}
             </button>
           )}
-          <button type="button" disabled={n.temp || !!askShown} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
-            저장
+          <button type="button" disabled={n.temp || !!askShown || up.uploading} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
+            {up.uploading ? "파일을 올리는 중이에요" : "저장"}
           </button>
         </div>
         {S.saved && (
@@ -454,6 +488,17 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             stickyToolbar="var(--edit-bar-h, 68px)"
           />
         </div>
+
+        <FileUploadList
+          label="첨부 파일 (선택)"
+          hint={n.temp ? "저장한 뒤 파일을 붙일 수 있어요" : `끌어다 놓아도 돼요 · ${NODE_FILE_HINT}`}
+          rows={up.rows}
+          onPick={up.pick}
+          onRemove={up.remove}
+          onRetry={up.retry}
+          canRetry={up.canRetry}
+          disabled={n.temp || savedFiles === null}
+        />
       </div>
     </section>
   );

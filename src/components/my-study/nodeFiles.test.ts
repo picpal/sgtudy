@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FileMeta } from "@/lib/api/types";
-import { fileBadge, nodeObjectKey, nodeRemovePlan, nodeRows, sameIds } from "./nodeFiles";
+import { fileBadge, nodeObjectKey, nodeRemovePlan, nodeRows, sameIds, saveSteps } from "./nodeFiles";
 import type { UploadRow } from "./uploads";
 
 const meta = (id: string): FileMeta => ({ id, name: `${id}.pdf`, contentType: "application/pdf", size: 4, status: "ready" });
@@ -39,4 +39,13 @@ it("sameIds 는 순서까지 본다", () => {
 });
 it("fileBadge", () => {
   expect(["application/pdf", "application/zip", "application/x-zip-compressed", "image/png", "text/markdown"].map(fileBadge)).toEqual(["PDF", "ZIP", "ZIP", "IMG", "TXT"]);
+});
+
+describe("saveSteps — 저장 순서 (node_files_set 먼저)", () => {
+  it("saveSteps: files first, then node; empty both → []", () => {
+    expect(saveSteps(false, ["a"])).toEqual(["files", "node"]);
+    expect(saveSteps(true, ["a"])).toEqual(["files"]);
+    expect(saveSteps(false, undefined)).toEqual(["node"]);
+    expect(saveSteps(true, undefined)).toEqual([]);
+  });
 });

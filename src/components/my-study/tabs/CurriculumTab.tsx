@@ -8,8 +8,8 @@ import { addDays } from "@/lib/date";
 import { dateShort, rangeShort } from "@/lib/api/format";
 import { useToday } from "@/lib/today";
 import { samePage } from "@/lib/leaveGuard";
-import { allParentsClosed, findNode, isDirty, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
-import { modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
+import { allParentsClosed, findNode, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
+import { editUnsaved, modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
 import { designatedHint, dropPlan, movedPlan, roundOf, rowMoves, withAddRows, withEmptyRounds, withPersonalAddRows, type RowMove } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import type { RoomStatus } from "../submission";
@@ -120,7 +120,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   }
   // 저장하지 않은 수정이 있으면 먼저 묻는다 (Q2-05)
   const request = (to: Leave) => {
-    if (isDirty(S.ov, S.editSel) && !("sel" in to && to.sel === S.editSel)) update({ leave: to, confirm: false });
+    if (editUnsaved(S, S.editSel) && !("sel" in to && to.sel === S.editSel)) update({ leave: to, confirm: false });
     else go(to);
   };
   const setMode = (m: CurMode) => request({ mode: m });
@@ -245,7 +245,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   if (selNode)
     return (
       <div className="mt-[18px] @container">
-        <EditView key={selNode.id} roomStatus={roomStatus} n={selNode} parent={parentNode} nodes={tree.nodes} roots={tree.roots} period={period} members={tree.members} S={S} update={update} api={api} go={go} request={request} />
+        <EditView key={selNode.id} roomStatus={roomStatus} n={selNode} parent={parentNode} nodes={tree.nodes} roots={tree.roots} period={period} members={tree.members} S={S} update={update} api={api} go={go} request={request} toast={toast} />
       </div>
     );
   // 보기 모드에서 항목을 누르면 목록 대신 읽기 전용 상세 화면 (?item=, mode 없음)
