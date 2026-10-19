@@ -62,6 +62,7 @@ export function toRoom(dto: RoomDetail, today: string, meId: string | null): Roo
   const myPending = d.members.find((m) => m.status === "pending" && m.userId === meId);
   if (myPending) members.push({ userId: myPending.userId, name: myPending.nickname, tone: myPending.tone, leader: false, me: true, pending: true });
   const cur = dto.archived ? ARCHIVED_CUR : curOf(d, today);
+  const act = actionOf(dto);
   return {
     id: d.slug,
     archived: dto.archived,
@@ -69,7 +70,7 @@ export function toRoom(dto: RoomDetail, today: string, meId: string | null): Roo
     intro: d.intro,
     status: uiStatus(d.status),
     draft: d.status === "draft",
-    base: dto.archived && actionOf(dto) === "pending" ? "archived" : baseOf(actionOf(dto)),
+    base: dto.archived && act === "pending" ? "archived" : baseOf(act),
     approval: d.joinMode === "approval",
     pub: d.isPublic,
     period: periodLong(d.startDate, d.endDate),

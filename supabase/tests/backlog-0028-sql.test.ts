@@ -84,9 +84,36 @@ cases("backlog 0028", db, [
         [[alb, '"ALB vs NLB 실습" 기간 10.15 – 10.21 → 10.17 – 10.23', `/my-study/aws?task=${alb}`]], nick);
       assert((ns[0].dedupe_key as string).startsWith(`SCHEDULE_CHANGED:${rid}:${alb}:`));
     }
-    assertEquals((await notes(q, "민수", "SCHEDULE_CHANGED")).length, 0);
     assertEquals((await notes(q, "지은", "ROUND_SCHEDULE_CHANGED")).length, 0);
     assert(nlb);
+  } },
+  { name: "묶음 시작만 바꿔도(하위는 종료일까지 함께 옮겨짐) 묶음 알림 본문은 '기간 옛 → 새' (리뷰 M1)", run: async (q) => {
+    const { grp } = await bundle(q);
+    await shift(q, grp, "2026-10-17", "2026-10-21");
+    assertEquals((await notes(q, "지은", "SCHEDULE_CHANGED")).map((n) => n.body),
+      ['"로드밸런서 비교" 과제 2개 일정이 2일 뒤로 옮겨졌어요 · 기간 10.15 – 10.21 → 10.17 – 10.21']);
+  } },
+  { name: "편집 권한자가 자기도 과제 2개를 맡은 묶음을 옮기면 본인은 0건 · 다른 담당자는 1건씩 (리뷰 M2)", run: async (q) => {
+    const { grp, alb } = await bundle(q);
+    await q("select public.member_set_curriculum_editor('aws', $1::uuid, true)", [await uidOf(q, "지은")]);
+    await as(q, "지은");
+    await shift(q, grp, "2026-10-17", "2026-10-23");
+    assertEquals((await notes(q, "지은", "SCHEDULE_CHANGED")).length, 0);
+    for (const nick of ["철수", "하나"]) assertEquals((await notes(q, nick, "SCHEDULE_CHANGED")).map((n) => n.node_id), [alb], nick);
+  } },
+  { name: "모집중(RECRUIT) 방에서 묶음을 옮기면 일정 변경 알림 0건 — 0026 규칙(진행중 방만) 그대로 (리뷰 M3)", run: async (q) => {
+    const { grp } = await bundle(q);
+    await q("update public.rooms set status = 'RECRUIT' where id = $1::bigint", [await roomId(q, "aws")]);
+    await shift(q, grp, "2026-10-17", "2026-10-23");
+    for (const nick of ["지은", "철수", "하나"]) assertEquals((await notes(q, nick, "SCHEDULE_CHANGED")).length, 0, nick);
+  } },
+  { name: "notify_link 재정의 회귀 — TASK_ASSIGNED 는 ?task=, ROUND_SCHEDULE_CHANGED 는 ?tab=curriculum (리뷰 M5)", run: async (q) => {
+    const rid = await roomId(q, "aws");
+    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");
+    const r3 = await nodeId(q, "aws", "고가용성 아키텍처");
+    const cs = await uidOf(q, "철수");
+    assertEquals((await one(q, "select public.notify_link('TASK_ASSIGNED', $1::bigint, $2::bigint, $3::uuid) as l", [rid, alb, cs])).l, `/my-study/aws?task=${alb}`);
+    assertEquals((await one(q, "select public.notify_link('ROUND_SCHEDULE_CHANGED', $1::bigint, $2::bigint, $3::uuid) as l", [rid, r3, cs])).l, "/my-study/aws?tab=curriculum");
   } },
   { name: "앞으로 당기면 '앞으로' · 과제를 직접 고친 알림도 과제 딥링크", run: async (q) => {
     const { grp, nlb } = await bundle(q);

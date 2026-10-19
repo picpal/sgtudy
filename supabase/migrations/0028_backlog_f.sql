@@ -2,7 +2,7 @@
 -- ① 보관된 방의 승인 대기 신청 취소: room_cancel_application(0005, 이후 재정의 없음)은 보관 여부를 보지 않는다 → 이미 허용. 서버 변경 없음(테스트로 고정).
 -- ② 묶음(depth ≥ 3)을 하위와 함께 옮길 때(0026) 과제마다 담당자에게 SCHEDULE_CHANGED 를 1건씩 보내던 것을 담당자별 1건으로 묶는다.
 --    k = 그 사람이 맡은 옮긴 팀 과제(보관 제외) 수. k = 1 → 기존 과제 알림 그대로(node = 과제, 0023 옛 → 새 모델).
---    k ≥ 2 → node = 묶음, model {bundle, tasks k, days, 묶음 옛 → 새 기간}. 본문 '"묶음" 과제 k개 일정이 n일 뒤로/앞으로 옮겨졌어요 · <0023 전→후 표기>'.
+--    k ≥ 2 → node = 묶음, model {bundle, tasks k, days, 묶음 옛 → 새 기간}. 본문 '"묶음" 과제 k개 일정이 n일 뒤로/앞으로 옮겨졌어요 · 기간 옛 범위 → 새 범위'(시작만 바꿔도 기간).
 --    중복 키: 'SCHEDULE_CHANGED:room:<과제 또는 묶음>:txid' — 묶음은 유형이 없어 직접 SCHEDULE_CHANGED 를 받지 않으므로 키가 겹치지 않는다.
 -- ③ notify_link: SCHEDULE_CHANGED 딥링크 — 과제면 ?task=(리프 포커스), 묶음이면 ?tab=curriculum&item=(보기 상세). 그 외 kind 불변.
 -- 재정의: node_update ← 0026 · notify_render ← 0026 · notify_link ← 0024.
@@ -341,11 +341,12 @@ begin
       coalesce(public.notify_range((p_model ->> 'oldStartDate')::date, (p_model ->> 'oldEndDate')::date, v_today) || ' → ', '')
       || public.notify_range((p_model ->> 'startDate')::date, (p_model ->> 'endDate')::date, v_today)
     when p_kind = 'ROUND_STARTED' and v_label is not null and v_node is distinct from v_label then v_node
-    -- 0028: 묶음 이동 묶음 알림(과제 2개 이상). 묶음 기간의 전→후는 0023 규칙(v_diff)
+    -- 0028: 묶음 이동 묶음 알림(과제 2개 이상). 묶음 시작만 바꿔도 하위 과제는 종료일까지 함께 옮겨지므로
+    -- 0023 의 '시작/마감만' 축약(v_diff) 대신 항상 '기간 옛 범위 → 새 범위' (리뷰 M1)
     when p_kind = 'SCHEDULE_CHANGED' and p_node is not null and p_model ? 'bundle' then
       format('"%s" 과제 %s개 일정이 %s일 %s 옮겨졌어요', v_node, v_tasks, abs((p_model ->> 'days')::int),
              case when (p_model ->> 'days')::int < 0 then '앞으로' else '뒤로' end)
-      || coalesce(' · ' || v_diff, '')
+      || coalesce(' · 기간 ' || public.notify_range(v_os, v_oe, v_today) || ' → ' || public.notify_range(v_ns, v_ne, v_today), '')
     when p_kind = 'SCHEDULE_CHANGED' and p_node is not null and v_diff is not null then
       format('"%s" %s', v_node, v_diff)
     when p_kind = 'SCHEDULE_CHANGED' and p_node is not null then

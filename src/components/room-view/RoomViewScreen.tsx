@@ -20,7 +20,7 @@ import { RoomInfo } from "./RoomInfo";
 import { JoinCard } from "./JoinCard";
 import { GlanceCard } from "./GlanceCard";
 import { LeaderPanel } from "./LeaderPanel";
-import { menuItemsOf, roomMoreItems } from "./moreItems";
+import { cancelConfirmBody, menuItemsOf, roomMoreItems } from "./moreItems";
 
 /** invite: ?invite= 로 연 비공개 방의 토큰 — 참가/신청 RPC 와 로그인 복귀 주소에 그대로 이어 붙인다 */
 /** filters: 둘러보기에서 이어받은 필터 — 왼쪽 목록(list)이 이 조건으로 조회됐다 (시나리오 QA #19) */
@@ -124,7 +124,7 @@ export function RoomViewScreen({ detail, list, invite, filters = DEFAULT_FILTERS
             ? "그룹장이 승인하면 참가가 확정되고 알림으로 알려 드려요."
             : confirm === "leave"
               ? "모집 기간에는 다시 참가할 수 있어요. 지정 과제 담당에서도 빠져요."
-              : "취소해도 모집 중이면 다시 신청할 수 있어요."
+              : cancelConfirmBody(dto.archived)
         }
         confirmLabel={confirm === "apply" ? "참가 신청" : confirm === "leave" ? "참가 취소" : "신청 취소"}
         danger={confirm !== "apply"}

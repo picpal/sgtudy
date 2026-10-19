@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { menuItemsOf, roomMoreItems, studyMoreItems } from "./moreItems";
+import { cancelConfirmBody, menuItemsOf, roomMoreItems, studyMoreItems } from "./moreItems";
 
 describe("roomMoreItems — 방 상세 더보기 (링크 복사는 옆 공유 버튼)", () => {
   it("비로그인·비참가자·이탈·종료 등은 메뉴 없음 → 버튼을 숨긴다", () => {
@@ -59,5 +59,13 @@ describe("menuItemsOf — 메뉴 항목으로 (링크는 href, 취소는 확인 
     items[3].onSelect?.();
     items[4].onSelect?.();
     expect(picked).toEqual(["leave", "cancel"]);
+  });
+});
+
+// 백로그 F 리뷰 I2: 방 화면·내 스터디 공용 신청 취소 확인 본문
+describe("cancelConfirmBody", () => {
+  it("보관된 방은 다시 신청할 수 없다고, 아니면 기존 문구", () => {
+    expect(cancelConfirmBody(true)).toBe("보관된 스터디라 취소하면 다시 신청할 수 없어요.");
+    expect(cancelConfirmBody(false)).toBe("취소해도 모집 중이면 다시 신청할 수 있어요.");
   });
 });

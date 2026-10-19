@@ -6,7 +6,7 @@ import { LeaderPanel } from "@/components/room-view/LeaderPanel";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { MoreMenuItem } from "@/components/ui/MoreMenu";
-import { menuItemsOf, studyMoreItems } from "@/components/room-view/moreItems";
+import { cancelConfirmBody, menuItemsOf, studyMoreItems } from "@/components/room-view/moreItems";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
@@ -40,7 +40,7 @@ import { RoomArchivedProvider } from "./roomArchived";
 
 const CONFIRM_TEXT: Record<JoinCardAction, { title: string; body: string; label: string }> = {
   leave: { title: "참가를 취소할까요?", body: "모집 기간에는 다시 참가할 수 있어요. 지정 과제 담당에서도 빠져요.", label: "참가 취소" },
-  cancel: { title: "신청을 취소할까요?", body: "취소해도 모집 중이면 다시 신청할 수 있어요.", label: "신청 취소" },
+  cancel: { title: "신청을 취소할까요?", body: cancelConfirmBody(false), label: "신청 취소" }, // 보관된 방은 아래에서 cancelConfirmBody(true)
   leaveRequest: {
     title: "그룹장에게 탈퇴를 요청할까요?",
     body: "그룹장이 맡은 과제를 다른 팀원에게 넘긴 뒤 처리해요. 처리되기 전에는 요청을 취소할 수 있고, 지금까지 낸 제출 기록은 남아요.",
@@ -183,6 +183,31 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [update]);
+  // 같은 화면에서 ?item= 알림(묶음 일정 변경, 0028)을 누르면 key(id·task·tab)가 같아 다시 마운트되지 않는다 — 바뀐 initialItem 을 연다 (백로그 F 리뷰 I1).
+  // key 에 item 을 넣지 않는다: 상세는 pushState 로 주소에 item 을 쓰므로 router.refresh 뒤 화면 상태가 날아간다.
+  // 이미 열린 항목·없는 항목은 그대로. 저장 안 한 편집은 이탈 가드가 이동을 보류하므로 여기 오지 않지만, 혹시 와도 덮지 않는다.
+  // 열린 기록은 알림 이동이 목록(이전) 기록 위에 쌓은 것 → popstate 분기처럼 pushed 로 두어 닫으면 back
+  const seenItem = useRef(initialItem);
+  useEffect(() => {
+    const prev = seenItem.current;
+    seenItem.current = initialItem;
+    if (!initialItem || initialItem === prev) return;
+    const { S: s, tree: t, openItem: open, canEdit: ce } = live.current;
+    const n = findNode(t.nodes, initialItem);
+    if (!n || initialItem === open) return;
+    if (s.curMode === "edit" && open && isDirty(s.ov, s.editSel)) return;
+    const edit = ce && initialMode === "edit" && !isPersonal(n);
+    if (readItem(window.location.search) === initialItem) {
+      pushed.current = initialItem;
+      overView.current = false;
+      backTab.current = shownTab.current;
+    }
+    update(
+      edit
+        ? { tab: "curriculum", curMode: "edit", editSel: initialItem, viewSel: null, confirm: false, leave: null, saved: "" }
+        : { tab: "curriculum", curMode: "view", viewSel: initialItem, editSel: null, confirm: false, leave: null, saved: "" },
+    );
+  }, [initialItem, initialMode, update]);
 
   // 새로고침·링크로 바로 열린 편집 화면은 아래 기록이 목록이 아니다 — 수정을 시작하면 지금 기록을 목록으로 바꾸고 편집 기록을 쌓아,
   // 브라우저 뒤로 가기가 다른 화면으로 조용히 떠나지 않고 위 popstate 의 "저장하지 않은 수정" 확인을 거치게 한다 (Q2-1)
@@ -334,7 +359,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         <ConfirmDialog
           open={confirm !== null}
           title={CONFIRM_TEXT[confirm ?? "leave"].title}
-          body={CONFIRM_TEXT[confirm ?? "leave"].body}
+          body={confirm === "cancel" ? cancelConfirmBody(detail.archived) : CONFIRM_TEXT[confirm ?? "leave"].body}
           confirmLabel={CONFIRM_TEXT[confirm ?? "leave"].label}
           danger={confirm !== "leaveRequestCancel"}
           busy={busy}

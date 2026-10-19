@@ -16,6 +16,12 @@ export const MORE_LABEL: Record<MoreItem, string> = {
   leaveRequest: "탈퇴 요청", leaveRequestCancel: "탈퇴 요청 취소",
 };
 
+/**
+ * 신청 취소 확인 본문 — 방 화면·내 스터디 공용. 보관된 방은 다시 신청할 수 없으니 되돌릴 수 없다고 알린다 (백로그 F 리뷰 I2)
+ */
+export const cancelConfirmBody = (archived: boolean): string =>
+  archived ? "보관된 스터디라 취소하면 다시 신청할 수 없어요." : "취소해도 모집 중이면 다시 신청할 수 있어요.";
+
 /** 방 상세(/rooms/[slug]) — 빈 배열이면 더보기 버튼을 숨긴다 */
 export function roomMoreItems(act: Action): MoreItem[] {
   switch (act) {
