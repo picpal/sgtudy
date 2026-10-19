@@ -72,6 +72,14 @@ export function NodeAttachments({ nodeId, canRemove, toast }: { nodeId: string; 
   const heading = useRef<HTMLHeadingElement>(null);
   const [removing, setRemoving] = useState(false);
   const [said, setSaid] = useState("");
+  const status = useRef<HTMLDivElement>(null);
+  // 빼기 뒤 포커스는 다시 그린 다음에 옮긴다 — 마지막 파일을 빼면 제목(h3)이 사라지므로 알림 영역으로 (body 로 떨어지지 않게)
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    (heading.current ?? status.current)?.focus({ preventScroll: true });
+  }, [files, said]);
   const cancel = () => {
     setAsking(null);
     heading.current?.focus({ preventScroll: true });
@@ -90,7 +98,7 @@ export function NodeAttachments({ nodeId, canRemove, toast }: { nodeId: string; 
         setFiles(fresh);
         setSaid(`‘${f.name}’은 이미 빠져 있어요`);
       }
-      heading.current?.focus({ preventScroll: true });
+      refocus.current = true;
     } catch {
       toast({ text: "파일을 뺄 수 없어요", tone: "bad" });
     } finally {
@@ -100,7 +108,7 @@ export function NodeAttachments({ nodeId, canRemove, toast }: { nodeId: string; 
   if (files.length === 0 && !said) return null;
   return (
     <div className="flex flex-col gap-2">
-      <div role="status" aria-live="polite" className="sr-only">
+      <div ref={status} role="status" aria-live="polite" tabIndex={-1} className="sr-only outline-none">
         {said}
       </div>
       <NodeAttachmentsView files={files} busy={busy} removing={removing} headingRef={heading} onOpen={(f) => void open(f)} onRemove={canRemove ? setAsking : undefined} />

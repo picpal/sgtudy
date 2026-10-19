@@ -163,5 +163,19 @@ describe("EditView 첨부 파일", () => {
     expect(host.textContent).not.toContain("저장할까요?");
     const labels = Array.from(host.querySelectorAll('[role="alertdialog"] button')).map((b) => b.textContent?.trim());
     expect(labels).toEqual(["계속 편집", "버리기"]);
+    expect(host.textContent).not.toContain("저장하지 않은 수정은 버려져요");
+  });
+
+  it("올리는 중 + 고친 내용도 있으면 — '올리던 파일과 저장하지 않은 수정은 버려져요'", async () => {
+    m.upload.mockReturnValue(new Promise(() => {}));
+    await mount(leaf);
+    const title = host.querySelector<HTMLInputElement>('input[type="text"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "새 제목");
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await pick("a.pdf");
+    act(() => button("진행목표").click());
+    expect(host.textContent).toContain("파일을 올리는 중이에요. 지금 나가면 올리던 파일과 저장하지 않은 수정은 버려져요");
   });
 });

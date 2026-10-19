@@ -51,6 +51,22 @@ describe("NodeAttachments container", () => {
     expect(api.setNodeFiles).not.toHaveBeenCalled();
     expect(host.querySelector("h3")?.textContent).toBe("첨부 파일 1");
   });
+  it("빼기 뒤 포커스 — 남은 파일이 있으면 제목, 마지막 파일을 빼면 알림 영역 (body 로 떨어지지 않게)", async () => {
+    api.fetchNodeFiles.mockResolvedValueOnce([f("a"), f("b")]);
+    api.setNodeFiles.mockResolvedValueOnce([f("b")]);
+    await confirmRemove("a.pdf");
+    await flush();
+    expect(document.activeElement).toBe(host.querySelector("h3"));
+    api.fetchNodeFiles.mockResolvedValueOnce([f("b")]);
+    api.setNodeFiles.mockResolvedValueOnce([]);
+    await confirmRemove("b.pdf");
+    await flush();
+    expect(host.querySelector("h3")).toBeNull();
+    const status = host.querySelector('[role="status"]');
+    expect(status?.textContent).toBe("‘b.pdf’을 뺐어요");
+    expect(document.activeElement).toBe(status);
+    expect(document.activeElement).not.toBe(document.body);
+  });
   it("disables every 빼기 while a removal is in flight", async () => {
     let done!: (v: FileMeta[]) => void;
     api.fetchNodeFiles.mockResolvedValue([f("a"), f("b")]);

@@ -97,7 +97,21 @@ describe("PersonalForm 첨부 파일", () => {
     expect(host.textContent).toContain("파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요");
     const dialog = host.querySelector('[role="alertdialog"]')!;
     expect(Array.from(dialog.querySelectorAll("button")).map((b) => b.textContent?.trim())).toEqual(["계속 편집", "버리기"]);
+    expect(host.textContent).not.toContain("저장하지 않은 수정은 버려져요");
     expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("1b. 올리는 중 + 고친 제목 — '올리던 파일과 저장하지 않은 수정은 버려져요'", async () => {
+    m.upload.mockReturnValue(new Promise(() => {}));
+    await openEdit();
+    const title = host.querySelector<HTMLInputElement>('form input[type="text"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "새 제목");
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await pick("a.pdf");
+    act(() => backBtn().click());
+    expect(host.textContent).toContain("파일을 올리는 중이에요. 지금 나가면 올리던 파일과 저장하지 않은 수정은 버려져요");
   });
 
   it("2. 버리기 — 등록만 된 파일을 버리고(붙은 파일은 그대로) 이동", async () => {

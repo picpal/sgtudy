@@ -306,7 +306,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         {S.leave && (
           // 올리는 중이면 "저장하고 이동" 은 없다 — 기다리지 않고 막는다 (리뷰 I-2: 저장하면 올리던 파일이 빠진다)
           <InlineConfirm
-            text={up.uploading ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요" : "저장하지 않은 수정이 있어요. 저장할까요?"}
+            text={up.uploading ? (dirty ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일과 저장하지 않은 수정은 버려져요" : "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요") : "저장하지 않은 수정이 있어요. 저장할까요?"}
             cancelLabel="계속 편집"
             onCancel={() => update({ leave: null })}
             actions={[{ label: "버리기", onClick: leaveDiscard }, ...(up.uploading ? [] : [{ label: "저장하고 이동", onClick: () => void leaveSave(), tone: "primary" as const }])]}

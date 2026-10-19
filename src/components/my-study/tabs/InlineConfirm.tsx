@@ -23,7 +23,7 @@ export function InlineConfirm({ text, actions, onCancel, cancelLabel = "취소" 
       return;
     }
     if (e.key !== "Tab") return;
-    const btns = Array.from(box.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+    const btns = Array.from(box.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
     if (btns.length === 0) return;
     const i = btns.indexOf(document.activeElement as HTMLButtonElement);
     const next = e.shiftKey ? (i <= 0 ? btns.length - 1 : i - 1) : i === btns.length - 1 ? 0 : i + 1;

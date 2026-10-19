@@ -127,9 +127,16 @@ cases("node attachments · helpers & policies", db, [
     assertEquals(await can("authenticated", "public.node_doc_object_writable(text)"), true);
     assertEquals(await can("authenticated", "public.node_doc_object_readable(text)"), true);
     assertEquals(await can("anon", "public.node_doc_object_writable(text)"), false);
-    for (const fn of ["public.node_doc_readable(bigint,uuid)", "public.node_doc_writable(bigint,uuid)"]) {
+    for (const fn of ["public.node_doc_readable(bigint,uuid)", "public.node_doc_writable(bigint,uuid)",
+                      "public.node_files_json(bigint)", "public.node_doc_target(bigint,uuid,boolean)",
+                      "public.goal_nodes_doc_release()", "public.node_doc_key_ok(text)", "public.node_file_limit()"]) {
       assertEquals(await can("authenticated", fn), false, fn);
       assertEquals(await can("anon", fn), false, fn);
+    }
+    for (const fn of ["public.node_doc_readable_me(bigint)", "public.node_doc_object_writable(text)", "public.node_doc_object_readable(text)",
+                      "public.node_files(bigint)", "public.node_file_register(bigint,text,text,text,bigint)",
+                      "public.node_files_set(bigint,uuid[])", "public.node_file_discard(uuid)"]) {
+      assertEquals(await can("authenticated", fn), true, fn);
     }
   } },
   { name: "trigger: deleting a subtree or a personal goal marks its NODE_DOC files DELETED (rows stay for cleanup-files)", run: async (q) => {
@@ -188,11 +195,26 @@ cases("node attachments · RPC", db, [
     await expectFail(reg(bigPath), "FILE_TOO_LARGE");
     const ids: string[] = [];
     for (let i = 0; i < 3; i++) ids.push(await staged(q, leaf, aws, minsu));
-    await setFiles(q, leaf, ids);                                               // 붙은 3
-    ids.push(await staged(q, leaf, aws, minsu), await staged(q, leaf, aws, minsu));   // 미저장 2 → 합 5
-    await expectFail(staged(q, leaf, aws, minsu), "FILE_LIMIT_EXCEEDED");
+    await setFiles(q, leaf, ids);                                               // 붙은 3 — 한도에 세지 않는다
+    for (let i = 0; i < 5; i++) await staged(q, leaf, aws, minsu);              // 내 미저장 5
+    await expectFail(staged(q, leaf, aws, minsu), "FILE_LIMIT_EXCEEDED");       // 미저장 6번째만 막힌다
     await asUser(q, await uidOf(q, "철수"));
     await expectFail(staged(q, leaf, aws, await uidOf(q, "철수")), "NOT_CURRICULUM_EDITOR");
+  } },
+  { name: "swap on a full item: 5 attached → register a 6th staged succeeds → set with 5 ids ok, 6 ids FILE_LIMIT_EXCEEDED", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF); const minsu = await uidOf(q, "민수");
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, minsu);
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) ids.push(await staged(q, leaf, aws, minsu));
+    await setFiles(q, leaf, ids);                                               // 붙은 5(가득)
+    const v2 = await staged(q, leaf, aws, minsu);                               // 편집에서 하나 빼고 새로 올리기 — 등록은 된다
+    assertEquals(await statusOf(q, v2), { status: "READY", att: false });
+    await expectFail(setFiles(q, leaf, [...ids, v2]), "FILE_LIMIT_EXCEEDED");   // 6개는 저장에서 막힌다
+    const next = [...ids.slice(1), v2];
+    assertEquals((await setFiles(q, leaf, next)).map((f) => f.id).sort(), [...next].sort());
+    assertEquals(await statusOf(q, ids[0]), { status: "DELETED", att: true });
+    assertEquals((await list(q, leaf)).sort(), [...next].sort());
   } },
   { name: "set: duplicates·>5 rejected; another editor's staged id → FILE_NOT_READY; any editor can remove others' attached", run: async (q) => {
     const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF);

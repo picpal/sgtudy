@@ -109,7 +109,7 @@
 
 | 함수 | 인자 | 반환 | 하는 일 |
 |---|---|---|---|
-| `node_file_register` | `(p_node bigint, p_path text, p_name text, p_mime text, p_size bigint)` | FileMeta | 쓰기 권한(§5.1 추가) → 키 형식 → 이름 1~255 → MIME 화이트리스트 → Storage 실재·metadata 크기/MIME → 10MB → 유예 지난 DELETED 되살리기 금지(0019) → 한도(붙은 것 + 내 미저장 24h ≥ 5 → `FILE_LIMIT_EXCEEDED`) → `files` READY, `attached_at null` |
+| `node_file_register` | `(p_node bigint, p_path text, p_name text, p_mime text, p_size bigint)` | FileMeta | 쓰기 권한(§5.1 추가) → 키 형식 → 이름 1~255 → MIME 화이트리스트 → Storage 실재·metadata 크기/MIME → 10MB → 유예 지난 DELETED 되살리기 금지(0019) → 한도(내 미저장 24h ≥ 5 → `FILE_LIMIT_EXCEEDED`, 0019 와 같음. 붙은 파일은 세지 않는다 — 5개 찬 항목에서 하나를 빼고 바꿔 올릴 수 있게. 붙은 개수 5는 `node_files_set` 이 막는다) → `files` READY, `attached_at null` |
 | `node_files_set` | `(p_node bigint, p_file_ids uuid[])` | FileMeta[] | 항목의 첨부를 **목록대로** 만든다(집합 의미, 멱등). 중복 id 거부 · 5개 초과 거부 · 새로 붙일 id = 내 미저장 READY ∧ 같은 항목 ∧ Storage 실재 · 빠진 붙은 파일 → DELETED. 목록이 현재의 부분집합이면 "빼기만"(개인 목표 그룹장 허용) |
 | `node_file_discard` | `(p_file uuid)` | `{id,status:'deleted'}` | 내 미저장 NODE_DOC → DELETED(한도에서 뺀다, 0015 와 같은 이유). 붙은 파일 → `FILE_ATTACHED` |
 | `node_files` | `(p_node bigint)` | FileMeta[] | 읽기 권한이면 붙은 READY 목록(`attached_at, created_at, id` 순), 아니면 `NODE_NOT_FOUND` |

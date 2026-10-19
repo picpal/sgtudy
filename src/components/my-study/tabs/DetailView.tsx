@@ -329,7 +329,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
       {(unsaved || (pendingLeave && editing && formUnsaved)) && (
         <div className="pt-3">
           <InlineConfirm
-            text={formUploading ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요" : "저장하지 않은 수정이 있어요"}
+            text={formUploading ? (formDirty ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일과 저장하지 않은 수정은 버려져요" : "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요") : "저장하지 않은 수정이 있어요"}
             cancelLabel={formUploading ? "계속 편집" : "계속 고치기"}
             onCancel={() => (unsaved ? setUnsaved(null) : pendingLeave?.cancel())}
             actions={[

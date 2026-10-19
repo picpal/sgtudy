@@ -96,7 +96,7 @@ create or replace function public.goal_nodes_doc_release() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   update public.files set status = 'DELETED', deleted_at = now()
-   where node_id = old.id and purpose = 'NODE_DOC' and status <> 'DELETED';
+   where node_id = old.id and purpose = 'NODE_DOC' and status = 'READY';   -- NODE_DOC 은 PENDING 이 없다(등록이 곧 READY) → ix_files_node_doc 를 탄다
   return old;
 end $$;
 create trigger trg_goal_nodes_doc_release before delete on public.goal_nodes
@@ -207,9 +207,11 @@ begin
     perform public.fail('FILE_NOT_READY', '정리된 파일이에요. 다시 올려 주세요', jsonb_build_object('fileId', v_id::text));
   end if;
 
+  -- 내 미저장(24h 안)만 센다(0019 file_register 와 같음). 붙은 파일 수는 node_files_set 이 5개로 막는다 —
+  -- 붙은 5개 중 하나를 편집에서 빼고 새 파일로 바꿔 저장할 수 있어야 하므로 붙은 것은 여기서 세지 않는다
   select count(*) into v_cnt from public.files
-  where node_id = n.id and purpose = 'NODE_DOC' and status = 'READY' and id <> v_id
-    and (attached_at is not null or (owner_user_id = v_uid and created_at > now() - interval '24 hours'));
+  where owner_user_id = v_uid and node_id = n.id and purpose = 'NODE_DOC' and status = 'READY'
+    and attached_at is null and created_at > now() - interval '24 hours' and id <> v_id;
   if v_cnt >= public.node_file_limit() then
     perform public.fail('FILE_LIMIT_EXCEEDED', format('첨부는 항목당 %s개까지예요', public.node_file_limit()), '{"field":"fileIds"}'::jsonb);
   end if;
