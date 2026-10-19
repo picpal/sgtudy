@@ -19,9 +19,12 @@ export function currentRoundId(roots: ParentNode[], today: string): string {
 
 export type RoundOption = { id: string; text: string; s: string; e: string };
 
+/** 회차 선택지 글 "1주차 · 제목 (10/1 – 10/7)" — 라벨이 없으면 "제목 (기간)". 과제 편집·보드 필터가 같이 쓴다 */
+export const roundLabel = (r: { label?: string | null; title: string; s: string; e: string }): string =>
+  `${r.label ? `${r.label} · ${r.title}` : r.title} (${md(r.s)} – ${md(r.e)})`;
+
 /** 과제 편집 화면의 "회차" 선택지 — 보관·임시 회차 제외 */
-export const roundOptions = (roots: ParentNode[]): RoundOption[] =>
-  live(roots).map((r) => ({ id: r.id, text: `${r.label ?? ""} · ${r.title} (${md(r.s)} – ${md(r.e)})`, s: r.s, e: r.e }));
+export const roundOptions = (roots: ParentNode[]): RoundOption[] => live(roots).map((r) => ({ id: r.id, text: roundLabel(r), s: r.s, e: r.e }));
 
 /** 노드가 속한 회차 (묶음 안 과제도 회차로) */
 export const roundOf = (nodes: TreeNode[], n: TreeNode): ParentNode | null => {

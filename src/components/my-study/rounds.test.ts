@@ -23,6 +23,11 @@ describe("roundOptions", () => {
     expect(o[0].text).toBe("1주차 · IAM·VPC (10.01 – 10.07)");
   });
   it("excludes archived rounds", () => expect(roundOptions(archivedTree.roots).map((x) => x.id)).toEqual(["1", "3", "4", "5"]));
+  // F 리뷰 n1: 라벨 없는 회차는 앞에 " · " 를 남기지 않는다
+  it("no label → title (period) without a leading separator", () => {
+    const [r] = tree.roots;
+    expect(roundOptions([{ ...r, label: null }])[0].text).toBe("IAM·VPC (10.01 – 10.07)");
+  });
 });
 
 describe("roundOf", () => {

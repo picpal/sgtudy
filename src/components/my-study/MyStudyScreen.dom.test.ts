@@ -126,6 +126,21 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=board");
   });
 
+  // F 리뷰 m1: 개요 목록 → (알림 등으로) 진행목표 목록 주소로 이동 → 브라우저 뒤로. 이 화면이 닫은 back 이 아니므로 돌아온 ?tab=overview 를 curriculum 으로 고치지 않는다
+  it("다른 목록 주소에서 뒤로 가기로 돌아오면 ?tab= 을 이 화면 탭으로 고치지 않는다", async () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=overview");
+    window.history.pushState(null, "", "/my-study/aws?tab=curriculum");
+    const { host } = mount({ initialTab: "curriculum" });
+    expect(selectedTab(host)).toContain("진행목표");
+    const replace = vi.spyOn(window.history, "replaceState");
+    const popped = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
+    window.history.back();
+    await act(async () => void (await popped));
+    expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=overview");
+    expect(replace).not.toHaveBeenCalled();
+    replace.mockRestore();
+  });
+
   // 재리뷰 m1: 벨로 item=31 → 상세 안에서 상위(3회차)로 이동 → 같은 알림을 다시 누름. initialItem 은 그대로 31 이지만 벨이 알린 item 을 연다
   it("상세 안에서 다른 항목으로 옮긴 뒤 같은 알림을 다시 누르면 그 항목이 다시 열린다", () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");

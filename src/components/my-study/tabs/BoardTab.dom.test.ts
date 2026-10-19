@@ -86,15 +86,16 @@ describe("BoardTab 회차 필터 select", () => {
     expect(cardTitles(host)).toEqual(expect.arrayContaining(["IAM 정책 이해", "EC2 인스턴스 유형 정리"]));
   });
 
-  it("20회차여도 선택지는 select 안 — 누르는 영역 44px, 라벨 상자는 좁은 폭에서 한 줄을 다 쓴다", () => {
+  it("20회차여도 선택지는 select 안 — 누르는 영역 44px, 데스크톱 상자는 세그 높이, 좁은 폭에선 한 줄을 다 쓴다", () => {
     const t = manyRounds(20);
     const { host, select } = mount({ bRound: "r20" }, t);
     expect(select.options.length).toBe(21);
     expect(select.value).toBe("r20");
     expect(host.querySelectorAll("button[aria-pressed]").length).toBe(2); // 내/팀 칸반 세그만
-    expect(select.classList.contains("min-h-11")).toBe(true);
+    expect(select.classList.contains("h-11")).toBe(true); // 누르는 영역 44px — sm 이상에서도 상자(40px) 밖으로 넘쳐 유지
     const box = select.closest("label")!;
-    expect(box.classList.contains("min-h-11")).toBe(true);
+    expect(box.classList.contains("h-11")).toBe(true);
+    expect(box.classList.contains("sm:h-10")).toBe(true); // 데스크톱: 칸반 세그와 같은 높이
     expect(box.classList.contains("max-sm:w-full")).toBe(true);
     expect(select.classList.contains("truncate")).toBe(true);
   });

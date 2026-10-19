@@ -123,6 +123,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // overView: 지금 편집 기록을 같은 항목의 보기 상세 기록 위에 쌓았는지 (상세 → "편집" = push, 뒤로 = 상세)
   const overView = useRef(false);
   const backTab = useRef<TabId | null>(null);
+  // closedByBack: 이 화면이 상세·편집을 history.back 으로 닫았다 — 그 back 의 popstate 에서만 목록 주소 ?tab= 을 화면 탭에 맞춘다 (F 리뷰 m1)
+  const closedByBack = useRef(false);
   const shownTab = useRef<TabId>(S.tab);
   useEffect(() => {
     const url = readItem(window.location.search);
@@ -134,7 +136,10 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     if (step === "push" && url === null) backTab.current = shownTab.current;
     if (step === "push") window.history.pushState(null, "", href);
     else if (step === "replace") window.history.replaceState(null, "", href);
-    else if (step === "back") window.history.back();
+    else if (step === "back") {
+      closedByBack.current = true;
+      window.history.back();
+    }
     if (step === "none") return;
     // 상세 위 편집 기록을 쌓거나 걷을 때는 아래 상세 기록의 pushed 를 그대로 둔다
     if (!modePush && !(step === "back" && overView.current)) pushed.current = step === "push" || (step === "replace" && pushed.current) ? openItem : null;
@@ -156,6 +161,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   useEffect(() => {
     const onPop = () => {
       const { S: s, tree: t, openItem: open, canEdit: ce } = live.current;
+      const ownBack = closedByBack.current;
+      closedByBack.current = false;
       const url = readItem(window.location.search);
       const target = itemFromUrl(window.location.search, (id) => !!findNode(t.nodes, id), ce, (id) => {
         const n = findNode(t.nodes, id);
@@ -164,8 +171,9 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       // 앞으로 가기로 돌아온 기록의 항목이 그새 삭제됐으면 주소에서도 지운다
       if (url && !target.id) window.history.replaceState(null, "", withItem(window.location.href, null));
       if (target.id === open && (target.id === null || (target.mode === "edit") === (s.curMode === "edit"))) {
-        // 화면 안 닫기(history.back)로 돌아온 목록 기록 — 화면은 이미 목록이고 위 탭 effect 는 다시 돌지 않는다 → 주소의 ?tab= 을 화면 탭에 맞춘다 (F 리뷰 n1)
-        if (target.id === null) syncListTab(s.tab);
+        // 화면 안 닫기(이 화면의 history.back)로 돌아온 목록 기록 — 화면은 이미 목록이고 위 탭 effect 는 다시 돌지 않는다 → 주소의 ?tab= 을 화면 탭에 맞춘다 (F 리뷰 n1).
+        // 다른 목록 기록(?tab=overview → 알림으로 ?tab=curriculum → 뒤로)은 곧 다시 마운트될 화면의 것이라 건드리지 않는다 (F 리뷰 m1)
+        if (target.id === null && ownBack) syncListTab(s.tab);
         return;
       }
       if (s.curMode === "edit" && open && isDirty(s.ov, s.editSel)) {

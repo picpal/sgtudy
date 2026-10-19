@@ -6,20 +6,20 @@ import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { AvatarStack, Seg, TypeBadge } from "../bits";
 import { CODE_COLOR, CODE_STATUS, boardColumn, codeLabel, ddayLabel, myCode, type BoardCol, type LeafNode, type Tree } from "../model";
+import { roundLabel } from "../rounds";
 import { boardSource } from "../sources";
 import type { BoardMode, ScreenState, Update } from "../state";
 
 /**
  * 보드 회차 필터 선택지 — 회차가 20개쯤 되면 칩이 여러 줄로 쌓여 칸반을 밀어내서 select 하나로 바꿨다.
- * 글은 "1주차 · 제목 (10/1 – 10/7)", 오늘이 든 회차는 "· 이번 회차", 보관된 회차는 "· 보관됨".
+ * 글은 roundLabel("1주차 · 제목 (10/1 – 10/7)"), 오늘이 든 회차는 "· 이번 회차", 보관된 회차는 "· 보관됨".
  */
 export function boardRoundOptions(roots: Tree["roots"], today: string): [string, string][] {
   return [
     ["all", "전체 회차"],
     ...roots.map((r): [string, string] => {
-      const name = r.label ? `${r.label} · ${r.title}` : r.title;
       const tag = r.archived ? " · 보관됨" : r.s <= today && today <= r.e ? " · 이번 회차" : "";
-      return [r.id, `${name} (${md(r.s)} – ${md(r.e)})${tag}`];
+      return [r.id, `${roundLabel(r)}${tag}`];
     }),
   ];
 }
@@ -49,14 +49,15 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
       <div className="flex flex-wrap items-center gap-[10px]">
         <Seg<BoardMode> label="칸반 범위" value={S.bMode} onChange={(m) => update({ bMode: m })} options={[["mine", "내 칸반"], ["team", "팀 칸반"]]} />
         <span className="flex-[1_1_20px]" />
-        {/* 라벨 상자 전체(44px)가 누르는 영역 — 좁은 폭에선 한 줄을 다 쓴다 */}
-        <label className="inline-flex min-h-11 min-w-0 max-w-full items-center gap-2 rounded-[12px] border border-line-3 bg-surface pl-3 text-[13px] font-medium text-ink-2 max-sm:w-full sm:max-w-[360px]">
+        {/* 좁은 폭: 상자 44px 가 한 줄을 다 쓴다. sm 이상: 상자는 옆 칸반 세그(40px)와 같은 높이, select 는 44px 로 상자 위아래로
+            보이지 않게 2px 씩 넘쳐 누르는 영역을 지킨다(HIT_Y 와 같은 방식 — select 는 ::before 를 못 그린다). 긴 회차 글은 truncate(text-overflow: ellipsis) */}
+        <label className="inline-flex h-11 min-w-0 max-w-full items-center gap-2 rounded-[12px] border border-line-3 bg-surface pl-3 text-[13px] font-medium text-ink-2 max-sm:w-full sm:h-10 sm:max-w-[360px]">
           <span className="shrink-0">회차</span>
           <select
             aria-label="회차 필터"
             value={bRound}
             onChange={(e) => update({ bRound: e.target.value })}
-            className="min-h-11 min-w-0 flex-1 cursor-pointer truncate rounded-r-[12px] border-0 bg-transparent pr-2 text-[13px] font-semibold text-ink"
+            className="h-11 min-w-0 flex-1 cursor-pointer truncate rounded-r-[12px] border-0 bg-transparent pr-2 text-[13px] font-semibold text-ink"
           >
             {rounds.map(([id, text]) => (
               <option key={id} value={id}>
