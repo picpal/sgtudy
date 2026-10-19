@@ -15,14 +15,14 @@ import { addTag, fromDto, removeTag, searchTags, TAG_LIMIT, tagKey, type TagItem
 export const RULE_TOOLS = ["bold", "italic", "strike", "code", "link", "bullet"] as const;
 
 export const FIELD_CLASS =
-  "h-12 w-full rounded-[12px] border border-line-3 bg-surface px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE] disabled:bg-surface-2 disabled:text-muted";
+  "h-12 w-full min-w-0 rounded-[12px] border border-line-3 bg-surface px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE] disabled:bg-surface-2 disabled:text-muted";
 
 /** 필수 표시 — 글자로(색만으로 구분하지 않는다) */
 const Required = () => <span className="ml-1 text-[11px] font-semibold text-warn">필수</span>;
 
 export function Field({ label, error, hint, required, children }: { label: string; error?: string; hint?: string; required?: boolean; children: ReactNode }) {
   return (
-    <label className="flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
+    <label className="flex min-w-0 flex-col gap-[6px] text-[12px] font-semibold text-ink-3">
       <span>
         {label}
         {required && <Required />}
