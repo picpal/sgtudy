@@ -78,7 +78,7 @@ export function RoomViewScreen({ detail, list, invite, filters = DEFAULT_FILTERS
   };
 
   // 더보기: 내 스터디로 · 방 설정(그룹장) · 참가/신청 취소 (JoinCard 와 같은 확인 대화상자)
-  const more: MoreMenuItem[] = menuItemsOf(roomMoreItems(act), dto.slug, (k) => (k === "leave" || k === "cancel") && setConfirm(k));
+  const more: MoreMenuItem[] = menuItemsOf(roomMoreItems(act), dto.slug, (k) => (k === "leave" || k === "cancel") && setConfirm(k), routes.room(dto.slug));
 
   return (
     // 한 페이지 스크롤 — 화면 높이에 가두지 않는다. 옆 목록은 화면에 다 들어갈 때만 붙는다(RoomSidebar)

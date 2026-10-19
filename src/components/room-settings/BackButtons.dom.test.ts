@@ -28,19 +28,19 @@ vi.mock("next/link", async () => {
       ),
   };
 });
-const { SideBackRail, TopBackLink } = await import("./BackButtons");
+const { SideBackRail, TopBackLink, backLabelOf } = await import("./BackButtons");
 
 afterEach(() => {
   document.body.innerHTML = "";
   moved.length = 0;
 });
 
-const mount = () => {
+const mount = (prev = "/my-study/aws") => {
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
   act(() =>
     root.render(
-      createElement("main", null, createElement(TopBackLink, { href: "/my-study/aws" }), createElement(SideBackRail, { href: "/my-study/aws" })),
+      createElement("main", null, createElement(TopBackLink, { href: "/my-study/aws" }), createElement(SideBackRail, { href: prev })),
     ),
   );
   const links = [...host.querySelectorAll("a")];
@@ -75,6 +75,28 @@ describe("방 설정 돌아가기 버튼", () => {
     off();
     act(() => side.click());
     expect(moved).toEqual(["/my-study/aws"]);
+    act(() => root.unmount());
+  });
+
+  it("옆 '이전 페이지' 는 설정을 연 화면(방 보기)으로, 위쪽은 내 스터디 그대로 — 스크린리더에 목적지를 알린다", () => {
+    const { root, top, side } = mount("/rooms/aws");
+    expect(top.getAttribute("href")).toBe("/my-study/aws");
+    expect(side.getAttribute("href")).toBe("/rooms/aws");
+    expect(side.getAttribute("aria-label")).toBe("이전 페이지 — 방 보기로");
+    expect(backLabelOf("/my-study/aws?tab=board")).toBe("이전 페이지 — 내 스터디로");
+    act(() => root.unmount());
+  });
+
+  it("가드가 있으면 방 보기로 가는 '이전 페이지' 도 보류되고, 가드는 그 목적지를 받는다 (확인 뒤 같은 곳으로)", () => {
+    const { root, side } = mount("/rooms/aws");
+    const g = vi.fn(() => true);
+    const off = setLeaveGuard(g);
+    act(() => side.click());
+    expect(g).toHaveBeenCalledWith("/rooms/aws");
+    expect(moved).toEqual([]);
+    off();
+    act(() => side.click());
+    expect(moved).toEqual(["/rooms/aws"]);
     act(() => root.unmount());
   });
 });

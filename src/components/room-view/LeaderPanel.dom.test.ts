@@ -141,11 +141,11 @@ describe("LeaderPanel 모집 시작 — 확인 단계", () => {
     act(() => root.unmount());
   });
 
-  it("방 설정 링크", () => {
+  it("방 설정 링크 — from=방 보기를 실어 설정의 '이전 페이지' 가 방 보기로 돌아온다", () => {
     const host = document.body.appendChild(document.createElement("div"));
     const root = createRoot(host);
     act(() => root.render(createElement(LeaderPanel, { detail, toast: vi.fn() })));
-    expect(host.querySelector<HTMLAnchorElement>('a[href="/rooms/r1/settings"]')?.textContent).toContain("방 설정");
+    expect(host.querySelector<HTMLAnchorElement>('a[href="/rooms/r1/settings?from=%2Frooms%2Fr1"]')?.textContent).toContain("방 설정");
     act(() => root.unmount());
   });
 });

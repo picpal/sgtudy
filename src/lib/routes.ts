@@ -1,4 +1,4 @@
-import { loginUrl } from "@/lib/supabase/return-to";
+import { loginUrl, safeReturnTo } from "@/lib/supabase/return-to";
 
 /** returnTo 검증·로그인 URL 은 plan 01 return-to.ts 가 단일 출처 — 여기서는 다시 내보내기만 한다 */
 export { loginUrl, safeReturnTo } from "@/lib/supabase/return-to";
@@ -27,8 +27,13 @@ export const routes = {
   task: (slug: string, id: string) => `/my-study/${slug}?task=${id}`,
   /** 방 만들기 (디자인 §4.3) */
   createRoom: () => "/rooms/new",
-  /** 방 설정 (그룹장) — 정보·태그·참가·기간 수정, 삭제·보관 (QA Q3-1·Q2-2) */
-  roomSettings: (slug: string) => `/rooms/${slug}/settings`,
+  /** 내 스터디의 한 탭 — overview(기본)면 쿼리 없이. 방 설정 "이전 페이지" 목적지(from)로 쓴다 */
+  myStudyTab: (slug: string, tab?: string) => (tab && tab !== "overview" ? `/my-study/${slug}?tab=${encodeURIComponent(tab)}` : `/my-study/${slug}`),
+  /**
+   * 방 설정 (그룹장) — 정보·태그·참가·기간 수정, 삭제·보관 (QA Q3-1·Q2-2).
+   * from = 설정을 연 화면(방 보기·내 스터디). 설정의 "이전 페이지" 가 그리로 돌아간다 — 읽을 때는 settingsBackOf 로 검증한다
+   */
+  roomSettings: (slug: string, from?: string) => (from ? `/rooms/${slug}/settings?from=${encodeURIComponent(from)}` : `/rooms/${slug}/settings`),
   /** 이메일+비밀번호 로그인 (§4.1) — returnTo 가 있으면 plan 01 loginUrl 과 같은 값 */
   login: (returnTo?: string) => (returnTo ? loginUrl(returnTo) : "/login"),
   /** 회원가입: 이메일 인증 코드 → 비밀번호 정하기 → 닉네임 */
@@ -42,6 +47,18 @@ export const routes = {
   /** 초대 링크 진입 (§4.12) */
   invite: (token: string) => `/invite/${token}`,
 } as const;
+
+/**
+ * 방 설정 "이전 페이지" 목적지 — ?from= 을 safeReturnTo(같은 사이트 경로만·허용 접두사·인코딩 우회 거부)로 거르고,
+ * 없거나 거부되거나 설정 화면 자신을 가리키면 내 스터디(slug)로. 배열(?from=a&from=b)은 믿지 않는다.
+ */
+export function settingsBackOf(raw: string | string[] | undefined | null, slug: string): string {
+  const fallback = routes.myStudy(slug);
+  if (typeof raw !== "string") return fallback;
+  const safe = safeReturnTo(raw);
+  if (safe === "/" || new URL(safe, "http://x").pathname.replace(/\/+$/, "").endsWith("/settings")) return fallback;
+  return safe;
+}
 
 /** 404 화면의 <title> — 루트 not-found 와 방 메타데이터(ROOM_NOT_FOUND)가 같이 쓴다 (V1-02) */
 export const NOT_FOUND_TITLE = "페이지를 찾을 수 없어요 · 슥터디";

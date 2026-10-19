@@ -49,10 +49,13 @@ export function studyMoreItems(act: StudyAction, o: { canRequestLeave?: boolean;
 
 const HREF: Partial<Record<MoreItem, (slug: string) => string>> = { myStudy: routes.myStudy, room: routes.room, settings: routes.roomSettings };
 
-/** 메뉴 항목으로 — 이동 항목은 링크, 참가/신청 취소·탈퇴 요청은 onCancel(확인 대화상자를 연다). 요청 취소는 되돌리는 동작이라 위험 표시 없음 */
-export function menuItemsOf(keys: MoreItem[], slug: string, onCancel: (k: MoreAction) => void): MoreMenuItem[] {
+/**
+ * 메뉴 항목으로 — 이동 항목은 링크, 참가/신청 취소·탈퇴 요청은 onCancel(확인 대화상자를 연다). 요청 취소는 되돌리는 동작이라 위험 표시 없음.
+ * from = 지금 화면 주소 — 방 설정 링크에 실어 설정의 "이전 페이지" 가 이 화면으로 돌아오게 한다
+ */
+export function menuItemsOf(keys: MoreItem[], slug: string, onCancel: (k: MoreAction) => void, from?: string): MoreMenuItem[] {
   return keys.map((k) => {
     const href = HREF[k];
-    return href ? { key: k, label: MORE_LABEL[k], href: href(slug) } : { key: k, label: MORE_LABEL[k], danger: k !== "leaveRequestCancel", onSelect: () => onCancel(k as MoreAction) };
+    return href ? { key: k, label: MORE_LABEL[k], href: k === "settings" ? routes.roomSettings(slug, from) : href(slug) } : { key: k, label: MORE_LABEL[k], danger: k !== "leaveRequestCancel", onSelect: () => onCancel(k as MoreAction) };
   });
 }

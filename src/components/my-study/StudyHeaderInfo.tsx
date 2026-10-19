@@ -120,7 +120,7 @@ export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: Stu
               </span>
             )}
             {room.action === "owner" && (
-              <Link href={routes.roomSettings(room.id)} className="inline-flex min-h-11 items-center px-1 text-[12px] font-semibold text-mint hover:text-mint-dark">
+              <Link href={routes.roomSettings(room.id, routes.myStudyTab(room.id, tab))} className="inline-flex min-h-11 items-center px-1 text-[12px] font-semibold text-mint hover:text-mint-dark">
                 태그 편집
               </Link>
             )}

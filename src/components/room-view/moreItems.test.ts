@@ -62,6 +62,13 @@ describe("menuItemsOf — 메뉴 항목으로 (링크는 href, 취소는 확인 
   });
 });
 
+describe("menuItemsOf — 방 설정 링크에 지금 화면(from)을 싣는다", () => {
+  it("방 보기에서 열면 설정의 '이전 페이지' 가 방 보기로, 다른 링크는 그대로", () => {
+    const items = menuItemsOf(["myStudy", "settings"], "aws", () => {}, "/rooms/aws");
+    expect(items.map((i) => i.href)).toEqual(["/my-study/aws", "/rooms/aws/settings?from=%2Frooms%2Faws"]);
+  });
+});
+
 // 백로그 F 리뷰 I2: 방 화면·내 스터디 공용 신청 취소 확인 본문
 describe("cancelConfirmBody", () => {
   it("보관된 방은 다시 신청할 수 없다고, 아니면 기존 문구", () => {

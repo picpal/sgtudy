@@ -44,13 +44,13 @@ describe("OverviewTab 빈 상태 (Q2-11)", () => {
     expect(doc.textContent).toContain("아직 스터디 소개가 없어요");
     expect(doc.textContent).toContain("아직 운영 규칙이 없어요");
     expect(doc.textContent).toContain("아직 회차가 없어요");
-    expect(doc.querySelectorAll('a[href="/rooms/new-room/settings"]').length).toBe(2);
+    expect(doc.querySelectorAll('a[href="/rooms/new-room/settings?from=%2Fmy-study%2Fnew-room"]').length).toBe(2);
   });
   it("참가자: 안내만", () => {
     const doc = renderOverview({ ...emptyRoom, action: "joined" } as StudyRoom);
     expect(doc.textContent).toContain("아직 스터디 소개가 없어요");
     expect(doc.textContent).toContain("그룹장이 진행목표를 준비하고 있어요");
-    expect(doc.querySelector('a[href="/rooms/new-room/settings"]')).toBeNull();
+    expect(doc.querySelector('a[href^="/rooms/new-room/settings"]')).toBeNull();
   });
   it("운영 규칙은 마크다운으로 — 굵게·링크", () => {
     const doc = renderOverview({ ...emptyRoom, rules: ["**굵게** 와 [문서](https://example.com)"] } as StudyRoom);

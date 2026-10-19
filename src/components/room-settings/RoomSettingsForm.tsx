@@ -41,7 +41,7 @@ function Section({ title, desc, children }: { title: string; desc?: string; chil
  * 방 설정 (그룹장, QA Q3-1·Q2-2) — 방 만들기 폼과 같은 칸 + 태그 + 삭제/보관.
  * 저장: 바뀐 칸만 room_update, 태그가 바뀌었으면 room_tags_put. 잠긴 칸·삭제/보관 가능 여부는 서버 규칙(settings.ts)을 따른다
  */
-export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail }) {
+export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail: RoomDetail; back?: string }) {
   const router = useRouter();
   const today = useToday();
   const [d, setD] = useState(initialDetail);
@@ -137,7 +137,9 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
     setServerError("");
   };
 
+  // 위쪽 "내 스터디로" 는 늘 내 스터디, 옆 "이전 페이지" 는 설정을 연 화면(page.tsx 가 ?from= 을 검증해 넘긴다 — 없으면 내 스터디)
   const back = routes.myStudy(d.slug);
+  const prevHref = prev ?? back;
   return (
     <div className="flex min-h-screen flex-col">
       <AppHeader active="myStudy" bell={<NotificationBell />} />
@@ -194,7 +196,7 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
                   <input name="maxMembers" type="number" inputMode="numeric" min={Math.max(2, d.memberCount)} max={100} className={FIELD_CLASS} value={v.maxMembers} disabled={dis("maxMembers")} onChange={(e) => set("maxMembers", e.target.value)} aria-invalid={!!errors.maxMembers} />
                 </Field>
                 <Field label="최소 인원 (선택)" hint={locked.has("minMembers") ? reason : "비우면 제한 없음"} error={errors.minMembers}>
-                  <input name="minMembers" type="number" inputMode="numeric" min={1} className={FIELD_CLASS} value={v.minMembers} disabled={dis("minMembers")} onChange={(e) => set("minMembers", e.target.value)} aria-invalid={!!errors.minMembers} />
+                  <input name="minMembers" type="number" inputMode="numeric" min={1} className={`${FIELD_CLASS} disabled:placeholder:text-muted`} value={v.minMembers} placeholder="제한 없음" disabled={dis("minMembers")} onChange={(e) => set("minMembers", e.target.value)} aria-invalid={!!errors.minMembers} />
                 </Field>
               </div>
               <SwitchRow
@@ -245,7 +247,7 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
           {!d.archived && d.status !== "ended" && <NotifySettingsSection slug={d.slug} toast={setToast} />}
 
           <DangerZone detail={d} onDetail={setD} toast={setToast} dirty={dirtyCount > 0} />
-          <SideBackRail href={back} />
+          <SideBackRail href={prevHref} />
         </main>
         <Toast msg={toast} onClose={closeToast} />
         <ConfirmDialog

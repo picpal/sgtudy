@@ -78,7 +78,7 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning
   // 참가 중인 나(그룹장 포함) + 이번 회차가 있을 때만 내 개인 목표 줄
   const meRow = room.members.find((m) => m.me && !m.left && !m.pending);
   const owner = room.action === "owner";
-  const settings = owner ? routes.roomSettings(room.id) : undefined;
+  const settings = owner ? routes.roomSettings(room.id, routes.myStudy(room.id)) : undefined;
   return (
     <>
       {/* 방 기간을 벗어난 회차 경고 (PeriodWarning — 진행목표와 같은 줄) */}

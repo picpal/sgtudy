@@ -319,7 +319,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     }
   };
   // 더보기: 방 정보(공개 방 화면) · 방 설정(그룹장) · 참가/신청 취소 (참가 카드와 같은 확인 대화상자)
-  const more: MoreMenuItem[] = menuItemsOf(studyMoreItems(room.action, { canRequestLeave: room.action === "joined", leaveRequested: !!room.leaveRequest }), detail.slug, setConfirm);
+  const more: MoreMenuItem[] = menuItemsOf(studyMoreItems(room.action, { canRequestLeave: room.action === "joined", leaveRequested: !!room.leaveRequest }), detail.slug, setConfirm, routes.myStudyTab(detail.slug, S.tab));
 
   // "내 과제 보기" → 보드 탭으로 바꾼 뒤 탭 목록이 보이게 (Q3-18)
   const [tabJump, setTabJump] = useState(0);
