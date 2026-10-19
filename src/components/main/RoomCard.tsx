@@ -43,6 +43,12 @@ export function RoomCard({ room, selectedTags, anonymous = false, filters = DEFA
           <Badge bg={badge.bg} fg={badge.fg}>
             {badge.label}
           </Badge>
+          {/* 참가한 스터디(mine)는 내가 그룹장인 방도 담는다(0029) — 그 방을 알아보게. 색은 상세 왼쪽 목록 표시와 같다 */}
+          {filters.scope === "mine" && room.created && (
+            <Badge bg="#E3ECFD" fg="#2F5BC2">
+              그룹장
+            </Badge>
+          )}
           {!room.pub && (
             <Badge bg="#E9EEF0" fg="#3A4452">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">

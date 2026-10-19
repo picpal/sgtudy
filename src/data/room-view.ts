@@ -279,7 +279,7 @@ export const MARK: Partial<Record<Action, { label: string; fg: string; bg: strin
   leave: { label: MEMBERSHIP_LABEL.joined, fg: "#0B6553", bg: "#DDF4EE" },
   pending: { label: MEMBERSHIP_LABEL.pending, fg: "#7A4F00", bg: "#FBEFD3" },
   joined: { label: MEMBERSHIP_LABEL.joined, fg: "#0B6553", bg: "#DDF4EE" },
-  owner: { label: "내 방", fg: "#2F5BC2", bg: "#E3ECFD" },
+  owner: { label: "그룹장", fg: "#2F5BC2", bg: "#E3ECFD" },   // 참가한 스터디 목록에서도 그룹장 방이 섞인다(0029) — 홈 카드 배지와 같은 말
 };
 
 /** 상태 배지 색 */

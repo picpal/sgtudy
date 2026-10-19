@@ -451,7 +451,7 @@ export const ROOM_CASES: Case[] = [
     },
   },
   {
-    name: "rooms_list: 철수 public — 8장 정렬, tabCounts 8/4/1, jcg isFull, docker 1/6, facets 자격증3·클라우드2",
+    name: "rooms_list: 철수 public — 8장 정렬, tabCounts 8/5/1(mine 에 그룹장 docker 포함, 0029), jcg isFull, docker 1/6, facets 자격증3·클라우드2",
     run: async (q) => {
       await setToday(q, TODAY);
       await asUser(q, USERS.철수);
@@ -459,7 +459,7 @@ export const ROOM_CASES: Case[] = [
       assertEquals(r.today, TODAY);
       assertEquals([r.page, r.size, r.totalElements], [0, 24, 8]);
       assertEquals(r.items.map((x: any) => x.slug), ["react", "aws", "jcg", "cs", "sqld", "toeic", "docker", "algo"]);
-      assertEquals(r.tabCounts, { public: 8, mine: 4, created: 1 });
+      assertEquals(r.tabCounts, { public: 8, mine: 5, created: 1 });
       const by = Object.fromEntries(r.items.map((x: any) => [x.slug, x]));
       assertEquals([by.jcg.status, by.jcg.isFull, by.jcg.memberCount, by.jcg.maxMembers, by.jcg.joinMode], ["recruit", true, 4, 4, "approval"]);
       assertEquals([by.toeic.isFull, by.toeic.memberCount], [false, 2]);
@@ -476,19 +476,55 @@ export const ROOM_CASES: Case[] = [
     },
   },
   {
-    name: "rooms_list: mine 4(sqld pending 포함), created 1, facets 는 scope 기준",
+    name: "rooms_list: mine 5(sqld pending·그룹장 docker 포함, 0029), created 1, facets 는 scope 기준",
     run: async (q) => {
       await setToday(q, TODAY);
       await asUser(q, USERS.철수);
       const mine = await listRooms(q, { scope: "mine" });
-      assertEquals(mine.items.map((x: any) => x.slug), ["aws", "spring", "sqld", "algo"]);   // active(start asc) → recruit → ended
-      assertEquals(mine.totalElements, 4);
+      assertEquals(mine.items.map((x: any) => x.slug), ["aws", "spring", "sqld", "docker", "algo"]);   // active(start asc) → recruit → ended
+      assertEquals(mine.totalElements, 5);
+      assertEquals(mine.items.find((x: any) => x.slug === "docker").membership, { role: "leader", status: "active" });
       assertEquals(mine.items.find((x: any) => x.slug === "spring").isPublic, false);
-      assertEquals(mine.tagFacets.length, 10);
+      assertEquals(mine.tagFacets.length, 12);   // docker 방 태그 2개가 더해짐 (0029)
       assertEquals(mine.tagFacets[0], { slug: "certificate", label: "자격증", count: 2 });
       const created = await listRooms(q, { scope: "created" });
       assertEquals(created.items.map((x: any) => x.slug), ["docker"]);
-      assertEquals(created.tabCounts, { public: 8, mine: 4, created: 1 });
+      assertEquals(created.tabCounts, { public: 8, mine: 5, created: 1 });
+    },
+  },
+  {
+    name: "rooms_list (0029): mine 은 그룹장 방(DRAFT 포함)을 담는다 — created ⊂ mine, 태그·상태 필터·tabCounts·facets 일치, 보관하면 빠진다",
+    run: async (q) => {
+      await setToday(q, TODAY);
+      // 보람: 시드에서 멤버·그룹장 방이 없는 사용자라고 가정하지 않고 지금 상태를 기준으로 증가분을 본다
+      await asUser(q, USERS.보람);
+      const before = await listRooms(q, { scope: "mine" });
+      const d = await createRoom(q, USERS.보람, { title: "Led Draft" });   // DRAFT(준비중) 방
+      await asUser(q, USERS.보람);
+      const mine = await listRooms(q, { scope: "mine" });
+      assertEquals(mine.totalElements, before.totalElements + 1);
+      assertEquals(mine.tabCounts.mine, before.tabCounts.mine + 1);
+      const led = mine.items.find((x: any) => x.slug === d.slug);
+      assertEquals([led.status, led.membership], ["draft", { role: "leader", status: "active" }]);
+      // created ⊂ mine
+      const created = await listRooms(q, { scope: "created" });
+      const mineSlugs = new Set(mine.items.map((x: any) => x.slug));
+      assertEquals(created.items.every((x: any) => mineSlugs.has(x.slug)), true);
+      // 공개 목록에는 여전히 DRAFT 가 안 보인다
+      assertEquals((await listRooms(q)).items.some((x: any) => x.slug === d.slug), false);
+
+      // 철수: docker(그룹장, RECRUIT) — 태그 필터·상태 필터 모두 mine 에서 잡힌다
+      await asUser(q, USERS.철수);
+      const tagged = await listRooms(q, { scope: "mine", tags: ["docker"] });
+      assertEquals(tagged.items.map((x: any) => x.slug), ["docker"]);
+      assertEquals([tagged.tabCounts.mine, tagged.tabCounts.created], [1, 1]);
+      assertEquals((await listRooms(q, { scope: "mine" })).tagFacets.some((f: any) => f.slug === "docker"), true);
+      assertEquals((await listRooms(q, { scope: "mine", status: "recruit" })).items.some((x: any) => x.slug === "docker"), true);
+      // 보관된 그룹장 방은 mine·created 모두에서 빠진다(보관 규칙 불변). room_archive 는 RECRUIT 를 거절하므로 컬럼을 직접 세운다
+      await q(`update public.rooms set archived_at = now() where slug = 'docker'`);
+      const archived = await listRooms(q, { scope: "mine" });
+      assertEquals(archived.items.some((x: any) => x.slug === "docker"), false);
+      assertEquals([archived.tabCounts.mine, archived.tabCounts.created], [4, 0]);
     },
   },
   {
@@ -611,7 +647,7 @@ export const ROOM_CASES: Case[] = [
       await asUser(q, USERS.철수);
       const pub = await listRooms(q);
       assertEquals(pub.items.some((x: any) => x.slug === "aws"), false);
-      assertEquals(pub.tabCounts, { public: 7, mine: 3, created: 1 });
+      assertEquals(pub.tabCounts, { public: 7, mine: 4, created: 1 });
       assertEquals(pub.tagFacets.find((f: any) => f.slug === "certificate").count, 2);
       assertEquals((await listRooms(q, { scope: "mine" })).items.some((x: any) => x.slug === "aws"), false);
       await asUser(q, USERS.민수);
@@ -640,7 +676,7 @@ export const ROOM_CASES: Case[] = [
       await asUser(q, USERS.철수);
       await q("set local role authenticated");
       const [{ r: m }] = await q(`select public.rooms_list('mine','all',null,null,0,24,'default') as r`);
-      assertEquals(m.totalElements, 4);                                    // aws·spring·sqld(PENDING)·algo — role MEMBER ∧ ACTIVE|PENDING
+      assertEquals(m.totalElements, 5);                                    // aws·spring·sqld(PENDING)·algo(MEMBER ∧ ACTIVE|PENDING) + docker(그룹장, 0029)
       await q("reset role");
     },
   },

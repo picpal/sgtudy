@@ -381,7 +381,7 @@ cases("scenario-qa (0024)", db, [
     const list = async (status: string, qq: string | null, tags: string[] | null, scope = "public") =>
       (await one(q, "select public.rooms_list($1, $2, $3, $4::text[]) as r", [scope, status, qq, tags])).r as Row;
     const all = await list("all", null, null);
-    assertEquals(all.tabCounts, { public: 8, mine: 4, created: 1 });
+    assertEquals(all.tabCounts, { public: 8, mine: 5, created: 1 });   // mine 에 그룹장 docker 포함 (0029)
     const rec = await list("recruit", null, null);
     assertEquals(rec.tabCounts.public, rec.totalElements);
     assert(rec.tabCounts.public < 8);
@@ -390,7 +390,7 @@ cases("scenario-qa (0024)", db, [
     const aws = await list("all", "aws", null);
     assertEquals([aws.tabCounts.public, aws.tabCounts.created], [1, 0]);
     const tag = await list("all", null, ["docker"]);
-    assertEquals([tag.tabCounts.public, tag.tabCounts.created], [1, 1]);   // docker 방은 철수가 만든 방
+    assertEquals([tag.tabCounts.public, tag.tabCounts.mine, tag.tabCounts.created], [1, 1, 1]);   // docker 방은 철수가 만든 방 — 참가한(mine)에도 센다 (0029)
   } },
 
   // ───────── f. 날짜 표기 ─────────
