@@ -4,7 +4,7 @@ import { Logo } from "@/components/ui/Logo";
 /** 로그인·온보딩·초대 공용 껍데기 — 가운데 420px 카드, 390px 에서 좌우 16px */
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col items-center bg-bg-main px-4 pb-16 pt-10 text-ink">
+    <div className="flex min-h-screen flex-col items-center px-4 pb-16 pt-10 text-ink">
       <Logo />
       <main className="mt-8 flex w-full max-w-[420px] flex-col gap-5 rounded-[20px] border border-line bg-surface p-7 shadow-[0_10px_30px_rgba(27,34,48,.06)] max-sm:p-5">
         <div>

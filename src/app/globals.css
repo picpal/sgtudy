@@ -113,7 +113,7 @@
   }
 
   body {
-    background: var(--bg);
+    background: var(--bg-main);
     color: var(--ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;

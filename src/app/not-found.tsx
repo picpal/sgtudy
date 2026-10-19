@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: NOT_FOUND_TITLE };
 /** 없는 주소·없는 방·초대 없이 연 비공개 방(notFound()) 공통 404 — 앱 헤더와 돌아갈 길을 둔다(Q3-10, Q2-24) */
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen flex-col bg-bg text-ink">
+    <div className="flex min-h-screen flex-col text-ink">
       <AppHeader bell={<NotificationBell />} />
       <PageBody>
         <main className="mx-auto flex w-full max-w-[560px] flex-1 flex-col items-center justify-center gap-3 rounded-[20px] bg-surface px-6 py-16 text-center">

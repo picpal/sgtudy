@@ -73,7 +73,7 @@ function DetailMain({ tabs }: { tabs: boolean }) {
 /** / — 방 카드 격자 (MainScreen 의 헤더 + 카드 그리드) */
 export function HomeSkeleton() {
   return (
-    <div data-skeleton="" aria-busy="true" className="min-h-screen bg-bg-main text-ink">
+    <div data-skeleton="" aria-busy="true" className="min-h-screen text-ink">
       <AppHeader active="home" bell={<BellSlot />}>
         <Bar className="h-10 min-w-40 flex-[0_1_280px] rounded-[12px]" />
       </AppHeader>

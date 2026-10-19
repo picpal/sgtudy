@@ -100,7 +100,7 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
   const createHref = me ? routes.createRoom() : routes.login(routes.createRoom());
 
   return (
-    <div className="min-h-screen bg-bg-main text-ink">
+    <div className="min-h-screen text-ink">
       <AppHeader active="home" bell={<NotificationBell />}>
         <label className="flex h-10 min-w-40 flex-[0_1_280px] items-center gap-2 rounded-[12px] border border-line bg-surface-3 px-[14px]">
           <span className="sr-only">스터디 검색</span>
