@@ -4,10 +4,25 @@ import { StatusIcon } from "@/components/ui/StatusIcon";
 import { diffDays, md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
-import { AvatarStack, Chip, Seg, TypeBadge } from "../bits";
+import { AvatarStack, Seg, TypeBadge } from "../bits";
 import { CODE_COLOR, CODE_STATUS, boardColumn, codeLabel, ddayLabel, myCode, type BoardCol, type LeafNode, type Tree } from "../model";
 import { boardSource } from "../sources";
 import type { BoardMode, ScreenState, Update } from "../state";
+
+/**
+ * 보드 회차 필터 선택지 — 회차가 20개쯤 되면 칩이 여러 줄로 쌓여 칸반을 밀어내서 select 하나로 바꿨다.
+ * 글은 "1주차 · 제목 (10/1 – 10/7)", 오늘이 든 회차는 "· 이번 회차", 보관된 회차는 "· 보관됨".
+ */
+export function boardRoundOptions(roots: Tree["roots"], today: string): [string, string][] {
+  return [
+    ["all", "전체 회차"],
+    ...roots.map((r): [string, string] => {
+      const name = r.label ? `${r.label} · ${r.title}` : r.title;
+      const tag = r.archived ? " · 보관됨" : r.s <= today && today <= r.e ? " · 이번 회차" : "";
+      return [r.id, `${name} (${md(r.s)} – ${md(r.e)})${tag}`];
+    }),
+  ];
+}
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
 
@@ -15,7 +30,10 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
   const today = useToday();
   const meId = useMe()?.id ?? null;
   const mine = S.bMode === "mine";
-  const inRound = (l: LeafNode) => S.bRound === "all" || l.roundId === S.bRound;
+  const rounds = boardRoundOptions(tree.roots, today);
+  // 고른 회차가 사라졌으면(삭제 등) 전체로 — select 에 보이는 값과 거르는 값을 맞춘다
+  const bRound = rounds.some(([id]) => id === S.bRound) ? S.bRound : "all";
+  const inRound = (l: LeafNode) => bRound === "all" || l.roundId === bRound;
   const src = boardSource(tree, mine, meId)
     .filter(inRound)
     .sort((a, b) => a.e.localeCompare(b.e));
@@ -25,20 +43,28 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
     ["doing", "진행중", "#12A386"],
     ["done", mine ? "제출 완료" : "전원 제출", "#1E9E6A"],
   ];
-  const rounds: [string, string][] = [["all", "전체 회차"], ...tree.roots.map((r): [string, string] => [r.id, r.label ?? r.title])];
 
   return (
     <div className="mt-[18px] flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-[10px]">
         <Seg<BoardMode> label="칸반 범위" value={S.bMode} onChange={(m) => update({ bMode: m })} options={[["mine", "내 칸반"], ["team", "팀 칸반"]]} />
         <span className="flex-[1_1_20px]" />
-        <div role="group" aria-label="회차 필터" className="flex flex-wrap gap-x-[6px] gap-y-[10px]">
-          {rounds.map(([id, label]) => (
-            <Chip key={id} on={S.bRound === id} onClick={() => update({ bRound: id })}>
-              {label}
-            </Chip>
-          ))}
-        </div>
+        {/* 라벨 상자 전체(44px)가 누르는 영역 — 좁은 폭에선 한 줄을 다 쓴다 */}
+        <label className="inline-flex min-h-11 min-w-0 max-w-full items-center gap-2 rounded-[12px] border border-line-3 bg-surface pl-3 text-[13px] font-medium text-ink-2 max-sm:w-full sm:max-w-[360px]">
+          <span className="shrink-0">회차</span>
+          <select
+            aria-label="회차 필터"
+            value={bRound}
+            onChange={(e) => update({ bRound: e.target.value })}
+            className="min-h-11 min-w-0 flex-1 cursor-pointer truncate rounded-r-[12px] border-0 bg-transparent pr-2 text-[13px] font-semibold text-ink"
+          >
+            {rounds.map(([id, text]) => (
+              <option key={id} value={id}>
+                {text}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <p className="m-0 text-[12px] text-muted">
         {mine ? "내가 담당한 과제만 보여요. 제출 상태에 따라 칸이 자동으로 바뀌어요 · 카드를 누르면 진행목표에서 상세를 볼 수 있어요." : "모든 과제의 팀 진행 상황이에요. 담당자 전원이 제출하면 ‘전원 제출’로 이동해요."}
