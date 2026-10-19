@@ -30,7 +30,6 @@
 | `max` | number | `rooms.max_members` | `cur >= max` 면 인원 텍스트 빨강 |
 | `leader` | string | `users.nickname` (role = LEADER 멤버) | 푸터 "by 민수" + 아바타 |
 | `tags` | string[] | `room_tags` → `tags.name` 순서대로 | 카드 행 24px 고정, 넘치면 잘림 → 서버 정렬 순서가 곧 노출 우선순위 |
-| `mine` | boolean | 내가 그룹장인 방 + 내 `room_members` MEMBER 행(`status IN (ACTIVE, PENDING)`) — 0029 이후 created ⊂ mine | sqld 는 **승인 대기중인데 mine=true** → "내가 참가한 방"에 대기 방 포함 |
 | `created` | boolean | 내 멤버십 `role = LEADER` | docker. mine 에도 포함된다(0029) |
 | `period` | string | `rooms.start_date`, `end_date` 로 포맷 (§3-5) | "2026.10.01 – 12.31 · 3개월" |
 | `slot.label` | string | 상태·참여 여부로 결정 (§3-2) | 모집 현황 / 내 진척률 / 전체 진행 / 최종 달성률 |
