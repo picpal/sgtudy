@@ -11,10 +11,16 @@ type Props = {
   onRetry: (row: UploadRow) => void;
   canRetry: (row: UploadRow) => boolean;
   disabled?: boolean;
+  /** 위 제목 — 기본은 제출 문구 */
+  label?: string;
+  /** 드롭존 안내 — 기본은 제출 문구 */
+  hint?: string;
 };
 
+const DEFAULT_HINT = "끌어다 놓아도 돼요 · PNG·JPG·GIF·WEBP·PDF·ZIP·TXT·MD · 파일당 10MB · 5개까지";
+
 /** 첨부 — 드롭존 + [파일 고르기] · 줄마다 진행률/상태 · [취소|빼기|다시 시도] (스펙 §2.3-3) */
-export function FileUploadList({ rows, onPick, onRemove, onRetry, canRetry, disabled }: Props) {
+export function FileUploadList({ rows, onPick, onRemove, onRetry, canRetry, disabled, label = "파일 (선택)", hint = DEFAULT_HINT }: Props) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -32,7 +38,7 @@ export function FileUploadList({ rows, onPick, onRemove, onRetry, canRetry, disa
   return (
     <div className="flex flex-col gap-[6px]">
       <span id={`${id}-label`} className="text-[12px] font-semibold text-ink-3">
-        파일 (선택)
+        {label}
       </span>
       {/* 드롭은 마우스 보조 — 키보드는 [파일 고르기] 로 */}
       <div
@@ -44,7 +50,7 @@ export function FileUploadList({ rows, onPick, onRemove, onRetry, canRetry, disa
         <button type="button" onClick={() => input.current?.click()} disabled={disabled} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink disabled:opacity-50">
           파일 고르기
         </button>
-        <span className="min-w-0 flex-[1_1_200px] text-[12px] text-muted">끌어다 놓아도 돼요 · PNG·JPG·GIF·WEBP·PDF·ZIP·TXT·MD · 파일당 10MB · 5개까지</span>
+        <span className="min-w-0 flex-[1_1_200px] text-[12px] text-muted">{hint}</span>
         <input
           ref={input}
           type="file"
