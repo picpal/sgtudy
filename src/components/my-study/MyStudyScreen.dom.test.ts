@@ -186,3 +186,26 @@ describe("MyStudyScreen — 신청 취소 확인 문구", () => {
     expect(body).not.toContain("보관된 스터디라");
   });
 });
+
+// 백로그 F 리뷰(1319cc2) #6: 내 스터디에서 방 설정으로 가는 링크는 지금 탭을 ?from= 으로 싣는다 → 설정 "이전 페이지" 가 그 탭으로
+const { routes, MY_STUDY_TABS } = await import("@/lib/routes");
+const { TABS } = await import("./StudyHeaderInfo");
+describe("MyStudyScreen — 방 설정 링크의 from", () => {
+  const leaderDetail = { ...detail, me: { state: "leader" } } as RoomDetail;
+  const want = routes.roomSettings("aws", "/my-study/aws?tab=board");
+
+  it("탭 키는 routes 의 MY_STUDY_TABS 와 같다 (from 검증 화이트리스트)", () => {
+    expect(TABS.map(([id]) => id)).toEqual([...MY_STUDY_TABS]);
+  });
+  it("헤더 '태그 편집' 링크 (방 정보 칸은 개요 탭에만 있어 from 은 개요 = 쿼리 없는 내 스터디)", () => {
+    const { host } = mount({ detail: leaderDetail, initialTab: "overview" });
+    const a = [...host.querySelectorAll("a")].find((x) => x.textContent?.trim() === "태그 편집");
+    expect(a?.getAttribute("href")).toBe(routes.roomSettings("aws", "/my-study/aws"));
+  });
+  it("더보기 '방 설정' 메뉴 링크", () => {
+    const { host } = mount({ detail: leaderDetail, initialTab: "board" });
+    act(() => (host.querySelector('button[aria-haspopup="menu"][aria-label="더보기"]') as HTMLButtonElement).click());
+    const a = [...host.querySelectorAll('a[role="menuitem"]')].find((x) => x.getAttribute("href")?.includes("/settings"));
+    expect(a?.getAttribute("href")).toBe(want);
+  });
+});

@@ -48,16 +48,39 @@ export const routes = {
   invite: (token: string) => `/invite/${token}`,
 } as const;
 
+/** 내 스터디 탭 키 — StudyHeaderInfo 의 TabId 가 이 목록에서 나온다(설정 "이전 페이지" from 검증이 같은 목록을 쓴다) */
+export const MY_STUDY_TABS = ["overview", "curriculum", "board", "calendar", "gantt"] as const;
+export type MyStudyTab = (typeof MY_STUDY_TABS)[number];
+const isMyStudyTab = (v: string): v is MyStudyTab => (MY_STUDY_TABS as readonly string[]).includes(v);
+
+/** from 길이 상한 — 정상 값(방 보기·내 스터디 탭)은 수십 자 */
+const FROM_MAX = 200;
+
 /**
- * 방 설정 "이전 페이지" 목적지 — ?from= 을 safeReturnTo(같은 사이트 경로만·허용 접두사·인코딩 우회 거부)로 거르고,
- * 없거나 거부되거나 설정 화면 자신을 가리키면 내 스터디(slug)로. 배열(?from=a&from=b)은 믿지 않는다.
+ * 방 설정 "이전 페이지" 목적지 — ?from= 을 이 방(slug)의 두 화면만 허용하는 화이트리스트로 거른다:
+ * 방 보기(routes.room(slug), 쿼리 없음) 또는 내 스터디(routes.myStudy(slug), 선택 ?tab=<알려진 탭>).
+ * 더미 origin 기준 URL 로 풀어 origin·디코딩한 pathname 을 정확히 비교하고(%73ettings·;a·다른 방·/invite/ 등 거부),
+ * 통과하면 원문이 아니라 정규형 주소를 돌려준다. 그 밖(없음·배열·너무 김·거부)은 내 스터디(slug).
  */
 export function settingsBackOf(raw: string | string[] | undefined | null, slug: string): string {
   const fallback = routes.myStudy(slug);
-  if (typeof raw !== "string") return fallback;
-  const safe = safeReturnTo(raw);
-  if (safe === "/" || new URL(safe, "http://x").pathname.replace(/\/+$/, "").endsWith("/settings")) return fallback;
-  return safe;
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > FROM_MAX || !raw.startsWith("/") || safeReturnTo(raw) !== raw) return fallback;
+  const origin = "http://settings-back.invalid";
+  let url: URL;
+  let path: string;
+  try {
+    url = new URL(raw, origin);
+    path = decodeURIComponent(url.pathname);
+  } catch {
+    return fallback;
+  }
+  if (url.origin !== origin || url.hash) return fallback;
+  const keys = [...url.searchParams.keys()];
+  if (path === routes.room(slug)) return url.search === "" ? routes.room(slug) : fallback;
+  if (path !== routes.myStudy(slug)) return fallback;
+  const tab = url.searchParams.get("tab");
+  if (keys.length !== 1 || keys[0] !== "tab" || tab === null || !isMyStudyTab(tab)) return fallback;
+  return routes.myStudyTab(slug, tab);
 }
 
 /** 404 화면의 <title> — 루트 not-found 와 방 메타데이터(ROOM_NOT_FOUND)가 같이 쓴다 (V1-02) */

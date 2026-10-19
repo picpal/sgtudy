@@ -7,10 +7,10 @@ import { MoreMenu, type MoreMenuItem } from "@/components/ui/MoreMenu";
 import { PAL } from "@/lib/palette";
 import { roomStatusLabel, type RoomStatus } from "@/lib/types";
 import type { StudyRoom } from "@/lib/api/my-study";
-import { routes } from "@/lib/routes";
+import { routes, type MyStudyTab } from "@/lib/routes";
 import { RoundIconButton, toneOfName } from "./bits";
 
-export type TabId = "overview" | "curriculum" | "board" | "calendar" | "gantt";
+export type TabId = MyStudyTab;
 export const TABS: [TabId, string][] = [
   ["overview", "개요"],
   ["curriculum", "진행목표"],

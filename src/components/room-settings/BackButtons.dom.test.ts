@@ -84,6 +84,8 @@ describe("방 설정 돌아가기 버튼", () => {
     expect(side.getAttribute("href")).toBe("/rooms/aws");
     expect(side.getAttribute("aria-label")).toBe("이전 페이지 — 방 보기로");
     expect(backLabelOf("/my-study/aws?tab=board")).toBe("이전 페이지 — 내 스터디로");
+    // 방 보기는 /rooms/{slug} 정확히만 — 방 만들기·설정·쿼리는 방 보기로 읽지 않는다
+    for (const h of ["/rooms/new", "/rooms/aws/settings", "/rooms/aws?x=1", "/my-study/aws"]) expect(backLabelOf(h), h).toBe("이전 페이지 — 내 스터디로");
     act(() => root.unmount());
   });
 

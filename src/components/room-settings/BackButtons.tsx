@@ -36,11 +36,12 @@ export function TopBackLink({ href }: { href: string }) {
  * 좁은 화면(왼쪽 여백 < 간격 16 + 버튼 ≈ 150px)에서는 숨긴다 — 위쪽 "내 스터디로" 가 같은 곳으로 가고, 떠 있는 버튼이 저장 막대·폼을 가리지 않게.
  * 여백 = (화면폭 − 카드폭)/2 이라 기준은 카드 880px 에 맞춘 1200px(여백 160px). 카드 폭을 바꾸면 카드폭 + 2×(16+버튼 ≈ 130) 이상으로 함께 바꾼다.
  */
-/** 스크린리더용 목적지 이름 — 보이는 글자는 "이전 페이지" 그대로 */
+/**
+ * 스크린리더용 목적지 이름 — 보이는 글자는 "이전 페이지" 그대로. href 는 settingsBackOf 가 검증한 값(이 방의 방 보기 또는 내 스터디)이라
+ * 방 보기(/rooms/{slug}, 쿼리·하위 경로 없음)만 "방 보기로", 그 외는 전부 "내 스터디로".
+ */
 export function backLabelOf(href: string): string {
-  if (href.startsWith("/my-study")) return "이전 페이지 — 내 스터디로";
-  if (href.startsWith("/rooms/")) return "이전 페이지 — 방 보기로";
-  return "이전 페이지";
+  return /^\/rooms\/[^/?#;]+$/.test(href) && href !== "/rooms/new" ? "이전 페이지 — 방 보기로" : "이전 페이지 — 내 스터디로";
 }
 
 export function SideBackRail({ href }: { href: string }) {
