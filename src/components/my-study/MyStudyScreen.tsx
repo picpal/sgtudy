@@ -54,6 +54,15 @@ type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; i
 /** 개인 목표 id 인가 — 편집 화면 대상이 아니다(편집 URL 로 와도 보기 상세) */
 const isPersonalId = (nodes: Curriculum["nodes"], id: string) => nodes.some((n) => n.id === id && n.task?.type === "personal");
 
+// 목록 주소(항목 없음)의 ?tab= 을 화면 탭에 맞춘다 — 항목이 열린 주소는 건드리지 않는다
+function syncListTab(tab: TabId) {
+  const sp = new URLSearchParams(window.location.search);
+  if (readItem(window.location.search) !== null || (sp.get("tab") ?? "overview") === tab) return;
+  const u = new URL(window.location.href);
+  u.searchParams.set("tab", tab);
+  window.history.replaceState(null, "", `${u.pathname}?${u.searchParams.toString()}${u.hash}`);
+}
+
 export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf, initialItem }: Props) {
   const me = useMe();
   const router = useRouter();
@@ -137,11 +146,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   });
   // 목록 화면(항목 없음)의 ?tab= 은 지금 탭을 따라간다 — 뒤로 가기로 돌아온 기록·새로고침이 다른 탭을 열지 않게
   useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    if (openItem !== null || readItem(window.location.search) !== null || (sp.get("tab") ?? "overview") === S.tab) return;
-    const u = new URL(window.location.href);
-    u.searchParams.set("tab", S.tab);
-    window.history.replaceState(null, "", `${u.pathname}?${u.searchParams.toString()}${u.hash}`);
+    if (openItem === null) syncListTab(S.tab);
   }, [S.tab, openItem]);
   // 브라우저 뒤로·앞으로 → 주소의 항목을 연다/닫는다. 미저장 수정이 있으면 주소를 되돌려 놓고 먼저 묻는다 (조용히 버리지 않는다)
   const live = useRef({ S, tree, openItem, canEdit });
@@ -158,7 +163,11 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       });
       // 앞으로 가기로 돌아온 기록의 항목이 그새 삭제됐으면 주소에서도 지운다
       if (url && !target.id) window.history.replaceState(null, "", withItem(window.location.href, null));
-      if (target.id === open && (target.id === null || (target.mode === "edit") === (s.curMode === "edit"))) return;
+      if (target.id === open && (target.id === null || (target.mode === "edit") === (s.curMode === "edit"))) {
+        // 화면 안 닫기(history.back)로 돌아온 목록 기록 — 화면은 이미 목록이고 위 탭 effect 는 다시 돌지 않는다 → 주소의 ?tab= 을 화면 탭에 맞춘다 (F 리뷰 n1)
+        if (target.id === null) syncListTab(s.tab);
+        return;
+      }
       if (s.curMode === "edit" && open && isDirty(s.ov, s.editSel)) {
         // 편집 기록을 되돌려 놓는다 — 뒤로 간 곳이 같은 항목 상세면 여전히 그 위에 쌓인 편집 기록
         const backToView = target.id === open && target.mode === "view";

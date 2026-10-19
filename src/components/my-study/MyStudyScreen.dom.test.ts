@@ -95,6 +95,37 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     back.mockRestore();
   });
 
+  // F 리뷰 n1: 보드 탭에서 연 상세를 화면 안 [← 진행목표]로 닫으면 화면은 진행목표 목록 — 돌아온 목록 기록의 ?tab= 도 화면을 따른다
+  const selectedTab = (host: HTMLElement) => host.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? "";
+  const openFromBoard = () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=board");
+    const m = mount({ initialTab: "board" });
+    expect(selectedTab(m.host)).toContain("보드");
+    window.history.pushState(null, "", "/my-study/aws?tab=curriculum&item=31");
+    m.render({ initialTab: "board", initialItem: "31" });
+    expect(detailTitle(m.host)).toContain(title("31"));
+    return m;
+  };
+  it("보드에서 연 상세를 화면 안에서 닫으면 주소 ?tab= 이 화면(진행목표)과 같다", async () => {
+    const { host } = openFromBoard();
+    const popped = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
+    act(() => buttonByText(host.querySelector("#detail-title")!.closest("section")!, "진행목표").click());
+    await act(async () => void (await popped));
+    expect(detailTitle(host)).toBeNull();
+    expect(selectedTab(host)).toContain("진행목표");
+    expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=curriculum");
+  });
+  // F 리뷰 n2: 브라우저 뒤로 가기는 상세를 연 목록 기록의 탭(보드)으로 — backTab 회귀를 잡는다
+  it("보드에서 연 상세에서 브라우저 뒤로 가기 → 보드 탭", async () => {
+    const { host } = openFromBoard();
+    const popped = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
+    window.history.back();
+    await act(async () => void (await popped));
+    expect(detailTitle(host)).toBeNull();
+    expect(selectedTab(host)).toContain("보드");
+    expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=board");
+  });
+
   // 재리뷰 m1: 벨로 item=31 → 상세 안에서 상위(3회차)로 이동 → 같은 알림을 다시 누름. initialItem 은 그대로 31 이지만 벨이 알린 item 을 연다
   it("상세 안에서 다른 항목으로 옮긴 뒤 같은 알림을 다시 누르면 그 항목이 다시 열린다", () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
