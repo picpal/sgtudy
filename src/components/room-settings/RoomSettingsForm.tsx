@@ -1,6 +1,5 @@
 "use client";
 
-import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { EditorField, FIELD_CLASS, Field, JoinModeRadio, RULE_TOOLS, SwitchRow, TagPicker } from "@/components/room-new/fields";
@@ -21,6 +20,7 @@ import { useToday } from "@/lib/today";
 import { useLeaveConfirm } from "@/lib/useLeaveConfirm";
 import { archiveRoom, buildPatch, dangerOf, deleteRoom, lockReason, lockedOf, saveSteps, updateRoom, validateSettings, valuesOf } from "./settings";
 import { NotifySettingsSection } from "./NotifySettings";
+import { SideBackRail, TopBackLink } from "./BackButtons";
 
 type Errors = Partial<Record<keyof NewRoomValues, string>>;
 
@@ -142,13 +142,8 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
     <div className="flex min-h-screen flex-col">
       <AppHeader active="myStudy" bell={<NotificationBell />} />
       <PageBody>
-        <main className="mx-auto w-full max-w-[720px] rounded-[20px] bg-surface p-7 max-sm:p-5">
-          <Link href={back} className="-ml-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[14px] font-medium text-ink-3 hover:text-ink">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-            내 스터디로
-          </Link>
+        <main className="relative mx-auto w-full max-w-[880px] rounded-[20px] bg-surface p-7 max-sm:p-5">
+          <TopBackLink href={back} />
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 설정</h1>
             <StatusBadge status={uiStatus(d.status)} draft={d.status === "draft"} />
@@ -250,6 +245,7 @@ export function RoomSettingsForm({ detail: initialDetail }: { detail: RoomDetail
           {!d.archived && d.status !== "ended" && <NotifySettingsSection slug={d.slug} toast={setToast} />}
 
           <DangerZone detail={d} onDetail={setD} toast={setToast} dirty={dirtyCount > 0} />
+          <SideBackRail href={back} />
         </main>
         <Toast msg={toast} onClose={closeToast} />
         <ConfirmDialog

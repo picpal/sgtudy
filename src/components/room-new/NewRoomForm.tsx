@@ -81,7 +81,7 @@ export function NewRoomForm() {
     <div className="flex min-h-screen flex-col">
       <AppHeader bell={<NotificationBell />} />
       <PageBody>
-        <main className="mx-auto w-full max-w-[640px] rounded-[20px] bg-surface p-7 max-sm:p-5">
+        <main className="mx-auto w-full max-w-[880px] rounded-[20px] bg-surface p-7 max-sm:p-5">
           <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 만들기</h1>
           <p className="mb-6 mt-[6px] text-[14px] text-muted">채팅방 만들듯 30초면 충분해요. 진행목표는 만든 뒤 천천히 채워요.</p>
           <form ref={formRef} onSubmit={submit} className="flex flex-col gap-4" noValidate>
