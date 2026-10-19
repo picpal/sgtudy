@@ -145,16 +145,19 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   const [editing, setEditing] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
   const onDirtyChange = useCallback((d: boolean) => setFormDirty(d), []);
+  const [formUploading, setFormUploading] = useState(false);
+  const onUploadingChange = useCallback((u: boolean) => setFormUploading(u), []);
+  const formUnsaved = formDirty || formUploading;
   const [unsaved, setUnsaved] = useState<(() => void) | null>(null);
   // 개인 목표 편집 폼에 저장 안 한 수정 → 헤더 메뉴·⋯ 메뉴 등 앱 안 링크도 아래 "저장하지 않은 수정이 있어요" 로 보류 (최종 리뷰 Minor 8)
   const router = useRouter();
   useEffect(() => {
-    if (!(editing && formDirty)) return;
+    if (!(editing && formUnsaved)) return;
     return setLeaveGuard((href) => {
       setUnsaved(() => () => router.push(href));
       return true;
     });
-  }, [editing, formDirty, router]);
+  }, [editing, formUnsaved, router]);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   // 소유자 코드가 체크·토스트 "되돌리기" 등 제출 카드 밖에서 바뀌면 제출 카드(task_get)를 새로 받는다 — LeafBody 를 다시 마운트.
@@ -185,7 +188,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   const [uploading, setUploading] = useState(false);
   const [leave, setLeave] = useState<(() => void) | null>(null);
   const guard = (go: () => void) => {
-    if (editing && formDirty) setUnsaved(() => go);
+    if (editing && formUnsaved) setUnsaved(() => go);
     else if (uploading) setLeave(() => go);
     else go();
   };
@@ -204,6 +207,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
     refocusForm(() => heading.current);
     setEditing(false);
     setFormDirty(false);
+    setFormUploading(false);
   };
   const complete = async () => {
     if (!pn || busy) return;
@@ -315,8 +319,8 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
       {unsaved && (
         <div className="pt-3">
           <InlineConfirm
-            text="저장하지 않은 수정이 있어요"
-            cancelLabel="계속 고치기"
+            text={formUploading ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요" : "저장하지 않은 수정이 있어요"}
+            cancelLabel={formUploading ? "계속 편집" : "계속 고치기"}
             onCancel={() => setUnsaved(null)}
             actions={[
               {
@@ -325,8 +329,9 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
                 onClick: () => {
                   const go = unsaved;
                   setUnsaved(null);
-                  setEditing(false);
+                  setEditing(false); // 폼이 닫히며 올리던·등록만 된 파일을 버린다
                   setFormDirty(false);
+                  setFormUploading(false);
                   go();
                 },
               },
@@ -362,7 +367,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
 
       {pn && editing ? (
         <div className="pt-5">
-          <PersonalForm n={pn} roots={roots} period={period} api={api} onDone={closeForm} onDirtyChange={onDirtyChange} />
+          <PersonalForm n={pn} roots={roots} period={period} api={api} onDone={closeForm} onDirtyChange={onDirtyChange} onUploadingChange={onUploadingChange} toast={toast} />
         </div>
       ) : (
         <div className="flex flex-col gap-4 pt-5">
