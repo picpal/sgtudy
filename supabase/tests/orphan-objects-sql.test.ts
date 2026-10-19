@@ -1,7 +1,8 @@
-// supabase/tests/orphan-objects-sql.test.ts — 0031: files 행이 없는 Storage 고아 객체 후보(file_orphan_candidates), 유예 file_orphan_grace
+// supabase/tests/orphan-objects-sql.test.ts — 0031: files 행이 없는 Storage 고아 객체 후보(file_orphan_candidates), 유예 file_orphan_grace,
+// file_register·node_file_register 의 등록 경합 차단(행 없는 객체가 유예−1h 보다 오래되면 FILE_NOT_READY)
 import { assertEquals } from "@std/assert";
-import { applySeed, openDb } from "./_harness.ts";
-import { cases, one, type Q } from "./_fixtures.ts";
+import { applySeed, asUser, expectFail, openDb } from "./_harness.ts";
+import { cases, nodeId, one, roomId, setNow, uidOf, type Q } from "./_fixtures.ts";
 
 const db = await openDb();
 await applySeed(db);
@@ -61,5 +62,70 @@ cases("orphan-objects", db, [
                                where p.oid = 'public.file_orphan_candidates(integer)'::regprocedure`);
     assertEquals(meta.sd, true);
     assertEquals((meta.cfg as string[]).includes('search_path=""'), true);
+  } },
+  { name: "PENDING 행이 있는 객체도 제외(상태 무관), 다른 버킷 행이 같은 경로면 제외(버킷 무관 비교)", run: async (q) => {
+    const [pending, crossBucket] = [sub(), doc()];
+    await object(q, pending, "3 days");     await fileRow(q, pending, "PENDING");
+    await object(q, crossBucket, "3 days");
+    const owner = (await one(q, "select id from public.profiles limit 1")).id;
+    await q(`insert into public.files (id, owner_user_id, purpose, bucket_id, object_path, original_name, content_type, size_bytes, status)
+             values (gen_random_uuid(), $1, 'ATTACHMENT', 'covers', $2, 'a.pdf', 'application/pdf', 1, 'READY')`, [owner, crossBucket]);
+    const got = await candidates(q);
+    assertEquals([got.includes(pending), got.includes(crossBucket)], [false, false]);
+  } },
+
+  { name: "거의 맞는 키는 제외: 대문자 UUID, 앞자리 0 세그먼트, 세그먼트 수 틀림(제출 3·5개, n/ 뒤 4개), 대문자 확장자", run: async (q) => {
+    const u = () => crypto.randomUUID();
+    const near = [
+      `1/2/${u().toUpperCase()}/${u()}.png`, `1/2/${u()}/${u().toUpperCase()}.png`, `n/1/2/${u().toUpperCase()}.pdf`,
+      `01/2/${u()}/${u()}.png`, `1/02/${u()}/${u()}.png`, `n/01/2/${u()}.pdf`, `n/1/0/${u()}.pdf`,
+      `1/${u()}/${u()}.png`, `1/2/3/${u()}/${u()}.png`, `n/1/2/3/${u()}.pdf`, `n/1/${u()}.pdf`,
+      `1/2/${u()}/${u()}.PNG`,
+    ];
+    for (const k of near) await object(q, k, "3 days");
+    const ok = sub(); await object(q, ok, "3 days");                 // 대조군: 맞는 키는 고른다
+    const got = await candidates(q);
+    assertEquals(near.filter((k) => got.includes(k)), []);
+    assertEquals(got.includes(ok), true);
+  } },
+
+  // ───────── 등록 경합 차단(R1) ─────────
+  { name: "file_register: 행 없는 객체가 23h 이하면 등록, 23h 넘으면 FILE_NOT_READY; 이미 행 있는 오래된 객체 재등록은 그대로", run: async (q) => {
+    const u = await uidOf(q, "철수"); const room = await roomId(q, "aws"); const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    await asUser(q, u);
+    const put = async (ago: string) => {
+      const path = `${room}/${ec2}/${u}/${crypto.randomUUID()}.png`;
+      await q("insert into storage.objects (bucket_id, name, owner_id, metadata, created_at) values ('attachments', $1, $2, $3::jsonb, now() - $4::interval)",
+              [path, u, JSON.stringify({ size: 10, mimetype: "image/png" }), ago]);
+      return path;
+    };
+    const reg = (path: string) => one(q, "select public.file_register($1::bigint, $2, 'a.png', 'image/png', 10) as f", [ec2, path]).then((r) => r.f);
+    assertEquals((await reg(await put("22 hours 59 minutes"))).status, "ready");
+    await expectFail(reg(await put("23 hours 30 minutes")), "FILE_NOT_READY");
+    const again = await put("1 minute");
+    await reg(again);
+    await q("update storage.objects set created_at = now() - interval '3 days' where name = $1", [again]);
+    assertEquals((await reg(again)).status, "ready");                    // 행이 있으면 0031 검사 대상 아님(on conflict 갱신)
+    assertEquals((await candidates(q)).includes(again), false);
+  } },
+
+  { name: "node_file_register: 행 없는 객체가 23h 이하면 등록, 23h 넘으면 FILE_NOT_READY; 이미 행 있는 오래된 객체 재등록은 그대로", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", "EC2 인스턴스 유형 정리"); const minsu = await uidOf(q, "민수");
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, minsu);
+    const put = async (ago: string) => {
+      const path = `n/${aws}/${leaf}/${crypto.randomUUID()}.pdf`;
+      await q("insert into storage.objects (bucket_id, name, owner_id, metadata, created_at) values ('attachments', $1, $2, $3::jsonb, now() - $4::interval)",
+              [path, minsu, JSON.stringify({ size: 10, mimetype: "application/pdf" }), ago]);
+      return path;
+    };
+    const reg = (path: string) =>
+      one(q, "select public.node_file_register($1::bigint, $2, 'a.pdf', 'application/pdf', 10) as f", [leaf, path]).then((r) => r.f);
+    assertEquals((await reg(await put("22 hours 59 minutes"))).status, "ready");
+    await expectFail(reg(await put("23 hours 30 minutes")), "FILE_NOT_READY");
+    const again = await put("1 minute");
+    await reg(again);
+    await q("update storage.objects set created_at = now() - interval '3 days' where name = $1", [again]);
+    assertEquals((await reg(again)).status, "ready");
   } },
 ]);
