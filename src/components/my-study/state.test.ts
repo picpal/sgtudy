@@ -72,3 +72,13 @@ describe("editUnsaved — 첨부를 올리는 중이면 수정이 없어도 미�
     expect(tabPatch({ ...S, uploading: "7" }, "board", true)).toEqual({ leave: { tab: "board" }, confirm: false });
   });
 });
+
+describe("개인 목표 편집 폼 미저장 (personalUnsaved) — 보기 모드여도 탭을 막는다", () => {
+  const S = { ...INITIAL_STATE, tab: "curriculum" as const, personalUnsaved: "32" };
+  it("blocksLeave — 권한·모드와 무관, 진행목표 탭에서만", () => {
+    expect(blocksLeave(S, false)).toBe(true);
+    expect(blocksLeave({ ...S, tab: "board" }, false)).toBe(false);
+    expect(blocksLeave({ ...S, personalUnsaved: null }, false)).toBe(false);
+  });
+  it("tabPatch — 목적지를 보류", () => expect(tabPatch(S, "board", false)).toEqual({ leave: { tab: "board" }, confirm: false }));
+});

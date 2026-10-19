@@ -59,6 +59,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
   const [fileIds, setFileIds] = useState<string[] | null>(null);
   const [filesErr, setFilesErr] = useState(false);
   useEffect(() => {
+    if (n.temp) return; // 서버에 만드는 중인 임시 행은 목록이 없다
     let live = true;
     void fetchNodeFiles(n.id)
       .then((f) => {
@@ -75,7 +76,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 목표가 바뀔 때만 (toast 참조가 바뀌어도 다시 부르지 않는다)
-  }, [n.id]);
+  }, [n.id, n.temp]);
   const saved = savedFiles ?? NO_FILES;
   const savedIds = saved.map((f) => f.id);
   const up = useNodeFileUploads({ nodeId: n.temp ? null : n.id, saved, selected: fileIds ?? NO_IDS, onSelect: setFileIds, toast });
@@ -174,6 +175,9 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
       if (cur) {
         keep.current = true;
         onDone();
+      } else if (steps[0] === "files") {
+        // 첨부는 이미 저장됐다 — 내용만 못 저장했다고 알린다 (EditView 와 같은 문구)
+        toast({ text: "첨부 파일은 저장했어요 · 내용은 저장하지 못했어요 · 다시 저장해 주세요", tone: "bad" });
       }
     } finally {
       setSaving(false);
@@ -255,7 +259,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
         onRemove={up.remove}
         onRetry={up.retry}
         canRetry={up.canRetry}
-        disabled={n.temp || savedFiles === null}
+        disabled={n.temp || savedFiles === null || saving}
       />
       <p className="m-0 text-[12px] text-muted">
         유형·담당자는 없어요 · 기간은 방 기간({rangeShort(period.start, period.end, today)}) 안에서 정해 주세요

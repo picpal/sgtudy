@@ -5,7 +5,7 @@ export type CurMode = "view" | "edit";
 export type BoardMode = "mine" | "team";
 export type Zoom = "day" | "week";
 /** 저장하지 않은 수정이 있는 채로 다른 노드·모드·추가·탭(Q2-1)·다른 화면 주소(헤더 메뉴 등)로 가려 할 때 보류한 목적지 (Q2-05) */
-export type Leave = { sel: string | null } | { mode: CurMode } | { add: string | null } | { tab: TabId } | { href: string };
+export type Leave = { sel: string | null } | { mode: CurMode } | { add: string | null } | { tab: TabId } | { href: string } | { view: string | null };
 
 /** 화면 안 모든 상태 — 방(URL) 이 바뀌면 통째로 리셋된다 */
 export type ScreenState = {
@@ -33,6 +33,8 @@ export type ScreenState = {
   leave: Leave | null;
   /** 첨부를 올리는 중인 편집 항목 id — ov 수정이 없어도 떠나기 전에 묻는다 (EditView 가 맞춘다) */
   uploading: string | null;
+  /** 개인 목표 편집 폼에 저장하지 않은 수정·올리는 중인 파일이 있는 목표 id — 보기 모드라 ov 에 없다. 탭·뒤로 가기 전에 묻는다 (DetailView 가 맞춘다) */
+  personalUnsaved: string | null;
   saved: string;
   ov: Overrides;
   bMode: BoardMode;
@@ -61,6 +63,7 @@ export const INITIAL_STATE: ScreenState = {
   confirm: false,
   leave: null,
   uploading: null,
+  personalUnsaved: null,
   saved: "",
   ov: EMPTY_OVERRIDES,
   bMode: "mine",
@@ -98,7 +101,8 @@ export const toggleOthersPatch = (p: ScreenState): Partial<ScreenState> => ({ ot
 export const editUnsaved = (S: Pick<ScreenState, "ov" | "uploading">, id: string | null): boolean => isDirty(S.ov, id) || (!!id && S.uploading === id);
 
 /** 진행목표 편집 화면에 저장하지 않은 수정이 열려 있다 — 탭·헤더 메뉴·뒤로 가기로 떠나기 전에 묻는다 (Q2-1) */
-export const blocksLeave = (S: ScreenState, canEdit: boolean): boolean => canEdit && S.tab === "curriculum" && S.curMode === "edit" && editUnsaved(S, S.editSel);
+export const blocksLeave = (S: ScreenState, canEdit: boolean): boolean =>
+  S.tab === "curriculum" && (S.personalUnsaved !== null || (canEdit && S.curMode === "edit" && editUnsaved(S, S.editSel)));
 
 /** 방 탭 누름 — 미저장 수정이 있으면 탭은 그대로 두고 목적지를 보류(편집 화면의 "저장하지 않은 수정이 있어요" 확인) */
 export const tabPatch = (S: ScreenState, tab: TabId, canEdit: boolean): Partial<ScreenState> =>

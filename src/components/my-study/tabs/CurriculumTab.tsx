@@ -93,6 +93,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   const [ask, setAsk] = useState<string | null>(null);
   const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !p.closed[id] } }));
   // 목적지로 바로 이동 — 미저장 수정 확인(leave)을 거친 뒤에도 여기로 온다
+  const setPersonalUnsaved = useCallback((id: string | null) => update({ personalUnsaved: id }), [update]);
   const go = (to: Leave) => {
     setAsk(null);
     if ("mode" in to) {
@@ -111,7 +112,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
         update({ leave: null });
         router.push(to.href);
       }
-    } else update({ editSel: to.sel, quickAdd: null, confirm: false, leave: null, saved: "" });
+    } else if ("view" in to) update({ viewSel: to.view, viewFocus: null, confirm: false, leave: null, saved: "" });
+    else update({ editSel: to.sel, quickAdd: null, confirm: false, leave: null, saved: "" });
   };
   // 편집 모드는 권한을 다시 확인한 뒤에 연다 — 화면을 연 뒤 권한을 거뒀을 수 있다 (시나리오 QA #10)
   async function enterEdit() {
@@ -274,6 +276,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
           period={period}
           personal={personal}
           api={api}
+          onUnsavedChange={setPersonalUnsaved}
+          pendingLeave={S.leave && S.personalUnsaved ? { go: () => go(S.leave!), cancel: () => update({ leave: null }) } : null}
         />
       </div>
     );

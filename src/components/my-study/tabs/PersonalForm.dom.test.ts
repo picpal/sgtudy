@@ -143,11 +143,43 @@ describe("PersonalForm 첨부 파일", () => {
     expect(m.set).not.toHaveBeenCalled();
   });
 
-  it("4. 임시 행 — 고르기 비활성 + '저장한 뒤 파일을 붙일 수 있어요', 목록 호출은 하지만 올리지 않는다", async () => {
+  it("4. 임시 행 — 고르기 비활성 + '저장한 뒤 파일을 붙일 수 있어요', 목록을 부르지 않고(실패 토스트도 없다) 올리지 않는다", async () => {
+    m.fetch.mockRejectedValue(new Error("temp id"));
     await start(createElement(PersonalForm, { n: { ...goal, temp: true }, roots: tree.roots, period, api, onDone: () => {}, onDirtyChange: () => {}, toast }));
     expect(host.textContent).toContain("저장한 뒤 파일을 붙일 수 있어요");
     expect(button("파일 고르기").disabled).toBe(true);
     expect(m.upload).not.toHaveBeenCalled();
+    expect(m.fetch).not.toHaveBeenCalled();
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  it("저장하는 중에는 파일 고르기도 막힌다", async () => {
+    m.set.mockReturnValue(new Promise(() => {}));
+    m.upload.mockResolvedValue(undefined);
+    m.register.mockResolvedValue(meta("new1"));
+    await openEdit();
+    await pick("new1.pdf");
+    act(() => button("저장").click());
+    await flush();
+    expect(button("파일 고르기").disabled).toBe(true);
+  });
+
+  it("첨부는 저장됐는데 내용 저장이 실패하면 '첨부 파일은 저장했어요 · ' 로 알린다, 폼 유지", async () => {
+    m.upload.mockResolvedValue(undefined);
+    m.register.mockResolvedValue(meta("new1"));
+    m.set.mockResolvedValue([meta("s1"), meta("new1")]);
+    updatePersonal.mockResolvedValue(null);
+    await openEdit();
+    await pick("new1.pdf");
+    const title = host.querySelector<HTMLInputElement>("form input[type=text]")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, "고친 제목");
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button("저장").click());
+    await flush();
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining("첨부 파일은 저장했어요 · "), tone: "bad" }));
+    expect(host.querySelector("form")).not.toBeNull();
   });
 
   it("저장 — 첨부를 먼저 node_files_set, 그다음 personal_update", async () => {

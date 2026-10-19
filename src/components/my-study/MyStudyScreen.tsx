@@ -177,6 +177,12 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         if (target.id === null && ownBack) syncListTab(s.tab);
         return;
       }
+      if (s.personalUnsaved !== null && s.personalUnsaved === open && s.curMode === "view") {
+        // 개인 목표 편집 폼에 미저장 — 상세 기록을 되돌려 놓고 먼저 묻는다
+        window.history.pushState(null, "", withItem(window.location.href, open, "view"));
+        update({ leave: { view: target.id }, confirm: false });
+        return;
+      }
       if (s.curMode === "edit" && open && editUnsaved(s, s.editSel)) {
         // 편집 기록을 되돌려 놓는다 — 뒤로 간 곳이 같은 항목 상세면 여전히 그 위에 쌓인 편집 기록
         const backToView = target.id === open && target.mode === "view";

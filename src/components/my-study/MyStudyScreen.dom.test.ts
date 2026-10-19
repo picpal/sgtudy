@@ -12,6 +12,8 @@ Element.prototype.scrollIntoView = () => {};
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/components/ui/NotificationBell", () => ({ NotificationBell: () => null }));
 vi.mock("@/components/ui/AppHeader", () => ({ AppHeader: () => null }));
+vi.mock("@/lib/api/nodeFiles", async (orig) => ({ ...(await orig<object>()), fetchNodeFiles: () => Promise.resolve([]), fetchNodeFilesOrEmpty: () => Promise.resolve([]) }));
+vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }));
 
 const { MeProvider } = await import("@/lib/me");
 const { announceItem } = await import("@/lib/hashTarget");
@@ -207,5 +209,61 @@ describe("MyStudyScreen — 방 설정 링크의 from", () => {
     act(() => (host.querySelector('button[aria-haspopup="menu"][aria-label="더보기"]') as HTMLButtonElement).click());
     const a = [...host.querySelectorAll('a[role="menuitem"]')].find((x) => x.getAttribute("href")?.includes("/settings"));
     expect(a?.getAttribute("href")).toBe(want);
+  });
+});
+
+// 개인 목표 편집(보기 모드) — 미저장 수정이 있으면 탭 전환·브라우저 뒤로 가기도 묻는다 (Task 7 M-1)
+describe("MyStudyScreen — 개인 목표 편집 폼 미저장", () => {
+  const flush = () =>
+    act(async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+  const openDirtyForm = async () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
+    const cur = { ...AWS, personal: { canAdd: true, perRound: 20 } };
+    const m = mount({ curriculum: cur });
+    window.history.pushState(null, "", "/my-study/aws?tab=curriculum&item=32");
+    m.render({ curriculum: cur, initialItem: "32" });
+    act(() => buttonByText(m.host.querySelector("#detail-title")!.closest("section")!, "편집").click());
+    await flush();
+    const input = m.host.querySelector<HTMLInputElement>("form input[type=text]")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "고친 제목");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flush();
+    return m;
+  };
+  const tab = (host: HTMLElement, name: string) => [...host.querySelectorAll<HTMLElement>('[role="tab"]')].find((t) => t.textContent?.includes(name))!;
+
+  it("방 탭을 누르면 탭은 그대로 두고 '저장하지 않은 수정이 있어요' — 버리기 하면 이동", async () => {
+    const { host } = await openDirtyForm();
+    act(() => tab(host, "보드").click());
+    expect(host.textContent).toContain("저장하지 않은 수정이 있어요");
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("진행목표");
+    act(() => buttonByText(host.querySelector('[role="alertdialog"]')!, "버리기").click());
+    await flush();
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("보드");
+  });
+
+  it("방 탭 — '계속 고치기' 면 폼이 그대로", async () => {
+    const { host } = await openDirtyForm();
+    act(() => tab(host, "보드").click());
+    act(() => buttonByText(host.querySelector('[role="alertdialog"]')!, "계속 고치기").click());
+    expect(host.querySelector("form")).not.toBeNull();
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+  });
+
+  it("브라우저 뒤로 가기 → 주소를 되돌려 놓고 묻는다, 버리기 하면 목록", async () => {
+    const { host } = await openDirtyForm();
+    const popped = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
+    window.history.back();
+    await act(async () => void (await popped));
+    expect(host.textContent).toContain("저장하지 않은 수정이 있어요");
+    expect(window.location.search).toContain("item=32");
+    expect(host.querySelector("form")).not.toBeNull();
+    act(() => buttonByText(host.querySelector('[role="alertdialog"]')!, "버리기").click());
+    await flush();
+    expect(detailTitle(host)).toBeNull();
   });
 });

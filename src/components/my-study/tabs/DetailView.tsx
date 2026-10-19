@@ -46,6 +46,10 @@ type Props = {
   period: { start: string; end: string };
   personal?: { canAdd: boolean; perRound: number };
   api: CurriculumApi;
+  /** 개인 목표 편집 폼에 미저장 수정·올리는 중 파일이 있는 목표 id (없으면 null) — 화면 상태로 올려 탭·뒤로 가기도 묻게 한다 */
+  onUnsavedChange?: (id: string | null) => void;
+  /** 탭·뒤로 가기가 보류한 이동 — 폼에 미저장이 있으면 아래 확인으로 묻는다 */
+  pendingLeave?: { go: () => void; cancel: () => void } | null;
 };
 
 const NOT_ACTIVE = "스터디가 진행 중일 때 완료할 수 있어요";
@@ -129,7 +133,7 @@ function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActio
 }
 
 /** 보기 모드 상세 — 목록 자리를 쓰는 읽기 전용 화면 (?tab=curriculum&item=). 회차는 기간·진척·설명·과제 목록, 과제는 설명·담당자별 상태 */
-export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, isLeader, quietNotAssigned, roots, period, personal, api }: Props) {
+export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, isLeader, quietNotAssigned, roots, period, personal, api, onUnsavedChange, pendingLeave }: Props) {
   const today = useToday();
   const meId = useMe()?.id ?? null;
   // 위 고정 막대 높이 → 제출·개인 목표 편집기 툴바가 그 밑에 붙는다 (Q1-10)
@@ -148,6 +152,12 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   const [formUploading, setFormUploading] = useState(false);
   const onUploadingChange = useCallback((u: boolean) => setFormUploading(u), []);
   const formUnsaved = formDirty || formUploading;
+  const pnId = n.leaf && n.personal ? n.id : null;
+  useEffect(() => {
+    if (!onUnsavedChange || !pnId || !editing || !formUnsaved) return;
+    onUnsavedChange(pnId);
+    return () => onUnsavedChange(null);
+  }, [onUnsavedChange, pnId, editing, formUnsaved]);
   const [unsaved, setUnsaved] = useState<(() => void) | null>(null);
   // 개인 목표 편집 폼에 저장 안 한 수정 → 헤더 메뉴·⋯ 메뉴 등 앱 안 링크도 아래 "저장하지 않은 수정이 있어요" 로 보류 (최종 리뷰 Minor 8)
   const router = useRouter();
@@ -316,18 +326,18 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
         </div>
       )}
 
-      {unsaved && (
+      {(unsaved || (pendingLeave && editing && formUnsaved)) && (
         <div className="pt-3">
           <InlineConfirm
             text={formUploading ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요" : "저장하지 않은 수정이 있어요"}
             cancelLabel={formUploading ? "계속 편집" : "계속 고치기"}
-            onCancel={() => setUnsaved(null)}
+            onCancel={() => (unsaved ? setUnsaved(null) : pendingLeave?.cancel())}
             actions={[
               {
                 label: "버리기",
                 tone: "danger",
                 onClick: () => {
-                  const go = unsaved;
+                  const go = unsaved ?? pendingLeave?.go ?? (() => {});
                   setUnsaved(null);
                   setEditing(false); // 폼이 닫히며 올리던·등록만 된 파일을 버린다
                   setFormDirty(false);
