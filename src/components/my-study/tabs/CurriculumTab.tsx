@@ -93,7 +93,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
   const [ask, setAsk] = useState<string | null>(null);
   const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !p.closed[id] } }));
   // 목적지로 바로 이동 — 미저장 수정 확인(leave)을 거친 뒤에도 여기로 온다
-  const setPersonalUnsaved = useCallback((id: string | null) => update({ personalUnsaved: id }), [update]);
+  const setPersonalUnsaved = useCallback((id: string | null) => update(id ? { personalUnsaved: id } : { personalUnsaved: null, leave: null }), [update]);
   const go = (to: Leave) => {
     setAsk(null);
     if ("mode" in to) {

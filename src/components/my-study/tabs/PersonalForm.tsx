@@ -171,13 +171,10 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
         }
       }
       const to = patch.roundId ? roots.find((r) => r.id === patch.roundId) : null;
-      const cur = await api.updatePersonal(n.id, patch, to ? `${to.label ?? to.title}로 옮겼어요` : "저장했어요");
+      const cur = await api.updatePersonal(n.id, patch, to ? `${to.label ?? to.title}로 옮겼어요` : "저장했어요", steps[0] === "files" ? "첨부 파일은 저장했어요 · " : "");
       if (cur) {
         keep.current = true;
         onDone();
-      } else if (steps[0] === "files") {
-        // 첨부는 이미 저장됐다 — 내용만 못 저장했다고 알린다 (EditView 와 같은 문구)
-        toast({ text: "첨부 파일은 저장했어요 · 내용은 저장하지 못했어요 · 다시 저장해 주세요", tone: "bad" });
       }
     } finally {
       setSaving(false);

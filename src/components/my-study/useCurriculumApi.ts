@@ -39,8 +39,8 @@ export type CurriculumApi = {
   createPersonal: (roundId: string, title: string) => Promise<boolean>;
   /** 완료 표시/취소. 완료 토스트에는 "되돌리기"(→ 완료 취소) 버튼 (결정 3). 성공하면 true */
   completePersonal: (id: string, done: boolean) => Promise<boolean>;
-  /** 제목·설명·기간·회차 수정. okText = 성공 토스트(기본 "저장했어요"). 성공하면 응답 Curriculum(warnings 확인용), 실패면 null */
-  updatePersonal: (id: string, patch: PersonalPatch, okText?: string) => Promise<Curriculum | null>;
+  /** 제목·설명·기간·회차 수정. okText = 성공 토스트(기본 "저장했어요"), failPrefix = 실패 토스트 앞말(첨부만 먼저 저장된 경우). 성공하면 응답 Curriculum(warnings 확인용), 실패면 null */
+  updatePersonal: (id: string, patch: PersonalPatch, okText?: string, failPrefix?: string) => Promise<Curriculum | null>;
   archivePersonal: (id: string, on: boolean) => Promise<boolean>;
   removePersonal: (id: string) => Promise<boolean>;
   /** 편집 모드 진입 전 권한 재확인 (시나리오 QA #10) — 거뒀으면 토스트 + 보기로 두고 false */
@@ -236,14 +236,14 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
 
   // 개인 목표 RPC 공통 — 응답으로 교체 + 성공 토스트. 실패는 fail
   const personal = useCallback(
-    async (call: () => Promise<Curriculum>, ok: ToastMsg): Promise<Curriculum | null> => {
+    async (call: () => Promise<Curriculum>, ok: ToastMsg, failPrefix = ""): Promise<Curriculum | null> => {
       try {
         const cur = await call();
         setCur(cur);
         toast(ok);
         return cur;
       } catch (e) {
-        fail(e);
+        fail(e, failPrefix);
         return null;
       }
     },
@@ -264,7 +264,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const updatePersonal = useCallback(
-    (id: string, patch: PersonalPatch, okText = "저장했어요") => personal(() => personalUpdate(slug, id, patch), { text: okText, tone: "ok" }),
+    (id: string, patch: PersonalPatch, okText = "저장했어요", failPrefix = "") => personal(() => personalUpdate(slug, id, patch), { text: okText, tone: "ok" }, failPrefix),
     [slug, personal],
   );
 

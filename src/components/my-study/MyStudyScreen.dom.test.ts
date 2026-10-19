@@ -266,4 +266,26 @@ describe("MyStudyScreen — 개인 목표 편집 폼 미저장", () => {
     await flush();
     expect(detailTitle(host)).toBeNull();
   });
+
+  it("확인이 떠 있는 채로 폼이 깨끗해지면(제목을 되돌림) 보류했던 이동도 지운다 — 나중에 낡은 확인이 되살아나지 않는다", async () => {
+    const { host } = await openDirtyForm();
+    act(() => tab(host, "보드").click());
+    expect(host.querySelector('[role="alertdialog"]')).not.toBeNull();
+    const input = host.querySelector<HTMLInputElement>("form input[type=text]")!;
+    const orig = AWS.nodes.find((n) => n.id === "32")!.title;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, orig);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flush();
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+    // 다시 고쳐도 옛 목적지(보드)로 묻지 않는다
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "또 고침");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flush();
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("진행목표");
+  });
 });

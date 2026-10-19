@@ -11,9 +11,10 @@ import { useCurriculumApi, type CurriculumApi } from "./useCurriculumApi";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const m = vi.hoisted(() => ({ setFiles: vi.fn(), nodeUpdate: vi.fn(), calls: [] as string[] }));
+const m = vi.hoisted(() => ({ setFiles: vi.fn(), nodeUpdate: vi.fn(), personalUpdate: vi.fn(), calls: [] as string[] }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push: () => {} }) }));
 vi.mock("@/lib/api/nodeFiles", () => ({ setNodeFiles: m.setFiles }));
+vi.mock("@/lib/api/personal", async (orig) => ({ ...(await orig<typeof import("@/lib/api/personal")>()), personalUpdate: m.personalUpdate }));
 vi.mock("@/lib/api/my-study", async (orig) => ({ ...(await orig<typeof import("@/lib/api/my-study")>()), nodeUpdate: m.nodeUpdate }));
 
 const leaf = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "21")!;
@@ -105,5 +106,20 @@ describe("api.save — 첨부 (node_files_set 먼저)", () => {
     expect(await api.save(leaf, ov)).toBe(false);
     expect(m.setFiles).toHaveBeenCalled();
     expect(toasts.at(-1)?.text).toMatch(/^첨부 파일은 저장했어요 · /);
+  });
+});
+
+describe("api.updatePersonal — 실패 토스트 앞말", () => {
+  it("failPrefix 를 구체적인 실패 사유 앞에 붙인다 (사유를 덮지 않는다)", async () => {
+    m.personalUpdate.mockReset().mockRejectedValue(Object.assign(new Error("x"), { code: "ROOM_NOT_EDITABLE", message: "x" }));
+    expect(await api.updatePersonal("32", { title: "a" }, "저장했어요", "첨부 파일은 저장했어요 · ")).toBeNull();
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0]!.text.startsWith("첨부 파일은 저장했어요 · ")).toBe(true);
+    expect(toasts[0]!.text.length).toBeGreaterThan("첨부 파일은 저장했어요 · ".length);
+  });
+  it("앞말이 없으면 그대로", async () => {
+    m.personalUpdate.mockReset().mockRejectedValue(Object.assign(new Error("x"), { code: "ROOM_NOT_EDITABLE", message: "x" }));
+    await api.updatePersonal("32", { title: "a" });
+    expect(toasts[0]!.text.startsWith("첨부")).toBe(false);
   });
 });

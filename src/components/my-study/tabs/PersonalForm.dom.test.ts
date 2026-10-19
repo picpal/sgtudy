@@ -164,7 +164,7 @@ describe("PersonalForm 첨부 파일", () => {
     expect(button("파일 고르기").disabled).toBe(true);
   });
 
-  it("첨부는 저장됐는데 내용 저장이 실패하면 '첨부 파일은 저장했어요 · ' 로 알린다, 폼 유지", async () => {
+  it("첨부는 저장됐는데 내용 저장이 실패하면 앞말('첨부 파일은 저장했어요 · ')을 api 에 넘긴다, 폼 유지", async () => {
     m.upload.mockResolvedValue(undefined);
     m.register.mockResolvedValue(meta("new1"));
     m.set.mockResolvedValue([meta("s1"), meta("new1")]);
@@ -178,7 +178,9 @@ describe("PersonalForm 첨부 파일", () => {
     });
     act(() => button("저장").click());
     await flush();
-    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining("첨부 파일은 저장했어요 · "), tone: "bad" }));
+    // 구체적인 실패 토스트는 api 가 앞말을 붙여 낸다 — 폼이 따로 덮어쓰지 않는다
+    expect(updatePersonal).toHaveBeenCalledWith("32", expect.anything(), expect.any(String), "첨부 파일은 저장했어요 · ");
+    expect(toast).not.toHaveBeenCalled();
     expect(host.querySelector("form")).not.toBeNull();
   });
 
