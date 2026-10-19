@@ -28,6 +28,7 @@ let host: HTMLElement;
 const live = {} as { S: ScreenState };
 const went: Leave[] = [];
 const save = vi.fn();
+const toast = vi.fn();
 
 function Harness({ n }: { n: TreeNode }) {
   const [S, setS] = useState<ScreenState>({ ...INITIAL_STATE, tab: "curriculum", curMode: "edit", editSel: n.id });
@@ -45,7 +46,7 @@ function Harness({ n }: { n: TreeNode }) {
   return createElement(
     TodayProvider,
     { today: REF_DAY } as Parameters<typeof TodayProvider>[0],
-    createElement(EditView, { n, parent: null, nodes: tree.nodes, roots: tree.roots, period: { start: "2026-10-01", end: "2026-11-30" }, members: tree.members, S, update, api, go, request, toast: () => {} }),
+    createElement(EditView, { n, parent: null, nodes: tree.nodes, roots: tree.roots, period: { start: "2026-10-01", end: "2026-11-30" }, members: tree.members, S, update, api, go, request, toast }),
   );
 }
 
@@ -79,6 +80,7 @@ beforeEach(() => {
   m.discard.mockReset().mockResolvedValue(true);
   m.upload.mockReset();
   save.mockReset().mockResolvedValue(true);
+  toast.mockReset();
   went.length = 0;
 });
 afterEach(() => {
@@ -112,7 +114,7 @@ describe("EditView 첨부 파일", () => {
     act(() => button("진행목표").click());
     expect(live.S.leave).toEqual({ sel: null });
     expect(went).toEqual([]);
-    expect(host.textContent).toContain("저장하지 않은 수정이 있어요");
+    expect(host.textContent).toContain("파일을 올리는 중이에요. 지금 나가면");
   });
 
   it("'버리기' — 저장 안 한 첨부를 버리고 ov.files 도 지운 뒤 이동", async () => {
@@ -140,5 +142,26 @@ describe("EditView 첨부 파일", () => {
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0][1].files["21"]).toEqual(["s1", "new1"]);
     expect(typeof save.mock.calls[0][2].onFiles).toBe("function");
+  });
+
+  it("목록을 못 불러오면 빈 목록으로 보지 않는다 — 첨부 비활성 + 토스트, 저장은 첨부를 빼고 (I-1)", async () => {
+    m.fetch.mockRejectedValue(new Error("net"));
+    await mount(leaf);
+    expect(button("파일 고르기").disabled).toBe(true);
+    expect(toast).toHaveBeenCalledWith({ text: "첨부 파일 목록을 불러오지 못했어요 · 새로 고침해 주세요", tone: "bad" });
+    expect(host.textContent).toContain("첨부 파일 목록을 불러오지 못했어요");
+    await act(async () => button("저장").click());
+    expect(save.mock.calls[0][2].skipFiles).toBe(true);
+  });
+
+  it("올리는 중 떠나기 확인 — '올리던 파일은 버려져요', 버리기·계속 편집만 (I-2)", async () => {
+    m.upload.mockReturnValue(new Promise(() => {}));
+    await mount(leaf);
+    await pick("a.pdf");
+    act(() => button("진행목표").click());
+    expect(host.textContent).toContain("파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요");
+    expect(host.textContent).not.toContain("저장할까요?");
+    const labels = Array.from(host.querySelectorAll('[role="alertdialog"] button')).map((b) => b.textContent?.trim());
+    expect(labels).toEqual(["계속 편집", "버리기"]);
   });
 });

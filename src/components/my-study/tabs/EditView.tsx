@@ -44,6 +44,7 @@ type Props = {
 };
 
 const NO_FILES: FileMeta[] = [];
+const FILES_ERR = "첨부 파일 목록을 불러오지 못했어요 · 새로 고침해 주세요";
 
 const field = "h-11 rounded-[10px] border border-line-3 text-ink";
 const label = "flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3";
@@ -87,8 +88,17 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
 
   // 첨부 — 붙은 목록은 서버(node_files), 고친 선택은 ov.files 에 모았다가 "저장" 때 node_files_set. 임시 행은 저장한 뒤에 붙인다
   const [savedFiles, setSavedFiles] = useState<FileMeta[] | null>(null);
+  // 못 불러오면 빈 목록으로 보지 않는다 — node_files_set 은 통째 교체라 일부 목록으로 저장하면 붙은 파일이 지워진다 (리뷰 I-1)
+  const [filesErr, setFilesErr] = useState(false);
   useEffect(() => {
-    if (!n.temp) void fetchNodeFiles(id).then(setSavedFiles).catch(() => setSavedFiles([]));
+    if (n.temp) return;
+    void fetchNodeFiles(id)
+      .then(setSavedFiles)
+      .catch(() => {
+        setFilesErr(true);
+        toast({ text: FILES_ERR, tone: "bad" });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 항목이 바뀔 때만 (toast 참조가 바뀌어도 다시 부르지 않는다)
   }, [id, n.temp]);
   const saved = savedFiles ?? NO_FILES; // 같은 참조 — 훅이 saved 바뀜을 참조로 본다
   const savedIds = useMemo(() => saved.map((f) => f.id), [saved]);
@@ -215,7 +225,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   const [shiftAsk, setShiftAsk] = useState<{ ask: ShiftAsk; then: typeof S.leave } | null>(null);
   const doSave = async (shift: boolean, then: typeof S.leave) => {
     setShiftAsk(null);
-    if (await api.save(n, S.ov, { shift, onFiles: setSavedFiles })) {
+    if (await api.save(n, S.ov, { shift, onFiles: setSavedFiles, skipFiles: savedFiles === null })) {
       update({ fresh: null });
       if (then) go(then);
     } else if (then) update({ leave: null });
@@ -287,20 +297,19 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             cancelLabel="계속 편집"
             onCancel={() => setShiftAsk(null)}
             actions={[
-              { label: "함께 옮기기", tone: "primary", onClick: () => void doSave(true, askShown.then) },
-              { label: kind === "회차" ? "회차만 바꾸기" : "이 묶음만 바꾸기", onClick: () => void doSave(false, askShown.then) },
+              // 올리는 중엔 저장하지 않는다 — 올리던 파일이 빠진 채 저장된다 (리뷰 M-1)
+              { label: "함께 옮기기", tone: "primary", onClick: () => void doSave(true, askShown.then), disabled: up.uploading },
+              { label: kind === "회차" ? "회차만 바꾸기" : "이 묶음만 바꾸기", onClick: () => void doSave(false, askShown.then), disabled: up.uploading },
             ]}
           />
         )}
         {S.leave && (
+          // 올리는 중이면 "저장하고 이동" 은 없다 — 기다리지 않고 막는다 (리뷰 I-2: 저장하면 올리던 파일이 빠진다)
           <InlineConfirm
-            text="저장하지 않은 수정이 있어요. 저장할까요?"
+            text={up.uploading ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요" : "저장하지 않은 수정이 있어요. 저장할까요?"}
             cancelLabel="계속 편집"
             onCancel={() => update({ leave: null })}
-            actions={[
-              { label: "버리기", onClick: leaveDiscard },
-              { label: "저장하고 이동", onClick: () => void leaveSave(), tone: "primary" },
-            ]}
+            actions={[{ label: "버리기", onClick: leaveDiscard }, ...(up.uploading ? [] : [{ label: "저장하고 이동", onClick: () => void leaveSave(), tone: "primary" as const }])]}
           />
         )}
         {S.confirm && (
@@ -491,7 +500,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
 
         <FileUploadList
           label="첨부 파일 (선택)"
-          hint={n.temp ? "저장한 뒤 파일을 붙일 수 있어요" : `끌어다 놓아도 돼요 · ${NODE_FILE_HINT}`}
+          hint={n.temp ? "저장한 뒤 파일을 붙일 수 있어요" : filesErr ? FILES_ERR : `끌어다 놓아도 돼요 · ${NODE_FILE_HINT}`}
           rows={up.rows}
           onPick={up.pick}
           onRemove={up.remove}

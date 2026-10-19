@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 
-type Action = { label: string; onClick: () => void; tone?: "danger" | "primary" };
+type Action = { label: string; onClick: () => void; tone?: "danger" | "primary"; disabled?: boolean };
 type Props = { text: string; actions: Action[]; onCancel: () => void; cancelLabel?: string };
 
 /**
@@ -45,7 +45,8 @@ export function InlineConfirm({ text, actions, onCancel, cancelLabel = "취소" 
             key={a.label}
             type="button"
             onClick={a.onClick}
-            className="flex h-11 items-center rounded-[19px]"
+            disabled={a.disabled}
+            className="flex h-11 items-center rounded-[19px] disabled:opacity-50"
           >
             <span className={`flex h-[38px] items-center rounded-[19px] px-[14px] text-[13px] font-semibold ${a.tone === "danger" ? "bg-warn text-white" : a.tone === "primary" ? "bg-navy text-white" : "border border-line-3 bg-surface text-ink"}`}>{a.label}</span>
           </button>

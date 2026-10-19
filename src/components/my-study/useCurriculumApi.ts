@@ -27,8 +27,9 @@ export type CurriculumApi = {
   archive: (id: string, on: boolean, from?: "edit" | "list") => Promise<void>;
   /** 성공(또는 바뀐 것 없음)이면 true */
   /** opts.shift: 회차·묶음 시작일 변경을 하위(과제·개인 목표)에도 같은 날수만큼 (D2).
-   *  ov.files 가 있으면 node_files_set 을 먼저 — 성공하면 opts.onFiles(새 붙은 목록), 실패하면 ov.files 를 남기고 false */
-  save: (n: TreeNode, ov: Overrides, opts?: { shift?: boolean; onFiles?: (f: FileMeta[]) => void }) => Promise<boolean>;
+   *  ov.files 가 있으면 node_files_set 을 먼저 — 성공하면 opts.onFiles(새 붙은 목록), 실패하면 ov.files 를 남기고 false.
+   *  skipFiles: 붙은 목록을 못 불러왔다 — 일부 목록으로 바꿔 쓰지 않게(node_files_set 은 통째 교체) 첨부는 보내지 않는다 */
+  save: (n: TreeNode, ov: Overrides, opts?: SaveOpts) => Promise<boolean>;
   /** node_move 후 dates(서브트리의 바뀌는 기간, movedPlan)를 노드마다 node_update 로 맞춘다. okText = 성공 토스트. 옮겨졌으면 true */
   move: (id: string, parentId: string, index?: number, dates?: DatePlan, okText?: string) => Promise<boolean>;
   /** 커리큘럼만 다시 받는다 — 제출 뒤 보드·간트·개요의 사람별 코드 갱신. 실패는 조용히 */
@@ -45,6 +46,8 @@ export type CurriculumApi = {
   /** 편집 모드 진입 전 권한 재확인 (시나리오 QA #10) — 거뒀으면 토스트 + 보기로 두고 false */
   recheckEdit: () => Promise<boolean>;
 };
+
+export type SaveOpts = { shift?: boolean; onFiles?: (f: FileMeta[]) => void; skipFiles?: boolean };
 
 export const dropKey = <T,>(rec: Record<string, T>, key: string) => {
   const { [key]: _omit, ...rest } = rec; // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -65,7 +68,8 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   const router = useRouter();
 
   const fail = useCallback(
-    (e: unknown) => {
+    /** prefix: 토스트 앞에 붙일 말 (예: 첨부는 저장됐고 내용만 실패) */
+    (e: unknown, prefix = "") => {
       const err = toApiError(e);
       if (err.code === "NOT_CURRICULUM_EDITOR") {
         // 편집하는 사이 그룹장이 권한을 거뒀다 — 편집 모드를 닫고(편집 스위치도 사라짐) 커리큘럼을 다시 받는다
@@ -76,7 +80,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         router.refresh();
         return;
       }
-      toast({ text: personalErrorText(err), tone: "bad" });
+      toast({ text: prefix + personalErrorText(err), tone: "bad" });
       if (err.code === "ROOM_NOT_EDITABLE" || err.code === "NOT_LEADER") update({ curMode: "view", editSel: null });
     },
     [toast, update, setCur, slug, router],
@@ -150,11 +154,17 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const save = useCallback(
-    async (n: TreeNode, ov: Overrides, opts: { shift?: boolean; onFiles?: (f: FileMeta[]) => void } = {}) => {
+    async (n: TreeNode, ov: Overrides, opts: SaveOpts = {}) => {
       const patch: NodePatch = patchOf(n, ov);
       // 회차·묶음 시작일을 옮기면서 "하위도 함께" 를 골랐을 때 (시나리오 QA D2) — 시작일이 바뀐 패치에만
       if (opts.shift && patch.startDate && !n.leaf) patch.shiftDescendants = true;
-      const files = ov.files[n.id];
+      const files = opts.skipFiles ? undefined : ov.files[n.id];
+      // 저장하는 사이 업로드가 끝나 선택이 바뀌었으면 그 새 선택은 남긴다 (보낸 목록과 같을 때만 지운다)
+      const dropSent = (o: Overrides): Overrides => (o.files[n.id] === files ? { ...o, files: dropKey(o.files, n.id) } : o);
+      const dropFields = (o: Overrides): Overrides => {
+        const next = dropFieldOv(o, n.id);
+        return n.id in o.files && o.files[n.id] !== files ? { ...next, files: { ...next.files, [n.id]: o.files[n.id] } } : next;
+      };
       const steps = saveSteps(Object.keys(patch).length === 0, files);
       if (steps.length === 0) {
         // 고쳤다가 원래 값으로 되돌린 오버라이드도 지운다 — 남으면 계속 "미저장"(회차 선택 비활성·이동 확인)
@@ -163,8 +173,9 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       }
       if (steps[0] === "files") {
         try {
-          opts.onFiles?.(await setNodeFiles(n.id, files!));
-          update((p) => ({ ov: { ...p.ov, files: dropKey(p.ov.files, n.id) } }));
+          const attached = await setNodeFiles(n.id, files!);
+          opts.onFiles?.(attached);
+          update((p) => ({ ov: dropSent(p.ov) }));
         } catch (e) {
           fail(e); // ov.files 는 남긴다 — 고쳐서 다시 저장
           return false;
@@ -180,13 +191,13 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         setCur(cur);
         // 태그가 실제로 바뀌었는지 여기서는 알 수 없다 → "다시 골랐어요" 문구는 쓰지 않는다 (Q1-17). 이전 오류 토스트는 닫는다 (Q2-09)
         toast(null);
-        update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: shiftedText(cur.shifted) }));
+        update((p) => ({ ov: dropFields(p.ov), saved: shiftedText(cur.shifted) }));
         router.refresh(); // 자동 태그가 바뀌었을 수 있다(D9)
         return true;
       } catch (e) {
         // 실패한 수정은 되돌린다 — 트리에 저장되지 않은 값이 남지 않게 (Q2-09). 첨부는 이미 저장됐다
-        update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: "" }));
-        fail(e);
+        update((p) => ({ ov: dropFields(p.ov), saved: "" }));
+        fail(e, steps[0] === "files" ? "첨부 파일은 저장했어요 · " : "");
         return false;
       }
     },
