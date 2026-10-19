@@ -289,3 +289,114 @@ describe("MyStudyScreen — 개인 목표 편집 폼 미저장", () => {
     expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("진행목표");
   });
 });
+
+// 재리뷰 R-3: 다른 화면 주소로 돌아간 popstate(클라이언트 이동으로 들어온 경우)는 이 화면이 막거나 ?item= 을 쌓지 않는다
+describe("MyStudyScreen — popstate 가 다른 화면 주소면 손대지 않는다", () => {
+  const flush = () =>
+    act(async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+  const typeInto = (input: HTMLInputElement, v: string) =>
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, v);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  const popTo = (href: string) =>
+    act(() => {
+      window.history.replaceState(null, "", href);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+  const spyHistory = () => ({ push: vi.spyOn(window.history, "pushState"), replace: vi.spyOn(window.history, "replaceState") });
+  afterEach(() => vi.restoreAllMocks());
+
+  const openDirtyPersonal = async () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
+    const cur = { ...AWS, personal: { canAdd: true, perRound: 20 } };
+    const m = mount({ curriculum: cur });
+    window.history.pushState(null, "", "/my-study/aws?tab=curriculum&item=32");
+    m.render({ curriculum: cur, initialItem: "32" });
+    act(() => buttonByText(m.host.querySelector("#detail-title")!.closest("section")!, "편집").click());
+    await flush();
+    typeInto(m.host.querySelector<HTMLInputElement>("form input[type=text]")!, "고친 제목");
+    await flush();
+    return m;
+  };
+  const openDirtyTeamEdit = async () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum&mode=edit&item=31");
+    const m = mount({ curriculum: { ...AWS, myPermissions: { canEditCurriculum: true } }, initialMode: "edit", initialItem: "31" });
+    await flush();
+    typeInto(m.host.querySelector<HTMLInputElement>('section[aria-labelledby="edit-view-title"] input[type=text]')!, "고친 회차");
+    await flush();
+    return m;
+  };
+
+  it("개인 목표 폼 미저장 — 다른 주소로 popstate 면 history 를 건드리지 않고 묻지 않는다", async () => {
+    const { host } = await openDirtyPersonal();
+    const h = spyHistory();
+    popTo("/notifications");
+    await flush();
+    expect(h.push).not.toHaveBeenCalled();
+    expect(h.replace.mock.calls.filter((c) => c[2] !== "/notifications")).toEqual([]);
+    expect(window.location.pathname + window.location.search).toBe("/notifications");
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+  });
+
+  it("팀 편집 화면 미저장 — 다른 주소로 popstate 면 history 를 건드리지 않고 묻지 않는다", async () => {
+    const { host } = await openDirtyTeamEdit();
+    expect(window.location.search).toContain("item=31");
+    const h = spyHistory();
+    popTo("/rooms/aws");
+    await flush();
+    expect(h.push).not.toHaveBeenCalled();
+    expect(h.replace.mock.calls.filter((c) => c[2] !== "/rooms/aws")).toEqual([]);
+    expect(window.location.pathname + window.location.search).toBe("/rooms/aws");
+    expect(host.textContent).not.toContain("저장하지 않은 수정이 있어요");
+  });
+
+  it("팀 편집 화면 미저장 — 같은 화면 주소로 popstate 면 여전히 편집 기록을 되돌려 놓고 묻는다", async () => {
+    const { host } = await openDirtyTeamEdit();
+    const h = spyHistory();
+    popTo("/my-study/aws?tab=curriculum");
+    await flush();
+    expect(h.push).toHaveBeenCalled();
+    expect(window.location.search).toContain("item=31");
+    expect(host.textContent).toContain("저장하지 않은 수정이 있어요");
+  });
+
+  // 재리뷰 nit: [목록, 31, 32] 에서 32 를 고치다 뒤로 → 확인 → 버리기 = 31 기록으로 돌아간다 (31 기록을 하나 더 만들지 않는다)
+  it("개인 목표 폼 미저장 — 뒤로 가기 확인에서 버리기 하면 아래 기록으로 돌아가 그다음 뒤로 가기가 목록", async () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
+    const cur = { ...AWS, personal: { canAdd: true, perRound: 20 } };
+    const m = mount({ curriculum: cur });
+    window.history.pushState(null, "", "/my-study/aws?tab=curriculum&item=31");
+    m.render({ curriculum: cur, initialItem: "31" });
+    window.history.pushState(null, "", "/my-study/aws?tab=curriculum&item=32");
+    m.render({ curriculum: cur, initialItem: "32" });
+    expect(detailTitle(m.host)).toBe(title("32"));
+    act(() => buttonByText(m.host.querySelector("#detail-title")!.closest("section")!, "편집").click());
+    await flush();
+    typeInto(m.host.querySelector<HTMLInputElement>("form input[type=text]")!, "고친 제목");
+    await flush();
+    const back = async () => {
+      const popped = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
+      window.history.back();
+      await act(async () => void (await popped));
+      await flush();
+    };
+    await back();
+    expect(m.host.textContent).toContain("저장하지 않은 수정이 있어요");
+    // 고친 뒤에는 back 의 popstate 가 온다 — 없으면(고치기 전) 잠깐 기다리고 넘어가 아래 단언이 실패한다
+    const popped = new Promise((r) => {
+      window.addEventListener("popstate", r, { once: true });
+      setTimeout(r, 200);
+    });
+    act(() => buttonByText(m.host.querySelector('[role="alertdialog"]')!, "버리기").click());
+    await act(async () => void (await popped));
+    await flush();
+    expect(detailTitle(m.host)).toBe(title("31"));
+    expect(window.location.search).toContain("item=31");
+    await back();
+    expect(window.location.search).not.toContain("item=");
+    expect(detailTitle(m.host)).toBeNull();
+  });
+});

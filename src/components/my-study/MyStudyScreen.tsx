@@ -127,11 +127,23 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // closedByBack: 이 화면이 상세·편집을 history.back 으로 닫았다 — 그 back 의 popstate 에서만 목록 주소 ?tab= 을 화면 탭에 맞춘다 (F 리뷰 m1)
   const closedByBack = useRef(false);
   const shownTab = useRef<TabId>(S.tab);
+  // guardPop: 미저장 확인 때문에 popstate 가 되돌려 쌓은 기록 아래(뒤로 간 곳)의 항목·모드 — "버리기"로 그곳을 열면 replace 로 같은 기록을 하나 더 만들지 않고 back 으로 그 기록에 돌아간다 (재리뷰 nit)
+  const guardPop = useRef<{ id: string | null; mode: CurMode } | null>(null);
   useEffect(() => {
     const url = readItem(window.location.search);
     const urlMode = readMode(window.location.search);
     const step = syncStep(url, urlMode, openItem, openMode, url !== null && pushed.current === url, new URLSearchParams(window.location.search).has("task"), overView.current);
     const href = withItem(window.location.href, openItem, openMode);
+    const gp = guardPop.current;
+    guardPop.current = null;
+    if (step === "replace" && gp && gp.id === openItem && gp.mode === openMode) {
+      // 뒤로 간 기록이 바로 아래에 있다 — 그 popstate 는 화면과 같아 따로 바꾸지 않는다. 기록 상태는 popstate 가 그 기록을 열었을 때와 같게
+      closedByBack.current = true;
+      window.history.back();
+      pushed.current = openItem;
+      overView.current = false;
+      return;
+    }
     const modePush = step === "push" && url !== null && url === openItem;
     // 목록 기록 위에 상세·편집을 쌓을 때, 그 목록 기록이 보여 주던 탭(보드 카드 → 상세 등) — 뒤로 가기로 돌아오면 그 탭으로
     if (step === "push" && url === null) backTab.current = shownTab.current;
@@ -150,6 +162,10 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   useEffect(() => {
     shownTab.current = S.tab;
   });
+  // 확인을 닫으면("계속 고치기"·폼이 깨끗해짐) 되돌려 쌓은 기록 표시도 지운다 — 위 동기화 effect 가 먼저 돌아 "버리기"는 소비한 뒤다
+  useEffect(() => {
+    if (!S.leave) guardPop.current = null;
+  }, [S.leave]);
   // 목록 화면(항목 없음)의 ?tab= 은 지금 탭을 따라간다 — 뒤로 가기로 돌아온 기록·새로고침이 다른 탭을 열지 않게
   useEffect(() => {
     if (openItem === null) syncListTab(S.tab);
@@ -159,11 +175,14 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   useEffect(() => {
     live.current = { S, tree, openItem, canEdit };
   });
+  const studyPath = new URL(routes.myStudy(detail.slug), "http://x").pathname;
   useEffect(() => {
     const onPop = () => {
       const { S: s, tree: t, openItem: open, canEdit: ce } = live.current;
       const ownBack = closedByBack.current;
       closedByBack.current = false;
+      // 다른 화면 주소로 돌아간 기록(클라이언트 이동으로 들어온 경우)은 Next 가 그 화면을 연다 — 그 주소에 ?item= 을 쌓거나 묻지 않는다 (재리뷰 R-3)
+      if (window.location.pathname !== studyPath) return;
       const url = readItem(window.location.search);
       const target = itemFromUrl(window.location.search, (id) => !!findNode(t.nodes, id), ce, (id) => {
         const n = findNode(t.nodes, id);
@@ -180,6 +199,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       if (s.personalUnsaved !== null && s.personalUnsaved === open && s.curMode === "view") {
         // 개인 목표 편집 폼에 미저장 — 상세 기록을 되돌려 놓고 먼저 묻는다
         window.history.pushState(null, "", withItem(window.location.href, open, "view"));
+        guardPop.current = target;
         update({ leave: { view: target.id }, confirm: false });
         return;
       }
@@ -189,6 +209,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         window.history.pushState(null, "", withItem(window.location.href, open, "edit"));
         if (!backToView) pushed.current = open;
         overView.current = backToView && overView.current;
+        guardPop.current = target;
         // 목록(편집 모드)·다른 편집 항목은 sel, 보기 상세는 mode 전환으로 보류
         update({ leave: target.id === null || target.mode === "edit" ? { sel: target.id } : { mode: "view" }, confirm: false });
         return;
@@ -206,7 +227,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, [update]);
+  }, [update, studyPath]);
   // 같은 화면에서 ?item= 알림(묶음 일정 변경, 0028)을 누르면 key(id·task·tab)가 같아 다시 마운트되지 않는다 — 바뀐 initialItem 을 연다 (백로그 F 리뷰 I1).
   // key 에 item 을 넣지 않는다: 상세는 pushState 로 주소에 item 을 쓰므로 router.refresh 뒤 화면 상태가 날아간다.
   // 이미 열린 항목·없는 항목은 그대로. 저장 안 한 편집은 이탈 가드가 이동을 보류하므로 여기 오지 않지만, 혹시 와도 덮지 않는다.
