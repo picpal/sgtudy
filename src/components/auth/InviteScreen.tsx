@@ -20,6 +20,12 @@ const primary = "flex h-12 w-full items-center justify-center rounded-[24px] tex
 export function InviteScreen({ token, preview }: { token: string; preview: InvitePreview }) {
   const router = useRouter();
   const [p, setP] = useState(preview);
+  // router.refresh() 가 새 preview 를 내려보내면 로컬 상태를 다시 맞춘다(렌더 중 "이전 prop 저장 후 리셋" 패턴)
+  const [seen, setSeen] = useState(preview);
+  if (seen !== preview) {
+    setSeen(preview);
+    setP(preview);
+  }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState(""); // 참가 신청 한마디 (승인제 — D4)

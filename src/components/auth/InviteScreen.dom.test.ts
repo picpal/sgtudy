@@ -2,6 +2,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { createRoot } from "react-dom/client";
+import { act } from "react";
 import type { InvitePreview } from "@/lib/api/types";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {}, refresh: () => {} }) }));
@@ -38,5 +40,19 @@ describe("InviteScreen 0032", () => {
     const root = render(preview({ join: { mode: null, via: null, until: null } }));
     expect(root.querySelector("button")?.textContent).toBe("모집이 끝났어요 · 그룹장에게 새 초대를 받아 주세요");
     expect(root.querySelector('[role="note"]')).toBeNull();
+  });
+
+  it("새 preview prop 이 오면(router.refresh) 화면이 다시 맞춰진다", () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    const el = (pv: InvitePreview) => createElement(InviteScreen, { token: "tok", preview: pv });
+    act(() => root.render(el(preview({ join: { mode: "direct", via: "invite", until: "2026-10-19" } }))));
+    expect(host.textContent).toContain("바로 참가하기");
+    act(() => root.render(el(preview({ join: { mode: null, via: null, until: null } }))));
+    expect(host.textContent).not.toContain("바로 참가하기");
+    expect(host.querySelector('[role="note"]')).toBeNull();
+    expect(host.textContent).toContain("모집이 끝났어요 · 그룹장에게 새 초대를 받아 주세요");
+    act(() => root.unmount());
   });
 });
