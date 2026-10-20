@@ -15,7 +15,7 @@
 2. **읽기 응답이 너무 크다.** `get_curriculum` 은 트리 전체(팀원 전원의 개인 목표 포함 — `curriculum_json` 이 그룹장·멤버에게 남의 개인 목표를 보여 준다)를 uuid·중첩 JSON 으로 준다. 12주·6명 방이면 약 15~20k 토큰. `list_my_tasks`(`me_tasks`)는 기간 필터가 없어 내 모든 스터디의 모든 과제를 준다. → **개요/상세 단계 + 회차 범위 + 개인 목표 기본 "내 것만" + 압축 줄 형식**(D12), 할 일은 **기간이 있는 `me_schedule`** 로(기술 결정 T2).
 3. **사용자가 말하는 이름으로 못 부른다.** 도구가 slug·숫자 id·uuid 만 받는다. 한글 제목 방의 slug 는 `r-1a` 같은 값이라 사용자가 알 수 없고, 매번 `list_my_studies` → `get_curriculum` 을 먼저 불러야 한다. → **스터디 이름 해석, 회차 선택자("3주차"·`current`·서수), 담당자 닉네임**(D14).
 4. **"N주 밀기"를 LLM 날짜 계산에 맡기면 왕복·오류가 많다.** 전체 트리를 읽고 회차마다 시작·끝을 계산한 update op 10개를 쓴다(날짜 산수 실수 위험). → **계획서 `shift` op**(D15): `{op:"shift", from:"3주차", days:7}` 한 줄, 트리 읽기 불필요.
-5. **확인 흐름이 이중이고, 되돌릴 길이 없다.** 채팅 확인 + Claude Code 권한 창(인자는 거대한 JSON) = 이중 확인인데 권한 창은 읽을 수도 없다. 적용 후 "취소해 줘" 경로도 없다. → **미리보기는 읽기 도구(`readOnlyHint`)로 자동 허용 가능, 서버가 쓴 한국어 diff 요약을 그대로 보여 주고 채팅 승인 1번 → `apply(previewId)`**(권한 창엔 짧은 인자만), **일정·이동 되돌리기는 `preview(undo: previewId)`**(D17), 개인 목표는 `remove_personal_goals`(D16).
+5. **확인 흐름이 이중이고, 되돌릴 길이 없다.** 채팅 확인 + Claude Code 권한 창(인자는 거대한 JSON) = 이중 확인인데 권한 창은 읽을 수도 없다. 적용 후 "취소해 줘" 경로도 없다. → **미리보기는 읽기 도구(`readOnlyHint`)로 자동 허용 가능, 서버가 쓴 한국어 diff 요약을 그대로 보여 주고 채팅 승인 1번 → `apply(previewId)`**(권한 창엔 짧은 인자만), **일정 되돌리기는 `preview(undo: previewId)`**(D17 — 〔Codex #4〕 이동은 제외), 개인 목표는 `remove_personal_goals`(D16).
 
 부수 발견: 계획으로 **새로 만든 과제는 팀원에게 아무 알림도 안 간다**(`node_create`·`assignment_resync` 무알림) → D18. 설치 명령이 `claude mcp add` 기본 **local 스코프**라 그 폴더에서만 보인다 → D21. 라우트가 **매 요청 `whoami` 왕복**을 한다 → T1.
 
@@ -59,7 +59,7 @@
 | 4 | `preview_curriculum_plan` (진행목표 변경 미리보기) | curriculum:write · `curriculum_plan_preview` | 계획서 검증·실행 후 되감기, **저장** 후 `previewId` | `{ study, plan }` 또는 `{ study, undo: previewId }` | 서버가 쓴 한국어 diff 요약(최대 40줄 + "외 N건") · 경고 · 알림 미리보기 · `previewId` · 다음 행동 1줄 | **readOnly**(사용자에게 보이는 상태 불변 — 초안 행만), idempotent |
 | 5 | `apply_curriculum_plan` (진행목표 변경 적용) | curriculum:write · `curriculum_plan_apply` | 미리본 계획을 원자 적용 | `{ previewId }` | 적용 요약 1~3줄 · 웹 링크 · ref→id · 되돌리기 안내 | readOnly:false, **destructive:true**, **idempotent:true**(같은 previewId 재호출 = 저장 응답) |
 | 6 | `add_personal_goals` (개인 목표 추가) | personal:write · `personal_create_many` | 한 회차에 내 개인 목표 1~20개, 바로 추가(알림 없음) | `{ study, round?: 회차선택자 = "current", goals: [{title, startDate?, endDate?, descriptionMd?}] }` | `n개 추가(3주차, 남은 자리 m) · 건너뜀(중복) k` + id 목록 | destructive:false, idempotent:true(같은 회차·제목 건너뜀) |
-| 7 | `remove_personal_goals` (개인 목표 삭제) | personal:write · `personal_delete_many` | 내 개인 목표 되돌리기 — **본인 것·제출 없는 것만** | `{ study, ids: string[1..20] }` | `n개 삭제` / 거부 목록 | destructive:true, idempotent:true |
+| 7 | `remove_personal_goals` (개인 목표 삭제) | personal:write · `personal_delete_many` | 내 개인 목표 되돌리기 — **본인 것·제출 없는 것만** | `{ study, ids: string[1..20] }` | `n개 삭제 · 이미 없음 k개` / 거부 사유(〔Codex #10〕 중복 id 제거, 이미 없는 id 는 건너뛰고 성공) | destructive:true, idempotent:true |
 
 - **회차 선택자**: JSON 수 = 서수(1부터, 보관 제외 순서) · `"current"` = 현재 회차(`room_current_round_id` 규칙) · 숫자 문자열 = id · 그 밖 문자열 = 라벨 정확 일치(`"3주차"`). 못 찾거나 겹치면 `ROUND_NOT_FOUND`/`ROUND_AMBIGUOUS` + 후보 라벨.
 - **뺀 것**: `whoami` 도구(→ `list_my_studies` 의 `나:` 줄 + `initialize` 시 401), `get_task`·`list_notifications`·첨부 목록(2단계), `shift_schedule` 도구(→ 계획서 `shift` op).
@@ -260,7 +260,7 @@ sqld · 2주차
 | D14 | 이름으로 부르기 | **`study` = slug 또는 내 스터디 제목 일부(유일할 때), 하나뿐이면 생략 가능 · 회차 선택자(서수·`current`·라벨·id) · 담당 `assignees` 에 닉네임 또는 userId**(방 안 ACTIVE 멤버에서 유일할 때) | id·slug·uuid 만(현행) | `api_resolve_study`·`plan_resolve`·`plan_round_pick` 제거 |
 | D15 | 일정 밀기 | **계획서 `shift` op(MVP)**: `{op:"shift", from, to?=마지막, days}` → 서버가 회차별 `node_update(start/end ± days, shiftDescendants)` 로 펼침(무거운 op 로 셈) | (a) 2단계 `shift_schedule` 도구(스펙 원안) (b) LLM 이 update op 계산(현행 1단계) | `plan_resolve` 의 shift 분기·테스트 2개 제거 |
 | D16 | 개인 목표 되돌리기 | **`remove_personal_goals` MVP** — 본인 것만, 제출 있으면 거부(웹 `personal_delete` 보다 엄격) | 2단계 / 웹에서만 | 도구 1개·`personal_delete_many` 제거 |
-| D17 | 진행목표 되돌리기 | **`preview_curriculum_plan(study, undo: previewId)`** — 적용된 초안의 diff 에서 update·move·shift 의 역계획을 서버가 만들어 같은 미리보기→승인 경로로. 생성 항목은 되돌릴 수 없음(D5 유지) → 요약에 "웹에서 보관하세요" + 링크 | 2단계 `revert_plan`(스펙 원안) | `plan_undo_of` 제거, 도구 입력 `undo` 제거 |
+| D17 | 진행목표 되돌리기 | **`preview_curriculum_plan(study, undo: previewId)`** — 〔Codex #4, 2026-10-20 축소〕 적용된 초안의 diff 에서 **일정 변경(shift·날짜 update)만** 역계획을 서버가 만들어 같은 미리보기→승인 경로로. 이동(리프 → 묶음 전환·라벨 소실을 되살릴 수 없음)·생성(D5)·제목 등은 되돌리지 않음 → 요약에 "웹에서" + 링크. 적용 뒤 그 일정이 다시 바뀌었으면 `UNDO_STALE` | 2단계 `revert_plan`(스펙 원안) | `plan_undo_of` 제거, 도구 입력 `undo` 제거 |
 | D18 | 새 과제 알림 | **계획 적용으로 생긴 신규 공통 배정을 수신자별로 세어(지정은 이미 `TASK_ASSIGNED`) 묶음 알림에 `새 과제 n건`** — 일정·담당과 합쳐 수신자당 최대 1건. 웹 단건 생성은 그대로(무알림) | 현행(새 과제 무알림) | Task 5 의 `newTask` 집계 제거 |
 | D19 | 초안 작성 지침 | **MCP prompt `draft-curriculum` 1개 MVP**(정적 텍스트, 상주 비용 0) | 2단계 | Task 8 `prompts.ts` 제거 |
 | D20 | 항목 첨부(0030) | **`get_curriculum` full 에 `첨부 n` 개수만.** 목록·다운로드는 2단계 OAuth 이후(사용자 JWT 로 서명 URL) | (a) 완전 제외 (b) 파일 이름 목록 1단계 | (a): 0034 `fileCounts` 제거 |
@@ -270,7 +270,7 @@ sqld · 2주차
 
 | # | 내용 |
 |---|---|
-| T1 | 라우트 인증: `initialize` 에서만 `whoami`(잘못된 토큰이면 연결 시점 401 → Claude Code `/mcp` 에 바로 실패 표시). `tools/call` 은 `api_invoke` 가 인증을 겸하고 `API_TOKEN_*` 는 401 로. `tools/list`·`prompts/*`·`ping`·`notifications/*` 는 형식 검사만(DB 왕복 0). |
+| T1 | ~~라우트 인증: `initialize` 에서만 `whoami`~~ → 〔Codex #6, 2026-10-20〕 **HTTP 요청마다 transport 앞에서 `whoami` 1회**(잘못된·폐기·만료 → 401 + `WWW-Authenticate`, 분당 한도 → 429). 이유: SDK `McpServer` 가 도구 콜백 예외를 `isError` 결과로 흡수해(1.32.1 `server/mcp.js`) tools/call 중의 401 을 라우트가 보장할 수 없다. 연결 중 폐기는 다음 HTTP 요청에서 401. 비용: tools/call 당 DB 왕복 +1(원래 F11 이 줄이려던 것) — 정확성 우선. |
 | T2 | `list_my_tasks` 백엔드 = `me_schedule(from, to)`(62일 창, 회차 라벨 포함). 기본 창 = 오늘−14 ~ 이번 주 일요일, TS 가 "이번 주"/"놓친 것" 으로 나눔. `me_tasks` 는 스코프 표에서 뺀다. |
 | T3 | annotations: preview `readOnlyHint:true`(초안 행·감사 행 외 변화 없음 — 사용자가 허용 목록에 넣을 수 있게), apply `destructiveHint:true, idempotentHint:true`, add_personal `idempotentHint:true`(중복 건너뜀), remove_personal `destructiveHint:true`. 모두 `openWorldHint:false`. |
 | T4 | 토큰 만료 안내: `api_invoke` 봉투에 `meta.expiresAt`, 7일 이내면 TS 가 결과 첫 줄에 `토큰이 n일 뒤 만료돼요 — /me 「AI 연결」에서 새로 만드세요`. |
