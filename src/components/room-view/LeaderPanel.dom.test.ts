@@ -7,7 +7,7 @@ import { ApiException } from "@/lib/api/errors";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {} }) }));
-const api = vi.hoisted(() => ({ startRoom: vi.fn(), updateRoomEndDate: vi.fn(), openRecruit: vi.fn(), fetchApplications: vi.fn() }));
+const api = vi.hoisted(() => ({ startRoom: vi.fn(), updateRoomEndDate: vi.fn(), openRecruit: vi.fn(), fetchApplications: vi.fn(), fetchInvite: vi.fn(), rotateInvite: vi.fn() }));
 vi.mock("@/lib/api/leader", async (orig) => ({ ...(await orig<typeof import("@/lib/api/leader")>()), ...api }));
 
 const { LeaderPanel } = await import("./LeaderPanel");
@@ -219,5 +219,37 @@ describe("LeaderPanel 초대 행 — 추가 모집·초대 코드", () => {
     expect(host.textContent).toContain("추가 모집 ~10.27");
     expect(host.textContent).toContain("코드 ABCD-2345 복사");
     expect(host.textContent).not.toContain("방 설정 →");
+  });
+});
+
+// 코드 상태: 링크 새로 만들기·invite_get 결과가 코드 버튼에 반영된다
+describe("LeaderPanel 초대 코드 상태 갱신", () => {
+  const write = vi.fn().mockResolvedValue(undefined);
+  const mount = (code: string | null) => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: write }, configurable: true });
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    const d = { ...detail, invite: { url: "/i/old", token: "old", code, bypass: null } };
+    act(() => root.render(createElement(LeaderPanel, { detail: d, toast: vi.fn() })));
+    return host;
+  };
+  it("새 링크로 바꾸면 코드 복사가 새 코드를 쓴다", async () => {
+    write.mockClear();
+    api.rotateInvite.mockResolvedValue({ url: "/i/new", token: "new", code: "WXYZ6789", bypass: null });
+    const host = mount("ABCD2345");
+    await act(async () => btn(host, "새 링크로 바꾸기")[0].click());
+    await act(async () => btn(host, "새 링크 만들기").at(-1)!.click());
+    await flush();
+    expect(btn(host, "코드 ABCD-2345 복사")).toHaveLength(0);
+    await act(async () => btn(host, "코드 WXYZ-6789 복사")[0].click());
+    expect(write).toHaveBeenLastCalledWith("WXYZ6789");
+  });
+  it("코드가 없던 방: 링크 복사 때 invite_get 이 준 코드로 버튼이 생긴다", async () => {
+    api.fetchInvite.mockResolvedValue({ url: "/i/old", token: "old", code: "ABCD2345", bypass: null });
+    const host = mount(null);
+    expect(host.textContent).not.toContain("코드 ");
+    await act(async () => btn(host, "초대 링크 복사")[0].click());
+    await flush();
+    expect(btn(host, "코드 ABCD-2345 복사")).toHaveLength(1);
   });
 });

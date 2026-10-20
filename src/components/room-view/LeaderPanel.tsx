@@ -50,7 +50,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"open" | "start" | "rotate" | null>(null);
   const [inviteUrl, setInviteUrl] = useState(detail.invite?.url ?? null);
-  const inviteCode = detail.invite?.code ?? null;
+  const [inviteCode, setInviteCode] = useState(detail.invite?.code ?? null);
   // 예정보다 일찍 시작 — 일정을 오늘로 당길지 (시나리오 QA D1, 기본 당기기). 0 이면 묻지 않는다
   const early = earlyStartDays(detail);
   const [shift, setShift] = useState<"shift" | "keep">("shift");
@@ -100,7 +100,12 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
   const copyInvite = async () => {
     try {
       // room_get 은 이미 있는 링크만 준다 — 없으면 invite_get 이 만든다
-      const url = inviteUrl ?? (await fetchInvite(detail.slug)).url;
+      let url = inviteUrl;
+      if (!url || !inviteCode) {
+        const r = await fetchInvite(detail.slug);
+        url = r.url;
+        setInviteCode(r.code);
+      }
       setInviteUrl(url);
       await navigator.clipboard.writeText(absoluteUrl(url, window.location.origin));
       toast({ text: "초대 링크를 복사했어요", tone: "ok" });
@@ -125,6 +130,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
     try {
       const r = await rotateInvite(detail.slug);
       setInviteUrl(r.url);
+      setInviteCode(r.code);
       await navigator.clipboard.writeText(absoluteUrl(r.url, window.location.origin)).catch(() => undefined);
       toast({ text: "새 초대 링크를 만들어 복사했어요 · 이전 링크는 더 이상 열리지 않아요", tone: "ok" });
     } catch (e) {
