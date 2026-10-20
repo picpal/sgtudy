@@ -5,8 +5,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createRoot } from "react-dom/client";
 import { act } from "react";
 import type { InvitePreview } from "@/lib/api/types";
+import { ApiException } from "@/lib/api/errors";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {}, refresh: () => {} }) }));
+const refresh = vi.fn();
+const joinByInvite = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {}, refresh }) }));
+vi.mock("@/lib/api/invite", async (orig) => ({ ...(await orig<typeof import("@/lib/api/invite")>()), joinByInvite: (...a: unknown[]) => joinByInvite(...a) }));
 const { InviteScreen } = await import("./InviteScreen");
 
 const preview = (over: Partial<InvitePreview> & { status?: string }): InvitePreview =>
@@ -54,5 +58,21 @@ describe("InviteScreen 0032", () => {
     expect(host.querySelector('[role="note"]')).toBeNull();
     expect(host.textContent).toContain("모집이 끝났어요 · 그룹장에게 새 초대를 받아 주세요");
     act(() => root.unmount());
+  });
+
+  it.each(["ROOM_NOT_RECRUITING", "INVITE_EXPIRED"])("바로 참가 실패(%s): 문구를 보이고 router.refresh 로 미리보기를 다시 받는다", async (code) => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    refresh.mockClear();
+    joinByInvite.mockRejectedValueOnce(new ApiException({ code, message: "모집이 끝났어요" }));
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    act(() => root.render(createElement(InviteScreen, { token: "tok", preview: preview({ join: { mode: "direct", via: "invite", until: "2026-10-19" } }) })));
+    const btn = Array.from(host.querySelectorAll("button")).find((b) => b.textContent === "바로 참가하기")!;
+    await act(async () => { btn.click(); });
+    expect(host.querySelector('[role="alert"]')?.textContent).toBeTruthy();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    act(() => root.unmount());
+    host.remove();
   });
 });

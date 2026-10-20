@@ -44,7 +44,7 @@ export function RoomCard({ room, selectedTags, anonymous = false, filters = DEFA
             {badge.label}
           </Badge>
           {room.extra && (
-            <Badge bg="#E3ECFD" fg="#2F5BC2">
+            <Badge bg="#EEE7FB" fg="#6B45B8">
               {room.extra === "full" ? "추가 모집 · 정원 마감" : "추가 모집"}
             </Badge>
           )}

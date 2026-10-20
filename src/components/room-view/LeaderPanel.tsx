@@ -144,17 +144,17 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
 
   return (
     <section aria-labelledby="leader-panel-title" className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
-      <div className="flex items-center justify-between gap-2">
-        <h3 id="leader-panel-title" className="m-0 text-[14px] font-bold">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <h3 id="leader-panel-title" className="m-0 whitespace-nowrap text-[14px] font-bold">
           그룹장 패널
         </h3>
-        <span className="flex items-center gap-1">
-          <span className="rounded-[7px] bg-bg px-2 py-[2px] text-[12px] font-semibold text-ink-3">지금 {detail.archived ? "보관됨" : statusStepLabel(detail.status)}</span>
+        <span className="flex flex-wrap items-center gap-1">
+          <span className="whitespace-nowrap rounded-[7px] bg-bg px-2 py-[2px] text-[12px] font-semibold text-ink-3">지금 {detail.archived ? "보관됨" : statusStepLabel(detail.status)}</span>
           {detail.recruit?.extraUntil && (
-            <span className="rounded-[7px] bg-[#E3ECFD] px-2 py-[2px] text-[12px] font-semibold text-[#2F5BC2]">추가 모집 ~{mmdd(detail.recruit.extraUntil)}</span>
+            <span className="whitespace-nowrap rounded-[7px] bg-[#EEE7FB] px-2 py-[2px] text-[12px] font-semibold text-[#6B45B8]">추가 모집 ~{mmdd(detail.recruit.extraUntil)}</span>
           )}
           {/* 방 정보·태그·기간 수정, 삭제·보관 (Q3-1·Q2-2) */}
-          <Link href={routes.roomSettings(detail.slug, routes.room(detail.slug))} className="-mr-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[13px] font-semibold text-ink-3 hover:text-ink">
+          <Link href={routes.roomSettings(detail.slug, routes.room(detail.slug))} className="-mr-2 inline-flex h-11 items-center gap-1 whitespace-nowrap rounded-[10px] px-2 text-[13px] font-semibold text-ink-3 hover:text-ink">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />

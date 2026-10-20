@@ -44,7 +44,7 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
       const err = toApiError(e);
       if (err.code === "AUTH_REQUIRED") return router.push(routes.login(routes.invite(token)));
       if (err.code === "ONBOARDING_REQUIRED") return router.push(routes.onboarding(routes.invite(token)));
-      if (err.code === "INVITE_EXPIRED") {
+      if (err.code === "INVITE_EXPIRED" || err.code === "ROOM_NOT_RECRUITING") {
         setError(recruitErrorText(err.code, err.message));
         router.refresh(); // 미리보기를 다시 받는다
         return;
