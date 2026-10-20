@@ -82,6 +82,15 @@ function ExtraRecruitCard({ d, toast, onDetail }: { d: RoomDetail; toast: Props[
     const x = extraRecruitDefaults(d);
     return { until: x.until, max: String(x.maxMembers), mode: x.joinMode };
   });
+  // 정원 칸 = 방 정보 폼의 "최대 인원"(스펙 §4.1). 서버 값(정원·방식·인원)이 바뀌면 정원·방식 칸만 다시 채운다 — 렌더 중 조정(React "props 변화에 state 맞추기").
+  // 키를 바꿔 다시 마운트하면 고른 마감일·줄 오류까지 날아가고, 효과로 맞추면 한 프레임 옛 값이 보인다. 같은 props 의 재렌더에선 카드 입력을 건드리지 않는다
+  const srcKey = `${d.maxMembers}|${d.joinMode}|${d.memberCount}`;
+  const [seenKey, setSeenKey] = useState(srcKey);
+  if (seenKey !== srcKey) {
+    setSeenKey(srcKey);
+    const x = extraRecruitDefaults(d);
+    setForm((f) => ({ ...f, max: String(until0 ? d.maxMembers : x.maxMembers), mode: until0 ? d.joinMode : x.joinMode }));
+  }
   const [errs, setErrs] = useState<{ until?: string; max?: string }>({});
   const [busy, setBusy] = useState(false);
   const [askClose, setAskClose] = useState(false);

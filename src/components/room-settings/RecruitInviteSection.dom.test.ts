@@ -91,6 +91,26 @@ describe("RecruitInviteSection — 추가 모집", () => {
     expect(m.toast).toHaveBeenCalledWith({ text: "추가 모집을 시작했어요 · 10.19까지", tone: "ok" });
     act(() => m.root.unmount());
   });
+  it("위 폼이 정원·방식을 저장하면(props 변경) 카드 칸도 새 값으로 — 고른 마감일은 그대로 (리뷰 I-1)", async () => {
+    api.openExtraRecruit.mockResolvedValue(base);
+    const m = mount();
+    type(m.input("recruitUntil"), "2026-10-25");
+    type(m.input("recruitMax"), "7");
+    act(() => m.root.render(createElement(RecruitInviteSection, { detail: { ...base, maxMembers: 9, joinMode: "direct" } as RoomDetail, toast: m.toast, onDetail: m.onDetail })));
+    expect(m.input("recruitMax").value).toBe("9");
+    expect(m.input("recruitUntil").value).toBe("2026-10-25");
+    act(() => m.btn("추가 모집 시작").click());
+    await flush();
+    expect(api.openExtraRecruit).toHaveBeenCalledWith("aws", { until: "2026-10-25", maxMembers: 9, joinMode: "direct" });
+    act(() => m.root.unmount());
+  });
+  it("같은 props 로 다시 그려도 카드에서 고친 정원은 남는다", () => {
+    const m = mount();
+    type(m.input("recruitMax"), "8");
+    act(() => m.root.render(createElement(RecruitInviteSection, { detail: { ...base } as RoomDetail, toast: m.toast, onDetail: m.onDetail })));
+    expect(m.input("recruitMax").value).toBe("8");
+    act(() => m.root.unmount());
+  });
   it("INVALID_PERIOD·CAPACITY_NO_SEAT 는 해당 칸 아래 줄 오류", async () => {
     api.openExtraRecruit.mockRejectedValueOnce(new ApiException({ code: "CAPACITY_NO_SEAT", message: "빈자리가 없어요 · 정원을 늘려 주세요", details: { field: "maxMembers" } }));
     const m = mount();
