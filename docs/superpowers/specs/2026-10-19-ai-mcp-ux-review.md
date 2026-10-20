@@ -260,7 +260,7 @@ sqld · 2주차
 | D14 | 이름으로 부르기 | **`study` = slug 또는 내 스터디 제목 일부(유일할 때), 하나뿐이면 생략 가능 · 회차 선택자(서수·`current`·라벨·id) · 담당 `assignees` 에 닉네임 또는 userId**(방 안 ACTIVE 멤버에서 유일할 때) | id·slug·uuid 만(현행) | `api_resolve_study`·`plan_resolve`·`plan_round_pick` 제거 |
 | D15 | 일정 밀기 | **계획서 `shift` op(MVP)**: `{op:"shift", from, to?=마지막, days}` → 서버가 회차별 `node_update(start/end ± days, shiftDescendants)` 로 펼침(무거운 op 로 셈) | (a) 2단계 `shift_schedule` 도구(스펙 원안) (b) LLM 이 update op 계산(현행 1단계) | `plan_resolve` 의 shift 분기·테스트 2개 제거 |
 | D16 | 개인 목표 되돌리기 | **`remove_personal_goals` MVP** — 본인 것만, 제출 있으면 거부(웹 `personal_delete` 보다 엄격) | 2단계 / 웹에서만 | 도구 1개·`personal_delete_many` 제거 |
-| D17 | 진행목표 되돌리기 | **`preview_curriculum_plan(study, undo: previewId)`** — 〔Codex #4, 2026-10-20 축소〕 적용된 초안의 diff 에서 **일정 변경(shift·날짜 update)만** 역계획을 서버가 만들어 같은 미리보기→승인 경로로. 이동(리프 → 묶음 전환·라벨 소실을 되살릴 수 없음)·생성(D5)·제목 등은 되돌리지 않음 → 요약에 "웹에서" + 링크. 적용 뒤 그 일정이 다시 바뀌었으면 `UNDO_STALE` | 2단계 `revert_plan`(스펙 원안) | `plan_undo_of` 제거, 도구 입력 `undo` 제거 |
+| D17 | 진행목표 되돌리기 | **`preview_curriculum_plan(study, undo: previewId)`** — 〔Codex #4, 2026-10-20 축소〕 **적용 때 날짜가 실제로 바뀐 기존 노드만 기록된 옛 날짜로 복원**하는 초안을 서버가 만들어 같은 미리보기→승인 경로로(〔Codex N2〕 그 계획이 만든 새 노드는 건드리지 않음). 이동(리프 → 묶음 전환·라벨 소실을 되살릴 수 없음)·생성(D5)·제목 등은 되돌리지 않음 → 요약에 "웹에서" + 링크. 적용 뒤 그 일정이 다시 바뀌었으면 미리보기·적용(〔N1〕 방 잠금 안에서 재확인) 모두 `UNDO_STALE` | 2단계 `revert_plan`(스펙 원안) | `plan_undo_check`·`plan_undo_run`·`sched_changes` 제거, 도구 입력 `undo` 제거 |
 | D18 | 새 과제 알림 | **계획 적용으로 생긴 신규 공통 배정을 수신자별로 세어(지정은 이미 `TASK_ASSIGNED`) 묶음 알림에 `새 과제 n건`** — 일정·담당과 합쳐 수신자당 최대 1건. 웹 단건 생성은 그대로(무알림) | 현행(새 과제 무알림) | Task 5 의 `newTask` 집계 제거 |
 | D19 | 초안 작성 지침 | **MCP prompt `draft-curriculum` 1개 MVP**(정적 텍스트, 상주 비용 0) | 2단계 | Task 8 `prompts.ts` 제거 |
 | D20 | 항목 첨부(0030) | **`get_curriculum` full 에 `첨부 n` 개수만.** 목록·다운로드는 2단계 OAuth 이후(사용자 JWT 로 서명 URL) | (a) 완전 제외 (b) 파일 이름 목록 1단계 | (a): 0034 `fileCounts` 제거 |
@@ -270,7 +270,7 @@ sqld · 2주차
 
 | # | 내용 |
 |---|---|
-| T1 | ~~라우트 인증: `initialize` 에서만 `whoami`~~ → 〔Codex #6, 2026-10-20〕 **HTTP 요청마다 transport 앞에서 `whoami` 1회**(잘못된·폐기·만료 → 401 + `WWW-Authenticate`, 분당 한도 → 429). 이유: SDK `McpServer` 가 도구 콜백 예외를 `isError` 결과로 흡수해(1.32.1 `server/mcp.js`) tools/call 중의 401 을 라우트가 보장할 수 없다. 연결 중 폐기는 다음 HTTP 요청에서 401. 비용: tools/call 당 DB 왕복 +1(원래 F11 이 줄이려던 것) — 정확성 우선. |
+| T1 | ~~라우트 인증: `initialize` 에서만 `whoami`~~ → 〔Codex #6, 2026-10-20〕 **HTTP 요청마다 transport 앞에서 `whoami` 1회**(잘못된·폐기·만료 → 401 + `WWW-Authenticate`, 분당 한도 → 429). 이유: SDK `McpServer` 가 도구 콜백 예외를 `isError` 결과로 흡수해(1.32.1 `server/mcp.js`) tools/call 중의 401 을 라우트가 보장할 수 없다. 연결 중 폐기는 다음 HTTP 요청에서 401. 비용: tools/call 당 DB 왕복 +1(원래 F11 이 줄이려던 것) — 정확성 우선. 〔N7〕 이 요청별 인증은 토큰당 120회/분 원자 카운터로 묶는다(tools/list·ping 남용 방지). |
 | T2 | `list_my_tasks` 백엔드 = `me_schedule(from, to)`(62일 창, 회차 라벨 포함). 기본 창 = 오늘−14 ~ 이번 주 일요일, TS 가 "이번 주"/"놓친 것" 으로 나눔. `me_tasks` 는 스코프 표에서 뺀다. |
 | T3 | annotations: preview `readOnlyHint:true`(초안 행·감사 행 외 변화 없음 — 사용자가 허용 목록에 넣을 수 있게), apply `destructiveHint:true, idempotentHint:true`, add_personal `idempotentHint:true`(중복 건너뜀), remove_personal `destructiveHint:true`. 모두 `openWorldHint:false`. |
 | T4 | 토큰 만료 안내: `api_invoke` 봉투에 `meta.expiresAt`, 7일 이내면 TS 가 결과 첫 줄에 `토큰이 n일 뒤 만료돼요 — /me 「AI 연결」에서 새로 만드세요`. |

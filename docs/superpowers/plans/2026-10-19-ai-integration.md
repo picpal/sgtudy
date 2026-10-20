@@ -4,7 +4,7 @@
 
 **Goal:** Claude Code 등 MCP 클라이언트가 사용자 본인의 개인 액세스 토큰(PAT)으로 `/api/mcp` 에 붙어 내 스터디·진행목표·이번 주 할 일을 **짧은 한국어 줄 형식**으로 읽고, 진행목표 계획서(회차→묶음→과제, 일정 이동·`shift` 밀기, 지정 담당)를 미리보기(서버에 초안 저장) 후 `previewId` 로 원자 적용·되돌리기 미리보기하고, 개인 목표를 일괄 추가·삭제한다. 스터디·회차·담당자는 이름으로 부를 수 있다. 기존 RPC 권한·검증을 그대로 쓰고, 대량 변경 알림은 수신자당 1건으로 묶는다.
 
-**Architecture:** DB = 마이그레이션 3개(추가형). `0032_api_tokens.sql`(토큰·감사·멱등 표, `current_user_id()` 가 트랜잭션 한정 GUC `sgtudy.api_uid` 를 보조 신원으로 읽음, `pat_*` RPC, 내부 인증·레이트리밋) → `0033_curriculum_plan.sql`(`node_create_core` 분리, `curriculum_version`, `plan_flatten/resolve/validate`, `plan_run` = 서브트랜잭션 dry-run/원자 실행, 초안 표 `api_plan_drafts` + `curriculum_plan_preview`/`curriculum_plan_apply`, 되돌리기 `plan_undo_of`, 알림 묶기 + `CURRICULUM_BULK_UPDATED`(새 과제 포함)) → `0034_api_invoke.sql`(anon 이 부르는 게이트웨이 `api_invoke(token, op, args)` = 인증·스코프·레이트리밋·감사·스터디 이름 해석·디스패치, `api_studies`, `personal_create_many`/`personal_delete_many`). 웹 = `src/lib/mcp/**`(순수 변환·줄 형식 포맷터·스키마·도구 7개·prompt 1개) + `src/app/api/mcp/route.ts`(stateless Streamable HTTP, `@modelcontextprotocol/sdk`) + `/me` 「AI 연결」 토큰 UI.
+**Architecture:** DB = 마이그레이션 3개(추가형). `0032_api_tokens.sql`(토큰·감사·멱등 표, `current_user_id()` 가 트랜잭션 한정 GUC `sgtudy.api_uid` 를 보조 신원으로 읽음, `pat_*` RPC, 내부 인증·레이트리밋) → `0033_curriculum_plan.sql`(`node_create_core` 분리, `curriculum_version`, `plan_flatten/resolve/validate`, `plan_run` = 서브트랜잭션 dry-run/원자 실행, 초안 표 `api_plan_drafts` + `curriculum_plan_preview`/`curriculum_plan_apply`, 되돌리기 `plan_undo_check`·`plan_undo_run`(기록된 날짜 복원), 알림 묶기 + `CURRICULUM_BULK_UPDATED`(새 과제 포함)) → `0034_api_invoke.sql`(anon 이 부르는 게이트웨이 `api_invoke(token, op, args)` = 인증·스코프·레이트리밋·감사·스터디 이름 해석·디스패치, `api_studies`, `personal_create_many`/`personal_delete_many`). 웹 = `src/lib/mcp/**`(순수 변환·줄 형식 포맷터·스키마·도구 7개·prompt 1개) + `src/app/api/mcp/route.ts`(stateless Streamable HTTP, `@modelcontextprotocol/sdk`) + `/me` 「AI 연결」 토큰 UI.
 
 **Tech Stack:** Supabase Postgres 17(plpgsql, RLS) · Deno + PGlite DB 테스트(`npm run test:db`) · Next.js 16.4 App Router Route Handler · React 19.3 · `@modelcontextprotocol/sdk`(2026-10-19 최신 1.32.1 — 웹 표준 전송 포함) + `zod`(4.x, SDK peer `^3.25 || ^4.0`) — Task 0 에서 버전 고정 · vitest(node, `src/**/*.test.ts`)
 
@@ -30,13 +30,30 @@
 | 12 | `WHEN OTHERS` 는 `query_canceled` 미포함 | 감사 보장 범위를 **업무 오류**로 한정 명시. 타임아웃·취소는 범위 밖 → 라우트가 토큰 없이 운영 로그 1줄, 도구 오류 `TIMEOUT` (Review Focus 6·Task 7·8, 스펙 §8) |
 | 13 | 테스트 이름과 실제 조건 불일치 · 하네스 한계 | 남의 previewId(다른 편집자) · 실제 제출 · 적용 중간 실패 전체 롤백 · 트랜잭션 간 GUC 초기화를 실제로 만든다. 동시성은 PGlite(단일 연결) 불가 → 잠금 순서 정적 테스트 + **실 PostgREST 게이트** `api-invoke-db.test.ts`(로컬 supabase, 배포 전 필수) (Task 1·4·6·10) |
 
+**〔Codex 재리뷰(2차) 반영〕** 2026-10-20 `c577612` 재리뷰 — 판정 "ready after listed fixes". 본문 표시 `〔N#〕`.
+
+| # | 지적 | 바뀐 것 (위치) |
+|---|---|---|
+| N1 | undo 스냅숏을 미리보기에서만 검사 → 그 뒤 개인 목표 변경(버전에 안 잡힘)을 놓침 | undo 적용 때 **방 잠금 안에서** `plan_undo_check`(기록 노드의 현재 날짜 = 저장된 새 값) 재검사 → `UNDO_STALE`. undo 초안은 버전 검사 대신 이 정확 일치로 판정. 미리보기~적용 사이 개인 목표 변경 테스트 (Task 4) |
+| N2 | 역계획(`shiftDescendants` 재실행)이 move 로 나간 자식은 놓치고 새 자식은 끌고 감 | 적용 때 **실제로 날짜가 바뀐 기존 노드별 옛·새 날짜**를 `plan_run.sched` → `api_plan_drafts.sched_changes` 에 저장, `plan_undo_run` 이 정확히 그 노드만 직접 복원(새 노드 불변, 개인 목표 포함). shift→move 자식·shift→create 테스트 (Task 4·7, 스펙 §5.2) |
+| N3 | replay 판정이 사용자 잠금 전 | `api_invoke` apply: `api_user_lock` → 초안 방 `room_lock` → replay 판정 → `api_rate_check`. 정적 순서 테스트 + 다른 토큰 2개 동시 replay 실 테스트 (Task 1·6) |
+| N4 | 실 동시성 테스트가 같은 토큰·같은 방 → advisory 잠금 효과를 못 봄 | 같은 사용자의 서로 다른 토큰, 서로 다른 방, 직접 PG 연결이 advisory 키를 쥐었다 놓는 **제어된 동시 시작**(대기 중임을 확인), 개인 목표 추가·제출-삭제 경쟁을 별도 연결 트랜잭션으로 (Task 6 Step 1b) |
+| N5 | `room_create` 에 없는 `p_capacity` · 응답 미검사 · 로컬 강제 없음 | `p_max_members`(0013:271 최신 판), 모든 setup 응답 `must()` 검사, 파일 로드 시 로컬 URL·DB URL 강제 (Task 6 Step 1b) |
+| N6 | 계약 fixture 가 모든 id 를 같은 값으로 → 참조 붕괴 · 첫 원소만 비교 | 결정적 일대일 치환(참조 보존), 판별자(op·kind)별 전 원소 모양 비교 + 판별자 집합·참조 무결성 검사, create/update/move/restore·개인 목표 각각 (Task 7 Step 4c) |
+| N7 | HTTP 요청별 `whoami` 가 카운터를 안 올림 → tools/list·ping 무제한 | `api_tokens.http_window/http_count` 분 단위 원자 카운터(같은 `UPDATE`, 120/분 `httpPerMinute`), 초과 429. 문서화 (Task 1·8) |
+| 잠금 순서 | 문서에 `api_tokens` 행 잠금 누락 · 세션 게이트웨이도 사용자 잠금 | Global Constraints 를 경로별(PAT / `api_invoke(null)` / 웹 직접 RPC)로 다시 씀: 토큰 행 → 사용자 → 방 → 초안 |
+
 ## Global Constraints
 
 - 마이그레이션은 **`0032_api_tokens.sql`, `0033_curriculum_plan.sql`, `0034_api_invoke.sql` 세 개만** 만든다. 0001~0031 수정 금지(0029_mine_scope_includes_led·0030_node_attachments·0031_orphan_objects 는 다른 작업 몫 — 2026-10-19 D7: 항목 첨부를 먼저 배포, 0031 = 미등록 Storage 고아 객체 정리 `file_orphan_candidates`). 다른 작업이 0032 를 먼저 차지했으면 멈추고 번호를 컨트롤러와 다시 정한다.
 - **추가형·무손실**: 기존 행 UPDATE/DELETE 없음. 함수 재정의는 **최신 판을 복사해 고친다**(Task 0 Step 2 로 최신 판 확인): `current_user_id` ← 0002, `node_create` ← 0024, `notification_kinds` ← 0024, `notify_render` ← 0028, `notify_link` ← 0028. `create or replace` 는 시그니처(이름·인자명·기본값) 동일 → GRANT 유지.
-- 함수 규칙: `security definer set search_path = ''`, 모든 객체 `public.` 접두, 오류는 `public.fail(code, 한국어 문구, detail jsonb)`. 공개 RPC 만 GRANT — `pat_create/pat_list/pat_revoke/curriculum_plan_preview/curriculum_plan_apply` → `authenticated`, `api_invoke` → `anon, authenticated`. 내부 헬퍼(`api_authenticate`, `api_rate_check`, `api_scope_of`, `api_limits`, `api_token_json`, `api_error_json`, `api_resolve_study`, `api_studies`, `api_node_file_counts`, `api_curriculum_view`, `node_create_core`, `curriculum_version`, `plan_*`(`plan_shape_check`·`plan_warn_text`·`plan_sched_snapshot` 포함), `personal_create_many`, `personal_delete_many`)는 GRANT 없음(0002 기본 권한이 막는다).
+- 함수 규칙: `security definer set search_path = ''`, 모든 객체 `public.` 접두, 오류는 `public.fail(code, 한국어 문구, detail jsonb)`. 공개 RPC 만 GRANT — `pat_create/pat_list/pat_revoke/curriculum_plan_preview/curriculum_plan_apply` → `authenticated`, `api_invoke` → `anon, authenticated`. 내부 헬퍼(`api_authenticate`, `api_rate_check`, `api_scope_of`, `api_limits`, `api_token_json`, `api_error_json`, `api_resolve_study`, `api_studies`, `api_node_file_counts`, `api_curriculum_view`, `node_create_core`, `curriculum_version`, `plan_*`(`plan_shape_check`·`plan_warn_text`·`plan_undo_check`·`plan_undo_run` 포함), `personal_create_many`, `personal_delete_many`)는 GRANT 없음(0002 기본 권한이 막는다).
 - **`sgtudy.api_uid` 를 `set_config` 하는 함수는 `api_authenticate` 하나뿐**이다(Task 6 정적 테스트가 고정).
-- 〔C#1·#2·#7〕 **잠금 순서(교착 방지)**: ① 사용자 잠금 `pg_advisory_xact_lock(hashtextextended('sgtudy.api:' || uid, 0))`(PAT 경로, `api_rate_check` 안 — whoami 제외) → ② 방 행 `room_lock`(`node_assert_editable`·`personal_room` 안) → ③ 초안 행 `api_plan_drafts … for update`. 검사(소유권·제출·중복·버전·한도)는 **자기에게 필요한 마지막 잠금을 잡은 뒤에** 한다. 웹(세션) 경로는 ①을 잡지 않으므로 ①→② 한 방향만 존재한다. PAT 개수는 별도 키 `'sgtudy.pat:' || uid`.
+- 〔C#1·#2·#7·재리뷰〕 **잠금 순서(교착 방지)** — 실제로 잡히는 순서 그대로:
+  - **PAT 경로**(`api_invoke(token, …)`): ⓪ `api_tokens` 행(`api_authenticate` 의 `UPDATE … last_used_at`/HTTP 카운터 — 같은 토큰끼리만 직렬화) → ① 사용자 advisory `pg_advisory_xact_lock(hashtextextended('sgtudy.api:' || uid, 0))`(`api_user_lock`, whoami 제외) → ② 방 행 `room_lock`(apply 는 〔N3〕 replay 판정 전에 `api_invoke` 가 먼저, 이후 `node_assert_editable`·`personal_room` 이 같은 트랜잭션에서 재잠금) → ③ 초안 행 `api_plan_drafts … for update`.
+  - **세션 게이트웨이 경로**(`api_invoke(null, …)`): ⓪ 없음, ①→②→③ 동일(`api_rate_check` 가 세션 사용자도 잠근다).
+  - **웹 직접 RPC**(`curriculum_plan_apply`·`personal_delete` 등을 화면이 직접 부름): ②→③ 만.
+  - 어느 경로도 역방향(방을 잡은 채 사용자 잠금·토큰 행)을 잡지 않으므로 순환이 없다. 검사(소유권·제출·중복·버전·한도·replay)는 **자기에게 필요한 마지막 잠금을 잡은 뒤에** 한다. PAT 개수는 별도 키 `'sgtudy.pat:' || uid`(`pat_create` 만, 다른 잠금과 섞이지 않음).
 - 〔C#13〕 **하네스 한계**: PGlite 는 단일 연결이라 동시 실행을 재현할 수 없고, `asUser/asAnon` 은 GUC 흉내일 뿐 PostgREST 역할·요청 경계가 아니다. 그래서 (a) 잠금 순서는 `pg_proc.prosrc` 정적 테스트로 고정하고, (b) 동시 적용·동시 레이트리밋·역할 GRANT·요청 간 GUC 비누수는 로컬 supabase(실 PostgREST)에서 도는 `supabase/tests/api-invoke-db.test.ts`(env 없으면 ignore)로 검증한다 — **배포 전 필수 게이트**(Task 10).
 - `service_role`/`createAdminClient` 를 MCP 경로에서 쓰지 않는다. Next 는 anon 키 + 쿠키 없는 클라이언트만.
 - 시간은 `public.app_now()`(테스트 `app.now`), 날짜는 `public.kst_today()`(테스트 `app.today`). `now()` 직접 비교 금지(감사 `created_at` 은 `app_now()` 로 넣는다).
@@ -59,8 +76,8 @@
 3. **미리보기 무부작용** — 미리보기 뒤 `goal_nodes`·`task_assignments`·`notifications` 행 수가 그대로(`api_plan_drafts` 1행 + 감사 1행만 늘어남). 적용은 전부 아니면 전무(〔C#13〕 미리본 뒤 생긴 제출로 **중간 op 가 실패하는** 적용을 실제로 만들어 앞 op 도 사라짐을 확인), 같은 `previewId` 재적용은 재실행 없이 저장 응답. 남의 `previewId`(〔C#13〕 같은 방의 **다른 편집자**)는 `PREVIEW_NOT_FOUND`. 미리보기 결과를 바꿀 수 있는 것(팀 노드·방 기간·상태·ACTIVE 멤버)이 바뀌면 `STALE_VERSION`(〔C#3〕). → Task 2·4·5.
 8. **이름 해석은 유일할 때만** — 스터디 제목 일부·회차 라벨·닉네임이 둘 이상에 맞으면 추측하지 않고 `*_AMBIGUOUS` + 후보. → Task 3·6.
 9. **응답 크기** — 12주·6명 시드 방에서 `get_curriculum` 개요 ≤ 1,500자, `list_my_tasks` 기본 ≤ 2,000자, 모든 도구 텍스트 ≤ 8,000자(초과 시 절단 안내). 〔C#11〕 요청 쪽도: HTTP 본문 512KB, `api_invoke` 인자 300KB, 계획서 256KB·중첩 6단 — 해석(`plan_resolve`) **전에** 거부. → Task 3·6·7·8.
-10. 〔C#1·#2·#7〕 **경쟁 조건** — 검사와 실행 사이에 끼어들 틈이 없다: 개인 목표 추가·삭제는 방 잠금 뒤 검사, 레이트리밋·PAT 개수는 사용자 잠금 뒤 집계, 적용은 방 → 초안 순. 잠금 순서는 Global Constraints 그대로(정적 테스트 + 실 PostgREST 동시 테스트). → Task 1·4·6.
-11. 〔C#4〕 **되돌리기는 일정만, 낡으면 거부** — undo 역계획에는 시작·종료일 변경만 들어간다(move·create·제목 등은 `notUndoable`). 원래 적용 뒤 영향 노드(하위 포함)의 일정·부모·보관·구성원이 바뀌었으면 `UNDO_STALE`. → Task 4.
+10. 〔C#1·#2·#7〕 **경쟁 조건** — 검사와 실행 사이에 끼어들 틈이 없다: 개인 목표 추가·삭제는 방 잠금 뒤 검사, 레이트리밋·PAT 개수는 사용자 잠금 뒤 집계, 〔N3〕 replay 판정은 사용자·방 잠금 뒤, 적용은 방 → 초안 순, 〔N7〕 HTTP 요청 수는 토큰 행 원자 카운터. 잠금 순서는 Global Constraints 그대로(정적 테스트 + 다른 토큰·다른 방·제어된 동시 시작의 실 PostgREST 테스트). → Task 1·4·6.
+11. 〔C#4·N1·N2〕 **되돌리기 = 기록된 날짜 복원, 낡으면 거부** — 적용 때 날짜가 실제로 바뀐 기존 노드마다 옛·새 날짜를 저장하고, undo 는 정확히 그 노드만 옛 날짜로 되돌린다(새 노드·move·create·제목 등은 건드리지 않음 → `notUndoable`). 기록된 노드의 현재 날짜가 저장된 새 값과 다르면 미리보기와 **적용(방 잠금 안)** 둘 다 `UNDO_STALE`. → Task 4.
 12. 〔C#6〕 **HTTP 인증** — 모든 POST 가 transport 에 닿기 전에 PAT 를 1회 검증해 401(`WWW-Authenticate`)/403/429 를 라우트가 직접 낸다. 연결 중 폐기 → 다음 HTTP 요청이 401. → Task 8.
 4. **알림 묶기 정확성** — 계획 1건에서 수신자당 알림 ≤ 1. 1건이면 원래 kind 그대로. 이 계획 밖(다른 행위자·다른 방·이전 id)의 알림은 건드리지 않는다. → Task 5.
 5. **`node_create` 회귀 없음** — `node_create_core` 분리 후 기존 `curriculum-*`·`scenario-qa`·`backlog*` 테스트가 수정 없이 통과. → Task 2.
@@ -118,7 +135,7 @@ Expected: `package/dist/esm/server/webStandardStreamableHttp.js` 존재(1.32.1 �
 - `pat_create(p_name text, p_scopes text[], p_days int default 90) → jsonb {id, token, name, prefix, scopes, expiresAt}` — 토큰 원문은 여기서만.
 - `pat_list() → jsonb {today, items:[{id,name,prefix,scopes,createdAt,expiresAt,lastUsedAt,expired}]}` — 폐기된 것 제외, 생성 역순.
 - `pat_revoke(p_id uuid) → jsonb` (= `pat_list()`)
-**Interfaces (내부):** `api_scope_of(op) → text|null`, `api_limits() → jsonb`, `api_authenticate(p_token, p_op) → public.api_tokens`(GUC 설정), `api_rate_check(p_token uuid, p_user uuid, p_op text, p_dry boolean, p_replay boolean default false) → void` — 〔C#7〕 `volatile`. `whoami` 가 아니면 **먼저** 사용자 잠금(`pg_advisory_xact_lock(hashtextextended('sgtudy.api:' || p_user, 0))`, 트랜잭션 끝까지 유지 — 같은 트랜잭션의 감사 insert 가 커밋될 때까지 다음 요청이 기다린다) 후 집계. `whoami`(라우트의 HTTP 요청별 인증, Task 8)는 잠금 없이 분당 한도만 본다(자신은 감사되지 않으므로 세지 않음). `p_replay = true`(소유권 확인된 적용 재생)는 시간당 적용 한도에서 빠진다(분당 한도는 그대로).
+**Interfaces (내부):** `api_scope_of(op) → text|null`, `api_limits() → jsonb`, `api_authenticate(p_token, p_op) → public.api_tokens`(GUC 설정), `api_user_lock(p_user uuid) → void`(〔N3〕 `pg_advisory_xact_lock(hashtextextended('sgtudy.api:' || p_user, 0))`, 같은 트랜잭션 재호출은 즉시 — advisory xact 잠금은 재진입), `api_rate_check(p_token uuid, p_user uuid, p_op text, p_dry boolean, p_replay boolean default false) → void` — 〔C#7〕 `volatile`. `whoami` 가 아니면 **먼저** `api_user_lock`(트랜잭션 끝까지 유지 — 같은 트랜잭션의 감사 insert 가 커밋될 때까지 다음 요청이 기다린다) 후 집계. `p_replay` 는 호출자가 **사용자·방 잠금을 잡은 뒤** 읽은 값이어야 한다(〔N3〕, Task 6). `whoami`(라우트의 HTTP 요청별 인증, Task 8)는 잠금 없이 분당 한도만 본다(자신은 감사되지 않으므로 세지 않음). `p_replay = true`(소유권 확인된 적용 재생)는 시간당 적용 한도에서 빠진다(분당 한도는 그대로). 〔N7〕 `api_authenticate(token, 'whoami')`(= 라우트의 HTTP 요청별 인증)는 토큰 행의 **분 단위 원자 카운터**(`http_window`·`http_count`, 같은 `UPDATE` 안 — 행 잠금으로 원자적)를 올리고 `httpPerMinute`(120) 초과면 `API_RATE_LIMITED`(retryAfterSec 60). tools/list·ping·initialize 도 HTTP 요청이므로 여기서 센다(도구 실행은 그에 더해 감사 기반 60/분). 고정 창이라 분 경계에서 최대 2배까지 몰릴 수 있음 — 남용 방어 목적엔 충분. 형식이 틀리거나 없는 토큰은 해시 인덱스 조회 1번으로 끝나고 행을 갱신하지 않는다(플랫폼 수준 방어 영역).
 
 - [ ] **Step 1: 실패하는 테스트 작성** — `supabase/tests/api-tokens-sql.test.ts`
 
@@ -217,11 +234,27 @@ cases("api tokens 0032", db, [
     await expectFail(q("select public.api_rate_check($1::uuid, $2::uuid, 'curriculum_plan_apply', false)", [t.id, u]), "API_RATE_LIMITED");
     await q("select public.api_rate_check($1::uuid, $2::uuid, 'curriculum_plan_apply', false, true)", [t.id, u]);  // 〔C#7〕 확인된 재생은 통과
   } },
+  { name: "〔N7〕 HTTP 인증 카운터: whoami 만 센다 · 분당 120 초과 → API_RATE_LIMITED · 다음 분이면 1부터", run: async (q) => {
+    await as(q, "민수");
+    const t = await mk(q, ["read"]);
+    await asAnon(q);
+    await q("select set_config('app.now', (date_trunc('minute', now()) + interval '30 seconds')::text, true)");   // 분 경계 흔들림 방지
+    await q("update public.api_tokens set http_window = date_trunc('minute', public.app_now()), http_count = 120 where id = $1::uuid", [t.id]);
+    await expectFail(q("select public.api_authenticate($1, 'whoami')", [t.token]), "API_RATE_LIMITED");
+    assertEquals((await one(q, "select http_count from public.api_tokens where id = $1::uuid", [t.id])).http_count, 120);   // 실패한 요청은 롤백
+    await q("select public.api_authenticate($1, 'me_studies')", [t.token]);   // 도구 op 는 이 카운터와 무관(감사 기반 60/분)
+    await clearApi(q);
+    await q("select set_config('app.now', (date_trunc('minute', now()) + interval '1 minute 30 seconds')::text, true)");
+    await q("select public.api_authenticate($1, 'whoami')", [t.token]);
+    assertEquals((await one(q, "select http_count from public.api_tokens where id = $1::uuid", [t.id])).http_count, 1);
+    await clearApi(q);
+  } },
   { name: "〔C#7〕 잠금 순서(정적): api_rate_check 는 집계 전에 사용자 잠금 · pat_create 는 개수 전에 사용자 잠금", run: async (q) => {
     // PGlite 는 단일 연결이라 동시 실행을 재현할 수 없다 → 함수 본문에서 순서를 고정하고, 실제 경쟁은 api-invoke-db.test.ts(실 PostgREST)에서 본다
     const src = async (fn: string) => (await one(q, "select prosrc from pg_proc p join pg_namespace s on s.oid = p.pronamespace where s.nspname = 'public' and p.proname = $1", [fn])).prosrc as string;
     const rc = await src("api_rate_check");
-    assert(rc.indexOf("pg_advisory_xact_lock") >= 0 && rc.indexOf("pg_advisory_xact_lock") < rc.indexOf("count(*)"), "api_rate_check: lock → count");
+    assert(rc.indexOf("api_user_lock(") >= 0 && rc.indexOf("api_user_lock(") < rc.indexOf("count(*)"), "api_rate_check: lock → count");
+    assert((await src("api_user_lock")).includes("pg_advisory_xact_lock"));
     const pc = await src("pat_create");
     assert(pc.indexOf("pg_advisory_xact_lock") >= 0 && pc.indexOf("pg_advisory_xact_lock") < pc.indexOf("count(*)"), "pat_create: lock → count");
     assertEquals((await one(q, "select provolatile from pg_proc where proname = 'api_rate_check'")).provolatile, "v");
@@ -231,7 +264,7 @@ cases("api tokens 0032", db, [
     for (const fn of ["public.pat_create(text, text[], integer)", "public.pat_list()", "public.pat_revoke(uuid)"]) {
       assertEquals([await can("anon", fn), await can("authenticated", fn)], [false, true], fn);
     }
-    for (const fn of ["public.api_authenticate(text, text)", "public.api_rate_check(uuid, uuid, text, boolean, boolean)",
+    for (const fn of ["public.api_authenticate(text, text)", "public.api_rate_check(uuid, uuid, text, boolean, boolean)", "public.api_user_lock(uuid)",
                       "public.api_scope_of(text)", "public.api_limits()"]) {
       assertEquals([await can("anon", fn), await can("authenticated", fn)], [false, false], fn);
     }
@@ -263,6 +296,8 @@ create table public.api_tokens (
   expires_at    timestamptz not null,
   last_used_at  timestamptz,
   revoked_at    timestamptz,
+  http_window   timestamptz,                         -- 〔N7〕 라우트 인증 요청 분 단위 창
+  http_count    int         not null default 0,
   constraint ck_api_tokens_scopes check (cardinality(scopes) >= 1 and scopes <@ array['read', 'curriculum:write', 'personal:write']::text[])
 );
 create index ix_api_tokens_user on public.api_tokens (user_id) where revoked_at is null;
@@ -308,7 +343,7 @@ $$;
 
 create or replace function public.api_limits() returns jsonb
 language sql immutable set search_path = '' as $$
-  select '{"perMinute": 60, "appliesPerHour": 20, "plansPerHour": 120, "tokensPerUser": 10}'::jsonb
+  select '{"perMinute": 60, "httpPerMinute": 120, "appliesPerHour": 20, "plansPerHour": 120, "tokensPerUser": 10}'::jsonb
 $$;
 
 create or replace function public.api_token_json(t public.api_tokens) returns jsonb
@@ -382,6 +417,7 @@ language plpgsql security definer set search_path = '' as $$
 declare
   t       public.api_tokens;
   v_scope text := public.api_scope_of(p_op);
+  v_n     int;
 begin
   if p_token is null or p_token !~ '^sgt_pat_[0-9a-f]{64}$' then
     perform public.fail('API_TOKEN_INVALID', '토큰이 올바르지 않아요');
@@ -393,12 +429,29 @@ begin
   if v_scope <> 'any' and not (v_scope = any(t.scopes)) then
     perform public.fail('API_SCOPE_DENIED', '이 토큰으로는 할 수 없는 작업이에요', jsonb_build_object('scope', v_scope));
   end if;
-  update public.api_tokens set last_used_at = public.app_now() where id = t.id;
+  if p_op = 'whoami' then
+    -- 〔N7〕 HTTP 요청(라우트 인증) 수: 토큰 행 하나의 분 단위 카운터. 같은 UPDATE(행 잠금)라 동시 요청에도 원자적
+    update public.api_tokens set last_used_at = public.app_now(),
+           http_count  = case when http_window = date_trunc('minute', public.app_now()) then http_count + 1 else 1 end,
+           http_window = date_trunc('minute', public.app_now())
+    where id = t.id returning http_count into v_n;
+    if v_n > (public.api_limits() ->> 'httpPerMinute')::int then   -- 실패하면 이 UPDATE 도 롤백 → 카운터는 한도에 머문다
+      perform public.fail('API_RATE_LIMITED', '요청이 너무 잦아요. 잠시 후 다시 해 주세요', '{"retryAfterSec":60}'::jsonb);
+    end if;
+  else
+    update public.api_tokens set last_used_at = public.app_now() where id = t.id;
+  end if;
   perform set_config('sgtudy.api_uid', t.user_id::text, true);
   return t;
 end $$;
 
--- 〔C#7〕 volatile(잠금). 잠금 순서: 이 사용자 잠금 → (호출자가 이어서) 방 잠금 → 초안 잠금. 웹 세션 경로는 이 잠금을 잡지 않는다
+-- 〔N3〕 사용자 잠금(트랜잭션 끝까지). advisory xact 잠금은 같은 트랜잭션에서 다시 잡아도 즉시 통과
+create or replace function public.api_user_lock(p_user uuid) returns void
+language sql volatile set search_path = '' as $$
+  select pg_advisory_xact_lock(hashtextextended('sgtudy.api:' || p_user::text, 0))
+$$;
+
+-- 〔C#7〕 volatile(잠금). 잠금 순서: (토큰 행) → 사용자 → (호출자가 이어서) 방 → 초안. 웹 직접 RPC 는 사용자 잠금을 잡지 않는다
 create or replace function public.api_rate_check(p_token uuid, p_user uuid, p_op text, p_dry boolean, p_replay boolean default false) returns void
 language plpgsql volatile security definer set search_path = '' as $$
 declare
@@ -408,7 +461,7 @@ declare
 begin
   if p_op <> 'whoami' then
     -- 같은 사용자의 다른 토큰·동시 요청이 같은 집계를 보고 함께 통과하지 않게 직렬화. 감사 insert 는 같은 트랜잭션 → 커밋 뒤 다음 대기자가 센다
-    perform pg_advisory_xact_lock(hashtextextended('sgtudy.api:' || p_user::text, 0));
+    perform public.api_user_lock(p_user);
   end if;
   v_now := public.app_now();
   select count(*) into n from public.api_audit a
@@ -441,7 +494,7 @@ grant execute on function public.pat_revoke(uuid)              to authenticated;
 ```
 
 - [ ] **Step 4: 통과 확인** — Run: `deno test -A --config supabase/tests/deno.json supabase/tests/api-tokens-sql.test.ts 2>&1 | tail -3` → PASS. "만료" 사례가 `app.now` 를 문자열로 받는지(`app_now()` 가 `::timestamptz` 캐스트) 확인.
-- [ ] **Step 5: 전체 회귀** — Run: `npm run test:db 2>&1 | tail -3` → 기준선 N + 9 passed, 0 failed(`current_user_id` 재정의 회귀 없음).
+- [ ] **Step 5: 전체 회귀** — Run: `npm run test:db 2>&1 | tail -3` → 기준선 N + 10 passed, 0 failed(`current_user_id` 재정의 회귀 없음).
 - [ ] **Step 6: 커밋** — `git commit -- supabase/migrations/0032_api_tokens.sql supabase/tests/api-tokens-sql.test.ts -m "feat(db): 0032 — AI 연동 PAT(해시 저장·스코프·만료·폐기), current_user_id 보조 신원, 감사·멱등 표, 레이트리밋"`
 
 ---
@@ -906,18 +959,20 @@ cases("curriculum plan 0033 · resolve", db, [
 **Files:** Modify `0033_curriculum_plan.sql` · Modify `curriculum-plan-sql.test.ts`
 
 **Interfaces:**
-- 표 `api_plan_drafts(id varchar(16) pk /* 'pv_'+12 hex */, user_id, room_id, plan jsonb /* 원본 */, resolved jsonb /* 정규 */, path_map jsonb, version char(32), preview jsonb, created_at, expires_at, applied_at, apply_response jsonb, undo_of varchar(16), undo_snapshot jsonb /* 〔C#4〕 적용 직후 일정 스냅숏 */)` — RLS on, 정책 없음, 인덱스 `(user_id, created_at desc)`.
-- 내부 `plan_run(r public.rooms, p_uid uuid, p_plan jsonb /* 정규 */, p_dry boolean, p_warn jsonb) → jsonb` — 원안 ⑥~⑧(서브트랜잭션 실행·diff·알림 묶기·dry 면 되감기). 실행 오류: dry 면 `{ok:false, errors:[…]}` 반환, 적용이면 재발생. 반환 `{ok, summary, diff, warnings, notifications, ids{path→id}, refs{ref→id}}`(dry 면 diff 의 생성 id null, ids·refs 비움). 〔C#9〕 `warnings` 의 **모든** 항목은 `{path, code, message, nodeId?}` — `node_update` 경고(`{code, nodeId}`, 0028:175)에는 `plan_warn_text(code)` 로 한국어 `message` 를 붙인다.
+- 표 `api_plan_drafts(id varchar(16) pk /* 'pv_'+12 hex */, user_id, room_id, plan jsonb /* 원본 */, resolved jsonb /* 정규 */, path_map jsonb, version char(32), preview jsonb, created_at, expires_at, applied_at, apply_response jsonb, undo_of varchar(16), sched_changes jsonb /* 〔C#4·N1·N2〕 적용 때 실제로 날짜가 바뀐 노드 {id:[옛시작,옛끝,새시작,새끝]} */)` — RLS on, 정책 없음, 인덱스 `(user_id, created_at desc)`.
+- 내부 `plan_run(r public.rooms, p_uid uuid, p_plan jsonb /* 정규 */, p_dry boolean, p_warn jsonb) → jsonb` — 원안 ⑥~⑧(서브트랜잭션 실행·diff·알림 묶기·dry 면 되감기). 실행 오류: dry 면 `{ok:false, errors:[…]}` 반환, 적용이면 재발생. 반환 `{ok, summary, diff, warnings, notifications, ids{path→id}, refs{ref→id}, sched}`(dry 면 diff 의 생성 id null, ids·refs 비움). 〔N2〕 `sched` = **이 실행에서 날짜가 실제로 바뀐 기존 노드**의 `{id: [옛시작, 옛끝, 새시작, 새끝]}`: update op 마다 `node_update` 직전·직후에 그 노드 하위 트리(`node_subtree` — `shiftDescendants` 가 옮기는 범위, 개인 목표 포함)의 날짜를 비교해 달라진 것을 모은다(같은 노드가 여러 번 바뀌면 옛 값은 처음 것). **이 계획이 만든 노드(`v_ids`)는 넣지 않는다.** 루프가 끝나면 모든 항목의 새 값을 현재 행으로 다시 읽는다. 〔C#9〕 `warnings` 의 **모든** 항목은 `{path, code, message, nodeId?}` — `node_update` 경고(`{code, nodeId}`, 0028:175)에는 `plan_warn_text(code)` 로 한국어 `message` 를 붙인다.
 - 〔C#9〕 내부 `plan_warn_text(p_code text) → text`(immutable): `PERIOD_OUTSIDE_ROOM` "스터디 기간 밖이에요", `PERIOD_OUTSIDE_PARENT` "상위 항목 기간 밖이에요", `UNASSIGNED_TASK` "담당자가 없는 지정 과제예요", 그 밖 = 코드 그대로.
 - 내부 `plan_map_paths(p_items jsonb, p_map jsonb) → jsonb` — 정규 경로 → 원래 경로(`ops[i]#n`), 정규 경로는 `rpath` 로 보존.
-- 공개(authenticated) `curriculum_plan_preview(p_slug text, p_plan jsonb, p_undo_of text default null) → jsonb` — 스펙 §7.2 미리보기 응답(`previewId`, `expiresAt`, `version`, `summary`, `diff`, `warnings`, `errors`, `notifications`, `undoable`). 검증·실행 오류는 `{ok:false, errors}`(초안 저장 안 함). 〔C#4〕 `undoable = {ops: <일정 변경 update 수>, notUndoable: {created, moved, otherChanges}}`(`otherChanges` = 제목·라벨·유형·설명·담당만 바꾼 update 수 — 일정과 함께 바꾼 update 는 일정만 되돌리고 여기에 1 더함).
+- 공개(authenticated) `curriculum_plan_preview(p_slug text, p_plan jsonb, p_undo_of text default null) → jsonb` — 스펙 §7.2 미리보기 응답(`previewId`, `expiresAt`, `version`, `summary`, `diff`, `warnings`, `errors`, `notifications`, `undoable`). 검증·실행 오류는 `{ok:false, errors}`(초안 저장 안 함). 〔C#4·N2〕 `undoable = {ops: <sched 의 노드 수 — 하위 포함, 날짜가 실제로 바뀌는 기존 노드>, notUndoable: {created, moved, otherChanges}}`(`otherChanges` = 제목·라벨·유형·설명·담당이 바뀐 update 수).
 - 공개(authenticated) `curriculum_plan_apply(p_slug text, p_preview_id text) → jsonb` — `{ok, applied, replayed?, previewId, version, summary, refs, createdIds, notifications, link, undoable}`(〔C#9〕 `undoable` = 초안 미리보기의 것 그대로 — `formatApply` 의 되돌리기 안내가 읽는다).
-- 〔C#4〕 내부 `plan_undo_of(d public.api_plan_drafts) → jsonb` — **일정만**: 적용된 초안 diff 의 update 중 `changes` 에 `startDate`/`endDate` 가 있는 것만 `{op:"update", id, set:{startDate:옛, endDate:옛, shiftDescendants:원래 op 의 값}}` 로, 역순. move·create·그 밖 필드는 넣지 않는다(→ `notUndoable`). 반환 `{schema, ops, notUndoable}`.
-- 〔C#4〕 내부 `plan_sched_snapshot(p_ids bigint[]) → jsonb` — `p_ids` 각각의 하위 트리(`node_subtree`, 개인 목표 포함 — `shiftDescendants` 가 함께 옮기므로) 모든 노드의 `{id: [start_date, end_date, parent_id, archived_at is not null]}`. `sort_order`·제목은 넣지 않는다(형제 추가로 밀리는 순서·이름 변경은 일정 되돌리기를 망치지 않는다). 하위 트리 구성원이 늘거나 줄어도 키가 달라져 감지된다.
+- 〔C#4·N1·N2〕 되돌리기 = **기록된 날짜 복원**(역계획을 다시 `node_update` 로 돌리지 않는다 — `shiftDescendants` 는 *현재* 하위를 옮기므로 그 사이 옮겨 나간 자식은 놓치고 새로 생긴 자식은 끌고 간다):
+  - 내부 `plan_undo_check(p_changes jsonb) → jsonb` — 기록된 id 마다 현재 `(start_date, end_date)` 가 기록된 **새 값**과 같은지. 다르거나 행이 없으면 그 id(≤20개)를 돌려준다(빈 배열 = 통과). 예외 없음.
+  - 내부 `plan_undo_run(r public.rooms, p_uid uuid, p_changes jsonb, p_dry boolean) → jsonb` — `plan_run` 과 같은 모양: 기록된 id **만** `update goal_nodes set start_date = 옛시작, end_date = 옛끝` (다른 노드·새 노드는 건드리지 않음, `node_update` 를 거치지 않으므로 개인 목표도 복원), `assignment_resync`, 방이 ACTIVE 면 복원된 팀 리프의 미해제 담당자·개인 목표 소유자(행위자 제외)에게 수신자당 `CURRICULUM_BULK_UPDATED`(`schedule` = 그 사람 항목 수) 1건. diff 항목 `{path:"undo", op:"restore", id, kind, title, changes:{startDate:[현재, 옛], endDate:[현재, 옛]}}`(깊이·id 순), summary `{created:0, updated:0, moved:0, restored:n, shiftedDescendants:0}`, `sched` = 복원의 역(그래서 undo 의 undo = 다시 적용이 된다). dry 면 서브트랜잭션 되감기.
+  - 혼합 계획: `shift R → R 아래 create` 의 새 노드, `create → shift` 로 함께 밀린 새 노드는 기록되지 않아 **그대로 남는다**(웹에서). `shift R → R 의 자식을 다른 회차로 move` 는 그 자식이 기록돼 있으므로 이동한 자리에서 날짜만 복원된다. move·create·제목 등 자체는 되돌리지 않는다(→ `notUndoable`).
 - `plan_kind`·`plan_changes`·`plan_runtime_err` 는 원안 그대로.
 
-순서 — `curriculum_plan_preview`: ① `node_assert_editable`(방 잠금·권한) ② `p_undo_of` 가 있으면 그 초안이 나·이 방·적용됨이 아니면 `PREVIEW_NOT_FOUND`; 〔C#4〕 `plan_sched_snapshot(그 초안의 일정 update id들)` ≠ `undo_snapshot` 이면 `UNDO_STALE`(hint `{nodeIds: 달라진 id ≤20}` — 이미 되돌렸거나 그 뒤 다른 수정), 역계획 ops 가 비면 `NOTHING_TO_UNDO`, 원본 = 역계획(`p_plan` 무시) ③ 〔C#11〕 `plan_shape_check` 오류 → `{ok:false, errors}` ④ `plan_resolve` 오류 → `{ok:false, errors}` ⑤ 원본에 `baseVersion` 이 있고 현재 버전과 다르면 `STALE_VERSION`(hint `{current}`) ⑥ `plan_validate(정규)` 오류 → `{ok:false, errors}`(원래 경로) ⑦ `plan_run(…, dry:=true)` → `ok:false` 면 반환 ⑧ **되감은 뒤** 초안 insert(`expires_at = app_now() + 24h`), 내 미적용 초안이 50개를 넘으면 오래된 것부터 삭제 ⑨ 응답.
-순서 — `curriculum_plan_apply`: ① `node_assert_editable`(**방 잠금 먼저**) ② 초안 `for update`(나·이 방, 없으면 `PREVIEW_NOT_FOUND`) ③ 이미 적용 → `apply_response || {replayed:true}`(재실행 없음) ④ 만료 → `PREVIEW_EXPIRED` ⑤ 현재 버전 ≠ 초안 버전 → `STALE_VERSION` ⑥ `plan_run(r, uid, d.resolved, false, '[]')` ⑦ 〔C#4〕 `undo_snapshot := plan_sched_snapshot(일정 update id들)`(없으면 null) ⑧ 응답 저장(`applied_at`·`apply_response`·`undo_snapshot`). 〔C#13〕 같은 `previewId` 동시 적용: 둘째는 ①의 방 잠금에서 기다렸다가 ③에서 `replayed` — 이중 실행 없음(잠금 순서 방 → 초안, 정적 테스트 + 실 PostgREST 테스트). 두 공개 함수 모두 `set statement_timeout = '15s'`.
+순서 — `curriculum_plan_preview`: ① `node_assert_editable`(방 잠금·권한) ② **undo 분기**(`p_undo_of` 있음, `p_plan` 무시): 그 초안이 나·이 방·적용됨이 아니면 `PREVIEW_NOT_FOUND` → `sched_changes` 가 비면 `NOTHING_TO_UNDO` → 〔N1〕 `plan_undo_check` 가 비지 않으면 `UNDO_STALE`(hint `{nodeIds}` — 이미 되돌렸거나 그 뒤 다른 수정) → `plan_undo_run(dry)` → 초안 insert(`plan = {"undoOf": id}`, `resolved = {"restore": 원래 sched_changes}`, `undo_of`) → 응답(`undoable.ops` = 복원 노드 수). **일반 분기**: ③ 〔C#11〕 `plan_shape_check` 오류 → `{ok:false, errors}` ④ `plan_resolve` 오류 → `{ok:false, errors}` ⑤ 원본에 `baseVersion` 이 있고 현재 버전과 다르면 `STALE_VERSION`(hint `{current}`) ⑥ `plan_validate(정규)` 오류 → `{ok:false, errors}`(원래 경로) ⑦ `plan_run(…, dry:=true)` → `ok:false` 면 반환 ⑧ **되감은 뒤** 초안 insert(`expires_at = app_now() + 24h`), 내 미적용 초안이 50개를 넘으면 오래된 것부터 삭제 ⑨ 응답.
+순서 — `curriculum_plan_apply`: ① `node_assert_editable`(**방 잠금 먼저**) ② 초안 `for update`(나·이 방, 없으면 `PREVIEW_NOT_FOUND`) ③ 이미 적용 → `apply_response || {replayed:true}`(재실행 없음) ④ 만료 → `PREVIEW_EXPIRED` ⑤ undo 초안이면 〔N1〕 **방 잠금 안에서** `plan_undo_check(d.resolved -> 'restore')` 를 다시 → 비지 않으면 `UNDO_STALE`(미리보기 뒤 개인 목표 등 기록된 노드가 바뀐 경우 — `curriculum_version` 은 개인 목표를 보지 않으므로 버전 검사로는 못 잡는다). undo 초안은 버전 검사를 하지 않는다(기록된 노드의 정확 일치가 더 좁고 정확한 조건 — 무관한 변경으로 undo 가 막히지 않게). 일반 초안이면 현재 버전 ≠ 초안 버전 → `STALE_VERSION` ⑥ `plan_undo_run(…, false)` 또는 `plan_run(r, uid, d.resolved, false, '[]')` ⑦ 응답 저장(`applied_at`·`apply_response`·`sched_changes = run.sched`). 〔C#13〕 같은 `previewId` 동시 적용: 둘째는 ①의 방 잠금에서 기다렸다가 ③에서 `replayed` — 이중 실행 없음(잠금 순서 방 → 초안, 정적 테스트 + 실 PostgREST 테스트). 두 공개 함수 모두 `set statement_timeout = '15s'`.
 
 - [ ] **Step 1: 실패하는 테스트** (추가)
 
@@ -1064,22 +1119,24 @@ cases("curriculum plan 0033 · run", db, [
     assert(d.summary.shiftedDescendants >= 1);
     assertEquals(d.summary.moved, 1);
   } },
-  { name: "되돌리기: shift 적용 → undo 미리보기는 반대 이동(하위 포함) · 적용하면 원래 날짜 · 생성만 있던 계획은 NOTHING_TO_UNDO", run: async (q) => {
+  { name: "되돌리기: shift 적용 → undo 미리보기는 기록된 노드의 옛 날짜(하위 포함) · 적용하면 원래 날짜 · 생성만 있던 계획은 NOTHING_TO_UNDO", run: async (q) => {
     await as(q, "민수");
-    const r3 = await nodeId(q, "aws", "로드밸런서 비교");   // 3주차 아래 묶음
-    const before = await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [r3]);
+    const grp = await nodeId(q, "aws", "로드밸런서 비교");   // 3주차 아래 묶음
+    const before = await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [grp]);
     const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 }]));
     await apply(q, "aws", p.previewId);
     const u = await preview(q, "aws", "{}", p.previewId);   // undo 가 있으면 plan 은 무시
-    assertEquals(u.diff[0].changes.startDate, ["2026-10-22", "2026-10-15"]);
+    assert(u.diff.every((d: Row) => d.op === "restore"));
+    assertEquals(u.diff.find((d: Row) => d.kind === "round").changes.startDate, ["2026-10-22", "2026-10-15"]);
+    assertEquals(u.undoable.ops, p.undoable.ops);           // 기록된 노드 수 그대로
     await apply(q, "aws", u.previewId);
-    assertEquals((await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [r3])).s, before.s);
+    assertEquals((await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [grp])).s, before.s);
     const { slug } = await mkRoom(q, "민수");
     const c = await preview(q, slug, sample());
     await apply(q, slug, c.previewId);
     await expectFail(q("select public.curriculum_plan_preview($1, '{}'::jsonb, $2)", [slug, c.previewId]), "NOTHING_TO_UNDO");
   } },
-  { name: "〔C#4〕 undo 는 일정만: shift + move + 제목 변경 + create 계획 → undo 는 일정 update 만, 나머지는 notUndoable", run: async (q) => {
+  { name: "〔C#4〕 undo 는 일정만: shift + move + 제목 변경 + create 계획 → undo 는 restore 만, 나머지는 notUndoable", run: async (q) => {
     await as(q, "민수");
     const grp = await nodeId(q, "aws", "로드밸런서 비교");
     const r2 = await nodeId(q, "aws", "EC2·S3");
@@ -1088,17 +1145,43 @@ cases("curriculum plan 0033 · run", db, [
                                           { op: "move", id: grp, parent: r2, index: 0 },
                                           { op: "update", id: alb, set: { title: "ALB 실습" } },
                                           { op: "create", parent: r2, title: "새 과제", taskType: "common" }]));
-    assertEquals([p.undoable.ops, p.undoable.notUndoable], [1, { created: 1, moved: 1, otherChanges: 1 }]);
+    assert(p.undoable.ops >= 1);
+    assertEquals(p.undoable.notUndoable, { created: 1, moved: 1, otherChanges: 1 });
     await apply(q, "aws", p.previewId);
     const u = await preview(q, "aws", "{}", p.previewId);
-    assertEquals(u.diff.map((d: Row) => [d.op, Object.keys(d.changes).sort()]), [["update", ["endDate", "startDate"]]]);
-    assertEquals(u.summary.moved, 0);
+    assert(u.diff.length >= 1 && u.diff.every((d: Row) => d.op === "restore"));
+    assertEquals([u.summary.created, u.summary.moved, u.summary.updated], [0, 0, 0]);
   } },
-  { name: "〔C#4〕 낡은 undo 거부: 적용 뒤 영향 회차의 하위 일정이 바뀌면 UNDO_STALE · 이미 되돌린 것도 UNDO_STALE", run: async (q) => {
+  { name: "〔N2〕 shift 뒤 자식을 다른 회차로 move(같은 계획) → undo 는 옮겨 간 자식의 날짜도 복원(자리는 그대로)", run: async (q) => {
+    await as(q, "민수");
+    const grp = await nodeId(q, "aws", "로드밸런서 비교");   // 3주차 자식
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const b = await one(q, "select start_date::text as s, end_date::text as e from public.goal_nodes where id = $1::bigint", [grp]);
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 }, { op: "move", id: grp, parent: r2, index: 0 }]));
+    await apply(q, "aws", p.previewId);
+    const u = await preview(q, "aws", "{}", p.previewId);
+    await apply(q, "aws", u.previewId);
+    const a = await one(q, "select start_date::text as s, end_date::text as e, parent_id::text as pid from public.goal_nodes where id = $1::bigint", [grp]);
+    assertEquals([a.s, a.e, a.pid], [b.s, b.e, r2]);        // 날짜만 복원, 이동은 그대로(notUndoable)
+  } },
+  { name: "〔N2〕 shift 뒤 그 회차 아래 create(같은 계획) → 새 노드는 기록되지 않고 undo 가 건드리지 않는다", run: async (q) => {
+    await as(q, "민수");
+    const r3 = await nodeId(q, "aws", "로드밸런서 비교").then(async (g) =>
+      (await one(q, "select parent_id::text as p from public.goal_nodes where id = $1::bigint", [g])).p as string);   // 3주차
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 },
+                                          { op: "create", parent: r3, title: "밀린 뒤 새 과제", taskType: "common", startDate: "2026-10-23", endDate: "2026-10-24" }]));
+    const a = await apply(q, "aws", p.previewId);
+    const created = a.createdIds[0] as string;
+    const u = await preview(q, "aws", "{}", p.previewId);
+    assertEquals(u.diff.some((d: Row) => d.id === created), false);
+    await apply(q, "aws", u.previewId);
+    assertEquals((await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [created])).s, "2026-10-23");
+  } },
+  { name: "〔C#4·N1〕 낡은 undo 거부: 적용 뒤 기록된 하위 일정이 바뀌면 미리보기 UNDO_STALE · 이미 되돌린 것도 UNDO_STALE", run: async (q) => {
     await as(q, "민수");
     const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 }]));
     await apply(q, "aws", p.previewId);
-    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");   // 3주차 하위
+    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");   // 3주차 하위(기록됨)
     await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-30\"}')", [alb]);
     await expectFail(q("select public.curriculum_plan_preview('aws', '{}'::jsonb, $1)", [p.previewId]), "UNDO_STALE");
     const p2 = await preview(q, "aws", plan([{ op: "shift", from: "5주차", to: "5주차", days: 3 }]));
@@ -1107,6 +1190,30 @@ cases("curriculum plan 0033 · run", db, [
     await apply(q, "aws", u2.previewId);
     await expectFail(q("select public.curriculum_plan_preview('aws', '{}'::jsonb, $1)", [p2.previewId]), "UNDO_STALE");
   } },
+  { name: "〔N1〕 undo 미리보기 뒤 개인 목표 변경 → undo 적용 UNDO_STALE(버전 검사로는 못 잡는 경우) · 새 개인 목표 추가는 막지 않고 건드리지도 않음", run: async (q) => {
+    const grp = await nodeId(q, "aws", "로드밸런서 비교");
+    const r3 = (await one(q, "select parent_id::text as p from public.goal_nodes where id = $1::bigint", [grp])).p as string;
+    await as(q, "지은");
+    const goal = ((await one(q, "select public.personal_create('aws', $1::bigint, '지은 3주차 복습') as c", [r3])).c as Row).createdId as string;
+    await as(q, "민수");
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 }]));   // 개인 목표도 함께 밀림 → 기록
+    await apply(q, "aws", p.previewId);
+    const u = await preview(q, "aws", "{}", p.previewId);
+    assert(u.diff.some((d: Row) => d.id === goal));
+    const v = (await one(q, "select public.curriculum_version(id) as v from public.rooms where slug = 'aws'")).v;
+    await as(q, "지은");
+    await q("select public.personal_update('aws', $1::bigint, '{\"endDate\":\"2026-10-29\"}')", [goal]);
+    assertEquals((await one(q, "select public.curriculum_version(id) as v from public.rooms where slug = 'aws'")).v, v);   // 버전은 그대로
+    await as(q, "민수");
+    await expectFail(q("select public.curriculum_plan_apply('aws', $1)", [u.previewId]), "UNDO_STALE");
+    // 되돌린 날짜를 원래대로 두고 새 개인 목표만 추가한 경우는 통과하고, 새 목표는 그대로
+    await as(q, "지은");
+    await q("select public.personal_update('aws', $1::bigint, $2::jsonb)", [goal, JSON.stringify({ endDate: u.diff.find((d: Row) => d.id === goal).changes.endDate[0] })]);
+    const extra = ((await one(q, "select public.personal_create('aws', $1::bigint, '나중 목표', '2026-10-25', '2026-10-26') as c", [r3])).c as Row).createdId as string;
+    await as(q, "민수");
+    await apply(q, "aws", u.previewId);
+    assertEquals((await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [extra])).s, "2026-10-25");
+  } },
   { name: "GRANT: preview·apply 는 authenticated 만, plan_* 내부는 아무도", run: async (q) => {
     const can = async (role: string, fn: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, fn])).v;
     for (const fn of ["public.curriculum_plan_preview(text, jsonb, text)", "public.curriculum_plan_apply(text, text)"]) {
@@ -1114,7 +1221,8 @@ cases("curriculum plan 0033 · run", db, [
     }
     for (const fn of ["public.plan_validate(public.rooms, jsonb)", "public.plan_flatten(jsonb)", "public.curriculum_version(bigint)",
                       "public.plan_resolve(public.rooms, jsonb)", "public.plan_run(public.rooms, uuid, jsonb, boolean, jsonb)",
-                      "public.plan_shape_check(jsonb)", "public.plan_warn_text(text)", "public.plan_sched_snapshot(bigint[])",
+                      "public.plan_shape_check(jsonb)", "public.plan_warn_text(text)", "public.plan_undo_check(jsonb)",
+                      "public.plan_undo_run(public.rooms, uuid, jsonb, boolean)",
                       "public.node_create_core(public.rooms, uuid, bigint, text, text, text, date, date, integer, text)"]) {
       assertEquals([await can("anon", fn), await can("authenticated", fn)], [false, false], fn);
     }
@@ -1177,7 +1285,7 @@ create table public.api_plan_drafts (
   applied_at     timestamptz,
   apply_response jsonb,
   undo_of        varchar(16),
-  undo_snapshot  jsonb                                     -- 〔C#4〕 적용 직후 plan_sched_snapshot(일정 update id들)
+  sched_changes  jsonb                                     -- 〔C#4·N1·N2〕 적용 때 실제로 날짜가 바뀐 기존 노드 {id:[옛시작,옛끝,새시작,새끝]}
 );
 
 -- 〔C#9〕 node_update 경고({code,nodeId})에 붙일 한국어 문구
@@ -1190,12 +1298,14 @@ language sql immutable set search_path = '' as $$
     else p_code end
 $$;
 
--- 〔C#4〕 일정 되돌리기용 스냅숏: 루트들의 하위 트리(개인 목표 포함) 일정·부모·보관. 순서·제목 제외
-create or replace function public.plan_sched_snapshot(p_ids bigint[]) returns jsonb
+-- 〔N1〕 기록된 노드가 지금도 '새 값' 그대로인가. 다르거나 없어진 id(≤20) — 빈 배열이면 통과. 예외 없음
+create or replace function public.plan_undo_check(p_changes jsonb) returns jsonb
 language sql stable security definer set search_path = '' as $$
-  select coalesce(jsonb_object_agg(g.id::text, jsonb_build_array(g.start_date, g.end_date, g.parent_id, g.archived_at is not null)), '{}'::jsonb)
-  from public.goal_nodes g
-  where g.id in (select public.node_subtree(x) from unnest(coalesce(p_ids, '{}')) x)
+  select coalesce(jsonb_agg(z.k), '[]'::jsonb) from (
+    select e.k from jsonb_each(coalesce(p_changes, '{}'::jsonb)) e(k, v)
+    left join public.goal_nodes g on g.id = e.k::bigint
+    where g.id is null or jsonb_build_array(g.start_date, g.end_date) <> jsonb_build_array(e.v -> 2, e.v -> 3)
+    order by e.k::bigint limit 20) z
 $$;
 create index ix_api_plan_drafts_user on public.api_plan_drafts (user_id, created_at desc);
 alter table public.api_plan_drafts enable row level security;   -- 정책 없음: RPC 전용
@@ -1225,6 +1335,8 @@ declare
   v_updated  int := 0;
   v_moved    int := 0;
   v_shift    int := 0;
+  v_sched    jsonb := '{}'::jsonb;   -- 〔N2〕 실제 날짜 변경 {id:[옛s,옛e,새s,새e]}
+  v_pre      jsonb;
   v_out      jsonb;
   v_state    text;
   v_code     text;
@@ -1255,7 +1367,18 @@ begin
         when 'update' then
           v_id := (o ->> 'id')::bigint;
           select * into b from public.goal_nodes where id = v_id;
+          -- 〔N2〕 node_update 가 옮길 수 있는 범위(자기 + 하위, 개인 목표 포함)의 날짜를 앞뒤로 비교
+          select coalesce(jsonb_object_agg(g.id::text, jsonb_build_array(g.start_date, g.end_date)), '{}'::jsonb) into v_pre
+          from public.goal_nodes g where g.id in (select public.node_subtree(v_id));
           v_res := public.node_update(v_slug, v_id, o -> 'set');
+          select v_sched || coalesce(jsonb_object_agg(g.id::text, jsonb_build_array(
+                   coalesce(v_sched -> g.id::text -> 0, v_pre -> g.id::text -> 0),    -- 옛 값은 처음 것
+                   coalesce(v_sched -> g.id::text -> 1, v_pre -> g.id::text -> 1),
+                   g.start_date, g.end_date)), '{}'::jsonb) into v_sched
+          from public.goal_nodes g
+          where g.id in (select public.node_subtree(v_id)) and v_pre ? g.id::text
+            and jsonb_build_array(g.start_date, g.end_date) <> v_pre -> g.id::text
+            and not exists (select 1 from jsonb_each_text(v_ids) c where c.value::bigint = g.id);   -- 이 계획이 만든 노드 제외
           select * into a from public.goal_nodes where id = v_id;
           v_shift := v_shift + coalesce((v_res #>> '{shifted,tasks}')::int, 0) + coalesce((v_res #>> '{shifted,groups}')::int, 0)
                              + coalesce((v_res #>> '{shifted,personal}')::int, 0);
@@ -1280,6 +1403,10 @@ begin
       end case;
     end loop;
     v_cur := null;
+    -- 〔N2〕 새 값을 최종 행으로 갱신하고, 계획 안에서 원위치된 항목은 뺀다
+    select coalesce(jsonb_object_agg(e.k, jsonb_build_array(e.v -> 0, e.v -> 1, g.start_date, g.end_date)), '{}'::jsonb) into v_sched
+    from jsonb_each(v_sched) e(k, v) join public.goal_nodes g on g.id = e.k::bigint
+    where jsonb_build_array(g.start_date, g.end_date) <> jsonb_build_array(e.v -> 0, e.v -> 1);
     perform public.assignment_resync(r.id);
     v_notes := '{"recipients":0,"perRecipient":[]}'::jsonb;   -- Task 5 에서 plan_collapse_notifications(r.id, v_uid, v_after_id, <v_ids 의 id 배열>) 로 교체
     -- create diff: 최종 상태로(리프 → 묶음 전환 반영). dry-run 이면 id null(되감긴 임시 id 비노출), 새 부모는 parentPath
@@ -1297,7 +1424,7 @@ begin
     v_out := jsonb_build_object('ok', true,
       'summary', jsonb_build_object('created', v_created, 'updated', v_updated, 'moved', v_moved, 'shiftedDescendants', v_shift),
       'diff', v_diff, 'warnings', coalesce(p_warn, '[]'::jsonb) || v_warn, 'errors', '[]'::jsonb, 'notifications', v_notes,
-      'ids', v_ids,
+      'ids', v_ids, 'sched', v_sched,
       'refs', coalesce((select jsonb_object_agg(k, v_ids ->> (v_refs ->> k)) from jsonb_object_keys(v_refs) k), '{}'::jsonb));
     if v_dry then raise exception using errcode = 'P0001', message = 'PLAN_DRY_RUN'; end if;
   exception when others then                                                  -- ⑧
@@ -1316,35 +1443,62 @@ begin
 end $$;
 ```
 
-되돌리기 역계획 — 〔C#4〕 **일정만**(diff 는 정규 경로 `rpath` 로 `resolved` 의 원래 op 를 찾는다). move 역연산은 기존 리프 아래로 옮겼을 때의 리프 → 묶음 전환·배정 해제(`node_make_parent`, 0006:212)와 회차 라벨 소실(`node_move` 의 `v_label`)을 되살리지 못해 MVP 에서 뺐다:
+되돌리기 실행 — 〔C#4·N1·N2〕 **기록된 날짜 복원**. 역계획을 `node_update`(`shiftDescendants`)로 다시 돌리지 않는다: 그건 *현재* 하위를 옮기므로 그 사이 옮겨 나간 자식은 놓치고 새로 생긴 자식은 끌고 간다. move 역연산은 리프 → 묶음 전환·배정 해제(`node_make_parent`, 0006:212)·회차 라벨 소실(`node_move` 의 `v_label`)을 되살리지 못해 MVP 에서 뺐다(→ `notUndoable`):
 
 ```sql
--- 일정 update 의 id 목록(스냅숏·역계획 공용)
-create or replace function public.plan_sched_ids(p_diff jsonb) returns bigint[]
-language sql immutable set search_path = '' as $$
-  select coalesce(array_agg((e ->> 'id')::bigint order by o), '{}')
-  from jsonb_array_elements(coalesce(p_diff, '[]'::jsonb)) with ordinality x(e, o)
-  where e ->> 'op' = 'update' and e -> 'changes' ?| array['startDate', 'endDate']
-$$;
-
-create or replace function public.plan_undo_of(d public.api_plan_drafts) returns jsonb
-language sql stable set search_path = '' as $$
-  -- update 중 일정이 바뀐 것만: set = 옛 시작·종료일(바뀐 쪽만) + 원래 op 의 shiftDescendants. 역순.
-  -- create·move·일정 외 필드는 넣지 않는다 → preview 의 undoable.notUndoable 이 이미 세어 두었다(D5·〔C#4〕)
-  select jsonb_build_object('schema', 'sgtudy.plan/v1', 'ops', coalesce(jsonb_agg(x.op order by x.ord desc), '[]'::jsonb),
-           'notUndoable', d.preview #> '{undoable,notUndoable}')
-  from (
-    select o.ord, jsonb_build_object('op', 'update', 'id', e ->> 'id', 'set',
-        (select coalesce(jsonb_object_agg(k, v -> 0), '{}'::jsonb) from jsonb_each(e -> 'changes') c(k, v)
-          where k in ('startDate', 'endDate'))
-        || case when (d.resolved #> array['ops', split_part(substr(coalesce(e ->> 'rpath', e ->> 'path'), 5), ']', 1), 'set'] ->> 'shiftDescendants') = 'true'
-                then '{"shiftDescendants": true}'::jsonb else '{}'::jsonb end) as op
-    from jsonb_array_elements(d.preview -> 'diff') with ordinality o(e, ord)
-    where e ->> 'op' = 'update' and e -> 'changes' ?| array['startDate', 'endDate']) x
-$$;
+create or replace function public.plan_undo_run(r public.rooms, p_uid uuid, p_changes jsonb, p_dry boolean) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_diff  jsonb;
+  v_sched jsonb;
+  v_notes jsonb := '{"recipients":0,"perRecipient":[]}'::jsonb;
+  v_list  jsonb := '[]'::jsonb;
+  v_out   jsonb;
+  g       record;
+begin
+  begin                                                                        -- 서브트랜잭션(dry 면 되감기)
+    select coalesce(jsonb_agg(jsonb_build_object('path', 'undo', 'op', 'restore', 'id', n.id::text, 'kind', public.plan_kind(n), 'title', n.title,
+             'changes', jsonb_strip_nulls(jsonb_build_object(
+               'startDate', case when n.start_date <> (e.v ->> 0)::date then jsonb_build_array(to_char(n.start_date, 'YYYY-MM-DD'), e.v ->> 0) end,
+               'endDate',   case when n.end_date   <> (e.v ->> 1)::date then jsonb_build_array(to_char(n.end_date, 'YYYY-MM-DD'), e.v ->> 1) end)))
+             order by n.depth, n.id), '[]'::jsonb),
+           coalesce(jsonb_object_agg(n.id::text, jsonb_build_array(n.start_date, n.end_date, e.v -> 0, e.v -> 1)), '{}'::jsonb)   -- 복원의 역 = undo 의 undo
+      into v_diff, v_sched
+    from jsonb_each(p_changes) e(k, v) join public.goal_nodes n on n.id = e.k::bigint and n.room_id = r.id;
+    -- 기록된 노드만. 새 노드·그 사이 옮겨 온 노드는 건드리지 않는다. node_update 를 거치지 않으므로 개인 목표도 복원된다
+    update public.goal_nodes n set start_date = (e.v ->> 0)::date, end_date = (e.v ->> 1)::date, updated_at = now()
+    from jsonb_each(p_changes) e(k, v) where n.id = e.k::bigint and n.room_id = r.id;
+    perform public.assignment_resync(r.id);
+    if r.status = 'ACTIVE' then                                                -- 일정 알림: 수신자당 1건(D4 와 같은 묶음 kind)
+      for g in
+        select x.user_id, count(*)::int as c from (
+          select a.user_id from public.task_assignments a
+          where a.released_at is null and a.node_id in (select k::bigint from jsonb_object_keys(p_changes) k)
+          union all
+          select n.owner_id from public.goal_nodes n
+          where n.task_type = 'PERSONAL' and n.id in (select k::bigint from jsonb_object_keys(p_changes) k)) x
+        where x.user_id <> p_uid group by x.user_id order by x.user_id
+      loop
+        perform public.notify_publish('CURRICULUM_BULK_UPDATED', r.id, null, p_uid, array[g.user_id],
+          'CURRICULUM_BULK_UPDATED:' || r.id || ':' || txid_current(), jsonb_build_object('newTasks', 0, 'schedule', g.c, 'assign', 0));
+        v_list := v_list || jsonb_build_object('nickname', (select nickname from public.profiles where id = g.user_id),
+                                               'count', g.c, 'newTasks', 0, 'collapsed', true);
+      end loop;
+      v_notes := jsonb_build_object('recipients', jsonb_array_length(v_list), 'perRecipient', v_list);
+    end if;
+    v_out := jsonb_build_object('ok', true,
+      'summary', jsonb_build_object('created', 0, 'updated', 0, 'moved', 0, 'restored', jsonb_array_length(v_diff), 'shiftedDescendants', 0),
+      'diff', v_diff, 'warnings', '[]'::jsonb, 'errors', '[]'::jsonb, 'notifications', v_notes,
+      'ids', '{}'::jsonb, 'refs', '{}'::jsonb, 'sched', v_sched);
+    if coalesce(p_dry, true) then raise exception using errcode = 'P0001', message = 'PLAN_DRY_RUN'; end if;
+  exception when others then
+    if sqlerrm <> 'PLAN_DRY_RUN' then raise; end if;                           -- 되감기만 삼킨다
+  end;
+  return v_out;
+end $$;
 ```
 
-`plan_sched_ids` 도 내부(GRANT 없음, Global Constraints `plan_*`).
+`plan_undo_check`·`plan_undo_run` 은 내부(GRANT 없음, Global Constraints `plan_*`). 사용자 계획서에는 `restore` op 가 없다(`plan_validate` 가 `UNKNOWN_OP`) — undo 초안만 `resolved = {"restore": …}` 를 갖는다.
 
 `plan_map_paths(p_items jsonb, p_map jsonb) → jsonb`(immutable, 내부): 각 항목 `path` 의 앞부분 `ops[k]` 가 `map` 에 있으면 `rpath` = 원래 값, `path` = 원래 경로(`ops[k]` → `ops[0]#2`, 하위 경로는 앞부분만 교체). 없으면 그대로.
 
@@ -1363,29 +1517,33 @@ declare
   v_run  jsonb;
   v_id   text;
   u      public.api_plan_drafts;
-  v_undo jsonb;
-  v_now  jsonb;
   v_bad  jsonb;
 begin
   r := public.node_assert_editable(p_slug);                                    -- ① 방 잠금 먼저(잠금 순서)
   v_uid := public.current_user_id();
-  if p_undo_of is not null then                                                -- ②
+  if p_undo_of is not null then                                                -- ② undo 분기 〔C#4·N1·N2〕(p_plan 무시)
     select * into u from public.api_plan_drafts where id = p_undo_of and user_id = v_uid and room_id = r.id and applied_at is not null;
     if not found then perform public.fail('PREVIEW_NOT_FOUND', '되돌릴 적용 기록을 찾을 수 없어요'); end if;
-    v_undo := public.plan_undo_of(u);
-    if jsonb_array_length(v_undo -> 'ops') = 0 then
+    if coalesce(u.sched_changes, '{}'::jsonb) = '{}'::jsonb then
       perform public.fail('NOTHING_TO_UNDO', '되돌릴 수 있는 일정 변경이 없어요. 이동·새 항목·제목 변경은 웹에서 고쳐 주세요');
     end if;
-    -- 〔C#4〕 적용 뒤 영향 노드(하위 포함)의 일정·부모·보관·구성원이 바뀌었으면 거부(이미 되돌렸거나 다른 수정)
-    v_now := public.plan_sched_snapshot(public.plan_sched_ids(u.preview -> 'diff'));
-    if u.undo_snapshot is null or v_now <> u.undo_snapshot then
-      select coalesce(jsonb_agg(k), '[]'::jsonb) into v_bad from (
-        select k from (select jsonb_object_keys(v_now) k union select jsonb_object_keys(coalesce(u.undo_snapshot, '{}'::jsonb))) ks
-        where v_now -> k is distinct from u.undo_snapshot -> k order by k limit 20) z;
+    v_bad := public.plan_undo_check(u.sched_changes);
+    if jsonb_array_length(v_bad) > 0 then
       perform public.fail('UNDO_STALE', '적용한 뒤에 그 일정이 다시 바뀌어서 되돌릴 수 없어요(이미 되돌렸거나 다른 수정). 웹에서 고쳐 주세요',
         jsonb_build_object('nodeIds', v_bad));
     end if;
-    v_src := v_undo - 'notUndoable';
+    v_run := public.plan_undo_run(r, v_uid, u.sched_changes, true);
+    v_ver := public.curriculum_version(r.id);
+    v_id := 'pv_' || left(replace(gen_random_uuid()::text, '-', ''), 12);
+    v_run := (v_run - 'ids' - 'refs' - 'sched') || jsonb_build_object('previewId', v_id, 'version', v_ver,
+               'expiresAt', public.iso(public.app_now() + interval '24 hours'),
+               'undoable', jsonb_build_object('ops', jsonb_array_length(v_run -> 'diff'),
+                             'notUndoable', '{"created":0,"moved":0,"otherChanges":0}'::jsonb),
+               'undoOf', p_undo_of);
+    insert into public.api_plan_drafts (id, user_id, room_id, plan, resolved, path_map, version, preview, created_at, expires_at, undo_of)
+    values (v_id, v_uid, r.id, jsonb_build_object('undoOf', p_undo_of), jsonb_build_object('restore', u.sched_changes), '{}'::jsonb,
+            v_ver, v_run, public.app_now(), public.app_now() + interval '24 hours', p_undo_of);
+    return v_run;
   end if;
   if public.plan_shape_check(v_src) is not null then                           -- 〔C#11〕 해석 전에 크기·깊이 거부
     return jsonb_build_object('ok', false, 'errors', jsonb_build_array(public.plan_shape_check(v_src)), 'warnings', '[]'::jsonb);
@@ -1407,12 +1565,12 @@ begin
     return v_run || jsonb_build_object('errors', public.plan_map_paths(v_run -> 'errors', v_res -> 'map'));
   end if;
   v_id := 'pv_' || left(replace(gen_random_uuid()::text, '-', ''), 12);         -- ⑦ 되감은 뒤
-  v_run := (v_run - 'ids' - 'refs') || jsonb_build_object('previewId', v_id, 'version', v_ver,
+  v_run := (v_run - 'ids' - 'refs' - 'sched') || jsonb_build_object('previewId', v_id, 'version', v_ver,
              'expiresAt', public.iso(public.app_now() + interval '24 hours'),
              'diff', public.plan_map_paths(v_run -> 'diff', v_res -> 'map'),
              'warnings', public.plan_map_paths(v_run -> 'warnings', v_res -> 'map'),
-             'undoable', jsonb_build_object(                                   -- 〔C#4〕 일정만 되돌릴 수 있다
-               'ops', cardinality(public.plan_sched_ids(v_run -> 'diff')),
+             'undoable', jsonb_build_object(                                   -- 〔C#4·N2〕 날짜가 실제로 바뀌는 기존 노드 수
+               'ops', (select count(*) from jsonb_object_keys(coalesce(v_run -> 'sched', '{}'::jsonb))),
                'notUndoable', jsonb_build_object(
                  'created', (v_run #>> '{summary,created}')::int,
                  'moved',   (v_run #>> '{summary,moved}')::int,
@@ -1435,6 +1593,7 @@ declare
   d     public.api_plan_drafts;
   v_run jsonb;
   v_out jsonb;
+  v_bad jsonb;
 begin
   r := public.node_assert_editable(p_slug);                                    -- ①
   v_uid := public.current_user_id();
@@ -1444,19 +1603,27 @@ begin
   if d.expires_at <= public.app_now() then                                     -- ④
     perform public.fail('PREVIEW_EXPIRED', '미리보기가 만료됐어요(24시간). 다시 미리 봐 주세요');
   end if;
-  if public.curriculum_version(r.id) <> d.version then                         -- ⑤
-    perform public.fail('STALE_VERSION', '미리본 뒤에 진행목표가 바뀌었어요. 같은 계획으로 다시 미리 봐 주세요',
-      jsonb_build_object('current', public.curriculum_version(r.id)));
+  if d.undo_of is not null then                                                -- ⑤ 〔N1〕 undo: 방 잠금 안에서 기록 노드 재확인
+    v_bad := public.plan_undo_check(d.resolved -> 'restore');                  --    (개인 목표 변경은 버전에 안 잡힌다 — 정확 일치로 본다)
+    if jsonb_array_length(v_bad) > 0 then
+      perform public.fail('UNDO_STALE', '미리본 뒤에 그 일정이 바뀌어서 되돌릴 수 없어요. 다시 되돌리기 미리보기를 해 주세요',
+        jsonb_build_object('nodeIds', v_bad));
+    end if;
+    v_run := public.plan_undo_run(r, v_uid, d.resolved -> 'restore', false);    -- ⑥
+  else
+    if public.curriculum_version(r.id) <> d.version then                       -- ⑤
+      perform public.fail('STALE_VERSION', '미리본 뒤에 진행목표가 바뀌었어요. 같은 계획으로 다시 미리 봐 주세요',
+        jsonb_build_object('current', public.curriculum_version(r.id)));
+    end if;
+    v_run := public.plan_run(r, v_uid, d.resolved, false, '[]'::jsonb);        -- ⑥ 실패하면 예외 → 이 함수 전체(앞 op 포함) 롤백
   end if;
-  v_run := public.plan_run(r, v_uid, d.resolved, false, '[]'::jsonb);          -- ⑥ 실패하면 예외 → 이 함수 전체(앞 op 포함) 롤백
   v_out := jsonb_build_object('ok', true, 'applied', true, 'previewId', d.id, 'version', public.curriculum_version(r.id),
     'summary', v_run -> 'summary', 'refs', v_run -> 'refs',
     'createdIds', coalesce((select jsonb_agg(value) from jsonb_each_text(v_run -> 'ids')), '[]'::jsonb),
     'notifications', v_run -> 'notifications', 'link', '/my-study/' || r.slug || '?tab=curriculum',
     'undoable', d.preview -> 'undoable');                                      -- 〔C#9〕 formatApply 계약
   update public.api_plan_drafts set applied_at = public.app_now(), apply_response = v_out,   -- ⑦⑧
-         undo_snapshot = case when cardinality(public.plan_sched_ids(d.preview -> 'diff')) > 0
-                              then public.plan_sched_snapshot(public.plan_sched_ids(d.preview -> 'diff')) end
+         sched_changes = nullif(v_run -> 'sched', '{}'::jsonb)                  -- 〔N2〕 실제 적용에서 바뀐 날짜(미리보기 값 아님)
   where id = d.id;
   return v_out;
 end $$;
@@ -1630,7 +1797,7 @@ end $$;
 - 내부: `api_resolve_study(p_uid uuid, p_text text) → text` · `api_studies(p_uid uuid, p_include_ended boolean) → jsonb` · `api_node_file_counts(p_room bigint) → jsonb` · `api_curriculum_view(p_c jsonb, p_uid uuid) → jsonb` · `personal_create_many(p_slug text, p_round jsonb, p_goals jsonb) → jsonb {createdIds, skipped:[title], round:{id,label}, remaining, count, warnings}` — 〔C#2〕 순서: **① `personal_room`(방 잠금·읽기·상태) ② `personal_eligible`(→ `NOT_ACTIVE_MEMBER`) ③ 회차 `plan_round_pick` + `personal_round`(보관·과제형 회차 거부) ④ 입력 검증(1~20개·키) ⑤ 중복 건너뜀 — 같은 회차에 같은 제목(trim)의 내 개인 목표가 이미 있거나 입력 안에서 앞서 나온 제목(〔T5〕 재시도 멱등) ⑥ 각각 `personal_create`**. 전부 중복이어도 ①~④ 는 돈다. 남은 자리 = `personal_limit()` − 내 목표 수. 경고에는 `plan_warn_text` 로 `message`(〔C#9〕) · `personal_delete_many(p_slug text, p_ids jsonb) → jsonb {deleted, skipped:[id]}` — 〔C#1·#10〕 순서: **① `personal_room`(방 잠금 — 제출 경로 `submission_target`·`personal_complete` 도 같은 방 잠금을 잡으므로 검사~삭제 사이에 제출이 끼지 못한다) ② id 형식 검증·중복 제거 ③ 각 id: 이 방의 개인 목표가 아니면(이미 지워짐 포함) `skipped`, 남의 것이면 `NOT_OWNER`(전부 실패), 제출 있으면 `NODE_HAS_SUBMISSIONS`(전부 실패 — 웹 `personal_delete` 는 본인 제출도 지우지만 AI 경로는 막는다) ④ 모두 통과한 뒤 각각 `personal_delete`**. 같은 호출을 다시 하면 `{deleted:0, skipped:[…]}` 로 성공 — `idempotentHint:true` 가 참이 된다 · `api_error_json(state, code, detail, hint) → jsonb`.
 - 함수 속성: `api_invoke … set statement_timeout = '15s'`.
 - 〔C#11〕 `api_invoke` 첫 줄: `octet_length(p_args::text) > 307200`(300KB) → 예외 `PAYLOAD_TOO_LARGE`(라우트 413; 인증 전 — 감사 없음). 라우트의 512KB HTTP 상한을 우회해 PostgREST 를 직접 부르는 경우의 방어.
-- 〔C#7〕 레이트리밋: `curriculum_plan_apply` 면 `v_replay := exists(api_plan_drafts where id = previewId and user_id = uid and applied_at is not null)`(소유권 확인) → `api_rate_check(…, v_replay)`. `api_rate_check` 가 사용자 잠금을 먼저 잡으므로 이후 RPC 의 방 잠금보다 앞선다(잠금 순서).
+- 〔C#7·N3〕 레이트리밋: `curriculum_plan_apply` 면 **① `api_user_lock(uid)` → ② 초안의 방을 `room_lock` → ③ 그 뒤에** `v_replay := exists(api_plan_drafts where id = previewId and user_id = uid and applied_at is not null)`(소유권 확인) → ④ `api_rate_check(…, v_replay)`. 잠금 전에 읽으면 다른 토큰의 동시 적용이 커밋되기 전 값(`false`)을 보고 replay 를 한도 초과로 거부할 수 있다. 방 잠금까지 잡는 이유: 웹이 `curriculum_plan_apply` 를 직접 부르는 경로는 사용자 잠금을 잡지 않지만 방 잠금은 잡으므로, 방 잠금 뒤에 읽으면 그 경로의 적용도 커밋된 뒤다. 잠금 순서 사용자 → 방 → (apply 안에서) 초안 그대로.
 - 〔C#12〕 감사 보장은 **업무 오류**(`WHEN OTHERS` 가 잡는 `P0001`·형식·제약 오류)까지. `query_canceled`(57014 — `statement_timeout`·클라이언트 취소)는 `WHEN OTHERS` 가 잡지 않아 트랜잭션 전체가 롤백된다 → 감사 행 없음(설계상 범위 밖, 라우트 운영 로그 — Task 8).
 
 - [ ] **Step 1: 실패하는 테스트**
@@ -1811,6 +1978,12 @@ cases("api invoke 0034", db, [
     const r = await call(q, t, "personal_create_many", { study: "aws", round: 2, goals: [{ title: "떠나기 전 목표" }] });
     assertEquals([r.ok, r.error.code], [false, "NOT_ACTIVE_MEMBER"]);
   } },
+  { name: "〔N3〕 잠금 순서(정적): api_invoke 의 apply 는 사용자 잠금 → 방 잠금 → replay 판정 → api_rate_check", run: async (q) => {
+    const src = (await one(q, "select prosrc from pg_proc p join pg_namespace s on s.oid = p.pronamespace where s.nspname = 'public' and p.proname = 'api_invoke'")).prosrc as string;
+    const at = (needle: string) => src.indexOf(needle);
+    assert(at("api_user_lock(") >= 0 && at("api_user_lock(") < at("room_lock(") && at("room_lock(") < at("applied_at is not null")
+           && at("applied_at is not null") < at("api_rate_check("), "user → room → replay → rate");
+  } },
   { name: "〔C#2〕 잠금 순서(정적): personal_*_many 는 personal_room(방 잠금)이 중복·제출·소유 검사보다 먼저", run: async (q) => {
     const src = async (fn: string) => (await one(q, "select prosrc from pg_proc p join pg_namespace s on s.oid = p.pronamespace where s.nspname = 'public' and p.proname = $1", [fn])).prosrc as string;
     const c = await src("personal_create_many");
@@ -1920,87 +2093,175 @@ Deno.test("트랜잭션 경계: api_invoke 가 남긴 sgtudy.api_uid 는 커밋 
 
 (`makeQ` 는 `_harness.ts` 에서 import 추가. PostgREST 연결 풀에서 요청 사이 누수가 없는지는 이 테스트로 증명되지 않는다 — 트랜잭션 한정 `set_config(…, true)` 의 의미만 고정하고, 실제 요청 경계는 Step 1b 의 실 PostgREST 테스트가 본다.)
 
-- [ ] **Step 1b(〔C#13〕): 실 PostgREST 게이트** — `supabase/tests/api-invoke-db.test.ts`(기존 `_testenv.ts` 의 `dbTest`, env 없으면 ignore → `npm run test:db` 기본 실행에는 영향 없음). 로컬 supabase 에 0032~0034 를 올린 뒤(`supabase db reset` — 로컬만) 실행한다:
+- [ ] **Step 1b(〔C#13·N4·N5〕): 실 PostgREST 게이트** — `supabase/tests/api-invoke-db.test.ts`(기존 `_testenv.ts` 의 `dbTest`, env 없으면 ignore → `npm run test:db` 기본 실행에는 영향 없음). 로컬 supabase 에 0032~0034 를 올린 뒤(`supabase db reset` — 로컬만) `eval "$(supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY SUPABASE_DB_URL=$DB_URL` 로 실행한다.
+
+설계(〔N4〕): ① 경쟁은 **같은 사용자의 서로 다른 토큰**으로 만든다 — 같은 토큰이면 `api_authenticate` 의 토큰 행 `UPDATE` 가 이미 직렬화해 사용자 advisory 잠금이 없어도 통과해 버린다. ② 서로 다른 previewId 는 **서로 다른 방**에 둔다(같은 방이면 방 잠금·`STALE_VERSION` 이 섞여 한도 경쟁을 가린다). ③ **제어된 동시 시작**: 직접 Postgres 연결(`SUPABASE_DB_URL`)이 같은 advisory 키(`'sgtudy.api:' || uid` / `'sgtudy.pat:' || uid`)를 세션 잠금으로 쥔 채 요청들을 쏘고, 400ms 뒤 **모두 아직 대기 중인지 확인한 다음** 놓는다 — 잠금이 실제로 그 요청들을 막고 있음을 증명한다. ④ 개인 목표 추가·제출-삭제 경쟁은 **별도 연결**(직접 연결의 열린 트랜잭션)이 방 잠금을 쥔 상태에서 PAT 요청을 쏜다. 〔N5〕 setup 의 모든 응답을 검사하고(`must`), 로컬 URL 이 아니면 파일 로드 시점에 실패한다.
 
 ```ts
-// 0034 — 실 PostgREST(역할·연결 풀·동시 실행). PGlite 하네스로는 증명할 수 없는 것만
+// 0034 — 실 PostgREST(역할·연결 풀·동시 실행). PGlite 하네스로는 증명할 수 없는 것만. 로컬 supabase 전용
 import { assert, assertEquals } from "@std/assert";
-import { anon, dbTest, RUN, service, userClient } from "./_testenv.ts";
+import postgres from "npm:postgres@3.4.5";
+import { anon, dbTest, hasEnv, RUN, service, userClient } from "./_testenv.ts";
 
-const call = (token: string | null, op: string, args: unknown = {}) =>
-  anon().rpc("api_invoke", { p_token: token, p_op: op, p_args: args });
-
-async function setup() {
-  const { u, c } = await userClient(1);
-  assertEquals((await c.rpc("me_update", { p_nickname: "ai" + RUN })).error, null);
-  const room = (await c.rpc("room_create", { p_title: "AI 게이트 " + RUN, p_intro: "x", p_start_date: "2026-11-01", p_end_date: "2026-11-28",
-    p_capacity: 6, p_is_public: true, p_join_mode: "direct" })).data as { id: string; slug: string };
-  const tok = (await c.rpc("pat_create", { p_name: "gate " + RUN, p_scopes: ["read", "curriculum:write"], p_days: 30 })).data as { id: string; token: string };
-  return { u, c, room, tok };
+// 〔N5〕 로컬 강제: 호스티드에 대고 동시성·대량 감사 행을 만들지 않는다
+const LOCAL = /^(https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/;
+const DB_URL = Deno.env.get("SUPABASE_DB_URL") ?? "";
+if (hasEnv && (!LOCAL.test(Deno.env.get("SUPABASE_URL") ?? "") || !/@(127\.0\.0\.1|localhost):/.test(DB_URL))) {
+  throw new Error("api-invoke-db.test.ts 는 로컬 supabase 전용이에요 — SUPABASE_URL·SUPABASE_DB_URL 이 127.0.0.1/localhost 여야 해요");
 }
-async function cleanup(room: { id: string }, tok: { id: string }, uid: string) {
+const pg = hasEnv ? postgres(DB_URL, { max: 4, onnotice: () => {} }) : (null as never);
+
+type R = { data: unknown; error: { message: string } | null };
+function must<T>(r: R, label: string): T {
+  if (r.error || r.data === null || r.data === undefined) throw new Error(`${label}: ${r.error?.message ?? "no data"}`);
+  return r.data as T;
+}
+const call = (token: string | null, op: string, args: unknown = {}) => anon().rpc("api_invoke", { p_token: token, p_op: op, p_args: args });
+const env = (r: R) => must<{ ok: boolean; data: any; error?: { code: string } }>(r, "api_invoke");
+
+async function setup(n = 1, rooms = 1) {
+  const { u, c } = await userClient(n);
+  must(await c.rpc("me_update", { p_nickname: "ai" + n + RUN }), "me_update");
+  const rs: { id: string; slug: string }[] = [];
+  for (let i = 0; i < rooms; i++) {
+    rs.push(must(await c.rpc("room_create", { p_title: `AI 게이트 ${RUN} ${i}`, p_intro: "x", p_start_date: "2026-11-01", p_end_date: "2026-11-28",
+      p_max_members: 6, p_is_public: true, p_join_mode: "direct" }), "room_create"));   // 0013 판 인자 이름
+  }
+  const toks: { id: string; token: string }[] = [];
+  for (let i = 0; i < 3; i++) {   // 같은 사용자의 서로 다른 토큰 3개
+    toks.push(must(await c.rpc("pat_create", { p_name: `gate ${RUN} ${i}`, p_scopes: ["read", "curriculum:write", "personal:write"], p_days: 30 }), "pat_create"));
+  }
+  return { u, c, rooms: rs, toks };
+}
+async function cleanup(uid: string, rooms: { id: string }[]) {
   const admin = service();
-  await admin.from("api_audit").delete().eq("user_id", uid);
-  await admin.from("api_plan_drafts").delete().eq("room_id", room.id);
-  await admin.from("api_tokens").delete().eq("id", tok.id);
-  await admin.from("rooms").delete().eq("id", room.id);
+  for (const [t, col, v] of [["api_audit", "user_id", uid], ["api_plan_drafts", "user_id", uid], ["api_tokens", "user_id", uid]] as const) {
+    const { error } = await admin.from(t).delete().eq(col, v);
+    if (error) console.error("cleanup", t, error.message);
+  }
+  for (const r of rooms) await admin.from("rooms").delete().eq("id", r.id);
 }
 const preview = async (token: string, slug: string, title: string) =>
-  ((await call(token, "curriculum_plan_preview", { study: slug, plan: { schema: "sgtudy.plan/v1", ops: [{ op: "create", title }] } })).data as any).data.previewId as string;
+  env(await call(token, "curriculum_plan_preview", { study: slug, plan: { schema: "sgtudy.plan/v1", ops: [{ op: "create", title }] } })).data.previewId as string;
+const fillApplies = async (uid: string, n: number) => {
+  const at = new Date(Date.now() - 120_000).toISOString();
+  const { error } = await service().from("api_audit").insert(Array.from({ length: n }, () =>
+    ({ token_id: null, user_id: uid, source: "PAT", op: "curriculum_plan_apply", dry_run: false, ok: true, created_at: at })));
+  if (error) throw new Error("fill " + error.message);
+};
+
+// 제어된 동시 시작: key 를 세션 advisory 잠금으로 쥔 채 fire → 400ms 뒤 전부 대기 중인지 확인 → 놓기
+async function heldStart<T>(key: string, fire: () => Promise<T>[]): Promise<T[]> {
+  const conn = await pg.reserve();
+  try {
+    await conn`select pg_advisory_lock(hashtextextended(${key}, 0))`;
+    const done: boolean[] = [];
+    const ps = fire().map((p, i) => p.finally(() => { done[i] = true; }));
+    await new Promise((r) => setTimeout(r, 400));
+    assertEquals(done.filter(Boolean).length, 0, `${key}: 요청들이 잠금에서 기다리고 있어야 한다(잠금이 실제 직렬화 지점인지)`);
+    await conn`select pg_advisory_unlock(hashtextextended(${key}, 0))`;
+    return await Promise.all(ps);
+  } finally { conn.release(); }
+}
+// 별도 연결의 열린 트랜잭션에서 uid 로 body 실행(방 잠금을 쥔 채) → PAT 요청이 막혀 있는지 본 뒤 커밋 → 그 다음에 PAT 응답을 기다린다
+async function holdRoomThen<T>(uid: string, body: (tx: any) => Promise<unknown>, during: () => Promise<T>): Promise<T> {
+  let pending!: Promise<T>;
+  await pg.begin(async (tx: any) => {
+    await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: uid, role: "authenticated" })}, true),
+                    set_config('request.jwt.claim.sub', ${uid}, true)`;
+    await body(tx);                                   // 여기서 room_lock 을 잡는다
+    let settled = false;
+    pending = during().finally(() => { settled = true; });
+    await new Promise((r) => setTimeout(r, 400));
+    assertEquals(settled, false, "PAT 요청이 방 잠금에서 기다리고 있어야 한다");
+  });                                                 // 커밋 → 방 잠금 해제
+  return await pending;
+}
 
 dbTest("api: anon 역할로 api_invoke 만 · 내부 함수는 PostgREST 에 없다 · 요청 사이 신원 누수 없음", async () => {
-  const { u, room, tok } = await setup();
+  const { u, rooms, toks } = await setup(1, 1);
   try {
-    assertEquals(((await call(tok.token, "whoami")).data as any).ok, true);
-    assert((await anon().rpc("api_authenticate", { p_token: tok.token, p_op: "whoami" })).error);         // GRANT 없음
-    assert((await anon().rpc("api_rate_check", { p_token: tok.id, p_user: u.id, p_op: "whoami", p_dry: null })).error);
-    for (let i = 0; i < 5; i++) {   // 풀의 여러 연결을 돌며: 토큰 요청 바로 뒤의 무토큰 요청은 항상 AUTH_REQUIRED
-      await call(tok.token, "whoami");
+    assertEquals(env(await call(toks[0].token, "whoami")).ok, true);
+    assert((await anon().rpc("api_authenticate", { p_token: toks[0].token, p_op: "whoami" })).error);   // GRANT 없음
+    assert((await anon().rpc("api_user_lock", { p_user: u.id })).error);
+    for (let i = 0; i < 5; i++) {
+      await call(toks[0].token, "whoami");
       assertEquals((await call(null, "whoami")).error?.message, "AUTH_REQUIRED");
     }
-  } finally { await cleanup(room, tok, u.id); }
+  } finally { await cleanup(u.id, rooms); }
 });
 
-dbTest("api: 같은 previewId 동시 적용 2건 → 한 번만 실행(하나는 replayed)", async () => {
-  const { u, room, tok } = await setup();
+dbTest("api 〔N4·N3〕: 같은 previewId 를 같은 사용자의 다른 토큰 2개로 동시 적용(19/20) → 한 번 실행 + replayed, 한도 거부 없음", async () => {
+  const { u, rooms, toks } = await setup(1, 1);
   try {
-    const pv = await preview(tok.token, room.slug, "동시 " + RUN);
-    const rs = await Promise.all([0, 1].map(() => call(tok.token, "curriculum_plan_apply", { previewId: pv })));
-    const datas = rs.map((r) => (r.data as any).data);
-    assertEquals(datas.filter((d) => d.applied && !d.replayed).length, 1);
-    assertEquals(datas.filter((d) => d.replayed).length, 1);
-    assertEquals((await service().from("goal_nodes").select("id").eq("room_id", room.id).eq("title", "동시 " + RUN)).data!.length, 1);
-  } finally { await cleanup(room, tok, u.id); }
+    const pv = await preview(toks[0].token, rooms[0].slug, "동시 " + RUN);
+    await fillApplies(u.id, 19);
+    const rs = await heldStart("sgtudy.api:" + u.id, () => [toks[1], toks[2]].map((t) => call(t.token, "curriculum_plan_apply", { previewId: pv })));
+    const ds = rs.map((r) => { assertEquals(r.error, null, "API_RATE_LIMITED 이면 replay 판정이 잠금 전에 일어난 것"); return env(r).data; });
+    assertEquals(ds.filter((d) => d.applied && !d.replayed).length, 1);
+    assertEquals(ds.filter((d) => d.replayed).length, 1);
+    assertEquals(must<unknown[]>(await service().from("goal_nodes").select("id").eq("room_id", rooms[0].id).eq("title", "동시 " + RUN), "count").length, 1);
+  } finally { await cleanup(u.id, rooms); }
 });
 
-dbTest("api: 적용 한도 19/20 에서 서로 다른 previewId 3건 동시 → 정확히 1건만 성공", async () => {
-  const { u, room, tok } = await setup();
+dbTest("api 〔N4〕: 적용 19/20 에서 서로 다른 방 3곳의 previewId 를 다른 토큰 3개로 동시 적용 → 정확히 1건만 성공", async () => {
+  const { u, rooms, toks } = await setup(1, 3);
   try {
-    const ids = [await preview(tok.token, room.slug, "a" + RUN), await preview(tok.token, room.slug, "b" + RUN), await preview(tok.token, room.slug, "c" + RUN)];
-    const now = new Date(Date.now() - 120_000).toISOString();
-    await service().from("api_audit").insert(Array.from({ length: 19 }, () =>
-      ({ token_id: null, user_id: u.id, source: "PAT", op: "curriculum_plan_apply", dry_run: false, ok: true, created_at: now })));
-    const rs = await Promise.all(ids.map((id) => call(tok.token, "curriculum_plan_apply", { previewId: id })));
-    assertEquals(rs.filter((r) => !r.error && (r.data as any).ok).length, 1);
+    const pvs = await Promise.all(rooms.map((r, i) => preview(toks[i].token, r.slug, `r${i} ${RUN}`)));
+    await fillApplies(u.id, 19);
+    const rs = await heldStart("sgtudy.api:" + u.id, () => pvs.map((pv, i) => call(toks[i].token, "curriculum_plan_apply", { previewId: pv })));
+    assertEquals(rs.filter((r) => !r.error && env(r).ok).length, 1);
     assertEquals(rs.filter((r) => r.error?.message === "API_RATE_LIMITED").length, 2);
-  } finally { await cleanup(room, tok, u.id); }
+  } finally { await cleanup(u.id, rooms); }
 });
 
-dbTest("api: PAT 9개에서 동시 생성 3건 → 10개를 넘지 않는다", async () => {
-  const { u, c, room, tok } = await setup();
+dbTest("api 〔N4〕: PAT 9개에서 동시 생성 3건(같은 세션, 서로 다른 요청) → 10개를 넘지 않는다", async () => {
+  const { u, c, rooms } = await setup(1, 0);          // setup 이 3개 → 6개 더 = 9
   try {
-    for (let i = 0; i < 8; i++) await c.rpc("pat_create", { p_name: `n${i}`, p_scopes: ["read"], p_days: 30 });   // setup 의 1개 + 8 = 9
-    const rs = await Promise.all([0, 1, 2].map((i) => c.rpc("pat_create", { p_name: `p${i}`, p_scopes: ["read"], p_days: 30 })));
+    for (let i = 0; i < 6; i++) must(await c.rpc("pat_create", { p_name: `n${i}`, p_scopes: ["read"], p_days: 30 }), "pat_create");
+    const rs = await heldStart("sgtudy.pat:" + u.id, () => [0, 1, 2].map((i) => c.rpc("pat_create", { p_name: `p${i}`, p_scopes: ["read"], p_days: 30 })));
     assertEquals(rs.filter((r) => !r.error).length, 1);
-    assertEquals((await service().from("api_tokens").select("id").eq("user_id", u.id).is("revoked_at", null)).data!.length, 10);
-  } finally {
-    await service().from("api_tokens").delete().eq("user_id", u.id);
-    await cleanup(room, tok, u.id);
-  }
+    assertEquals(rs.filter((r) => r.error?.message === "API_TOKEN_LIMIT").length, 2);
+  } finally { await cleanup(u.id, rooms); }
 });
+
+// 개인 목표 경쟁: 방이 RECRUIT/ACTIVE 여야 한다 → 회차 1개 만든 뒤 service 로 상태만 바꾼다(테스트 방 한정)
+async function activeRoomWithRound(c: any, room: { id: string; slug: string }) {
+  must(await c.rpc("node_create", { p_slug: room.slug }), "node_create");
+  const { error } = await service().from("rooms").update({ status: "ACTIVE" }).eq("id", room.id);
+  if (error) throw new Error("activate " + error.message);
+}
+
+dbTest("api 〔N4·C#2〕: 개인 목표 추가 경쟁 — 별도 연결이 같은 제목을 만드는 트랜잭션 중이면 PAT 요청은 방 잠금에서 기다렸다가 skipped", async () => {
+  const { u, c, rooms, toks } = await setup(1, 1);
+  try {
+    await activeRoomWithRound(c, rooms[0]);
+    const r = await holdRoomThen(u.id,
+      (tx) => tx`select public.personal_create_many(${rooms[0].slug}, '"current"'::jsonb, '[{"title":"동시 목표"}]'::jsonb)`,
+      () => call(toks[0].token, "personal_create_many", { study: rooms[0].slug, goals: [{ title: "동시 목표" }] }));
+    assertEquals([env(r).data.count, env(r).data.skipped], [0, ["동시 목표"]]);
+    assertEquals(must<unknown[]>(await service().from("goal_nodes").select("id").eq("room_id", rooms[0].id).eq("title", "동시 목표"), "count").length, 1);
+  } finally { await cleanup(u.id, rooms); }
+});
+
+dbTest("api 〔N4·C#1〕: 제출-삭제 경쟁 — 별도 연결이 완료(제출) 트랜잭션 중이면 PAT 삭제는 기다렸다가 NODE_HAS_SUBMISSIONS, 목표·제출 유지", async () => {
+  const { u, c, rooms, toks } = await setup(1, 1);
+  try {
+    await activeRoomWithRound(c, rooms[0]);
+    const id = env(await call(toks[0].token, "personal_create_many", { study: rooms[0].slug, goals: [{ title: "끝낼 목표" }] })).data.createdIds[0];
+    const r = await holdRoomThen(u.id,
+      (tx) => tx`select public.personal_complete(${rooms[0].slug}, ${id}::bigint, true)`,
+      () => call(toks[1].token, "personal_delete_many", { study: rooms[0].slug, ids: [id] }));
+    assertEquals([env(r).ok, env(r).error?.code], [false, "NODE_HAS_SUBMISSIONS"]);
+    assertEquals(must<unknown[]>(await service().from("goal_nodes").select("id").eq("id", id), "node").length, 1);
+    assertEquals(must<unknown[]>(await service().from("submissions").select("id").eq("node_id", id), "sub").length, 1);
+  } finally { await cleanup(u.id, rooms); }
+});
+
+addEventListener("unload", () => { if (hasEnv) void pg.end(); });
 ```
 
-(`room_create` 인자 이름·순서는 0004 판을 확인해 맞춘다. 이 파일은 **로컬 supabase 에서만** 돈다 — 호스티드에 대고 돌리지 않는다. 결과(통과/ignore)를 Task 노트에 적고, ignore 였다면 Task 10 체크리스트에서 사용자에게 실행을 요청한다.)
+(이 파일은 **로컬 supabase 에서만** 돈다 — 파일 머리의 URL 검사가 호스티드를 막는다. `npm:postgres` 는 이 테스트 파일에서만 쓰는 정확한 판(`3.4.5`) — `deno.json` 은 바꾸지 않는다. 결과(통과/ignore)를 Task 노트에 적고, ignore 였다면 Task 10 체크리스트에서 사용자에게 실행을 요청한다. `room_create` 인자는 최신 판(0013:271 — `p_max_members`)과 대조해 확정했다.)
 
 - [ ] **Step 2: 실패 확인** → FAIL.
 - [ ] **Step 3: 구현** — `0034_api_invoke.sql`
@@ -2193,9 +2454,14 @@ begin
     v_source := case when nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'client_id' is not null then 'OAUTH' else 'SESSION' end;
   end if;
   v_dry := case p_op when 'curriculum_plan_preview' then true when 'curriculum_plan_apply' then false end;
-  if p_op = 'curriculum_plan_apply' then                                       -- 〔C#7〕 소유권 확인된 재생은 적용 한도 제외
-    v_replay := exists (select 1 from public.api_plan_drafts d
+  if p_op = 'curriculum_plan_apply' then                                       -- 〔C#7·N3〕 소유권 확인된 재생은 적용 한도 제외
+    perform public.api_user_lock(v_uid);                                       -- ① 사용자(api_rate_check 가 다시 잡아도 즉시)
+    select x.slug into v_slug from public.api_plan_drafts d join public.rooms x on x.id = d.room_id
+    where d.id = v_args ->> 'previewId' and d.user_id = v_uid;
+    if v_slug is not null then perform public.room_lock(v_slug); end if;       -- ② 방(웹 직접 apply 와도 직렬화)
+    v_replay := exists (select 1 from public.api_plan_drafts d                 -- ③ 잠금 뒤에 읽는다
                         where d.id = v_args ->> 'previewId' and d.user_id = v_uid and d.applied_at is not null);
+    v_slug := null;                                                            --    (아래 디스패치가 다시 정한다)
   end if;
   -- 〔C#7〕 사용자 잠금 → 집계(api_rate_check 안). whoami 는 잠금 없이 분당 한도만 — 라우트가 HTTP 요청마다 부른다(〔C#6〕)
   perform public.api_rate_check(t.id, v_uid, p_op, v_dry, v_replay);
@@ -2260,7 +2526,7 @@ grant execute on function public.api_invoke(text, text, jsonb) to anon, authenti
 〔C#12〕 감사 보장 범위(주석으로 함수 머리에 적는다): `exception when others` 는 `query_canceled`(57014)·`assert_failure` 를 잡지 않는다 — `statement_timeout`(15s)·클라이언트 취소면 감사 행까지 롤백된다. 의도된 범위 밖이다(감사 = 업무 결과 기록). 라우트가 `TIMEOUT` 을 받으면 토큰 없이 운영 로그를 남긴다(Task 8). 잡으려고 `when query_canceled` 를 추가하지 않는다 — 취소된 트랜잭션에서 더 실행하면 타임아웃의 의미가 깨진다. 〔T5〕 `personal_create_many` 20개 성능을 PGlite 로 한 번 재서 노트에(목표 < 1s; 넘으면 후속 마이그레이션에서 `personal_create` core 분리 — 이 플랜 범위 밖).
 
 - [ ] **Step 3b(〔C#9〕): 응답 계약 스냅숏** — Task 7 Step 4c ① 의 계약 사례를 이 파일에 넣고 `UPDATE_CONTRACT=1 deno test -A --config supabase/tests/deno.json supabase/tests/api-invoke-sql.test.ts` 로 `src/lib/mcp/__fixtures__/api-contract.json` 을 만든다(이후 실행은 모양 비교).
-- [ ] **Step 4: 통과 + 전체 회귀** — `npm run test:db` 0 failed(`api-invoke-db.test.ts` 는 env 없으면 ignored 로 보인다 — 정상). 로컬 supabase 가 있으면 `eval "$(supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY` 후 `deno test -A --config supabase/tests/deno.json supabase/tests/api-invoke-db.test.ts` → 4 passed(〔C#13〕 동시성·역할 게이트). 없으면 노트에 "실 PostgREST 게이트 미실행 — Task 10 에서 사용자 실행".
+- [ ] **Step 4: 통과 + 전체 회귀** — `npm run test:db` 0 failed(`api-invoke-db.test.ts` 는 env 없으면 ignored 로 보인다 — 정상). 로컬 supabase 가 있으면 `eval "$(supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY SUPABASE_DB_URL=$DB_URL` 후 `deno test -A --config supabase/tests/deno.json supabase/tests/api-invoke-db.test.ts` → 6 passed(〔C#13·N4〕 동시성·역할 게이트). 없으면 노트에 "실 PostgREST 게이트 미실행 — Task 10 에서 사용자 실행".
 - [ ] **Step 5: 커밋** — `git commit -- supabase/migrations/0034_api_invoke.sql supabase/tests/api-invoke-sql.test.ts supabase/tests/api-invoke-db.test.ts src/lib/mcp/__fixtures__/api-contract.json -m "feat(db): 0034 — api_invoke 게이트웨이(PAT → 기존 RPC, 스코프·레이트리밋·감사·스터디 이름 해석), api_studies, 개인 목표 일괄 추가(회차 선택자·중복 건너뜀)·삭제"`
 
 ---
@@ -2510,12 +2776,14 @@ describe("formatStudies · formatTasks · formatPreview · expiryNotice", () => 
 // 실제 SQL 응답 모양과의 일치는 contract.test.ts(Step 4c)가 따로 본다
 ```
 
-`format.ts` 규칙(재검토 문서 §4): 텍스트만 반환, `MAX_TEXT = 8000`, 넘으면 마지막 완전한 줄까지 자르고 `… 외 N줄 — rounds:"a-b" 로 나눠 보세요`. `formatCurriculum` 은 `toCurriculumTree` 결과를 줄로(`personal: mine|none|all`, `rounds` 선택자 — 서수·`current`·라벨·`"a-b"` — 를 TS 로 해석, `current` 는 `currentRoundId`). `formatPreview` 의 줄: `+ 회차/과제 생성`(들여쓰기로 부모), `~ 변경(옛 → 새)`, `↪ 이동`, 담당은 닉네임, 경고는 `message ?? WARN_TEXT[code] ?? code`(〔C#9〕 서버가 message 를 붙이지만 계약이 깨져도 `undefined` 를 찍지 않는다 — `WARN_TEXT` 는 `plan_warn_text` 와 같은 3개), 알림은 `알림: 지은 1건(묶음) · …` 또는 `알림 없음`, 되돌리기 줄은 〔C#4〕 `되돌리기 가능: 일정 n건 · 웹에서만: 생성 a · 이동 b · 일정 외 변경 c`(0 인 항목 생략). `formatApply` = `적용 완료 — {slug} 진행목표: …` + 링크(origin + link) + `ref=id` + 되돌리기 안내(적용 응답의 `undoable`(〔C#9〕 Task 4 가 넣음)이 `ops > 0` 이면 `되돌리려면 preview_curriculum_plan(study:"…", undo:"pv_…") — 일정만, 그 뒤 일정이 바뀌면 거부`, `notUndoable` 합이 > 0 이면 "이동·생성·제목 등은 웹에서"). `formatPersonalResult`(건너뜀·경고 message 포함)·`formatRemoveResult`(〔C#10〕 `n개 삭제` + skipped 가 있으면 ` · 이미 없음 k개`) 한 줄.
+`format.ts` 규칙(재검토 문서 §4): 텍스트만 반환, `MAX_TEXT = 8000`, 넘으면 마지막 완전한 줄까지 자르고 `… 외 N줄 — rounds:"a-b" 로 나눠 보세요`. `formatCurriculum` 은 `toCurriculumTree` 결과를 줄로(`personal: mine|none|all`, `rounds` 선택자 — 서수·`current`·라벨·`"a-b"` — 를 TS 로 해석, `current` 는 `currentRoundId`). `formatPreview` 의 줄: `+ 회차/과제 생성`(들여쓰기로 부모), `~ 변경(옛 → 새)`, `↪ 이동`, 담당은 닉네임, 경고는 `message ?? WARN_TEXT[code] ?? code`(〔C#9〕 서버가 message 를 붙이지만 계약이 깨져도 `undefined` 를 찍지 않는다 — `WARN_TEXT` 는 `plan_warn_text` 와 같은 3개), 알림은 `알림: 지은 1건(묶음) · …` 또는 `알림 없음`, 되돌리기 줄은 〔C#4·N2〕 `되돌리기 가능: 일정 n건(하위·개인 목표 포함) · 웹에서만: 생성 a · 이동 b · 일정 외 변경 c`(0 인 항목 생략). undo 미리보기의 `op:"restore"` 항목은 `↩ 날짜 복원 {제목} {현재} → {옛}` 한 줄씩(40줄 상한 동일). `formatApply` = `적용 완료 — {slug} 진행목표: …` + 링크(origin + link) + `ref=id` + 되돌리기 안내(적용 응답의 `undoable`(〔C#9〕 Task 4 가 넣음)이 `ops > 0` 이면 `되돌리려면 preview_curriculum_plan(study:"…", undo:"pv_…") — 일정만, 그 뒤 일정이 바뀌면 거부`, `notUndoable` 합이 > 0 이면 "이동·생성·제목 등은 웹에서"). `formatPersonalResult`(건너뜀·경고 message 포함)·`formatRemoveResult`(〔C#10〕 `n개 삭제` + skipped 가 있으면 ` · 이미 없음 k개`) 한 줄.
 〔C#5〕 `personal:"mine"` 판정은 노드의 `isMine`(게이트웨이가 붙임)만 쓴다 — `ownerId` 와 비교할 호출자 id 를 포맷터가 갖지 않는다. `isMine` 이 없는 노드(계약 위반)는 `mine` 에서 빼고(남의 목표를 내 것으로 보이지 않게), `all` 에서는 `ownerNickname` 으로 보인다. `toCurriculumTree` 는 개인 목표 노드에 `isMine` 을 그대로 옮긴다.
 
 - [ ] **Step 4c(〔C#9·#5〕): SQL 응답 계약 테스트** — 포맷터 테스트의 손으로 만든 fixture 가 실제 SQL 응답과 어긋나는 것을 막는다.
-  1. Task 6 의 `api-invoke-sql.test.ts` 에 사례 1개 추가: 시드 aws 에서 PAT 로 `curriculum_get`(지은), `curriculum_plan_preview`(shift + 경고가 나는 update + create), `curriculum_plan_apply`, `personal_create_many`(건너뜀 1개 포함), `personal_delete_many`(skipped 포함) 응답의 `data` 를 모아 **정규화**(uuid → `"<uuid>"`, 숫자 id 문자열 → `"<id>"`, `pv_…` → `"pv_000000000000"`, ISO 시각 → `"<ts>"`)한 뒤, `UPDATE_CONTRACT=1` 이면 `src/lib/mcp/__fixtures__/api-contract.json` 에 쓰고, 아니면 그 파일과 **모양**(키 집합·값 타입, 배열은 첫 원소)이 같은지 `assertEquals(shape(actual), shape(fixture))`. 파일은 커밋한다(Task 6 이 만들고 Task 7 이 읽는다 — Task 6 커밋 경로에 추가).
-  2. `src/lib/mcp/contract.test.ts`(vitest): 그 JSON 을 `formatCurriculum`/`formatPreview`/`formatApply`/`formatPersonalResult`/`formatRemoveResult` 에 넣어 — 출력에 `undefined`·`null`·`[object Object]`·uuid 없음, 경고 줄이 한국어 문구, 적용 결과에 되돌리기 안내 줄, `personal:"mine"` 결과에 지은 목표만 — 을 확인한다.
+  1. Task 6 의 `api-invoke-sql.test.ts` 에 사례 1개 추가: 시드 aws 에서 PAT 로 `curriculum_get`(지은 — 지은·철수 개인 목표가 있는 상태), `curriculum_plan_preview`(〔N6〕 **create·update·move·shift 를 모두** 넣고 경고가 나는 update 포함), `curriculum_plan_apply`, undo 미리보기(`restore` 항목), `personal_create_many`(건너뜀 1개 포함), `personal_delete_many`(skipped 포함) 응답의 `data` 를 모은다.
+     〔N6〕 **정규화 = 결정적 일대일 치환**(참조 보존): JSON 을 키 정렬 순서로 깊이 우선 순회하며 처음 본 순서대로 uuid → `"u1"`, `"u2"`…, 노드 id(키 `id`·`parentId`·`roundId`·`nodeId`·`createdId`, 배열 `createdIds`·`skipped`·`nodeIds`, 객체 `refs` 의 값, `fileCounts` 의 **키**) → `"n1"`, `"n2"`…, `pv_…` → `"pv_000000000001"`… 로 바꾼다. 같은 원래 값은 어디서든 같은 치환값이 되므로 부모·회차·담당자·isMine 관계가 그대로 남는다. 시각(ISO)·`version`·`expiresAt` 만 상수로. `UPDATE_CONTRACT=1` 이면 `src/lib/mcp/__fixtures__/api-contract.json` 에 쓰고, 아니면 비교한다.
+     비교는 **종류별 모양**: 배열은 첫 원소가 아니라 **모든 원소**의 모양을 판별자(`op` — create/update/move/restore, 노드는 `kind`·`task.type` — round/bundle/task/personal)별로 합집합해 비교하고, 판별자 집합 자체(예: diff 의 `{create, update, move}`, 노드의 `{round, bundle, task, personal}`, 개인 목표의 `isMine` `{true, false}`)도 같아야 한다. 그리고 치환 후 참조 무결성 검사: 모든 `parentId`·`roundId` 가 같은 응답의 노드 `id` 중 하나, `fileCounts` 키 ⊂ 노드 id, `refs` 값 ⊂ `createdIds`.
+  2. `src/lib/mcp/contract.test.ts`(vitest): 그 JSON 을 `formatCurriculum`/`formatPreview`/`formatApply`/`formatPersonalResult`/`formatRemoveResult` 에 넣어 — 출력에 `undefined`·`null`·`[object Object]`·uuid 없음, 경고 줄이 한국어 문구, 적용 결과에 되돌리기 안내 줄, `personal:"mine"` 결과에 지은 목표만(철수 목표 없음), `detail:"full"` 트리에서 묶음 아래 과제가 들여쓰기로 이어짐(부모 참조가 살아 있어야 가능), 미리보기에 `+`·`~`·`↪` 줄이 각각 1개 이상, undo 미리보기에 `↩` 줄 — 을 확인한다.
   3. 계약을 바꾸는 SQL 변경은 `UPDATE_CONTRACT=1 npm run test:db` 로 fixture 를 갱신하고 vitest 를 다시 돌린다(둘 다 같은 커밋).
 
 - [ ] **Step 5: 통과** — `npx vitest run src/lib/mcp && npm run lint && npx tsc --noEmit`.
@@ -2550,6 +2818,7 @@ export type AuthResult =
   | { ok: false; status: 401 | 403 | 429 | 503; code: string; retryAfterSec?: number };
 export function authenticatePat(token: string): Promise<AuthResult>;
 // 〔C#6〕 rpc('api_invoke', {p_token, p_op:'whoami'}) 1회. DB 가 폐기·만료·형식(401)·분당 한도(429, details.retryAfterSec)를 판정.
+//      〔N7〕 이 호출이 토큰별 HTTP 요청 카운터(120/분, tools/list·ping·initialize 포함)를 올린다 — 초과면 429.
 //      fromPostgrest → httpStatusOf; 200(예상 밖 코드)·INTERNAL·네트워크 오류 → 503. Authorization·토큰을 로그·응답에 싣지 않는다
 // http.ts
 export const MAX_BODY_BYTES = 512 * 1024;
@@ -2740,7 +3009,7 @@ export const GET = notAllowed;      // stateless — 서버 → 클라이언트 
 export const DELETE = notAllowed;
 ```
 
-비용: tools/call 1회 = DB 왕복 2회(`whoami` + `api_invoke`), 세션 시작(initialize·initialized·tools/list) = 3회. UX 재검토 T1 의 "initialize 때만" 최적화는 SDK 가 콜백 예외를 흡수해 401 을 보장할 수 없어 폐기했다(〔C#6〕). 왕복을 줄이려면 2단계에서 `whoami` 결과를 토큰 해시 키로 수 초 캐시하는 방안을 검토(폐기 반영 지연과 맞바꿈 — 지금은 하지 않음).
+비용: tools/call 1회 = DB 왕복 2회(`whoami` + `api_invoke`), 세션 시작(initialize·initialized·tools/list) = 3회. UX 재검토 T1 의 "initialize 때만" 최적화는 SDK 가 콜백 예외를 흡수해 401 을 보장할 수 없어 폐기했다(〔C#6〕). 〔N7〕 그 대신 매 요청의 `whoami` 가 토큰 행의 분 단위 원자 카운터(`api_tokens.http_window/http_count`, 120/분)를 올리므로 tools/list·ping 만 반복해도 무제한 DB 부하가 되지 않는다(Task 1). 무효 토큰 난사는 해시 인덱스 조회만 일으키고 행을 갱신하지 않는다 — 그 이상은 플랫폼(Vercel) 수준 방어로 둔다. 왕복을 줄이려면 2단계에서 `whoami` 결과를 토큰 해시 키로 수 초 캐시하는 방안을 검토(폐기 반영 지연과 맞바꿈 — 지금은 하지 않음).
 
 `src/lib/mcp/http.test.ts`: Content-Length 600KB → 413(본문 읽지 않음 — `req.body` 를 읽으면 실패하는 스트림으로 확인) · Content-Length 없이 600KB 스트림 → 413 · 깨진 JSON → 400 `PARSE_ERROR` · 정상 → value · `deny(401)` 에 `WWW-Authenticate` · `deny(429, …, 60)` 에 `Retry-After: 60` · 어떤 응답 본문에도 `sgt_pat_` 없음.
 
@@ -2882,7 +3151,7 @@ describe("tokens", () => {
 **Files:** 없음(코드) — 사용자에게 넘길 체크리스트를 PR 설명에 적는다.
 
 - [ ] **Step 1: 전체 게이트** — `npm run test:db && npm run lint && npx tsc --noEmit && npx vitest run` 모두 통과 출력 확인.
-- [ ] **Step 1b(〔C#13〕): 실 PostgREST 게이트** — `supabase/tests/api-invoke-db.test.ts` 가 로컬 supabase 에서 4 passed 인지(Task 6 Step 4 노트). ignore 였다면 아래 1번 **전에** 사용자에게 로컬 실행을 요청한다(동시 적용·동시 레이트리밋·PAT 10개 경쟁·anon 역할 GRANT·요청 간 신원 비누수 — PGlite 로 증명 못 한 것).
+- [ ] **Step 1b(〔C#13〕): 실 PostgREST 게이트** — `supabase/tests/api-invoke-db.test.ts` 가 로컬 supabase 에서 6 passed 인지(Task 6 Step 4 노트). ignore 였다면 아래 1번 **전에** 사용자에게 로컬 실행을 요청한다(다른 토큰 동시 적용·replay·동시 레이트리밋·PAT 10개 경쟁·개인 목표 추가/제출-삭제 경쟁·anon 역할 GRANT·요청 간 신원 비누수 — PGlite 로 증명 못 한 것).
 - [ ] **Step 2: 사용자 실행 목록(에이전트는 실행하지 않음)**
   0. (Step 1b 미실행 시) 로컬 `supabase start && supabase db reset` → `api-invoke-db.test.ts` 통과 확인.
   1. 호스티드 DB: `supabase db push`(0032·0033·0034).
@@ -2904,13 +3173,13 @@ describe("tokens", () => {
 | D5 보관 허용 | Task 3 `archive` op(`allowArchive: true` 필요, 아니면 `DESTRUCTIVE_OP_NOT_ALLOWED`) · Task 4 실행 분기 `node_archive` · diff `op:"archive"` · 테스트 2개 |
 | D6·D8 값 | `api_limits()`·`pat_create` 일수 목록·UI 기본값만 |
 | D7 배지 | 새 마이그레이션에 `goal_nodes.created_via varchar(8)` + `node_create_core` 인자 — 이 플랜 범위 밖(2단계) |
-| 〔UX 재검토〕 D11 원안(계획서 재전송 + planHash) | Task 4 를 단일 `curriculum_plan(slug, plan, dry, hash, key)`(git 이력의 이전 판)로, Task 1 에 `api_idempotency` 복원, `api_plan_drafts`·`plan_undo_of` 제거(D17 도 함께 원안) |
+| 〔UX 재검토〕 D11 원안(계획서 재전송 + planHash) | Task 4 를 단일 `curriculum_plan(slug, plan, dry, hash, key)`(git 이력의 이전 판)로, Task 1 에 `api_idempotency` 복원, `api_plan_drafts`·`plan_undo_*` 제거(D17 도 함께 원안) |
 | D12 JSON 응답 | Task 7 `format.ts` 대신 `tree.ts` JSON 을 text + `structuredContent` 로, Task 8 테스트 기대값만 |
 | D13 한국어 설명 | Task 8 문자열만, 설명 길이 상한 6,000자 → 9,000자 |
 | D14 id 만 | Task 3 `plan_resolve`·`plan_round_pick`, Task 6 `api_resolve_study` 제거, 도구 입력 `study` → `slug`, `round` → `roundId` |
 | D15 shift 없음 | Task 3 shift 분기·테스트 2개 제거 |
 | D16 삭제 없음 | Task 6 `personal_delete_many`·테스트, Task 8 `remove_personal_goals` 제거 |
-| D17 되돌리기 2단계 | Task 4 `plan_undo_of`·`plan_sched_*`·`undo_snapshot`·`p_undo_of`·undo 테스트 3개 제거(〔C#4〕로 MVP 는 일정만) |
+| D17 되돌리기 2단계 | Task 4 `plan_undo_check`·`plan_undo_run`·`sched_changes`(와 `plan_run` 의 `sched` 기록)·`p_undo_of`·undo 테스트 6개 제거(〔C#4·N1·N2〕로 MVP 는 기록된 날짜 복원만) |
 | D18 새 과제 무알림 | Task 5 `nt` CTE·테스트 2개 제거, 시그니처에서 `p_created` 제거 |
 | D19 prompt 2단계 | Task 8 `prompts.ts` 제거 |
 | D20 첨부 제외 | Task 6 `api_node_file_counts` 제거 |
