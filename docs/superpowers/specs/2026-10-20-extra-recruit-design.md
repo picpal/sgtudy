@@ -4,6 +4,7 @@
 - 요청(원문): "이미 시작한 스터디에 참가자 추가하고 싶은데, 추가 모집 기능이 없어. 추가 모집 하기위해 모집 기간을 설정하거나, 초대 코드를 통해서 이미 모집 종료되었더라도 초대 코드로 들어오면 참가 가능한 형태가 필요해"
 - 플랜: `docs/superpowers/plans/2026-10-20-extra-recruit.md`
 - 마이그레이션: `0032_extra_recruit.sql`(§10)
+- 개정: 2026-10-20 Codex 플랜 리뷰 2차(6건) 반영 — `least(NULL, …)` 가드·tick 전이 재판정·지정→공통 미리보기·폼 동기화 범위·실 DB 잠금 대기 증명·`assignFrom` 노출 범위
 - 개정: 2026-10-20 Codex 플랜 리뷰 1차(9건) 반영 — 실효 마감(종료일로 자르기)·tick 재판정·재개 시 정리·내 스터디 노출·편집 미리보기·최소 인원·실패만 기록·폼 동기화·실 DB 경쟁 테스트(§3·§4.6·§6·§7·§11)
 
 ---
@@ -53,13 +54,13 @@ room_recruit_open(r)  := r.archived_at is null and (
   or coalesce(room_recruit_until(r) >= kst_today(), false))
 ```
 
-- **실효 마감 = `least(recruit_until, end_date)`.** 종료일을 모집 마감보다 앞당겨도(진행중 `room_update`) 저장값은 그대로 두고 판정·표시에서 자른다. 종료일이 지나면 tick 전이라도 닫힌다.
+- **실효 마감 = `least(recruit_until, end_date)`.** PostgreSQL `least` 는 NULL 을 무시하므로(`least(NULL, end_date) = end_date`) 이 식을 쓰는 곳마다 `recruit_until is not null` 가드가 함께 있어야 한다(창 없는 진행중 방이 '추가 모집'으로 보이는 회귀 방지). 종료일을 모집 마감보다 앞당겨도(진행중 `room_update`) 저장값은 그대로 두고 판정·표시에서 자른다. 종료일이 지나면 tick 전이라도 닫힌다.
 
 - `rooms.recruit_until date` (KST, 포함) — **방 상태는 ACTIVE 그대로**(D1). 회차·알림·통계 등 ACTIVE 에 걸린 로직을 하나도 건드리지 않는다.
 - `room_join_precheck`·`room_decide_precheck` 의 `status <> 'RECRUIT'` 를 `not room_recruit_open(r)` 로 바꾼다 → 추가 모집 창 안에서는 `room_join`·`room_apply`·`room_approve`·`room_reject` 가 그대로 동작. 창 밖 진행중 방은 지금과 똑같이 `ROOM_NOT_RECRUITING`(기존 테스트 유지).
 - 창이 닫히는 순간 남은 PENDING → `EXPIRED` + `JOIN_EXPIRED`(D4) — RECRUIT→ACTIVE 때와 같은 규칙. 닫히는 경로 셋:
   1. **수동 마감**(그룹장 "지금 마감") — 방 행 잠금 안에서 바로.
-  2. **자동 만료**(5분 tick) — 후보는 잠금 없이 고르되, 닫기 전에 **방 행을 잠그고 최신 상태로 다시 판정**한다. 그 사이 그룹장이 연장·재개했으면 손대지 않는다. tick 은 ACTIVE→ENDED 전이 **뒤**에 창을 정리해, 이번 tick 에 막 끝난 방(종료일 단축 포함)의 대기 신청도 같은 트랜잭션에서 만료한다.
+  2. **자동 만료**(5분 tick) — 후보는 잠금 없이 고르되, 닫기 전에 **방 행을 잠그고 최신 상태로 다시 판정**한다. tick 의 시작·종료 전이도 같은 방식(잠금 → `status`·`archived_at`·날짜 재검사, 실제 전이만 카운트) — 후보로 뽑힌 뒤 그룹장이 종료일을 연장했으면 끝내지 않는다(기존부터 있던 경쟁을 이번에 함께 막는다). 그 사이 그룹장이 연장·재개했으면 손대지 않는다. tick 은 ACTIVE→ENDED 전이 **뒤**에 창을 정리해, 이번 tick 에 막 끝난 방(종료일 단축 포함)의 대기 신청도 같은 트랜잭션에서 만료한다.
   3. **재개 시 정리** — 실효 마감이 지났는데 tick 전에 그룹장이 다시 열면, 새 창을 열기 전에 옛 창의 PENDING 을 먼저 만료한다(옛 신청이 새 창으로 넘어가 승인되는 일 없음). 아직 열린 창을 연장하면 대기 신청은 유지.
 - 지난 창의 PENDING 은 tick 전이라도 승인·거절할 수 없다(`room_decide_precheck` 가 같은 판정).
 
@@ -86,7 +87,7 @@ room_recruit_open(r)  := r.archived_at is null and (
 - `assignment_resync` 1단계(공통 과제 채우기)에 `and (m.assign_from is null or n.end_date >= m.assign_from)` 한 줄. 오늘 열려 있는 과제(마감 ≥ 오늘)·앞으로의 과제는 배정, 이미 마감된 과제는 배정 안 함(D6).
 - 지정 과제는 지금처럼 그룹장이 직접 정한다(지난 과제에 지정해도 막지 않음 — 그룹장 판단).
 - 개인 목표는 제약 없음(지금 규칙 그대로).
-- **편집 미리보기도 같은 규칙**: `curriculum_get` 멤버에 `assignFrom` 을 싣고, 진행목표 편집의 공통 담당 재계산(`model.ts`)이 `기존 담당 ∪ (assignFrom 없음 ∨ 마감 ≥ assignFrom)` 을 쓴다. 공통 과제의 날짜만 바꿔도 중간 합류자가 있으면 다시 계산한다(서버 `node_update → assignment_resync` 가 새로 배정하므로). 미리보기 = 저장 결과.
+- **편집 미리보기도 같은 규칙**: `curriculum_get` 멤버에 `assignFrom` 을 싣고, 진행목표 편집의 공통 담당 재계산(`model.ts`)이 `(원래 공통 과제면 기존 담당) ∪ (assignFrom 없음 ∨ 마감 ≥ assignFrom)` 을 쓴다. 지정→공통 전환은 서버가 기존 지정 배정을 먼저 해제하므로(`node_update`, 0028) 기존 지정 담당은 유지하지 않는다. `assignFrom` 은 그룹장·ACTIVE/INACTIVE 멤버가 부를 때만 응답에 싣는다(공개 방 익명·외부인 `curriculum_get` 에는 없음). 공통 과제의 날짜만 바꿔도 중간 합류자가 있으면 다시 계산한다(서버 `node_update → assignment_resync` 가 새로 배정하므로). 미리보기 = 저장 결과.
 
 ---
 
@@ -239,6 +240,8 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 | 종료일 단축으로 `recruit_until > end_date` | 판정·표시가 실효 마감(`least(recruit_until, end_date)`)을 쓴다 → 종료일이 지나면 tick 전이라도 닫힘. 종료일 다음 tick 이 종료 전이와 대기 만료를 **같은 트랜잭션**에서. 바로 참가 기한도 `least(bypass_until, end_date)` |
 | 마감 뒤 tick 전에 그룹장이 다시 엶 | 옛 창의 PENDING 을 먼저 만료(+알림)하고 새 창을 연다 |
 | tick 이 후보를 고른 뒤 그룹장이 연장 | 자동 만료가 방 행을 잠근 뒤 재판정 → 연장된 창은 그대로 |
+| tick 이 종료 후보를 고른 뒤 그룹장이 종료일 연장 | 잠금 뒤 재검사 → 끝내지 않음, `ended` 에 세지 않음 |
+| 설정 화면에서 정원을 고치다(미저장) "지금 마감" | 마감은 정원·방식을 바꾸지 않으므로 폼의 미저장 값 유지. 열기는 서버가 바꾼 정원·방식만 최신 폼 값에 병합 |
 | 새 정원 < 최소 인원 | `VALIDATION_FAILED {field:'maxMembers', minMembers}`(원시 제약 오류 아님) |
 | 이미 PENDING 인 사람이 바로 참가 초대를 받음 | 바로 ACTIVE 로 승격(승인 불필요). 그룹장 대기 목록에서 사라짐 |
 | REJECTED·CANCELED·EXPIRED | 추가 모집 창에서 다시 신청/참가 가능(지금 규칙). 바로 참가 초대로도 가능 |
@@ -315,6 +318,6 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 - 기존 테스트 수정 1곳: `_cases-membership.ts` "invite_get/rotate" 의 `invite_get` 전체 객체 단언 → 기존 3키 부분 단언 + `code` 형식.
 - 웹(vitest): `closedAction`/`actionOf`/`inviteActionOf` 표, 코드 정규화·표시, 추가 모집 기본값·검증, `toRoomCard` 배지, DOM: 설정 섹션·랜딩 안내·`/join` 폼.
 - SQL 추가(Codex): 재개 시 옛 대기 만료, 자동 만료 재판정, `room_update` 로 **실제** 종료일 단축 → 같은 tick 에서 종료 + 대기 만료, 최소 인원 검증, 실패만 기록·tick 정리, `me_studies` 노출, `curriculum_get.assignFrom`.
-- **실 PostgreSQL 두 연결**(`supabase/tests/extra-recruit-db.test.ts`, 로컬 supabase 전용, URL 가드): 추가 모집 마지막 좌석 동시 참가(한쪽 `ROOM_FULL`), 바로 참가 한도 경쟁(한쪽 `INVITE_EXPIRED`), tick↔연장 경쟁(새 창 유지), 별도 요청(트랜잭션)에 걸친 실패 누적 → `RATE_LIMITED`. 배포 전 필수 게이트.
+- **실 PostgreSQL 두 연결**(`supabase/tests/extra-recruit-db.test.ts`, 로컬 supabase 전용, URL 가드): 추가 모집 마지막 좌석 동시 참가(한쪽 `ROOM_FULL`), 바로 참가 한도 경쟁(한쪽 `INVITE_EXPIRED`), tick↔창 연장(새 창 유지), tick↔종료일 연장(방 유지·미집계), 별도 요청(트랜잭션)에 걸친 실패 누적 → `RATE_LIMITED`. 잠금 대기는 시간이 아니라 `pg_stat_activity`·`pg_blocking_pids` 로 확인한 뒤 놓는다. 테스트 방은 미래 시작일로 만들고 명시적으로 시작, 연결은 마지막에 닫는다. 배포 전 필수 게이트.
 - 웹 추가: 편집 미리보기(`model.ts`) 중간 합류자 규칙 = 서버, 설정 폼 서버 칸 동기화(`syncServerFields`), 사이드바 "모집 마감", 로그인 복귀(`middleware.test.ts` 로 `/join?code=` 보존 실행).
 - 브라우저(ego-browser, 390/820/1440): 그룹장 설정 → 추가 모집 시작 → 다른 계정 둘러보기 → 신청 → 승인 → 내 스터디에서 지난 과제 미배정 확인 / 바로 참가 켜기 → 코드 입력 → 바로 참가 / 비로그인 `/join?code=` → 로그인 → 복귀 / 종료일 단축 후 마감 표시.

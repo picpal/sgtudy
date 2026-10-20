@@ -24,6 +24,17 @@
 | 8 | 추가 모집이 바꾼 `joinMode` 가 설정 폼에 안 보임 | `settings.ts` `syncServerFields(base, v, next)` — 서버가 바꾼 `maxMembers`·`joinMode` 를 기준값·현재값에 반영, 다른 미저장 칸 유지(테스트) | Task 6 |
 | 9 | 단일 연결 테스트로는 경쟁·커밋 지속성 미검증 | 새 Task 9 `extra-recruit-db.test.ts`(로컬 supabase 전용, 두 연결): 마지막 좌석 동시 참가 · 바로 참가 한도 경쟁 · tick↔연장 경쟁 · 별도 트랜잭션 실패 누적. 로그인 복귀 코드 보존은 `middleware.test.ts` 실행 테스트 + 브라우저 시나리오 | Task 8·9·10 |
 
+### 2차 (review-2 · 5 resolved / 4 partial → 남은 항목 모두 수용)
+
+| # | 지적 | 반영 | 위치 |
+|---|---|---|---|
+| 2-1 | `least(NULL, end_date)` = `end_date` → 창 없는 ACTIVE 방도 `recruitUntil`·`isFull` | `rooms_list` 두 식 모두 `p.recruit_until is not null` 가드(다른 곳은 이미 가드: `room_recruit_until`·`room_matches`·tick 후보·`invite_bypass_ok`). `react.recruitUntil = null` 테스트가 이제 실제 회귀를 잡고, 꽉 찬 창 없는 방 `isFull = false` 단언 추가. 웹 `toRoomCard` 는 `recruitUntil` 있을 때만 배지 — 서버 수정으로 충분 | Task 4 |
+| 2-2 | tick 종료(·시작) 루프가 잠금 대기 뒤 `status` 만 재검사 → 종료일을 연장해도 종료 | `room_tick` 을 통째로 다시 쓴다: 두 전이 루프 모두 방 행 `for update` 후 `status`·`archived_at`·`end_date`(시작은 `start_date`) 재검사, **실제로 전이한 것만** 센다. 두 연결 테스트(`room_update(endDate)` 연장 ↔ tick) | Task 2 · Task 9 |
+| 2-3 | 지정→공통 미리보기가 기존 지정 담당을 유지(서버는 0028:150–153 에서 해제) | 기존 담당 유지는 **원래 공통 과제(기존 COMMON 배정)** 에만. 지정→공통 + 지난 과제 중간 합류 담당자 테스트 | Task 5 |
+| 2-4 | `syncServerFields` 가 안 바뀐 칸도 덮고, 요청 전 상태를 캡처 | 동작별 변경 칸 목록(`open` → `maxMembers`·`joinMode`, `close` → 없음)을 넘기고 `mergeServerFields` 를 **함수형 setState** 로 최신 상태에 병합. 테스트: "지금 마감" 뒤 미저장 정원 유지, 요청 중 입력 유지 | Task 6 |
+| 2-5 | 400ms 대기는 잠금 대기를 증명 못 함·시작일 오늘이라 cron 경쟁·연결 미종료 | `pg_stat_activity`/`pg_blocking_pids` 로 대상 백엔드가 잡은 연결에 막혀 있음을 제한시간(5s) 안에 확인한 뒤 커밋 → 둘 다 잠금 앞에서 기다림이 보장돼 오류 코드가 확정적. 방은 **미래 시작일**로 만든 뒤 `room_start`. 마지막 `dbTest` 에서 `pg.end()` 명시 | Task 9 |
+| 2-6 | `assignFrom` 이 공개 방 익명 `curriculum_get` 에 노출 | 그룹장·ACTIVE/INACTIVE 멤버(`v_viewer`, 0014 규칙)에게만 키를 싣는다. 익명·외부인 테스트 | Task 4 |
+
 16개 재정의 복사 원본은 Codex 가 0031 기준 최신으로 확인. 이번 반영으로 재정의가 2개(`me_studies`·`curriculum_json`, 둘 다 ←0024) 늘었다 — AI 연동 플랜(0033~0035)은 둘 다 재정의하지 않는다(`api_studies` 가 `me_studies` 출력을 소비하므로 `when.kind = 'recruitEnd'`·ACTIVE 방 PENDING 항목이 새로 보일 수 있다 — 동작 상호작용으로 컨트롤러에 알림).
 
 ## 번호 (중요)
@@ -73,6 +84,8 @@
 9. **창 경계 정리** — 마감 뒤 tick 전 재개·종료일 단축·tick↔연장 경쟁 어느 경로에서도 옛 PENDING 이 새 창으로 넘어가거나 새 창이 닫히지 않는다. → Task 2·9.
 10. **화면 = 서버** — 내 스터디 목록(`me_studies`)·편집 미리보기(`model.ts`)가 서버 배정·노출 규칙과 같은가. → Task 4·5.
 11. **실패 기록 수명** — 성공은 저장 안 함, 실패만 1일 보관(tick 정리). 실패 누적이 요청(트랜잭션) 사이에 유지되는가(실 DB). → Task 3·9.
+12. **`least()` 와 NULL** — PostgreSQL `least` 는 NULL 을 무시한다. `least(recruit_until, end_date)` 를 쓰는 모든 식에 `recruit_until is not null` 가드가 있는가(`room_recruit_until`·`room_matches`·`rooms_list` 두 식·tick 후보). → Task 1·2·4.
+13. **tick 전이 재판정** — 시작·종료 전이도 잠금 뒤 날짜 재검사, 실제 전이만 카운트. → Task 2·9.
 
 ---
 
@@ -442,6 +455,17 @@ cases("extra recruit 0032 · window", db, [
     await setToday(q, "2026-10-21");
     assertEquals((await one(q, "select public.room_extra_recruit_auto_expire($1::bigint) as v", [aws])).v, true);
   } },
+  { name: "tick ends only rooms whose end_date is still past after locking; counts only real transitions (Codex 2-2)", run: async (q) => {
+    // PGlite 는 단일 연결 — 경쟁 자체는 Task 9. 여기선 "후보였어도 재판정에서 빠지면 세지 않는다"만 고정
+    const r = await openRoom(q, USERS.서연, { maxMembers: 4 });
+    await q("select public.room_start($1)", [r.slug]);
+    await rpc(q, "public.room_update($1, $2::jsonb)", [r.slug, JSON.stringify({ endDate: "2026-11-08" })]);
+    await setToday(q, "2026-11-09");
+    const before = (await one(q, "select count(*)::int as n from public.rooms where status = 'ACTIVE' and archived_at is null and end_date < '2026-11-09'")).n;
+    const t = (await one(q, "select public.room_tick() as r")).r;
+    assertEquals(t.ended, before);                                                        // 실제 전이 수 = 후보 수(경쟁 없음)
+    assertEquals((await one(q, "select status from public.rooms where slug = $1", [r.slug])).status, "ENDED");
+  } },
   { name: "real end-date shortening: window capped by end_date; the ending tick expires PENDING in the same run (Codex #3)", run: async (q) => {
     const r = await openRoom(q, USERS.서연, { joinMode: "approval", maxMembers: 4 });   // 리프 11/01~11/07, 종료 11/28
     await q("select public.room_start($1)", [r.slug]);                                    // 10/12 → ACTIVE
@@ -638,9 +662,41 @@ grant execute on function public.room_extra_recruit_open(text, date, int, text) 
 grant execute on function public.room_extra_recruit_close(text)                to authenticated;
 ```
 
-`room_tick` ← 0004 전체 복사. **ACTIVE→ENDED 루프 뒤**(return 앞)에 아래를 더한다(반환 모양은 그대로). 뒤에 두는 이유: 이 tick 에서 막 ENDED 가 된 방(종료일 단축 포함)의 대기 신청을 **같은 트랜잭션**에서 만료시키려고(Codex #3).
+`room_tick` ← 0004 판을 바탕으로 **본문 전체를 아래로 교체**(시그니처·반환 모양 `{activated, ended}` 동일). 바뀐 점:
+- (Codex 2-2) 두 전이 루프 모두 후보를 잠금 없이 고른 뒤 **방 행을 `for update` 로 잠그고 `status`·`archived_at`·날짜를 다시 본다**. 그 사이 `room_update` 로 종료일(시작일)을 바꿨으면 전이하지 않는다. `room_transition_ended`/`active` 의 조건부 UPDATE 는 잠금 대기 뒤 `status` 만 재평가하기 때문. 실제로 전이한 것만 센다.
+- 창 정리 루프는 ACTIVE→ENDED 루프 **뒤** — 이 tick 에서 막 ENDED 가 된 방(종료일 단축 포함)의 대기 신청을 **같은 트랜잭션**에서 만료(Codex #3).
 
 ```sql
+create or replace function public.room_tick() returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_today date := public.kst_today();
+  v_id    bigint;
+  r       public.rooms;
+  v_act   int := 0;
+  v_end   int := 0;
+begin
+  perform pg_advisory_xact_lock(hashtext('room_tick'));
+  for v_id in
+    select id from public.rooms where status = 'RECRUIT' and archived_at is null and start_date <= v_today order by id
+  loop
+    -- 0032 (Codex 2-2): 잠근 뒤 최신 상태로 재판정 — 그 사이 시작일을 미뤘거나 보관했으면 건너뛴다
+    select * into r from public.rooms where id = v_id for update;
+    if r.status = 'RECRUIT' and r.archived_at is null and r.start_date <= v_today then
+      perform public.room_transition_active(v_id, null);
+      v_act := v_act + 1;
+    end if;
+  end loop;
+  for v_id in
+    select id from public.rooms where status = 'ACTIVE' and archived_at is null and end_date < v_today order by id
+  loop
+    -- 0032 (Codex 2-2): 그 사이 종료일을 연장했으면 끝내지 않는다
+    select * into r from public.rooms where id = v_id for update;
+    if r.status = 'ACTIVE' and r.archived_at is null and r.end_date < v_today then
+      perform public.room_transition_ended(v_id);
+      v_end := v_end + 1;
+    end if;
+  end loop;
   -- 0032: 추가 모집 창 정리 — 실효 마감(least(recruit_until, end_date))이 지났거나 방이 더는 ACTIVE 가 아니면 닫고 대기 만료(D4).
   -- 후보는 잠금 없이 고르고, 닫기는 auto_expire 가 방 행을 잠근 뒤 다시 판정한다(그 사이 연장·재개됐으면 손대지 않음 — Codex #1).
   -- 보관 방은 건드리지 않는다(풀린 뒤 다음 tick). 반환 모양 {activated, ended} 는 기존 테스트가 고정 — 세지 않는다
@@ -654,7 +710,11 @@ grant execute on function public.room_extra_recruit_close(text)                t
   end loop;
   -- 0032: 초대 코드 조회 실패 기록 정리(1일 지난 것, Codex #7) — job_cleanup(0030) 재정의를 피해 여기서
   delete from public.invite_code_failures where created_at < public.app_now() - interval '1 day';
+  return jsonb_build_object('activated', v_act, 'ended', v_end);
+end $$;
 ```
+
+(0004 판의 주석 "보관 방·DRAFT 는 건드리지 않는다" 는 그대로 유지된다 — 후보·재판정 모두 `archived_at is null`.)
 
 ```sql
 -- ───────── 8. 알림 MEMBER_JOINED (D11) ─────────
@@ -1048,7 +1108,7 @@ grant execute on function public.invite_code_lookup(text)           to authentic
 - `RoomCardDto.recruitUntil: string | null`(ACTIVE ∧ 창 열림일 때만), `isFull` = 모집 열림 ∧ 꽉 참
 - `rooms_list(p_status='recruit')` 가 추가 모집 중인 ACTIVE 방을 포함(D5)
 - `me_studies`(←0024): 모집 열린 ACTIVE 방의 내 PENDING → `recruit` 그룹 항목, `when = {kind:'recruitEnd', date: 실효 마감}`(Codex #4, 스펙 D14)
-- `curriculum_json`(←0024): `members[].assignFrom: 'YYYY-MM-DD' | null`(Codex #5)
+- `curriculum_json`(←0024): `members[].assignFrom: 'YYYY-MM-DD' | null`(Codex #5) — 그룹장·ACTIVE/INACTIVE 멤버 호출일 때만 키가 있다(Codex 2-6)
 
 - [ ] **Step 1: 실패하는 테스트 추가**
 
@@ -1062,8 +1122,11 @@ cases("extra recruit 0032 · reads", db, [
     const aws = (rec.items as Row[]).find((x) => x.slug === "aws")!;
     assertEquals([aws.status, aws.recruitUntil, aws.isFull], ["active", "2026-10-19", false]);
     assert(((await rpc(q, "public.rooms_list('public', 'active')")).items as Row[]).some((x) => x.slug === "aws"));
+    // 창 없는 ACTIVE 방: least(NULL, end_date) 회귀 방지(Codex 2-1) — 꽉 차도 isFull false, recruitUntil null
+    await q("update public.rooms set member_count = max_members where slug = 'react'");
     const react = ((await rpc(q, "public.rooms_list('public', 'active')")).items as Row[]).find((x) => x.slug === "react")!;
-    assertEquals(react.recruitUntil, null);
+    assertEquals([react.recruitUntil, react.isFull], [null, false]);
+    assert(!((await rpc(q, "public.rooms_list('public', 'recruit')")).items as Row[]).some((x) => x.slug === "react"));
     await q("update public.rooms set member_count = max_members where slug = 'aws'");
     const full = ((await rpc(q, "public.rooms_list('public', 'recruit')")).items as Row[]).find((x) => x.slug === "aws")!;
     assertEquals(full.isFull, true);
@@ -1103,6 +1166,11 @@ cases("extra recruit 0032 · reads", db, [
     const ms = (await rpc(q, "public.curriculum_get('aws', true)")).members as Row[];
     assertEquals(ms.find((m) => m.nickname === "서연")!.assignFrom, "2026-10-12");
     assertEquals(ms.find((m) => m.nickname === "지은")!.assignFrom, null);
+    // 공개 방이라도 익명·외부인에게는 키 자체가 없다 (Codex 2-6)
+    await asAnon(q);
+    assert(((await rpc(q, "public.curriculum_get('aws', false)")).members as Row[]).every((m) => !("assignFrom" in m)));
+    await as(q, "예린");
+    assert(((await rpc(q, "public.curriculum_get('aws', false)")).members as Row[]).every((m) => !("assignFrom" in m)));
   } },
 ]);
 ```
@@ -1142,9 +1210,12 @@ cases("extra recruit 0032 · reads", db, [
 ```sql
     'status', lower(p.status),
     -- 0032: 모집 열림(RECRUIT ∨ 추가 모집 창) ∧ 꽉 참
-    -- coalesce: recruit_until null 이면 비교가 null 이라 isFull 이 false 대신 null 이 된다
-    'isFull', (p.status = 'RECRUIT' or (p.status = 'ACTIVE' and coalesce(least(p.recruit_until, p.end_date) >= v_today, false))) and p.member_count >= p.max_members,
-    'recruitUntil', case when p.status = 'ACTIVE' and least(p.recruit_until, p.end_date) >= v_today then to_char(least(p.recruit_until, p.end_date), 'YYYY-MM-DD') end,
+    -- 주의(Codex 2-1): least(NULL, end_date) = end_date — 창이 없는 방을 걸러야 하므로 recruit_until is not null 가드 필수
+    'isFull', (p.status = 'RECRUIT'
+               or (p.status = 'ACTIVE' and p.recruit_until is not null and least(p.recruit_until, p.end_date) >= v_today))
+              and p.member_count >= p.max_members,
+    'recruitUntil', case when p.status = 'ACTIVE' and p.recruit_until is not null and least(p.recruit_until, p.end_date) >= v_today
+                         then to_char(least(p.recruit_until, p.end_date), 'YYYY-MM-DD') end,
 ```
 
 (원본 `'isFull', p.status = 'RECRUIT' and p.member_count >= p.max_members,` 를 대체. 그 밖의 CTE·정렬·탭 총계는 그대로.)
@@ -1178,11 +1249,15 @@ cases("extra recruit 0032 · reads", db, [
 
 (`mine` 에서 `public.room_recruit_until(r)`·`public.room_recruit_open(r)` 의 `r` 은 행 별칭 — 행 전체가 `public.rooms` 로 넘어간다. 보관 묶음은 그대로.)
 
-`curriculum_json` ← **0024** 판 전체 복사, 멤버 객체(`'doesTasks', m.status = 'ACTIVE' and …` 가 있는 `jsonb_build_object`)에 한 키(Codex #5):
+`curriculum_json` ← **0024** 판 전체 복사, 멤버 객체 끝에 한 조각(Codex #5). 키는 **그룹장·ACTIVE/INACTIVE 멤버에게만**(같은 함수의 `v_viewer` = `personal_viewer`, 0014 규칙) — 공개 방 익명·외부인 `curriculum_get` 에는 싣지 않는다(Codex 2-6):
 
 ```sql
-             'assignFrom', to_char(m.assign_from, 'YYYY-MM-DD'),   -- 0032: 중간 합류자 공통 과제 배정 시작일(null = 처음부터)
+             'canEditCurriculum', public.member_can_edit_curriculum(r, m))
+           -- 0032: 중간 합류자 공통 과제 배정 시작일(null = 처음부터). 방 사람에게만
+           || case when v_viewer then jsonb_build_object('assignFrom', to_char(m.assign_from, 'YYYY-MM-DD')) else '{}'::jsonb end
 ```
+
+(원본 `'canEditCurriculum', public.member_can_edit_curriculum(r, m))` 뒤 `order by` 앞에 `|| case …` 를 붙인다.)
 
 - [ ] **Step 4: 통과 확인** — `npm run test:db` 전체 PASS.
 
@@ -1329,6 +1404,14 @@ describe("late joiner (assignFrom) — preview equals server assignment_resync",
   });
   it("designated → 공통 on a leaf ending 10/14 includes the late joiner", () => {
     expect(ids(buildTree(cur, { ...EMPTY_OVERRIDES, typeOv: { "21": "공통" } }, REF_DAY), "21")).toContain("u6");
+  });
+  it("designated → 공통 on a PAST leaf drops a late joiner who was designated there (server releases DESIGNATED first) (Codex 2-3)", () => {
+    const past = { ...cur, nodes: cur.nodes.map((n) => n.id !== "21" ? n : { ...n, endDate: "2026-10-10",
+      task: { ...n.task!, people: [...n.task!.people, { userId: "u6", nickname: "서연", tone: "amber" as const, status: "missed" as const }] } }) };
+    expect(ids(buildTree(past, EMPTY_OVERRIDES, REF_DAY), "21")).toContain("u6");                         // 지금은 지정 담당
+    const after = ids(buildTree(past, { ...EMPTY_OVERRIDES, typeOv: { "21": "공통" } }, REF_DAY), "21");
+    expect(after).not.toContain("u6");                                                                     // 마감 10/10 < assignFrom 10/12
+    expect(after).toEqual(expect.arrayContaining(["u2", "u3", "u1", "u4"]));                              // 처음부터 멤버는 모두
   });
   it("moving a past 공통 leaf's end past assignFrom adds the late joiner (server resync does too)", () => {
     expect(ids(buildTree(cur, EMPTY_OVERRIDES, REF_DAY), "11")).not.toContain("u6");
@@ -1507,8 +1590,10 @@ export type TreeMember = { userId: string; name: string; tone: Tone; doesTasks: 
 // buildTree: members 매핑에 assignFrom: m.assignFrom ?? null
 // 리프 재계산 조건 — 공통 과제 날짜만 바꿔도 중간 합류자가 있으면 다시 계산(서버 node_update → assignment_resync 가 새로 배정하므로)
 const recompute = !personal && (temp || n.id in ov.typeOv || n.id in ov.assignOv || (type === "공통" && n.id in ov.dates && doers.some((m) => m.assignFrom)));
-// 공통 담당 = 이미 배정된 사람 ∪ 배정 자격(assignFrom 없음 ∨ 마감 ≥ assignFrom) — 서버 assignment_resync 1단계와 같은 규칙
-const commonDoers = doers.filter((m) => known.has(m.userId) || !m.assignFrom || e >= m.assignFrom);
+// 공통 담당 = (원래 공통 과제였다면) 이미 배정된 사람 ∪ 배정 자격(assignFrom 없음 ∨ 마감 ≥ assignFrom) — 서버 assignment_resync 1단계와 같은 규칙.
+// 지정→공통 전환은 서버가 기존 DESIGNATED 배정을 먼저 해제한다(node_update 0028:150–153) → 기존 담당 유지는 원래 COMMON 배정에만(Codex 2-3)
+const keepKnown = n.task.type === "common";
+const commonDoers = doers.filter((m) => (keepKnown && known.has(m.userId)) || !m.assignFrom || e >= m.assignFrom);
 const chosen = type === "공통" ? commonDoers : ov.assignOv[n.id] ? doers.filter((m) => ov.assignOv[n.id].includes(m.userId)) : doers.filter((m) => known.has(m.userId));
 ```
 
@@ -1541,16 +1626,28 @@ const chosen = type === "공통" ? commonDoers : ov.assignOv[n.id] ? doers.filte
 - `RoomSettingsForm` 연결(Codex #8): 폼은 `base`(기준값)·`v`(현재값)를 들고 있다(`RoomSettingsForm.tsx` 48–49행). 섹션의 `onDetail(next)` 는 `setD(next)` 하고, **서버가 바꾼 칸(`maxMembers`·`joinMode`)만** 기준값·현재값 둘 다에 반영한다 — 다른 칸의 미저장 수정은 그대로. 순수 함수로 `settings.ts` 에 둔다:
 
 ```ts
-/** 추가 모집 등 폼 밖 RPC 가 바꾼 칸을 폼에 반영 — 서버가 바꾼 칸은 기준값·현재값 모두 서버 값, 나머지 미저장 수정은 유지 (Codex #8) */
-export const SERVER_SYNCED: Field[] = ["maxMembers", "joinMode"];
-export function syncServerFields(base: NewRoomValues, v: NewRoomValues, next: Src): { base: NewRoomValues; v: NewRoomValues } {
+/** 폼 밖 RPC 가 실제로 바꾼 칸 — 동작별(Codex 2-4). 마감은 정원·방식을 바꾸지 않는다 */
+export const RECRUIT_CHANGED = { open: ["maxMembers", "joinMode"], close: [] } as const satisfies Record<string, readonly Field[]>;
+/** 최신 폼 값(cur)에 서버가 바꾼 칸만 덮는다 — 함수형 setState 안에서 부른다(요청 중 입력 보존) */
+export function mergeServerFields(cur: NewRoomValues, next: Src, changed: readonly Field[]): NewRoomValues {
+  if (changed.length === 0) return cur;
   const fresh = valuesOf(next);
-  const pick = Object.fromEntries(SERVER_SYNCED.map((k) => [k, fresh[k]])) as Partial<NewRoomValues>;
-  return { base: { ...base, ...pick }, v: { ...v, ...pick } };
+  return { ...cur, ...Object.fromEntries(changed.map((k) => [k, fresh[k]])) };
 }
 ```
 
-폼: `const onRecruitDetail = (next: RoomDetail) => { setD(next); const s = syncServerFields(base, v, next); setBase(s.base); setV(s.v); };`. 진행중엔 `joinMode` 칸이 잠겨 있어 사용자가 고칠 수 없으므로 서버 값으로 덮어도 잃는 입력이 없다. `maxMembers` 는 섹션에서 방금 저장한 값이 진실.
+폼(요청 전 `base`/`v` 를 캡처하지 않는다):
+
+```ts
+const onRecruitDetail = (next: RoomDetail, changed: readonly Field[]) => {
+  setD(next);
+  setBase((b) => mergeServerFields(b, next, changed));
+  setV((cur) => mergeServerFields(cur, next, changed));
+};
+// 섹션: openExtraRecruit 성공 → onDetail(next, RECRUIT_CHANGED.open) · closeExtraRecruit 성공 → onDetail(next, RECRUIT_CHANGED.close)
+```
+
+진행중엔 `joinMode` 칸이 잠겨 있어 사용자가 고칠 수 없으므로 서버 값으로 덮어도 잃는 입력이 없다. 열기 요청이 바꾼 `maxMembers` 는 서버 값이 진실(섹션 입력으로 방금 저장).
 - 모바일 390: 카드 안 입력은 한 줄 1개(`grid-cols-[72px_minmax(0,1fr)]` 라벨-값), 버튼은 전체 폭 `h-11`. 820 이상에서 버튼 오른쪽 정렬.
 
 - [ ] **Step 1: 실패하는 DOM 테스트** — `RecruitInviteSection.dom.test.ts`
@@ -1602,16 +1699,33 @@ describe("RecruitInviteSection", () => {
 추가(Codex #8) — `src/components/room-settings/settings.test.ts`:
 
 ```ts
-it("syncServerFields: server-changed maxMembers·joinMode land in base and v; other unsaved edits stay", () => {
+describe("mergeServerFields (Codex #8·2-4)", () => {
   const d = { title: "t", intro: "i", descriptionMd: "", rulesMd: "", startDate: "2026-10-01", endDate: "2026-12-31", maxMembers: 6, minMembers: 3, isPublic: true, joinMode: "approval" as const, leaderDoesTasks: true };
-  const base = valuesOf(d);
-  const v = { ...base, title: "고친 제목" };
-  const s = syncServerFields(base, v, { ...d, maxMembers: 8, joinMode: "direct" });
-  expect([s.base.maxMembers, s.base.joinMode, s.v.maxMembers, s.v.joinMode]).toEqual(["8", "direct", "8", "direct"]);
-  expect(s.v.title).toBe("고친 제목");
-  expect(buildPatch(s.base, s.v)).toEqual({ title: "고친 제목" });   // 저장 막대에는 제목만 남는다
+  it("open: server-changed maxMembers·joinMode land in base and v; other unsaved edits stay", () => {
+    const base = valuesOf(d);
+    const v = { ...base, title: "고친 제목" };
+    const next = { ...d, maxMembers: 8, joinMode: "direct" as const };
+    const b2 = mergeServerFields(base, next, RECRUIT_CHANGED.open), v2 = mergeServerFields(v, next, RECRUIT_CHANGED.open);
+    expect([b2.maxMembers, b2.joinMode, v2.maxMembers, v2.joinMode]).toEqual(["8", "direct", "8", "direct"]);
+    expect(buildPatch(b2, v2)).toEqual({ title: "고친 제목" });
+  });
+  it("close ('지금 마감'): an unsaved capacity edit survives", () => {
+    const base = valuesOf(d);
+    const v = { ...base, maxMembers: "8" };                                 // 폼에서 6→8, 아직 저장 안 함
+    const v2 = mergeServerFields(v, d, RECRUIT_CHANGED.close);
+    expect(v2.maxMembers).toBe("8");
+    expect(buildPatch(mergeServerFields(base, d, RECRUIT_CHANGED.close), v2)).toEqual({ maxMembers: 8 });
+  });
+  it("input typed while the request was in flight survives (merge into the latest state)", () => {
+    const atRequest = valuesOf(d);
+    const latest = { ...atRequest, intro: "요청 중에 고친 소개" };          // setV(fn) 가 받는 최신 값
+    const v2 = mergeServerFields(latest, { ...d, maxMembers: 8 }, RECRUIT_CHANGED.open);
+    expect([v2.intro, v2.maxMembers]).toEqual(["요청 중에 고친 소개", "8"]);
+  });
 });
 ```
+
+(폼 연결이 함수형 `setBase(fn)`/`setV(fn)` 인지는 리뷰에서 확인 — 캡처한 `base`/`v` 를 쓰면 위 세 번째 사례가 실제 화면에서 깨진다.)
 
 - [ ] **Step 2: 실패 확인** — `npx vitest run src/components/room-settings` → FAIL.
 - [ ] **Step 3: 구현** — 위 동작대로. 상태는 `useState` 로 입력값만 들고, 서버 응답(`RoomDetail`·`InviteLink`)이 진실. 버튼 `aria-label` 에 동작 이름. `ConfirmDialog`·`ChoiceList`·`Switch`·`Toast` 는 기존 것.
@@ -1719,7 +1833,7 @@ eval "$(npx supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON
 deno test -A --config supabase/tests/deno.json supabase/tests/extra-recruit-db.test.ts
 ```
 
-설계: ① **제어된 동시 시작** — 직접 연결이 `begin; select … from rooms where id = $1 for update` 로 방 행을 쥔 채 요청들을 쏘고, 400ms 뒤 **전부 아직 대기 중인지 확인한 다음** `commit` — 잠금이 실제로 그 요청들을 막았음을 증명한다. ② tick↔연장 경쟁은 쥔 트랜잭션 안에서 **그룹장 신원으로 실제 RPC**(`set local role authenticated` + `request.jwt.claims`)를 부른 뒤, 다른 연결에서 tick 을 쏴 후보 선택(옛 상태) → 잠금 대기 → 커밋 뒤 재판정을 재현한다. ③ 날짜는 로컬 seed 의 `internal.settings 'today'` — 바꾼 테스트는 `finally` 에서 되돌린다. ④ 정리는 이 파일이 만든 방(제목에 `RUN`)·자기 테스트 사용자 행만.
+설계: ① **제어된 동시 시작** — 직접 연결이 `begin; select … from rooms where id = $1 for update` 로 방 행을 쥔 채 요청들을 쏘고, `pg_stat_activity` + `pg_blocking_pids(pid)` 로 **대상 함수를 실행 중인 백엔드 N개가 바로 그 연결(`pg_backend_pid()`)에 막혀 있음**을 제한시간(5s) 안에 확인한 다음 `commit`(Codex 2-5). 시간 대기가 아니라 잠금 대기를 증명하므로, 모든 요청이 잠금 **앞**에서 같은 상태를 보고 기다린다 → 오류 코드가 확정적(예: 초대 둘째 요청은 반드시 `INVITE_EXPIRED`, 커밋 뒤 도착해 `ROOM_NOT_RECRUITING` 이 될 수 없음). 확인 실패면 커밋하지 않고 롤백·실패. 테스트 방은 **미래 시작일**(내일)로 만든 뒤 `room_start` 로 명시적으로 시작한다(cron tick 이 먼저 시작시키는 경쟁 차단). 마지막 `dbTest` 가 `pg.end()` 로 연결을 닫는다. ② tick↔연장 경쟁은 쥔 트랜잭션 안에서 **그룹장 신원으로 실제 RPC**(`set local role authenticated` + `request.jwt.claims`)를 부른 뒤, 다른 연결에서 tick 을 쏴 후보 선택(옛 상태) → 잠금 대기 → 커밋 뒤 재판정을 재현한다. ③ 날짜는 로컬 seed 의 `internal.settings 'today'` — 바꾼 테스트는 `finally` 에서 되돌린다. 옮기는 범위는 오늘+3 까지: 시드 기준일(10/12)에서 그 안에 시작하는 RECRUIT 방·끝나는 ACTIVE 방이 없어 tick 이 시드를 건드리지 않는다(Task 0 에서 `select slug from rooms where (status='RECRUIT' and start_date <= current+3) or (status='ACTIVE' and end_date < current+3)` 가 비었는지 확인, 아니면 멈추고 보고). ④ 정리는 이 파일이 만든 방(제목에 `RUN`)·자기 테스트 사용자 행만.
 
 - [ ] **Step 1: 테스트 작성**
 
@@ -1749,37 +1863,57 @@ async function member(n: number): Promise<{ id: string; c: SupabaseClient }> {
 const today = async () => (await pg`select public.kst_today()::text as d`)[0].d as string;
 const plus = async (n: number) => (await pg`select (public.kst_today() + ${n}::int)::text as d`)[0].d as string;
 
-/** 리프 1개 있는 ACTIVE 방(지금 시작). max 는 그룹장 포함 정원 */
-async function activeRoom(leader: { c: SupabaseClient }, max: number, joinMode: "direct" | "approval") {
+/** 리프 1개 있는 ACTIVE 방. 시작일은 **내일**로 만들어 cron 이 먼저 시작시키지 못하게 하고, room_start 로 명시적으로 시작(Codex 2-5).
+ *  endIn = 종료일(오늘+n). 리프는 내일~종료일 */
+async function activeRoom(leader: { c: SupabaseClient }, max: number, joinMode: "direct" | "approval", endIn = 40) {
+  const [s, e] = [await plus(1), await plus(endIn)];
   const room = ok<{ id: string; slug: string }>(await leader.c.rpc("room_create", {
-    p_title: `추가모집 ${RUN} ${crypto.randomUUID().slice(0, 4)}`, p_intro: "게이트", p_start_date: await today(), p_end_date: await plus(40),
+    p_title: `추가모집 ${RUN} ${crypto.randomUUID().slice(0, 4)}`, p_intro: "게이트", p_start_date: s, p_end_date: e,
     p_max_members: max, p_is_public: true, p_join_mode: joinMode }), "room_create");
   const admin = service();
-  const { data: round, error: e1 } = await admin.from("goal_nodes").insert({ room_id: Number(room.id), parent_id: null, depth: 2, sort_order: 0, label: "1주차", title: "회차", start_date: await today(), end_date: await plus(6) }).select("id").single();
+  const { data: round, error: e1 } = await admin.from("goal_nodes").insert({ room_id: Number(room.id), parent_id: null, depth: 2, sort_order: 0, label: "1주차", title: "회차", start_date: s, end_date: e }).select("id").single();
   if (e1) throw new Error(e1.message);
-  await admin.from("goal_nodes").update({ round_id: round!.id }).eq("id", round!.id);
-  const { error: e2 } = await admin.from("goal_nodes").insert({ room_id: Number(room.id), parent_id: round!.id, round_id: round!.id, depth: 3, sort_order: 0, title: "과제", start_date: await today(), end_date: await plus(6), task_type: "COMMON" });
+  const { error: eU } = await admin.from("goal_nodes").update({ round_id: round!.id }).eq("id", round!.id);
+  if (eU) throw new Error(eU.message);
+  const { error: e2 } = await admin.from("goal_nodes").insert({ room_id: Number(room.id), parent_id: round!.id, round_id: round!.id, depth: 3, sort_order: 0, title: "과제", start_date: s, end_date: e, task_type: "COMMON" });
   if (e2) throw new Error(e2.message);
   ok(await leader.c.rpc("room_open_recruit", { p_slug: room.slug }), "open_recruit");
-  ok(await leader.c.rpc("room_start", { p_slug: room.slug }), "room_start");
+  ok(await leader.c.rpc("room_start", { p_slug: room.slug }), "room_start");      // 예정보다 하루 일찍 — 시작일이 오늘로(일정 그대로)
+  assertEquals((await pg`select status from public.rooms where id = ${room.id}`)[0].status, "ACTIVE");
   return room;
 }
 const dropRoom = async (id: string) => { const { error } = await service().from("rooms").delete().eq("id", Number(id)); if (error) console.error("cleanup room", id, error.message); };
 
-/** 방 행을 쥔 채 fire → 400ms 뒤 전부 대기 중인지 확인 → during(쥔 트랜잭션 안 작업) → commit */
-async function heldRoom<T>(roomId: string, fire: () => PromiseLike<T>[], during?: (tx: postgres.ReservedSql) => Promise<void>): Promise<T[]> {
+/** holder 백엔드에 막혀 있는, 대상 함수를 실행 중인 백엔드가 n 개가 될 때까지(최대 timeoutMs) 기다린다 — 시간 대기가 아니라 잠금 대기 증명 (Codex 2-5) */
+async function waitBlocked(holderPid: number, fn: string, n: number, timeoutMs = 5000): Promise<void> {
+  const until = Date.now() + timeoutMs;
+  for (;;) {
+    const [{ c }] = await pg`select count(*)::int as c from pg_stat_activity
+                             where ${holderPid} = any(pg_blocking_pids(pid)) and query ilike ${"%" + fn + "%"}`;
+    if (c >= n) return;
+    if (Date.now() > until) throw new Error(`${fn} 요청 ${n}개가 방 잠금을 기다리지 않았어요(지금 ${c}개)`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
+/** 방 행을 쥔 채 during(쥔 트랜잭션 안 작업) → fire → 대상 n 개가 이 연결에 막혀 있음을 확인 → commit */
+async function heldRoom<T>(roomId: string, fn: string, fire: () => PromiseLike<T>[], during?: (tx: postgres.ReservedSql) => Promise<void>): Promise<T[]> {
   const tx = await pg.reserve();
+  let ps: Promise<T>[] = [];
   try {
     await tx`begin`;
     await tx`select 1 from public.rooms where id = ${roomId} for update`;
+    const [{ pid }] = await tx`select pg_backend_pid() as pid`;
     if (during) await during(tx);
-    const settled: boolean[] = [];
-    const ps = fire().map((p, i) => Promise.resolve(p).then((v) => { settled[i] = true; return v; }));
-    await new Promise((r) => setTimeout(r, 400));
-    assertEquals(settled.filter(Boolean).length, 0, "요청이 방 잠금에 막혀 있어야 해요");
+    ps = fire().map((p) => Promise.resolve(p));
+    await waitBlocked(pid as number, fn, ps.length);
     await tx`commit`;
     return await Promise.all(ps);
-  } catch (e) { await tx`rollback`.catch(() => {}); throw e; } finally { tx.release(); }
+  } catch (e) {
+    await tx`rollback`.catch(() => {});
+    await Promise.allSettled(ps);                                   // 잠금이 풀린 뒤 남은 요청을 기다려 다음 사례에 새지 않게
+    throw e;
+  } finally { tx.release(); }
 }
 
 dbTest("extra window: two concurrent direct joins for the last seat → one OK, one ROOM_FULL", async () => {
@@ -1788,7 +1922,7 @@ dbTest("extra window: two concurrent direct joins for the last seat → one OK, 
   try {
     ok(await leader.c.rpc("room_extra_recruit_open", { p_slug: room.slug, p_until: await plus(3), p_max_members: 2, p_join_mode: "direct" }), "extra_open");
     const [a, b] = [await member(32), await member(33)];
-    const res = await heldRoom(room.id, () => [a.c.rpc("room_join", { p_slug: room.slug }), b.c.rpc("room_join", { p_slug: room.slug })]);
+    const res = await heldRoom(room.id, "room_join", () => [a.c.rpc("room_join", { p_slug: room.slug }), b.c.rpc("room_join", { p_slug: room.slug })]);
     assertEquals(res.map(code).sort(), ["OK", "ROOM_FULL"]);
     assertEquals((await pg`select member_count from public.rooms where id = ${room.id}`)[0].member_count, 2);
   } finally { await dropRoom(room.id); }
@@ -1800,7 +1934,7 @@ dbTest("bypass invite: limit 1, two concurrent invite_join → one OK, one INVIT
   try {
     const inv = ok<{ token: string }>(await leader.c.rpc("invite_bypass_set", { p_slug: room.slug, p_until: await plus(3), p_max: 1 }), "bypass_set");
     const [a, b] = [await member(35), await member(36)];
-    const res = await heldRoom(room.id, () => [a.c.rpc("invite_join", { p_token: inv.token }), b.c.rpc("invite_join", { p_token: inv.token })]);
+    const res = await heldRoom(room.id, "invite_join", () => [a.c.rpc("invite_join", { p_token: inv.token }), b.c.rpc("invite_join", { p_token: inv.token })]);
     assertEquals(res.map(code).sort(), ["INVITE_EXPIRED", "OK"]);
     assertEquals((await pg`select bypass_used from public.room_invites where token = ${inv.token}`)[0].bypass_used, 1);
   } finally { await dropRoom(room.id); }
@@ -1814,7 +1948,7 @@ dbTest("tick vs extend: tick picks a lapsed window, leader reopens while holding
     ok(await leader.c.rpc("room_extra_recruit_open", { p_slug: room.slug, p_until: saved, p_max_members: null, p_join_mode: null }), "extra_open");
     await pg`update internal.settings set value = ${await plus(1)} where key = 'today'`;   // 창이 지난 날
     const until = await plus(5);
-    const [tick] = await heldRoom(room.id, () => [pg`select public.room_tick() as r`], async (tx) => {
+    const [tick] = await heldRoom(room.id, "room_tick", () => [pg`select public.room_tick() as r`], async (tx) => {
       await tx`set local role authenticated`;
       await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: leader.id, role: "authenticated" })}, true)`;
       await tx`select public.room_extra_recruit_open(${room.slug}, ${until}::date, null, null)`;   // 실제 RPC, 커밋 전
@@ -1846,13 +1980,35 @@ dbTest("code lookup: failures persist across separate requests (10 → RATE_LIMI
   }
 });
 
-addEventListener("unload", () => { if (hasEnv) void pg.end(); });
+dbTest("tick vs end-date extension: tick picks an overdue room, leader extends end_date while holding the row → room stays ACTIVE, not counted (Codex 2-2)", async () => {
+  const leader = await member(40);
+  const room = await activeRoom(leader, 6, "direct", 2);          // 종료일 = 오늘+2
+  const saved = await today();
+  try {
+    await pg`update internal.settings set value = ${await plus(3)} where key = 'today'`;   // 종료일이 지난 날
+    const newEnd = await plus(10);
+    const [tick] = await heldRoom(room.id, "room_tick", () => [pg`select public.room_tick() as r`], async (tx) => {
+      await tx`set local role authenticated`;
+      await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: leader.id, role: "authenticated" })}, true)`;
+      await tx`select public.room_update(${room.slug}, ${JSON.stringify({ endDate: newEnd })}::jsonb)`;   // 실제 RPC, 커밋 전
+    });
+    const row = (await pg`select status, end_date::text as e from public.rooms where id = ${room.id}`)[0];
+    assertEquals([row.status, row.e], ["ACTIVE", newEnd]);
+    assertEquals(((tick as { r: { ended: number } }[])[0]).r.ended, 0);          // 날짜 범위상 시드 방도 끝나지 않는다(설계 ③)
+  } finally {
+    await pg`update internal.settings set value = ${saved} where key = 'today'`;
+    await dropRoom(room.id);
+  }
+});
+
+// 연결을 명시적으로 닫는다 — 정의 순서대로 도므로 마지막(Codex 2-5)
+dbTest("teardown: close the direct pg pool", async () => { await pg.end({ timeout: 5 }); });
 ```
 
 (`room_start` 인자는 0025 판 시그니처를 따른다 — 기본값이면 `p_slug` 만. `public.fail` 은 PostgREST 오류 `message` 에 코드를 싣는다 — `rooms-db.test.ts` 와 같은 판정. 실패 원문이 다르면 그 형식에 맞춘다.)
 
-- [ ] **Step 2: 실행** — env 없이 `npm run test:db` → 이 파일은 ignored(정상). 로컬 supabase 가 있으면 위 명령으로 4 passed. 없으면 노트에 "실 DB 게이트 미실행 — Task 10 에서 사용자 실행 요청" 을 남기고 **배포 전 필수 게이트**로 표시.
-- [ ] **Step 3: 커밋** — `git commit -- supabase/tests/extra-recruit-db.test.ts -m "test(db): 0032 실 PostgreSQL 두 연결 게이트 — 마지막 좌석·바로 참가 한도·tick↔연장 경쟁, 코드 실패 누적"`
+- [ ] **Step 2: 실행** — env 없이 `npm run test:db` → 이 파일은 ignored(정상). 로컬 supabase 가 있으면 위 명령으로 6 passed(사례 5 + 정리 1). 없으면 노트에 "실 DB 게이트 미실행 — Task 10 에서 사용자 실행 요청" 을 남기고 **배포 전 필수 게이트**로 표시.
+- [ ] **Step 3: 커밋** — `git commit -- supabase/tests/extra-recruit-db.test.ts -m "test(db): 0032 실 PostgreSQL 두 연결 게이트 — 마지막 좌석·바로 참가 한도·tick↔창 연장·tick↔종료일 연장 경쟁, 코드 실패 누적"`
 
 ---
 
