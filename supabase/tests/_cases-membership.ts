@@ -301,7 +301,9 @@ export const MEMBERSHIP_CASES: Case[] = [
       await expectFailSql(q, `select public.invite_rotate($1)`, ["docker"], "NOT_LEADER");
       await asUser(q, USERS.철수);
       const [{ g }] = await q(`select public.invite_get($1) as g`, ["docker"]);
-      assertEquals(g, { today: TODAY, token: "seed-docker", url: "/invite/seed-docker" });
+      // 0032: code·bypass 가 붙었다 — 기존 3키는 그대로
+      assertEquals({ today: g.today, token: g.token, url: g.url }, { today: TODAY, token: "seed-docker", url: "/invite/seed-docker" });
+      assertEquals([/^[0-9A-HJKMNP-TV-Z]{8}$/.test(g.code), g.bypass], [true, null]);
       const [{ n }] = await q(`select public.invite_rotate($1) as n`, ["docker"]);
       assertNotEquals(n.token, "seed-docker");
       assertEquals([n.url, n.token.length], [`/invite/${n.token}`, 32]);
@@ -332,6 +334,7 @@ export const MEMBERSHIP_CASES: Case[] = [
         slug: "toeic", title: "토익 900 8주 챌린지", intro: "매일 LC·RC 한 세트씩 풀고 오답 노트를 공유해요. 주말엔 모의고사 1회.",
         startDate: "2026-11-02", endDate: "2026-12-27", memberCount: 2, maxMembers: 8, status: "recruit", isPublic: true, joinMode: "direct",
         tags: [{ slug: "english", label: "영어", tone: "blue", auto: true }, { slug: "toeic", label: "토익", tone: "peach", auto: true }],
+        recruitUntil: null,   // 0032: 추가 모집 실효 마감(RECRUIT 은 null)
       });
       assertEquals(p.leader, { userId: USERS.서연, nickname: "서연", tone: "blue" });
       await asUser(q, USERS.철수);

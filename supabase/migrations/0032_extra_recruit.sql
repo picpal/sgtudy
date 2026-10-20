@@ -485,3 +485,198 @@ begin
   end;
   return jsonb_build_object('title', left(v_title, 200), 'body', left(v_body, 500));
 end $$;
+
+-- ───────── 9. 초대: 판정 · JSON (D7·D8) ─────────
+create or replace function public.invite_bypass_ok(i public.room_invites, r public.rooms) returns boolean
+language sql stable security definer set search_path = '' as $$
+  -- 실효 기한 = least(bypass_until, 방 종료일) (Codex #3 — 종료일 단축 대응)
+  select i.revoked_at is null and i.bypass_until is not null and least(i.bypass_until, r.end_date) >= public.kst_today()
+     and (i.bypass_max is null or i.bypass_used < i.bypass_max)
+     and r.archived_at is null and r.status in ('RECRUIT', 'ACTIVE')
+$$;
+
+-- invite_get·invite_rotate·invite_bypass_set 응답(InviteLink) — 기존 키 today/token/url 유지 + code·bypass
+create or replace function public.invite_json(i public.room_invites, r public.rooms) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
+    'token', i.token, 'url', '/invite/' || i.token, 'code', i.code,
+    'bypass', case when i.bypass_until is null then null else jsonb_build_object(
+      'until', to_char(least(i.bypass_until, r.end_date), 'YYYY-MM-DD'), 'max', i.bypass_max, 'used', i.bypass_used,   -- 실효 기한
+      'active', public.invite_bypass_ok(i, r)) end)
+$$;
+
+-- invite_ensure ← 0004 판. 0032: 새 행에 코드, 코드 없는 기존 활성 행은 처음 볼 때 채운다
+create or replace function public.invite_ensure(p_room bigint, p_by uuid) returns text
+language plpgsql security definer set search_path = '' as $$
+declare v_token text; v_code text;
+begin
+  select token, code into v_token, v_code from public.room_invites where room_id = p_room and revoked_at is null;
+  if v_token is null then
+    -- 동시 요청이면 ux_room_invites_active 에 걸린다 → 23505 원문 대신 이긴 쪽 토큰을 다시 읽는다 (D9)
+    insert into public.room_invites (token, room_id, created_by, code)
+    values (replace(gen_random_uuid()::text, '-', ''), p_room, p_by, public.invite_code_new())   -- 0032: 코드도
+    on conflict do nothing;
+    select token into v_token from public.room_invites where room_id = p_room and revoked_at is null;
+  elsif v_code is null then
+    -- 0032: 코드 없는 기존 행(로컬 seed 등) — 처음 볼 때 채운다
+    update public.room_invites set code = public.invite_code_new() where token = v_token and code is null;
+  end if;
+  return v_token;
+end $$;
+
+-- invite_get ← 0005 판. 0032: 반환 = invite_json (code·bypass)
+create or replace function public.invite_get(p_slug text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; v_token text; i public.room_invites;
+begin
+  r := public.room_lock(p_slug);
+  perform public.require_leader(r, v_uid, '그룹장만 초대 링크를 볼 수 있어요');
+  v_token := public.invite_ensure(r.id, v_uid);
+  select * into i from public.room_invites where token = v_token;
+  return public.invite_json(i, r);   -- 0032: code·bypass
+end $$;
+
+-- invite_rotate ← 0005 판. 0032: 반환 = invite_json. 회전 = 새 행 → 바로 참가 꺼짐
+create or replace function public.invite_rotate(p_slug text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; v_token text; i public.room_invites;
+begin
+  r := public.room_lock(p_slug);
+  perform public.require_leader(r, v_uid, '그룹장만 초대 링크를 바꿀 수 있어요');
+  update public.room_invites set revoked_at = now() where room_id = r.id and revoked_at is null;
+  v_token := public.invite_ensure(r.id, v_uid);
+  select * into i from public.room_invites where token = v_token;
+  return public.invite_json(i, r);   -- 0032: code·bypass
+end $$;
+
+-- invite_preview ← 0005 판. 0032: room.recruitUntil · join {mode, via, until}
+create or replace function public.invite_preview(p_token text) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare v_uid uuid := public.current_user_id(); r public.rooms; i public.room_invites; v_bypass boolean; v_open boolean;
+begin
+  r := public.invite_resolve(p_token);
+  select * into i from public.room_invites where token = p_token;
+  v_bypass := public.invite_bypass_ok(i, r);
+  v_open   := public.room_recruit_open(r);
+  return jsonb_build_object(
+    'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
+    'room', jsonb_build_object(
+      'slug', r.slug, 'title', r.title, 'intro', r.intro,
+      'startDate', to_char(r.start_date, 'YYYY-MM-DD'), 'endDate', to_char(r.end_date, 'YYYY-MM-DD'),
+      'memberCount', r.member_count, 'maxMembers', r.max_members,
+      'status', lower(r.status), 'isPublic', r.visibility = 'PUBLIC', 'joinMode', lower(r.join_mode), 'tags', public.room_tags_json(r.id),
+      'recruitUntil', case when v_open then to_char(public.room_recruit_until(r), 'YYYY-MM-DD') end),   -- 0032
+    'leader', public.person_json(r.leader_id),
+    'me', public.room_me_json(r.id, v_uid),
+    -- 0032: 지금 이 초대로 할 수 있는 것. mode null = 참가 불가(종료·모집 끝)
+    'join', jsonb_build_object(
+      'mode',  case when v_bypass then 'direct' when v_open then lower(r.join_mode) end,
+      'via',   case when v_bypass then 'invite' when v_open and r.status = 'ACTIVE' then 'extra' when v_open then 'recruit' end,
+      'until', case when v_bypass then to_char(least(i.bypass_until, r.end_date), 'YYYY-MM-DD')   -- 실효 기한 (v_bypass → bypass_until not null)
+                    when v_open and r.status = 'ACTIVE' then to_char(public.room_recruit_until(r), 'YYYY-MM-DD') end));
+end $$;
+
+-- ───────── 10. 바로 참가 설정 (그룹장) ─────────
+-- p_until null = 끄기. 켜기: 오늘..min(종료일, 오늘+30). 켜져 있던 상태에서 바꾸면 사용 수는 유지, 꺼져 있다 켜면 0부터
+create or replace function public.invite_bypass_set(p_slug text, p_until date, p_max int default null) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid   uuid := public.require_user();
+  v_today date := public.kst_today();
+  r       public.rooms;
+  i       public.room_invites;
+  v_token text;
+  v_last  date;
+begin
+  r := public.room_lock(p_slug);
+  perform public.require_leader(r, v_uid, '그룹장만 초대 설정을 바꿀 수 있어요');
+  if r.archived_at is not null or r.status not in ('RECRUIT', 'ACTIVE') then
+    perform public.fail('ROOM_STATUS_INVALID', '모집중이거나 진행중인 방에서만 바꿀 수 있어요');
+  end if;
+  v_last := least(r.end_date, v_today + 30);
+  if p_until is not null and (p_until < v_today or p_until > v_last) then
+    perform public.fail('INVALID_PERIOD', '바로 참가 기한은 오늘부터 30일 안, 스터디 종료일까지예요',
+      jsonb_build_object('field', 'bypassUntil', 'maxDate', to_char(v_last, 'YYYY-MM-DD')));
+  end if;
+  if p_max is not null and (p_max < 1 or p_max > 100) then
+    perform public.fail('VALIDATION_FAILED', '인원 한도는 1~100명이에요', '{"field":"bypassMax"}'::jsonb);
+  end if;
+  v_token := public.invite_ensure(r.id, v_uid);
+  update public.room_invites
+     set bypass_used  = case when bypass_until is null then 0 else bypass_used end,
+         bypass_until = p_until,
+         bypass_max   = case when p_until is null then null else p_max end
+   where token = v_token
+  returning * into i;
+  return public.invite_json(i, r);
+end $$;
+
+-- ───────── 11. 바로 참가 (내부, invite_join 이 부른다) ─────────
+-- 잠금: 방 → 초대 행. 잠근 뒤 다시 판정(동시 한도). 정원은 지킨다(D3). PENDING 이면 승인 없이 승격
+create or replace function public.room_join_by_invite(p_slug text, p_token text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; i public.room_invites; m public.room_members;
+begin
+  r := public.room_lock(p_slug);
+  select * into i from public.room_invites where token = p_token and room_id = r.id for update;
+  if not found or not public.invite_bypass_ok(i, r) then
+    perform public.fail('INVITE_EXPIRED', '바로 참가 기한이 끝났거나 인원이 찼어요 · 그룹장에게 문의해 주세요');
+  end if;
+  if r.leader_id = v_uid then perform public.fail('OWNER_CANNOT_JOIN', '그룹장은 이미 참가자예요'); end if;
+  select * into m from public.room_members where room_id = r.id and user_id = v_uid;
+  if found then
+    if m.status = 'ACTIVE' then perform public.fail('ALREADY_MEMBER', '이미 참가한 방이에요'); end if;
+    if m.status = 'INACTIVE' then perform public.fail('MEMBER_NOT_ACTIVE', '이탈 처리된 방에는 다시 참가할 수 없어요'); end if;
+  end if;
+  perform public.room_take_seat(r.id);                       -- ROOM_FULL
+  perform public.room_member_activate(r, v_uid, 'invite');
+  update public.room_invites set bypass_used = bypass_used + 1 where token = i.token;
+  return public.membership_result(r.id, v_uid);
+end $$;
+
+-- invite_join ← 0024 판. 0032: 바로 참가 갈래
+create or replace function public.invite_join(p_token text, p_message text default null) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; i public.room_invites;   -- require_user() 를 resolve 보다 먼저: 비로그인은 INVITE_* 대신 AUTH_REQUIRED
+begin
+  r := public.invite_resolve(p_token);
+  select * into i from public.room_invites where token = p_token;
+  -- 0032: 바로 참가 초대 → 모집 상태·참가 방식과 무관하게 바로(D8). 아니면 지금과 같음(precheck 가 모집 열림 판정)
+  if public.invite_bypass_ok(i, r) then return public.room_join_by_invite(r.slug, p_token); end if;
+  if r.join_mode = 'DIRECT' then return public.room_join(r.slug, p_token); end if;
+  return public.room_apply(r.slug, p_token, p_message);
+end $$;
+
+-- ───────── 12. 코드 조회 (D9·D10, §6) ─────────
+-- 로그인 필수. 사용자별 실패 10회/1시간. 못 찾음은 "반환"한다 — fail 로 던지면 실패 기록 INSERT 가 롤백돼 제한이 무력해진다.
+-- 실패만 기록한다(성공·회전 코드 적중은 저장 안 함 — Codex #7). 정리는 room_tick(1일).
+-- 회전된 코드는 옛 링크로 보낸다(랜딩이 INVITE_REVOKED 를 보여 준다) — 실패로 세지 않는다.
+-- 한계: 사용자별 제한이라 여러 계정으로 나눠 시도하는 것은 막지 못한다(스펙 §6 — 필요하면 요청/IP 제한을 따로 설계)
+create or replace function public.invite_code_lookup(p_code text) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid   uuid := public.require_user();
+  v_code  text := public.invite_code_norm(p_code);
+  v_limit constant int := 10;
+  v_fails int;
+  v_token text;
+begin
+  perform pg_advisory_xact_lock(hashtextextended('sgtudy.invite_code:' || v_uid, 0));
+  select count(*)::int into v_fails from public.invite_code_failures
+  where user_id = v_uid and created_at > public.app_now() - interval '1 hour';
+  if v_fails >= v_limit then
+    perform public.fail('RATE_LIMITED', '코드를 너무 많이 틀렸어요 · 1시간 뒤에 다시 시도해 주세요', '{"retryAfterMinutes":60}'::jsonb);
+  end if;
+  if v_code ~ '^[0-9A-HJKMNP-TV-Z]{8}$' then
+    select token into v_token from public.room_invites where code = v_code;
+  end if;
+  if v_token is null then
+    insert into public.invite_code_failures (user_id, created_at) values (v_uid, public.app_now());
+    return jsonb_build_object('found', false, 'remaining', v_limit - v_fails - 1);
+  end if;
+  return jsonb_build_object('found', true, 'url', '/invite/' || v_token);
+end $$;
+
+grant execute on function public.invite_bypass_set(text, date, int) to authenticated;
+grant execute on function public.invite_code_lookup(text)           to authenticated;

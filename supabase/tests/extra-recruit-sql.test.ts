@@ -321,3 +321,138 @@ cases("extra recruit 0032 · window", db, [
     }
   } },
 ]);
+
+const bypassSet = (q: Q, slug: string, until: string | null, max: number | null = null) =>
+  rpc(q, "public.invite_bypass_set($1, $2::date, $3::int)", [slug, until, max]);
+
+cases("extra recruit 0032 · invite", db, [
+  { name: "invite_get fills code lazily for seed rows; bypass_set; rotate → new token+code, bypass off", run: async (q) => {
+    await as(q, "민수");
+    const g = await rpc(q, "public.invite_get('aws')");
+    assertEquals([g.token, g.url, g.bypass], ["seed-aws", "/invite/seed-aws", null]);
+    assertMatch(g.code, CODE_RE);
+    assertEquals((await rpc(q, "public.invite_get('aws')")).code, g.code);          // 한 번 정하면 그대로
+    const b = await bypassSet(q, "aws", "2026-10-19", 2);
+    assertEquals(b.bypass, { until: "2026-10-19", max: 2, used: 0, active: true });
+    const n = await rpc(q, "public.invite_rotate('aws')");
+    assertNotEquals(n.token, "seed-aws");
+    assertNotEquals(n.code, g.code);
+    assertEquals(n.bypass, null);
+    assertEquals((await bypassSet(q, "aws", null)).bypass, null);                   // 끄기
+  } },
+  { name: "bypass_set validation", run: async (q) => {
+    await as(q, "지은");
+    await expectFail(bypassSet(q, "aws", "2026-10-19"), "NOT_LEADER");
+    await as(q, "현우");
+    await expectFail(bypassSet(q, "algo", "2026-10-19"), "ROOM_STATUS_INVALID");    // ENDED
+    await as(q, "민수");
+    await expectFail(bypassSet(q, "aws", "2026-10-11"), "INVALID_PERIOD");
+    await expectFail(bypassSet(q, "aws", "2026-11-12"), "INVALID_PERIOD");           // 오늘+31
+    await expectFail(bypassSet(q, "aws", "2026-10-19", 0), "VALIDATION_FAILED");
+    await as(q, "수민");
+    await expectFail(bypassSet(q, "jcg", "2026-11-05"), "INVALID_PERIOD");           // jcg 종료 11/01 넘김
+    assertEquals((await bypassSet(q, "jcg", "2026-10-19")).bypass.active, true);    // 모집중 방에서도 켤 수 있다
+    // 실효 기한 = least(bypass_until, end_date): 종료일이 당겨지면 기한도 따라 줄어든다 (Codex #3)
+    await q("update public.rooms set start_date = '2026-10-12', end_date = '2026-10-15' where slug = 'jcg'");   // ck_rooms_period(시작 ≤ 종료)
+    assertEquals((await rpc(q, "public.invite_get('jcg')")).bypass.until, "2026-10-15");
+    await setToday(q, "2026-10-16");
+    assertEquals((await rpc(q, "public.invite_get('jcg')")).bypass.active, false);
+  } },
+  { name: "old invites stay closed for ACTIVE rooms (no bypass) — preview join.mode null", run: async (q) => {
+    await as(q, "서연");
+    const p = await rpc(q, "public.invite_preview('seed-aws')");
+    assertEquals(p.join, { mode: null, via: null, until: null });
+    await expectFail(rpc(q, "public.invite_join('seed-aws')"), "ROOM_NOT_RECRUITING");
+    const t = await rpc(q, "public.invite_preview('seed-toeic')");
+    assertEquals(t.join, { mode: "direct", via: "recruit", until: null });
+  } },
+  { name: "bypass join on closed ACTIVE approval room: direct ACTIVE, assign_from, used+1, MEMBER_JOINED; limit → falls back", run: async (q) => {
+    const seoyeon = await uidOf(q, "서연");
+    await as(q, "민수");
+    await bypassSet(q, "aws", "2026-10-19", 1);
+    await as(q, "서연");
+    assertEquals((await rpc(q, "public.invite_preview('seed-aws')")).join, { mode: "direct", via: "invite", until: "2026-10-19" });
+    const r = await rpc(q, "public.invite_join('seed-aws')");
+    assertEquals([r.me.state, r.memberCount], ["active", 5]);
+    assertEquals(await memberRow(q, "aws", seoyeon), { status: "ACTIVE", assign_from: "2026-10-12" });
+    assertEquals(await live(q, await nodeId(q, "aws", "IAM 정책 이해"), seoyeon), null);
+    assertEquals((await one(q, "select bypass_used from public.room_invites where token = 'seed-aws'")).bypass_used, 1);
+    const n = await notes(q, "민수", "MEMBER_JOINED", "aws");
+    assertEquals(n.length, 1);
+    assert((n[0].body as string).startsWith("초대로 바로 참가했어요"));
+    await as(q, "가은");
+    assertEquals((await rpc(q, "public.invite_preview('seed-aws')")).join.mode, null);   // 한도 소진
+    await expectFail(rpc(q, "public.invite_join('seed-aws')"), "ROOM_NOT_RECRUITING");
+    // 기한 지남
+    await as(q, "민수");
+    await bypassSet(q, "aws", "2026-10-19", null);
+    await setToday(q, "2026-10-20");
+    await as(q, "가은");
+    await expectFail(rpc(q, "public.invite_join('seed-aws')"), "ROOM_NOT_RECRUITING");
+  } },
+  { name: "bypass edges: INACTIVE, leader, PENDING promoted, full, RECRUIT approval room direct, archived hidden", run: async (q) => {
+    const aws = await roomId(q, "aws");
+    await as(q, "민수");
+    await bypassSet(q, "aws", "2026-10-19");
+    await as(q, "도윤");
+    await expectFail(rpc(q, "public.invite_join('seed-aws')"), "MEMBER_NOT_ACTIVE");
+    await as(q, "민수");
+    await expectFail(rpc(q, "public.invite_join('seed-aws')"), "OWNER_CANNOT_JOIN");
+    const gaeun = await uidOf(q, "가은");
+    await q("insert into public.room_members (room_id, user_id, role, status, applied_at) values ($1::bigint, $2::uuid, 'MEMBER', 'PENDING', now())", [aws, gaeun]);
+    await as(q, "가은");
+    assertEquals((await rpc(q, "public.invite_join('seed-aws')")).me.state, "active");
+    // 꽉 찬 비공개 진행중 방
+    await as(q, "지훈");
+    await bypassSet(q, "spring", "2026-10-19");
+    await as(q, "서연");
+    await expectFail(rpc(q, "public.invite_join('seed-spring')"), "ROOM_FULL");
+    // 모집중 승인제 방에서도 바로 참가 초대면 승인 없이
+    await as(q, "가은");
+    await bypassSet(q, "sqld", "2026-10-19");
+    await as(q, "서연");
+    assertEquals((await rpc(q, "public.invite_join('seed-sqld')")).me.state, "active");
+    assertEquals((await memberRow(q, "sqld", await uidOf(q, "서연"))).assign_from, null);
+    // 보관 방은 초대 자체가 숨겨진다
+    await q("update public.rooms set archived_at = now() where id = $1::bigint", [aws]);
+    await as(q, "예린");
+    await expectFail(rpc(q, "public.invite_join('seed-aws')"), "INVITE_NOT_FOUND");
+  } },
+  { name: "invite_code_lookup: normalized hit; misses are recorded & limited (10/h); rotated code still routes; anon blocked", run: async (q) => {
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await as(q, "민수");
+    const code = (await rpc(q, "public.invite_get('aws')")).code as string;
+    await as(q, "서연");
+    const messy = `${code.slice(0, 4).toLowerCase()}-${code.slice(4)} `;
+    assertEquals(await rpc(q, "public.invite_code_lookup($1)", [messy]), { found: true, url: "/invite/seed-aws" });
+    const miss = code === "ZZZZZZZZ" ? "YYYYYYYY" : "ZZZZZZZZ";
+    for (let i = 9; i >= 0; i--) assertEquals(await rpc(q, "public.invite_code_lookup($1)", [miss]), { found: false, remaining: i });
+    await expectFail(rpc(q, "public.invite_code_lookup($1)", [code]), "RATE_LIMITED");   // 맞는 코드도 막힌다
+    const fails = async () => (await one(q, "select count(*)::int as n from public.invite_code_failures where user_id = $1::uuid", [await uidOf(q, "서연")])).n;
+    assertEquals(await fails(), 10);                                                       // 성공(첫 조회)은 저장 안 함 (Codex #7)
+    await setNow(q, "2026-10-12T04:01:00Z");
+    assertEquals((await rpc(q, "public.invite_code_lookup('abc')")).found, false);         // 모양이 틀려도 실패로 센다
+    // tick 이 1일 지난 실패를 지운다 (요청 사이 커밋 지속성은 Task 9 실 DB 에서)
+    await setNow(q, "2026-10-13T05:00:00Z");
+    await q("select public.room_tick()");
+    assertEquals(await fails(), 0);
+    // 회전된 코드 → 옛 링크로 보낸다(랜딩이 INVITE_REVOKED 를 보여 줌), 실패로 세지 않음
+    await as(q, "민수");
+    await rpc(q, "public.invite_rotate('aws')");
+    await as(q, "예린");
+    assertEquals(await rpc(q, "public.invite_code_lookup($1)", [code]), { found: true, url: "/invite/seed-aws" });
+    await expectFail(rpc(q, "public.invite_preview('seed-aws')"), "INVITE_REVOKED");
+    await asAnon(q);
+    await expectFail(rpc(q, "public.invite_code_lookup($1)", [code]), "AUTH_REQUIRED");
+  } },
+  { name: "invite grants", run: async (q) => {
+    const can = async (role: string, fn: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, fn])).v;
+    assertEquals(await can("authenticated", "public.invite_bypass_set(text, date, integer)"), true);
+    assertEquals(await can("authenticated", "public.invite_code_lookup(text)"), true);
+    assertEquals(await can("anon", "public.invite_code_lookup(text)"), false);
+    assertEquals(await can("anon", "public.invite_preview(text)"), true);                   // 기존 그대로
+    for (const f of ["public.room_join_by_invite(text, text)", "public.invite_json(public.room_invites, public.rooms)", "public.invite_bypass_ok(public.room_invites, public.rooms)"]) {
+      assertEquals(await can("authenticated", f), false, f);
+    }
+  } },
+]);
