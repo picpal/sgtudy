@@ -838,6 +838,8 @@ export const ROOM_CASES: Case[] = [
         // 0030: 진행목표 항목 첨부 — Storage 정책 래퍼(node_doc_readable_me 는 ANON 에서 상속) · RPC 4개
         "node_doc_object_readable(text)", "node_doc_object_writable(text)",
         "node_file_register(bigint,text,text,text,bigint)", "node_files_set(bigint,uuid[])", "node_file_discard(uuid)", "node_files(bigint)",
+        // 0032: 추가 모집 열기·닫기
+        "room_extra_recruit_open(text,date,integer,text)", "room_extra_recruit_close(text)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);
