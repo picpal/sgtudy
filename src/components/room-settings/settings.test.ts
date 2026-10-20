@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoomDetail } from "@/lib/api/types";
-import { buildPatch, dangerOf, lockedOf, saveSteps, valuesOf, validateSettings } from "./settings";
+import { RECRUIT_CHANGED, buildPatch, dangerOf, lockedOf, mergeServerFields, saveSteps, valuesOf, validateSettings } from "./settings";
 
 const TODAY = "2026-10-12";
 type D = Pick<RoomDetail, "title" | "intro" | "descriptionMd" | "rulesMd" | "startDate" | "endDate" | "maxMembers" | "minMembers" | "isPublic" | "joinMode" | "leaderDoesTasks" | "status" | "archived" | "memberCount">;
@@ -119,5 +119,30 @@ describe("saveSteps — 방 정보 저장 뒤 태그 저장 (최종 리뷰 Minor
     const tags = [{ id: "t", name: "aws" }] as unknown as RoomDetail["tags"];
     const r = await saveSteps({ hasPatch: false, tagsDirty: true }, { update: async () => { throw new Error("불리면 안 됨"); }, putTags: async () => tags, onRoom: () => {} }, base as RoomDetail);
     expect(r.tags).toBe(tags);
+  });
+});
+
+describe("mergeServerFields (Codex #8·2-4)", () => {
+  const d = { title: "t", intro: "i", descriptionMd: "", rulesMd: "", startDate: "2026-10-01", endDate: "2026-12-31", maxMembers: 6, minMembers: 3, isPublic: true, joinMode: "approval" as const, leaderDoesTasks: true };
+  it("open: server-changed maxMembers·joinMode land in base and v; other unsaved edits stay", () => {
+    const base = valuesOf(d);
+    const v = { ...base, title: "고친 제목" };
+    const next = { ...d, maxMembers: 8, joinMode: "direct" as const };
+    const b2 = mergeServerFields(base, next, RECRUIT_CHANGED.open), v2 = mergeServerFields(v, next, RECRUIT_CHANGED.open);
+    expect([b2.maxMembers, b2.joinMode, v2.maxMembers, v2.joinMode]).toEqual(["8", "direct", "8", "direct"]);
+    expect(buildPatch(b2, v2)).toEqual({ title: "고친 제목" });
+  });
+  it("close ('지금 마감'): an unsaved capacity edit survives", () => {
+    const base = valuesOf(d);
+    const v = { ...base, maxMembers: "8" }; // 폼에서 6→8, 아직 저장 안 함
+    const v2 = mergeServerFields(v, d, RECRUIT_CHANGED.close);
+    expect(v2.maxMembers).toBe("8");
+    expect(buildPatch(mergeServerFields(base, d, RECRUIT_CHANGED.close), v2)).toEqual({ maxMembers: 8 });
+  });
+  it("input typed while the request was in flight survives (merge into the latest state)", () => {
+    const atRequest = valuesOf(d);
+    const latest = { ...atRequest, intro: "요청 중에 고친 소개" }; // setV(fn) 가 받는 최신 값
+    const v2 = mergeServerFields(latest, { ...d, maxMembers: 8 }, RECRUIT_CHANGED.open);
+    expect([v2.intro, v2.maxMembers]).toEqual(["요청 중에 고친 소개", "8"]);
   });
 });

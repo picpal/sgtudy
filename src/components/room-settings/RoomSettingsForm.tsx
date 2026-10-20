@@ -18,8 +18,9 @@ import type { RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
 import { useLeaveConfirm } from "@/lib/useLeaveConfirm";
-import { archiveRoom, buildPatch, dangerOf, deleteRoom, lockReason, lockedOf, saveSteps, updateRoom, validateSettings, valuesOf } from "./settings";
+import { archiveRoom, buildPatch, dangerOf, deleteRoom, lockReason, lockedOf, mergeServerFields, saveSteps, updateRoom, validateSettings, valuesOf } from "./settings";
 import { NotifySettingsSection } from "./NotifySettings";
+import { RecruitInviteSection } from "./RecruitInviteSection";
 import { SideBackRail, TopBackLink } from "./BackButtons";
 
 type Errors = Partial<Record<keyof NewRoomValues, string>>;
@@ -129,6 +130,13 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
     } finally {
       setBusy(false);
     }
+  };
+  // 추가 모집 섹션의 바로 저장 — 서버가 바꾼 칸만 기준값·현재값의 "최신" 상태에 덮는다(Codex #8·2-4). 요청 전 base/v 를 캡처하지 않는다
+  const onRecruitDetail = (next: RoomDetail, changed: readonly (keyof NewRoomValues)[]) => {
+    setD(next);
+    setBase((b) => mergeServerFields(b, next, changed));
+    setV((cur) => mergeServerFields(cur, next, changed));
+    router.refresh();
   };
   const reset = () => {
     setV(base);
@@ -242,6 +250,9 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
               </button>
             </div>
           </form>
+
+          {/* 추가 모집 · 초대 — 바로 저장(위 폼 저장과 따로). 진행중·모집중 방만 */}
+          {!d.archived && (d.status === "active" || d.status === "recruit") && <RecruitInviteSection detail={d} toast={setToast} onDetail={onRecruitDetail} />}
 
           {/* 알림 설정 — 바로 저장(위 폼 저장과 따로). 끝났거나 보관된 방은 보낼 알림이 없다 */}
           {!d.archived && d.status !== "ended" && <NotifySettingsSection slug={d.slug} toast={setToast} />}

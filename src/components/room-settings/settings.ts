@@ -10,13 +10,22 @@ import { validateNewRoom, type NewRoomValues } from "@/components/room-new/valid
  */
 type Src = Pick<RoomDetail, "title" | "intro" | "descriptionMd" | "rulesMd" | "startDate" | "endDate" | "maxMembers" | "minMembers" | "isPublic" | "joinMode" | "leaderDoesTasks">;
 type State = Pick<RoomDetail, "status" | "archived">;
-type Field = keyof NewRoomValues;
+export type Field = keyof NewRoomValues;
 
 export function valuesOf(d: Src): NewRoomValues {
   return {
     title: d.title, intro: d.intro, descriptionMd: d.descriptionMd ?? "", rulesMd: d.rulesMd ?? "", startDate: d.startDate, endDate: d.endDate,
     maxMembers: String(d.maxMembers), minMembers: d.minMembers === null ? "" : String(d.minMembers), isPublic: d.isPublic, joinMode: d.joinMode, leaderDoesTasks: d.leaderDoesTasks,
   };
+}
+
+/** 폼 밖 RPC 가 실제로 바꾼 칸 — 동작별(Codex 2-4). 마감은 정원·방식을 바꾸지 않는다 */
+export const RECRUIT_CHANGED = { open: ["maxMembers", "joinMode"], close: [] } as const satisfies Record<string, readonly Field[]>;
+/** 최신 폼 값(cur)에 서버가 바꾼 칸만 덮는다 — 함수형 setState 안에서 부른다(요청 중 입력 보존) */
+export function mergeServerFields(cur: NewRoomValues, next: Src, changed: readonly Field[]): NewRoomValues {
+  if (changed.length === 0) return cur;
+  const fresh = valuesOf(next);
+  return { ...cur, ...Object.fromEntries(changed.map((k) => [k, fresh[k]])) };
 }
 
 const ALL: Field[] = ["title", "intro", "descriptionMd", "rulesMd", "startDate", "endDate", "maxMembers", "minMembers", "isPublic", "joinMode", "leaderDoesTasks"];

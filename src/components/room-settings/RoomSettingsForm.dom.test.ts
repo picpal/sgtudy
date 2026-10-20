@@ -22,6 +22,11 @@ vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }
 vi.mock("./NotifySettings", () => ({ NotifySettingsSection: () => null }));
 vi.mock("@/lib/today", () => ({ useToday: () => "2026-10-19" }));
 
+const recruitApi = vi.hoisted(() => ({ openExtraRecruit: vi.fn(), closeExtraRecruit: vi.fn(), setInviteBypass: vi.fn(), fetchInvite: vi.fn(), rotateInvite: vi.fn() }));
+vi.mock("@/lib/api/recruit", async (orig) => ({ ...(await orig<typeof import("@/lib/api/recruit")>()), openExtraRecruit: recruitApi.openExtraRecruit, closeExtraRecruit: recruitApi.closeExtraRecruit, setInviteBypass: recruitApi.setInviteBypass }));
+vi.mock("@/lib/api/leader", async (orig) => ({ ...(await orig<typeof import("@/lib/api/leader")>()), fetchInvite: recruitApi.fetchInvite, rotateInvite: recruitApi.rotateInvite }));
+recruitApi.fetchInvite.mockResolvedValue({ today: "2026-10-19", token: "t", url: "/invite/t", code: "K7QM3XPA", bypass: null });
+
 const { RoomSettingsForm } = await import("./RoomSettingsForm");
 
 const base = {
@@ -63,7 +68,7 @@ describe("방 설정 — 진행중에 잠긴 칸도 지금 값을 보인다", ()
   });
   it("잠긴 스위치(공개·그룹장 과제)·참가 방식도 지금 상태를 보인다", () => {
     const { host, root } = mount({ isPublic: false, leaderDoesTasks: true, joinMode: "approval" });
-    const sw = [...host.querySelectorAll<HTMLElement>('[role="switch"]')];
+    const sw = [...host.querySelector("form")!.querySelectorAll<HTMLElement>('[role="switch"]')];
     expect(sw.map((s) => [s.getAttribute("aria-label") ?? s.textContent, s.getAttribute("aria-checked")])).toEqual([
       [expect.stringContaining("공개 방"), "false"],
       [expect.stringContaining("그룹장도 과제 수행"), "true"],
@@ -85,6 +90,47 @@ describe("방 설정 — 돌아가기 목적지", () => {
   it("back 이 없으면(바로 들어옴) 둘 다 내 스터디", () => {
     const { host, root } = mount({});
     expect([...host.querySelectorAll("a")].filter((a) => a.textContent === "이전 페이지" || a.textContent === "내 스터디로").map((a) => a.getAttribute("href"))).toEqual(["/my-study/aws", "/my-study/aws"]);
+    act(() => root.unmount());
+  });
+});
+
+/* 추가 모집 · 초대 섹션의 바로 저장이 폼 기준값·현재값에 서버가 바꾼 칸만 반영한다 (Codex #8·2-4) */
+describe("방 설정 — 추가 모집 결과가 폼과 맞물린다", () => {
+  const typeIn = (el: HTMLInputElement, value: string) => {
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(el, value);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const flush = () => act(async () => {});
+  const button = (host: ParentNode, label: string) => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === label) as HTMLButtonElement;
+  const live = { recruit: { open: true, extraUntil: "2026-10-27" }, invite: { url: "/invite/t", token: "t", code: "K7QM3XPA", bypass: null } } as Partial<RoomDetail>;
+
+  it("'지금 마감' 해도 저장 안 한 최대 인원 수정은 그대로", async () => {
+    recruitApi.closeExtraRecruit.mockResolvedValue({ ...base, recruit: { open: false, extraUntil: null } });
+    const { host, root, input } = mount(live);
+    typeIn(input("maxMembers"), "12");
+    act(() => button(host, "지금 마감").click());
+    act(() => button(document.body, "마감").click());
+    await flush();
+    expect(recruitApi.closeExtraRecruit).toHaveBeenCalled();
+    expect(input("maxMembers").value).toBe("12");
+    expect(host.textContent).toContain("바뀐 항목 1개");
+    expect(host.textContent).toContain("추가 모집 시작");
+    act(() => root.unmount());
+  });
+
+  it("추가 모집 요청 중에 고친 칸은 남고, 서버가 바꾼 정원은 기준값·현재값 모두에 들어간다", async () => {
+    let resolve!: (d: RoomDetail) => void;
+    recruitApi.openExtraRecruit.mockReturnValue(new Promise<RoomDetail>((r) => (resolve = r)));
+    const { host, root, input } = mount({ ...live, recruit: { open: false, extraUntil: null } });
+    act(() => button(host, "추가 모집 시작").click());
+    typeIn(input("intro"), "요청 중에 고친 소개");
+    await act(async () => resolve({ ...base, maxMembers: 12, recruit: { open: true, extraUntil: "2026-10-26" } } as RoomDetail));
+    expect(input("intro").value).toBe("요청 중에 고친 소개");
+    expect(input("maxMembers").value).toBe("12");
+    expect(host.textContent).toContain("바뀐 항목 1개");
     act(() => root.unmount());
   });
 });
