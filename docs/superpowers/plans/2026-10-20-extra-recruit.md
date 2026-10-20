@@ -35,7 +35,7 @@
 | 2-5 | 400ms 대기는 잠금 대기를 증명 못 함·시작일 오늘이라 cron 경쟁·연결 미종료 | `pg_stat_activity`/`pg_blocking_pids` 로 대상 백엔드가 잡은 연결에 막혀 있음을 제한시간(5s) 안에 확인한 뒤 커밋 → 둘 다 잠금 앞에서 기다림이 보장돼 오류 코드가 확정적. 방은 **미래 시작일**로 만든 뒤 `room_start`. 마지막 `dbTest` 에서 `pg.end()` 명시 | Task 9 |
 | 2-6 | `assignFrom` 이 공개 방 익명 `curriculum_get` 에 노출 | 그룹장·ACTIVE/INACTIVE 멤버(`v_viewer`, 0014 규칙)에게만 키를 싣는다. 익명·외부인 테스트 | Task 4 |
 
-16개 재정의 복사 원본은 Codex 가 0031 기준 최신으로 확인. 이번 반영으로 재정의가 2개(`me_studies`·`curriculum_json`, 둘 다 ←0024) 늘었다 — AI 연동 플랜(0033~0035)은 둘 다 재정의하지 않는다(`api_studies` 가 `me_studies` 출력을 소비하므로 `when.kind = 'recruitEnd'`·ACTIVE 방 PENDING 항목이 새로 보일 수 있다 — 동작 상호작용으로 컨트롤러에 알림).
+16개 재정의 복사 원본은 Codex 가 0031 기준 최신으로 확인. 이번 반영으로 재정의가 2개(`me_studies`·`curriculum_json`, 둘 다 ←0024) 늘었다 — AI 연동 플랜(0033~0035)은 둘 다 재정의하지 않는다(`api_studies` 는 `me_studies` 출력을 소비하지 않고 그 where 절을 복사하므로(복사 원본은 0032 판) 0032 의 ACTIVE 방 PENDING 항목(`room_recruit_open`)이 AI 쪽에도 보이도록 복사 원본을 0032 로 맞춰야 한다 — 동작 상호작용으로 컨트롤러에 알림).
 
 ## 번호 (중요)
 

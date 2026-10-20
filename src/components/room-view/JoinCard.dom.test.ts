@@ -41,6 +41,14 @@ describe("JoinCard — 보관된 방의 승인 대기", () => {
     expect(btn(host, "신청 취소")).toBeDefined();
     act(() => root.unmount());
   });
+  it("진행중 방(추가 모집) 대기자는 모집 마감일 기준 안내", () => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(JoinCard, { room: { ...room, archived: false, status: "active", extraUntil: "2026-10-27" }, act: "pending", loginHref: "/login", onJoin: () => {}, onApply: () => {}, onCancel: () => {} })));
+    expect(host.textContent).toContain("10.27까지 승인되지 않으면 신청이 자동 만료돼요");
+    expect(host.textContent).not.toContain("시작일까지");
+    act(() => root.unmount());
+  });
 });
 
 // 0032: 진행중 방 참가 안내 (D12)

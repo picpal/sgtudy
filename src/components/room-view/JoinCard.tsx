@@ -100,7 +100,7 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
           <button type="button" onClick={onCancel} disabled={busy} className={SECONDARY}>
             {leave ? "참가 취소" : "신청 취소"}
           </button>
-          <span className={NOTE}>{leave ? "모집 기간에만 참가를 취소할 수 있어요" : "시작일까지 승인되지 않으면 신청이 자동 만료돼요"}</span>
+          <span className={NOTE}>{leave ? "모집 기간에만 참가를 취소할 수 있어요" : room.status === "active" ? `${room.extraUntil ? `${mmdd(room.extraUntil)}까지` : "추가 모집이 끝날 때까지"} 승인되지 않으면 신청이 자동 만료돼요` : "시작일까지 승인되지 않으면 신청이 자동 만료돼요"}</span>
         </div>
       );
     }

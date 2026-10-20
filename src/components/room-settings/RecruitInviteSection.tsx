@@ -378,7 +378,7 @@ function InviteCard({ d, toast }: { d: RoomDetail; toast: Props["toast"] }) {
               <p className={`m-0 text-[13px] ${bypass.active ? "text-ink-2" : "font-medium text-warn"}`}>
                 {bypass.active
                   ? `${bypass.used}명 사용${bypass.max ? ` / ${bypass.max}명` : ""} · 승인 없이 바로 참가해요`
-                  : "기한이 지났거나 인원이 찼어요 · 기한을 늘리거나 새 코드로 바꿔 주세요"}
+                  : "기한이 지났거나 인원이 찼어요 · 기한·인원을 늘리거나 새 코드로 바꿔 주세요"}
               </p>
             )}
             <div className="flex flex-col md:flex-row md:justify-end">

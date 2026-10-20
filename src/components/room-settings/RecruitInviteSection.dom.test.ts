@@ -42,7 +42,7 @@ describe("RecruitInviteSection", () => {
     expect(html({ archived: true })).toBe("");
   });
   it("bypass on but inactive → warning", () => {
-    expect(html({ invite: { ...base.invite!, bypass: { until: "2026-10-11", max: 2, used: 2, active: false } } })).toContain("기한이 지났거나 인원이 찼어요");
+    expect(html({ invite: { ...base.invite!, bypass: { until: "2026-10-11", max: 2, used: 2, active: false } } })).toContain("기한이 지났거나 인원이 찼어요 · 기한·인원을 늘리거나 새 코드로 바꿔 주세요");
   });
   it("code is mono, no-wrap; buttons are 44px", () => {
     const h = html({});
