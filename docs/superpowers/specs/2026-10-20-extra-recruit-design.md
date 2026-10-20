@@ -3,7 +3,7 @@
 - 작성: 2026-10-20
 - 요청(원문): "이미 시작한 스터디에 참가자 추가하고 싶은데, 추가 모집 기능이 없어. 추가 모집 하기위해 모집 기간을 설정하거나, 초대 코드를 통해서 이미 모집 종료되었더라도 초대 코드로 들어오면 참가 가능한 형태가 필요해"
 - 플랜: `docs/superpowers/plans/2026-10-20-extra-recruit.md`
-- 마이그레이션: `0035_extra_recruit.sql`(임시 번호 — §10)
+- 마이그레이션: `0032_extra_recruit.sql`(§10)
 
 ---
 
@@ -69,7 +69,7 @@ room_recruit_open(r) := r.archived_at is null and (
 - `invite_join` 판정 순서: **바로 참가 유효 → `room_join_by_invite`(승인 없이 ACTIVE)** / 아니면 지금과 같음(`join_mode` 따라 `room_join`/`room_apply` → precheck 가 모집 열림 판정).
 - 바로 참가도 **정원은 지킨다**(`ROOM_FULL`) — 그룹장이 정원을 늘린다(D3).
 - 회전(`invite_rotate`) = 새 토큰·새 코드·바로 참가 꺼짐. 이미 퍼진 링크·코드가 한 번에 죽는다.
-- 기존(0035 전) 초대 행은 `bypass_until = null` → **동작 변화 없음**. 이미 공유된 모집 링크가 진행중 방에 갑자기 열리는 일은 없다(D7).
+- 기존(0032 전) 초대 행은 `bypass_until = null` → **동작 변화 없음**. 이미 공유된 모집 링크가 진행중 방에 갑자기 열리는 일은 없다(D7).
 
 ### 3.3 중간 합류자 배정 시작일
 
@@ -230,7 +230,7 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 | 동시 바로 참가(한도 1명 남음) | `room_lock`(방 행) → 초대 행 `for update` → 재판정 → 좌석 → `bypass_used+1`. 둘째 요청은 `INVITE_EXPIRED` |
 | 중간 합류자 참가 취소 | 진행중이므로 불가 → 탈퇴 요청(D12) |
 | 회차가 이미 모두 끝난 진행중 방 | 배정 0건. 그룹장이 새 과제를 만들면 그때부터 배정 |
-| AI 계획서(0033)로 지난 날짜 공통 과제를 새로 만듦 | 중간 합류자에게는 배정되지 않음(같은 `assignment_resync` 규칙) |
+| AI 계획서(0034)로 지난 날짜 공통 과제를 새로 만듦 | 중간 합류자에게는 배정되지 않음(같은 `assignment_resync` 규칙) |
 
 ---
 
@@ -256,7 +256,7 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 
 ---
 
-## 9. DB 변경 요약 (`0035_extra_recruit.sql`, 추가형)
+## 9. DB 변경 요약 (`0032_extra_recruit.sql`, 추가형)
 
 | 종류 | 대상 |
 |---|---|
@@ -267,7 +267,7 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 | 새 함수(내부) | `room_recruit_open` · `room_member_activate` · `room_extra_recruit_expire` · `room_join_by_invite` · `invite_code_new` · `invite_code_norm` · `invite_json` · `invite_bypass_ok` |
 | 재정의(최신 판 복사) | `assignment_resync` ←0014 · `room_join_precheck` ←0005 · `room_join` ←0005 · `room_approve` ←0005 · `room_decide_precheck` ←0005 · `room_tick` ←0004 · `invite_ensure` ←0004 · `invite_get`·`invite_rotate`·`invite_preview` ←0005 · `invite_join` ←0024 · `room_detail_json` ←0026 · `rooms_list` ←0024 · `room_matches` ←0004 · `notification_kinds` ←0024* · `notify_render` ←0028* |
 
-\* AI 플랜(0033)도 재정의 — §10.
+\* AI 플랜(0034)도 재정의 — §10.
 
 재정의하지 않는 것: `room_apply`(precheck 가 관문), `room_leave`, `room_update`, `notify_link`, `notify_enabled`, `invite_resolve`, `room_transition_*`.
 
@@ -275,15 +275,14 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 
 ## 10. 마이그레이션 번호 · AI 연동 플랜과의 충돌
 
-- 0032~0034 는 AI 연동 플랜(`2026-10-19-ai-integration.md`) 예약. 이 기능은 **임시 0035**.
-- **함수 충돌(둘 다 재정의)**: `notification_kinds()`(AI 0033 ← 0024 판에 `CURRICULUM_BULK_UPDATED` 추가) · `notify_render()`(AI 0033 ← 0028 판에 분기 추가). 그리고 TS `src/lib/api/types.ts` 의 `NOTIFICATION_KINDS` 배열(양쪽 다 끝에 추가).
+- **선택됨(확정): AI 연동보다 먼저 배포 → `0032_extra_recruit.sql`.** AI 연동 플랜(`2026-10-19-ai-integration.md`)은 0033~0035 로 밀렸다.
+- **함수 충돌(둘 다 재정의)**: `notification_kinds()`(AI 0034 ← 0032 판(MEMBER_JOINED 포함, 유지)에 `CURRICULUM_BULK_UPDATED` 추가) · `notify_render()`(AI 0034 ← 0032 판에 분기 추가). 그리고 TS `src/lib/api/types.ts` 의 `NOTIFICATION_KINDS` 배열(양쪽 다 끝에 추가).
 - 충돌 아님(확인함): AI 가 재정의하는 `current_user_id`·`node_create`·`node_update`·`notify_link`(AI 목록에는 있으나 MEMBER_JOINED 는 기본 갈래로 충분해 이 기능은 재정의 안 함)·`pat_*`·`plan_*`·`api_*`·`curriculum_plan_*`·`personal_*_many` 는 이 기능이 건드리지 않는다. 이 기능이 재정의하는 `assignment_resync` 는 AI 가 **호출만** 한다(동작 변화: 중간 합류자에게 지난 날짜 공통 과제 미배정 — 의도된 일관성).
-- **0035 로 AI 뒤에 배포**(기본): 이 기능의 `notification_kinds`·`notify_render` 는 **0033 판을 복사 원본**으로 쓴다(플랜 Task 0 이 최신 판을 grep 으로 확정). `NOTIFICATION_KINDS` 는 `// 0033` 줄 뒤에 `// 0035` 를 붙인다.
-- **AI 보다 먼저 배포**(번호 당김 → `0032_extra_recruit.sql`):
-  1. 파일명·파일 머리 주석·테스트 파일 머리 주석·`cases("… 0035 …")` 묶음 이름·커밋 메시지의 `0035` → `0032`.
-  2. 이 기능의 복사 원본은 0024/0028 판 그대로.
-  3. AI 플랜은 0033~0035 로 밀어야 하고, AI 플랜의 "최신 판 복사" 원본 중 `notification_kinds`·`notify_render` 가 0024/0028 이 아니라 **`0032_extra_recruit`** 가 된다(AI Task 0 Step 2 grep 이 잡아낸다). AI 플랜 Global Constraints 의 "0032 가 이미 있으면 멈추고 번호를 다시 정한다" 조항이 이 경우를 다룬다 — AI 플랜 문서는 이 작업이 고치지 않는다(컨트롤러가 조정).
-  4. `NOTIFICATION_KINDS` 주석 `// 0035` → `// 0032`.
+- **AI 보다 먼저 배포**(확정 → `0032_extra_recruit.sql`):
+  1. 파일명·파일 머리 주석·테스트 파일 머리 주석·`cases("… 0032 …")` 묶음 이름·커밋 메시지의 번호 = `0032`.
+  2. 이 기능의 `notification_kinds`·`notify_render` 복사 원본은 현재 `supabase/migrations/` 최신 판(0024/0028).
+  3. AI 플랜은 0033~0035 로 밀렸고, AI 플랜의 `notification_kinds`·`notify_render` 복사 원본은 **`0032_extra_recruit`** 이다(`MEMBER_JOINED` 유지). AI 문서에 반영 완료.
+  4. `NOTIFICATION_KINDS` 주석 `// 0032`.
 - 호스티드 적용은 사용자 승인 후 사용자가(`supabase db push`).
 
 ---

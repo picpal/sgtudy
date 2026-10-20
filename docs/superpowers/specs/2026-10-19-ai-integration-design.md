@@ -75,7 +75,7 @@ Postgres  api_invoke  ── 토큰 검증·스코프·레이트리밋·감사
 
 ### 4.2 PAT 를 사용자 신원으로 바꾸는 방법 — DB 게이트웨이 `api_invoke`
 
-- `current_user_id()` 를 `coalesce(auth.uid(), nullif(current_setting('sgtudy.api_uid', true), '')::uuid)` 로 재정의(0032). **모든 기존 RPC 가 무수정으로 그 사용자 권한(그룹장/편집자/멤버)으로 돈다.** RLS 정책·storage 정책은 이 경로에서 쓰이지 않는다(게이트웨이는 security definer RPC 만 부른다).
+- `current_user_id()` 를 `coalesce(auth.uid(), nullif(current_setting('sgtudy.api_uid', true), '')::uuid)` 로 재정의(0033). **모든 기존 RPC 가 무수정으로 그 사용자 권한(그룹장/편집자/멤버)으로 돈다.** RLS 정책·storage 정책은 이 경로에서 쓰이지 않는다(게이트웨이는 security definer RPC 만 부른다).
 - `sgtudy.api_uid` 는 `api_authenticate()`(내부 함수, GRANT 없음)만 `set_config(…, true)`(트랜잭션 한정)로 쓴다. PostgREST 클라이언트는 임의 GUC 를 설정할 수 없다(`request.*` 만). 회귀 테스트로 "이 GUC 를 쓰는 함수는 하나" 를 고정한다.
 - `api_invoke(p_token text, p_op text, p_args jsonb)` 는 `anon, authenticated` 에 GRANT. 
   - `p_token` 있음 → `auth.uid()` 가 null 이어야 함(아니면 `API_AUTH_CONFLICT`). 해시 조회 → 폐기·만료 확인 → 스코프 확인 → 레이트리밋 → `sgtudy.api_uid` 설정.
@@ -287,21 +287,21 @@ aws | AWS SAA 자격증 3개월 완주 | 진행 중 | 2026-10-01~2026-12-24 | �
 
 ## 8. 새 DB 객체
 
-> 번호: 2026-10-19 D7 로 진행목표 항목 첨부(`0030_node_attachments.sql`)가 먼저 배포되고, `0031_orphan_objects.sql`(미등록 Storage 고아 객체 정리 후보 `file_orphan_candidates`, 기존 함수 재정의 없음)이 그 뒤를 잇는다 → 이 기능은 **0032~0034**(0001~0031 수정 금지). 0030 이 `files`·Storage 정책·`job_cleanup`·`goal_nodes` 삭제 트리거를 바꾸므로 재정의 전 최신 판 확인(플랜 Task 0).
+> 번호: 2026-10-19 D7 로 진행목표 항목 첨부(`0030_node_attachments.sql`)가 먼저 배포되고, `0031_orphan_objects.sql`(미등록 Storage 고아 객체 정리 후보 `file_orphan_candidates`, 기존 함수 재정의 없음)이 그 뒤를 잇는다 → 이 기능은 **0033~0035**(0001~0031 수정 금지). 0030 이 `files`·Storage 정책·`job_cleanup`·`goal_nodes` 삭제 트리거를 바꾸므로 재정의 전 최신 판 확인(플랜 Task 0).
 
 | 마이그레이션 | 객체 | 비고 |
 |---|---|---|
-| `0032_api_tokens.sql` | 표 `api_tokens`(id uuid, user_id, name ≤40, token_hash unique, token_prefix, scopes text[], created_at, expires_at not null, last_used_at, revoked_at) · 표 `api_audit`(id, token_id, user_id, source, op, room_id, dry_run, ok, error_code, plan_hash, summary jsonb, created_at) — 둘 다 RLS on, 정책 없음(RPC 전용). 〔UX 재검토 D11〕 `api_idempotency` 는 없앴다(초안 표가 멱등을 겸함) | |
+| `0033_api_tokens.sql` | 표 `api_tokens`(id uuid, user_id, name ≤40, token_hash unique, token_prefix, scopes text[], created_at, expires_at not null, last_used_at, revoked_at) · 표 `api_audit`(id, token_id, user_id, source, op, room_id, dry_run, ok, error_code, plan_hash, summary jsonb, created_at) — 둘 다 RLS on, 정책 없음(RPC 전용). 〔UX 재검토 D11〕 `api_idempotency` 는 없앴다(초안 표가 멱등을 겸함) | |
 | | `current_user_id()` 재정의(+ `sgtudy.api_uid`) | 0002 판 복사 |
 | | RPC `pat_create(name, scopes, days)` · `pat_list()` · `pat_revoke(id)` (authenticated) | |
 | | 내부 `api_authenticate(token, op) → uuid` · `api_scope_of(op)` · `api_rate_check(token_id, user_id, op, dry_run, replay)`(〔Codex #7〕 volatile, 사용자 잠금) · 〔N3〕 `api_user_lock(uid)` · 표 `api_tokens` 에 `http_window`·`http_count`(〔N7〕) · `api_limits()` | GRANT 없음 |
-| `0033_curriculum_plan.sql` | 〔UX 재검토 D11〕 표 `api_plan_drafts`(id text `pv_`+12 hex PK, user_id, room_id, plan jsonb(원본), resolved jsonb(정규), version, preview jsonb, created_at, expires_at(+24h), applied_at, apply_response jsonb, undo_of text, sched_changes jsonb(〔Codex #4·N2〕 실제 날짜 변경 {id:[옛시작,옛끝,새시작,새끝]})) — RLS on, 정책 없음 | |
+| `0034_curriculum_plan.sql` | 〔UX 재검토 D11〕 표 `api_plan_drafts`(id text `pv_`+12 hex PK, user_id, room_id, plan jsonb(원본), resolved jsonb(정규), version, preview jsonb, created_at, expires_at(+24h), applied_at, apply_response jsonb, undo_of text, sched_changes jsonb(〔Codex #4·N2〕 실제 날짜 변경 {id:[옛시작,옛끝,새시작,새끝]})) — RLS on, 정책 없음 | |
 | | 내부 `node_create_core(r, uid, parent, title, label, type, s, e, index, desc) → bigint` · `node_create` 재정의(core + resync + json, 시그니처·GRANT 동일) | 0024 판 복사 |
 | | `curriculum_version(room) → text` | |
 | | 내부 `plan_flatten(plan)` · 〔UX 재검토 D14·D15〕 `plan_round_pick(r, sel) → goal_nodes` · `plan_resolve(r, plan) → jsonb{plan, errors}` · `plan_validate(r, plan)` · `plan_run(r, uid, plan, dry) → jsonb` · (D17 은 `plan_undo_run` — 기록된 날짜 복원) · 〔Codex〕 `plan_shape_check(plan)` · `plan_warn_text(code)` · `plan_undo_check(changes)` · `plan_undo_run(r, uid, changes, dry)`(N1·N2) · `plan_collapse_notifications(room, actor, after_id, created_ids) → jsonb`(D18) | |
 | | RPC `curriculum_plan_preview(slug, plan, undo_of text default null) → jsonb` · `curriculum_plan_apply(slug, preview_id text) → jsonb` (authenticated) | 웹 UI 도 재사용 가능 |
-| | `notification_kinds()`·`notify_render()`·`notify_link()` 재정의 + `CURRICULUM_BULK_UPDATED` | 각각 0024/0028 최신판 복사 |
-| `0034_api_invoke.sql` | RPC `api_invoke(token, op, args) → jsonb` (anon, authenticated, 봉투 `{ok, data\|error, meta:{expiresAt}}`) · 내부 `api_resolve_study(uid, text) → slug`(D14) · `api_studies(uid)`(me_studies + 편집권·현재 회차) · `personal_create_many(slug, round_sel jsonb, goals)`(회차 선택자·중복 건너뜀, 〔Codex #2〕 방 잠금 → 자격 → 회차 → 중복) · `personal_delete_many(slug, ids) → {deleted, skipped}`(D16, 〔Codex #1·#10〕) · `api_node_file_counts(room)`(D20) · 〔Codex #5〕 `api_curriculum_view(c, uid)`(노드 `isMine`) | `set statement_timeout = '15s'`(PostgREST 함수 설정 반영 — Task 0 확인) |
+| | `notification_kinds()`·`notify_render()`·`notify_link()` 재정의 + `CURRICULUM_BULK_UPDATED` | `notification_kinds`·`notify_render` 는 0032(추가 모집, `MEMBER_JOINED` 포함 — 유지) 판, `notify_link` 는 0028 최신판 복사 |
+| `0035_api_invoke.sql` | RPC `api_invoke(token, op, args) → jsonb` (anon, authenticated, 봉투 `{ok, data\|error, meta:{expiresAt}}`) · 내부 `api_resolve_study(uid, text) → slug`(D14) · `api_studies(uid)`(me_studies + 편집권·현재 회차) · `personal_create_many(slug, round_sel jsonb, goals)`(회차 선택자·중복 건너뜀, 〔Codex #2〕 방 잠금 → 자격 → 회차 → 중복) · `personal_delete_many(slug, ids) → {deleted, skipped}`(D16, 〔Codex #1·#10〕) · `api_node_file_counts(room)`(D20) · 〔Codex #5〕 `api_curriculum_view(c, uid)`(노드 `isMine`) | `set statement_timeout = '15s'`(PostgREST 함수 설정 반영 — Task 0 확인) |
 
 ## 9. 서버가 LLM 을 부르지 않는 이유
 
@@ -314,7 +314,7 @@ aws | AWS SAA 자격증 3개월 완주 | 진행 중 | 2026-10-01~2026-12-24 | �
 
 | 단계 | 내용 | 완료 기준 |
 |---|---|---|
-| **1 (MVP)** | 0032~0034 · `/api/mcp`(stateless) · PAT UI · 도구 7개 + prompt 1개(〔UX 재검토〕) · 알림 묶기 · 감사·레이트리밋 | Claude Code 에서 `claude mcp add --scope user --transport http sgtudy https://<도메인>/api/mcp --header "Authorization: Bearer sgt_pat_…"` → "aws 에 5주차 추가" 가 미리보기(한국어 요약) → 승인 → `apply(previewId)`, 팀원 알림 ≤ 1건. "3주차부터 1주 밀어 줘" 가 도구 2회로 끝남 |
+| **1 (MVP)** | 0033~0035 · `/api/mcp`(stateless) · PAT UI · 도구 7개 + prompt 1개(〔UX 재검토〕) · 알림 묶기 · 감사·레이트리밋 | Claude Code 에서 `claude mcp add --scope user --transport http sgtudy https://<도메인>/api/mcp --header "Authorization: Bearer sgt_pat_…"` → "aws 에 5주차 추가" 가 미리보기(한국어 요약) → 승인 → `apply(previewId)`, 팀원 알림 ≤ 1건. "3주차부터 1주 밀어 줘" 가 도구 2회로 끝남 |
 | 2 | OAuth 2.1(Supabase OAuth Server, 동의 화면, protected-resource metadata, 401 challenge) → claude.ai/Desktop 커넥터 · `archive_nodes`(플래그)·`revert_plan`(생성까지) · `list_node_files`(D20) · JSON 출력(`outputSchema`) 필요 시 · 감사 로그·만료 초안 정리 cron · 「AI 변경 이력」 보기(`/me`) | claude.ai 커스텀 커넥터 연결 |
 | 3 | `create_study`·설정·태그·`start_study` · CLI(`npx sgtudy`) · 웹 "붙여넣기로 일괄 추가"(같은 RPC) · `node_update` 의 curriculum_json 반환 비용 분리(대량 update 성능) | |
 

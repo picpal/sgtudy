@@ -4,7 +4,7 @@
 
 **Goal:** 이미 시작한(ACTIVE) 스터디에 참가자를 더 받는다 — ① 그룹장이 마감일을 정해 여는 **추가 모집**(기존 참가/신청·승인 흐름 재사용, 둘러보기 노출, 마감일 자동 종료), ② 모집이 닫혀 있어도 들어오는 **초대 링크·8자 코드 "바로 참가"**(기한·인원 한도·회전). 중간 합류자는 합류일 이후 마감인 공통 과제만 맡는다.
 
-**Architecture:** DB = 마이그레이션 1개 `0035_extra_recruit.sql`(추가형, **임시 번호** — 아래 "번호" 절). 판정 함수 `room_recruit_open(r)`(RECRUIT ∨ ACTIVE ∧ `recruit_until ≥ today`) 하나로 `room_join_precheck`·`room_decide_precheck` 의 `status <> 'RECRUIT'` 를 대체하고, 기존 방당 1개 초대(`room_invites`)에 `code`·`bypass_until`·`bypass_max`·`bypass_used` 를 붙여 `invite_join` 이 "바로 참가"면 `room_join_by_invite` 로 보낸다. 중간 합류는 `room_members.assign_from` + `assignment_resync` 한 줄. 웹 = 어댑터·순수 로직 `src/lib/api/recruit.ts` → 방 설정 「추가 모집 · 초대」 섹션(바로 저장) → 그룹장 패널·참가 카드·방 카드 표시 → 초대 랜딩 CTA 확장 + `/join` 코드 입력 페이지.
+**Architecture:** DB = 마이그레이션 1개 `0032_extra_recruit.sql`(추가형, **확정 — AI 연동보다 먼저 배포**, 아래 "번호" 절). 판정 함수 `room_recruit_open(r)`(RECRUIT ∨ ACTIVE ∧ `recruit_until ≥ today`) 하나로 `room_join_precheck`·`room_decide_precheck` 의 `status <> 'RECRUIT'` 를 대체하고, 기존 방당 1개 초대(`room_invites`)에 `code`·`bypass_until`·`bypass_max`·`bypass_used` 를 붙여 `invite_join` 이 "바로 참가"면 `room_join_by_invite` 로 보낸다. 중간 합류는 `room_members.assign_from` + `assignment_resync` 한 줄. 웹 = 어댑터·순수 로직 `src/lib/api/recruit.ts` → 방 설정 「추가 모집 · 초대」 섹션(바로 저장) → 그룹장 패널·참가 카드·방 카드 표시 → 초대 랜딩 CTA 확장 + `/join` 코드 입력 페이지.
 
 **Tech Stack:** Next.js 16 (App Router) · React 19 · Tailwind v4 · Supabase PG17(plpgsql `security definer set search_path=''`, `public.fail`) · vitest(`src/**/*.test.ts`, DOM 은 `// @vitest-environment jsdom` + `renderToStaticMarkup`) · deno + PGlite SQL 테스트(`npm run test:db`).
 
@@ -12,17 +12,17 @@
 
 ## 번호 (중요)
 
-- 0032~0034 는 AI 연동 플랜(`docs/superpowers/plans/2026-10-19-ai-integration.md`) 예약. 이 플랜은 **`0035_extra_recruit.sql`**(AI 뒤 배포 가정).
-- **AI 보다 먼저 배포하게 되면** 번호를 `0032` 로 당긴다. 그때 바꿀 것:
-  1. 파일명 `supabase/migrations/0035_extra_recruit.sql` → `0032_extra_recruit.sql`, 파일 머리 주석, `supabase/tests/extra-recruit-sql.test.ts` 머리 주석과 `cases("… 0035 …")` 묶음 이름, 커밋 메시지의 `0035`, `src/lib/api/types.ts` 의 `// 0035` 주석.
-  2. `notification_kinds`·`notify_render` 복사 원본 = 0024·0028 판(Task 0 Step 2 결과가 그렇게 나온다).
-  3. AI 플랜은 0033~0035 로 밀리고, AI 의 `notification_kinds`·`notify_render` 복사 원본이 **`0032_extra_recruit`** 가 된다 — AI 플랜 Task 0 Step 2 의 grep 이 잡는다. AI 플랜 문서는 이 작업자가 고치지 않는다(컨트롤러 몫).
-- **AI 와의 함수 충돌**: 둘 다 재정의 = `notification_kinds()`·`notify_render()` + TS `NOTIFICATION_KINDS`. 그 외 AI 재정의 대상(`current_user_id`·`node_create`·`node_update`·`notify_link`·`pat_*`·`plan_*`·`api_*`·`curriculum_plan_*`·`personal_*_many`)은 이 플랜이 건드리지 않는다. 이 플랜이 재정의하는 `assignment_resync` 는 AI 0033 이 호출만 한다.
+- **선택됨(확정): 이 기능이 AI 연동보다 먼저 배포된다 → `0032_extra_recruit.sql`.** AI 연동 플랜(`docs/superpowers/plans/2026-10-19-ai-integration.md`)은 0033~0035 로 밀렸다(문서 재번호 완료).
+- 이 번호에 맞춰 적용된 것:
+  1. 파일명 `supabase/migrations/0032_extra_recruit.sql`, 파일 머리 주석, `supabase/tests/extra-recruit-sql.test.ts` 머리 주석과 `cases("… 0032 …")` 묶음 이름, 커밋 메시지의 `0032`, `src/lib/api/types.ts` 의 `// 0032` 주석.
+  2. `notification_kinds`·`notify_render` 복사 원본 = 현재 `supabase/migrations/` 의 최신 판(`notification_kinds` ← 0024 · `notify_render` ← 0028; Task 0 Step 2 grep 으로 재확인).
+  3. AI 플랜은 `notification_kinds`·`notify_render` 복사 원본이 **`0032_extra_recruit`** 이고 `MEMBER_JOINED` 를 유지해야 한다 — AI 플랜 문서에 이미 반영됨.
+- **AI 와의 함수 충돌**: 둘 다 재정의 = `notification_kinds()`·`notify_render()` + TS `NOTIFICATION_KINDS`. 그 외 AI 재정의 대상(`current_user_id`·`node_create`·`node_update`·`notify_link`·`pat_*`·`plan_*`·`api_*`·`curriculum_plan_*`·`personal_*_many`)은 이 플랜이 건드리지 않는다. 이 플랜이 재정의하는 `assignment_resync` 는 AI 0034 가 호출만 한다.
 
 ## Global Constraints
 
-- 마이그레이션은 **`0035_extra_recruit.sql` 하나만**. 0001~0034 수정 금지. 0032~0034 는 만들지 않는다. Task 0 에서 `0035_*` 가 이미 있으면 멈추고 번호를 컨트롤러와 다시 정한다.
-- **재정의는 최신 판 복사 후 표시한 곳만 고친다**(Task 0 Step 2 로 최신 판 확정): `assignment_resync` ←0014 · `room_join_precheck`·`room_join`·`room_approve`·`room_decide_precheck` ←0005 · `room_tick`·`invite_ensure`·`room_matches` ←0004 · `invite_get`·`invite_rotate`·`invite_preview` ←0005 · `invite_join` ←0024 · `room_detail_json` ←0026 · `rooms_list` ←0024 · `notification_kinds` ←0024 **또는 AI 0033** · `notify_render` ←0028 **또는 AI 0033**. `create or replace` 는 이름·인자명·기본값 동일 → GRANT 유지.
+- 마이그레이션은 **`0032_extra_recruit.sql` 하나만**. 0001~0031 수정 금지. 0033~0035 는 AI 연동 예약 — 만들지 않는다. Task 0 에서 `0032_*` 가 이미 있으면 멈추고 번호를 컨트롤러와 다시 정한다.
+- **재정의는 최신 판 복사 후 표시한 곳만 고친다**(Task 0 Step 2 로 최신 판 확정): `assignment_resync` ←0014 · `room_join_precheck`·`room_join`·`room_approve`·`room_decide_precheck` ←0005 · `room_tick`·`invite_ensure`·`room_matches` ←0004 · `invite_get`·`invite_rotate`·`invite_preview` ←0005 · `invite_join` ←0024 · `room_detail_json` ←0026 · `rooms_list` ←0024 · `notification_kinds` ←0024 · `notify_render` ←0028. `create or replace` 는 이름·인자명·기본값 동일 → GRANT 유지.
 - **재정의 금지**: `room_apply`(precheck 가 관문) · `room_leave` · `room_update` · `notify_link` · `notify_enabled` · `invite_resolve` · `room_transition_active`/`room_transition_ended` · `member_deactivate`.
 - `room_tick()` 반환 모양 `{activated, ended}` 는 그대로(기존 `_cases-rooms.ts` 가 객체 전체를 단언).
 - 새 plpgsql 함수: `security definer set search_path = ''`, 객체는 `public.` 접두, 실패는 `perform public.fail(code, 한국어 문구, details)`. 공개 RPC 만 GRANT(`room_extra_recruit_open`·`room_extra_recruit_close`·`invite_bypass_set`·`invite_code_lookup` → `authenticated`). 내부 헬퍼는 0002 기본 권한으로 닫혀 있다 — 아무것도 하지 않는다.
@@ -45,13 +45,13 @@
 ## Review Focus
 
 1. **관문이 한 곳** — 참가·신청·승인 판정이 모두 `room_recruit_open` 을 거치는가. 창 밖 ACTIVE 는 지금과 똑같이 `ROOM_NOT_RECRUITING`(기존 `_cases-membership.ts`·`backlog-0028-sql.test.ts` 단언 유지). → Task 2.
-2. **이미 퍼진 링크가 열리지 않는다** — 0035 전 초대 행(`bypass_until null`)은 진행중 방에서 여전히 참가 불가. 바로 참가는 그룹장이 명시적으로 켠 경우만, 기한 ≤ 30일 ∧ ≤ 종료일. → Task 3.
+2. **이미 퍼진 링크가 열리지 않는다** — 0032 전 초대 행(`bypass_until null`)은 진행중 방에서 여전히 참가 불가. 바로 참가는 그룹장이 명시적으로 켠 경우만, 기한 ≤ 30일 ∧ ≤ 종료일. → Task 3.
 3. **실패 기록이 롤백되지 않는다** — `invite_code_lookup` 은 못 찾음을 **반환**(`{found:false}`)하고, 한도 초과만 `fail`. `fail` 로 던지면 실패 INSERT 가 함께 롤백돼 제한이 무력해진다. 테스트가 10회 실패 후 11회째 `RATE_LIMITED` 를 확인. → Task 3.
 4. **중간 합류 배정** — 합류일(KST) 이전 마감 공통 과제는 배정 안 됨, 이후·진행중 과제는 배정. 기존 멤버(`assign_from null`)는 무변화. 이미 해제된(released) 행을 되살리지 않는다(`on conflict … where released_at is not null` 이 `assign_from` 조건 밖에서 돌지 않는지). → Task 1·2.
 5. **동시성** — 바로 참가 한도: 방 행 잠금 → 초대 행 `for update` → 재판정 → 좌석 → `bypass_used + 1`. 정원은 `room_take_seat` 그대로. → Task 3.
 6. **대기 신청 정리** — 창이 닫히면(수동·tick·방 종료·종료일 단축) PENDING 이 남지 않는다. tick 반환 모양 불변. → Task 2.
 7. **노출 범위** — 코드·토큰·바로 참가 설정은 그룹장에게만(`room_detail_json.invite`), 비로그인 `room_get` 에는 `recruit` 만. → Task 4.
-8. **AI 플랜과의 재정의 충돌** — `notification_kinds`·`notify_render` 를 실제 최신 판(0033 이 먼저 들어왔으면 그 판)에서 복사했는가. → Task 0·2.
+8. **AI 플랜과의 재정의 충돌** — `notification_kinds`·`notify_render` 를 실제 최신 판(0024·0028)에서 복사했는가. → Task 0·2.
 
 ---
 
@@ -62,12 +62,12 @@
 - [ ] **Step 1: 작업 트리·번호**
 
 Run: `cd /Users/picpal/Desktop/workspace/sgtudy && git status --short && ls supabase/migrations | tail -5`
-Expected: `supabase/migrations/**`·`supabase/tests/**`·`src/lib/api/**`·`src/components/{room-settings,room-view,auth,main}/**` 에 커밋 안 된 변경 없음. `0035_*` 없음. 마지막 파일이 `0031_orphan_objects.sql`(AI 미배포) 또는 `0034_api_invoke.sql`(AI 배포 완료)이 아니면 멈추고 보고. AI 미배포이고 이 기능을 먼저 내기로 했으면 위 "번호" 절대로 0032 로 바꾸고 진행.
+Expected: `supabase/migrations/**`·`supabase/tests/**`·`src/lib/api/**`·`src/components/{room-settings,room-view,auth,main}/**` 에 커밋 안 된 변경 없음. `0032_*` 없음. 마지막 파일이 `0031_orphan_objects.sql` 이 아니면 멈추고 보고(이 기능이 AI 연동보다 먼저 배포되는 것으로 확정).
 
 - [ ] **Step 2: 복사 원본 확정**
 
 Run: `cd /Users/picpal/Desktop/workspace/sgtudy && for f in assignment_resync room_join_precheck room_join room_approve room_decide_precheck room_tick invite_ensure invite_get invite_rotate invite_preview invite_join room_detail_json rooms_list room_matches notification_kinds notify_render room_apply room_leave room_update notify_link; do echo "$f: $(grep -lE "create (or replace )?function public\.$f\(" supabase/migrations/*.sql | sort | tail -1 | xargs basename)"; done`
-Expected(AI 미배포 기준): `assignment_resync: 0014…` · `room_join_precheck/room_join/room_approve/room_decide_precheck/invite_get/invite_rotate/invite_preview: 0005…` · `room_tick/invite_ensure/room_matches: 0004…` · `invite_join: 0024…` · `room_detail_json: 0026…` · `rooms_list: 0024…` · `notification_kinds: 0024…` · `notify_render: 0028…` · `room_apply: 0026…` · `room_leave: 0005…` · `room_update: 0018…` · `notify_link: 0028…`. AI 가 들어왔으면 `notification_kinds`·`notify_render` 가 `0033_curriculum_plan.sql` 로 나온다 → **그 판을 복사 원본**으로 쓰고 노트에 적는다. 그 밖의 줄이 다르면 그 파일 판을 원본으로 쓰고 컨트롤러에 알린다.
+Expected: `assignment_resync: 0014…` · `room_join_precheck/room_join/room_approve/room_decide_precheck/invite_get/invite_rotate/invite_preview: 0005…` · `room_tick/invite_ensure/room_matches: 0004…` · `invite_join: 0024…` · `room_detail_json: 0026…` · `rooms_list: 0024…` · `notification_kinds: 0024…` · `notify_render: 0028…` · `room_apply: 0026…` · `room_leave: 0005…` · `room_update: 0018…` · `notify_link: 0028…`.그 밖의 줄이 다르면 그 파일 판을 원본으로 쓰고 컨트롤러에 알린다.
 
 - [ ] **Step 3: 게이트 기준선**
 
@@ -76,10 +76,10 @@ Expected: 모두 통과(env 없이 돌리면 `*-db.test.ts` 는 ignored). 실패
 
 ---
 
-### Task 1: 0035 (1) — 스키마 · 코드 생성 · 판정 · `assignment_resync` (opus)
+### Task 1: 0032 (1) — 스키마 · 코드 생성 · 판정 · `assignment_resync` (opus)
 
 **Files:**
-- Create: `supabase/migrations/0035_extra_recruit.sql`
+- Create: `supabase/migrations/0032_extra_recruit.sql`
 - Create: `supabase/tests/extra-recruit-sql.test.ts`
 
 **Interfaces (이 Task 가 만드는 것):**
@@ -91,7 +91,7 @@ Expected: 모두 통과(env 없이 돌리면 `*-db.test.ts` 는 ignored). 실패
 - [ ] **Step 1: 실패하는 테스트 작성** — `supabase/tests/extra-recruit-sql.test.ts`
 
 ```ts
-// supabase/tests/extra-recruit-sql.test.ts — 0035 추가 모집 · 초대 코드(바로 참가) (스펙 2026-10-20-extra-recruit-design)
+// supabase/tests/extra-recruit-sql.test.ts — 0032 추가 모집 · 초대 코드(바로 참가) (스펙 2026-10-20-extra-recruit-design)
 import { assert, assertEquals, assertMatch, assertNotEquals } from "@std/assert";
 import { applySeed, asAnon, asUser, expectFail, newUser, openDb, setToday } from "./_harness.ts";
 import { cases, nodeId, one, roomId, setNow, uidOf, type Q, type Row } from "./_fixtures.ts";
@@ -119,7 +119,7 @@ const notes = async (q: Q, nick: string, kind: string, slug: string) =>
            where n.user_id = $1::uuid and n.kind = $2 and r.slug = $3 order by n.id`, [await uidOf(q, nick), kind, slug]);
 // (Task 1 시점에 아직 안 쓰는 import·헬퍼는 Task 2~4 묶음이 쓴다)
 
-cases("extra recruit 0035 · schema & helpers", db, [
+cases("extra recruit 0032 · schema & helpers", db, [
   { name: "invite_code_norm: upper, strip spaces/hyphens, O→0 I/L→1", run: async (q) => {
     const n = async (s: string) => (await one(q, "select public.invite_code_norm($1) as v", [s])).v;
     assertEquals(await n(" k7qm-3xpa "), "K7QM3XPA");
@@ -174,19 +174,19 @@ cases("extra recruit 0035 · schema & helpers", db, [
 
 - [ ] **Step 2: 실패 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && npm run test:db -- --filter "0035"`
+Run: `cd /Users/picpal/Desktop/workspace/sgtudy && npm run test:db -- --filter "0032"`
 Expected: FAIL(함수·열 없음).
 
-- [ ] **Step 3: 마이그레이션 작성(앞부분)** — `supabase/migrations/0035_extra_recruit.sql`
+- [ ] **Step 3: 마이그레이션 작성(앞부분)** — `supabase/migrations/0032_extra_recruit.sql`
 
 ```sql
--- 0035_extra_recruit.sql — 2026-10-20 추가 모집 · 초대 코드(바로 참가). 배포 후 수정 금지.
+-- 0032_extra_recruit.sql — 2026-10-20 추가 모집 · 초대 코드(바로 참가). 배포 후 수정 금지.
 -- 스펙 docs/superpowers/specs/2026-10-20-extra-recruit-design.md (D1~D13).
 -- 추가형: 열·표·함수 추가 + 재정의(최신 판 복사). 기존 행 의미 무변경 — 기존 초대 행은 bypass_until null(바로 참가 꺼짐),
 -- 기존 멤버는 assign_from null(처음부터 배정).
 -- 재정의 원본: assignment_resync ←0014 · room_join_precheck·room_join·room_approve·room_decide_precheck ←0005 ·
 --   room_tick·invite_ensure·room_matches ←0004 · invite_get·invite_rotate·invite_preview ←0005 · invite_join ←0024 ·
---   room_detail_json ←0026 · rooms_list ←0024 · notification_kinds ←0024(AI 0033 이 먼저면 0033) · notify_render ←0028(동일)
+--   room_detail_json ←0026 · rooms_list ←0024 · notification_kinds ←0024 · notify_render ←0028
 
 -- ───────── 1. 스키마 ─────────
 alter table public.rooms        add column recruit_until date;   -- 추가 모집 마감일(KST, 포함). null = 추가 모집 아님. ACTIVE 에서만 의미(D1)
@@ -266,22 +266,22 @@ $$;
 ```sql
   where n.room_id = p_room and n.task_type = 'COMMON' and n.archived_at is null
     and m.room_id = p_room and m.status = 'ACTIVE' and (m.role = 'MEMBER' or v_ldt)
-    and (m.assign_from is null or n.end_date >= m.assign_from)   -- 0035: 중간 합류자는 합류일 이후 마감 과제만(D6)
+    and (m.assign_from is null or n.end_date >= m.assign_from)   -- 0032: 중간 합류자는 합류일 이후 마감 과제만(D6)
 ```
 
 (2a·2b 해제 단계는 그대로 — 이미 있는 행은 건드리지 않으므로 기존 멤버·중간 합류자 모두 기존 배정을 잃지 않는다.)
 
 - [ ] **Step 4: 통과 확인**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && npm run test:db -- --filter "0035"` → PASS. 그다음 `npm run test:db` 전체 → PASS.
+Run: `cd /Users/picpal/Desktop/workspace/sgtudy && npm run test:db -- --filter "0032"` → PASS. 그다음 `npm run test:db` 전체 → PASS.
 
 (커밋은 Task 4 끝에서 한 번 — 같은 파일을 이어 쓴다.)
 
 ---
 
-### Task 2: 0035 (2) — 추가 모집 RPC · 관문 · 승인 · tick · `MEMBER_JOINED` (opus)
+### Task 2: 0032 (2) — 추가 모집 RPC · 관문 · 승인 · tick · `MEMBER_JOINED` (opus)
 
-**Files:** Modify `supabase/migrations/0035_extra_recruit.sql`(뒤에 추가) · Modify `supabase/tests/extra-recruit-sql.test.ts`(묶음 추가)
+**Files:** Modify `supabase/migrations/0032_extra_recruit.sql`(뒤에 추가) · Modify `supabase/tests/extra-recruit-sql.test.ts`(묶음 추가)
 
 **Interfaces:**
 - 내부: `room_member_activate(r public.rooms, p_uid uuid, p_via text) → void` · `room_extra_recruit_expire(p_room bigint, p_actor uuid) → void`
@@ -292,7 +292,7 @@ Run: `cd /Users/picpal/Desktop/workspace/sgtudy && npm run test:db -- --filter "
 - [ ] **Step 1: 실패하는 테스트 추가**
 
 ```ts
-cases("extra recruit 0035 · window", db, [
+cases("extra recruit 0032 · window", db, [
   { name: "open: leader·ACTIVE only; until today..min(end, today+30); needs a free seat; sets max & joinMode atomically", run: async (q) => {
     await as(q, "지은");
     await expectFail(openExtra(q, "aws", "2026-10-19"), "NOT_LEADER");
@@ -390,9 +390,9 @@ cases("extra recruit 0035 · window", db, [
 ]);
 ```
 
-- [ ] **Step 2: 실패 확인** — `npm run test:db -- --filter "0035"` → 새 묶음 FAIL.
+- [ ] **Step 2: 실패 확인** — `npm run test:db -- --filter "0032"` → 새 묶음 FAIL.
 
-- [ ] **Step 3: 구현(0035 뒤에 추가)**
+- [ ] **Step 3: 구현(0032 뒤에 추가)**
 
 ```sql
 -- ───────── 5. 참가 공통: ACTIVE 로 만들기 (room_join·room_join_by_invite) ─────────
@@ -419,7 +419,7 @@ end $$;
 `room_join_precheck` ← 0005 전체 복사, **한 군데만**:
 
 ```sql
-  -- 0035: RECRUIT 전용 → 모집 열림(RECRUIT ∨ 추가 모집 창) (D1)
+  -- 0032: RECRUIT 전용 → 모집 열림(RECRUIT ∨ 추가 모집 창) (D1)
   if not public.room_recruit_open(r) then
     perform public.fail('ROOM_NOT_RECRUITING', '모집중인 방이 아니에요');
   end if;
@@ -437,7 +437,7 @@ begin
   r := public.room_lock(p_slug);
   perform public.room_join_precheck(r, v_uid, p_invite_token, 'DIRECT');
   perform public.room_take_seat(r.id);                       -- ROOM_FULL
-  perform public.room_member_activate(r, v_uid, 'extra');    -- 0035: 진행중(추가 모집)이면 assign_from·MEMBER_JOINED
+  perform public.room_member_activate(r, v_uid, 'extra');    -- 0032: 진행중(추가 모집)이면 assign_from·MEMBER_JOINED
   return public.membership_result(r.id, v_uid);
 end $$;
 ```
@@ -445,7 +445,7 @@ end $$;
 `room_decide_precheck` ← 0005, **한 군데만**:
 
 ```sql
-  -- 0035: 추가 모집 창 안에서도 처리(창이 닫히면 대기는 EXPIRED 로 정리된다 — D4)
+  -- 0032: 추가 모집 창 안에서도 처리(창이 닫히면 대기는 EXPIRED 로 정리된다 — D4)
   if not public.room_recruit_open(r) then
     perform public.fail('ROOM_NOT_RECRUITING', '모집중인 방에서만 신청을 처리할 수 있어요');
   end if;
@@ -456,7 +456,7 @@ end $$;
 ```sql
   update public.room_members
      set status = 'ACTIVE', joined_at = v_now, decided_at = v_now, decided_by = v_uid, updated_at = now(),
-         assign_from = case when r.status = 'ACTIVE' then public.kst_today() end   -- 0035 (D6)
+         assign_from = case when r.status = 'ACTIVE' then public.kst_today() end   -- 0032 (D6)
    where id = m.id;
 ```
 
@@ -536,7 +536,7 @@ grant execute on function public.room_extra_recruit_close(text)                t
 `room_tick` ← 0004 전체 복사, **ACTIVE→ENDED 루프 앞**에 루프 하나(반환 모양은 그대로):
 
 ```sql
-  -- 0035: 추가 모집 창 정리 — 마감일이 지났거나 방이 더는 ACTIVE 가 아니면(종료일 단축 후 종료 등) 닫고 대기 만료(D4).
+  -- 0032: 추가 모집 창 정리 — 마감일이 지났거나 방이 더는 ACTIVE 가 아니면(종료일 단축 후 종료 등) 닫고 대기 만료(D4).
   -- 보관 방은 건드리지 않는다(풀린 뒤 다음 tick). 반환 모양 {activated, ended} 는 기존 테스트가 고정 — 세지 않는다
   for v_id in
     select id from public.rooms
@@ -551,10 +551,10 @@ grant execute on function public.room_extra_recruit_close(text)                t
 -- ───────── 8. 알림 MEMBER_JOINED (D11) ─────────
 ```
 
-`notification_kinds` ← Task 0 이 확정한 최신 판(0024 또는 AI 0033) 복사, 배열 끝에:
+`notification_kinds` ← Task 0 이 확정한 최신 판(0024) 복사, 배열 끝에:
 
 ```sql
-               -- 0035
+               -- 0032
                , 'MEMBER_JOINED'
 ```
 
@@ -563,7 +563,7 @@ grant execute on function public.room_extra_recruit_close(text)                t
 `notify_render` ← 같은 기준의 최신 판 복사. 제목 `case p_kind` 의 마지막 `when` 뒤에:
 
 ```sql
-    -- 0035
+    -- 0032
     when 'MEMBER_JOINED'          then format('%s님이 %s에 합류했어요', v_actor, v_room)
 ```
 
@@ -577,13 +577,13 @@ grant execute on function public.room_extra_recruit_close(text)                t
 
 기존 분기 순서·문구는 건드리지 않는다. `notify_link` 는 재정의하지 않는다(그룹장 기본 갈래 `/my-study/{slug}`).
 
-- [ ] **Step 4: 통과 확인** — `npm run test:db -- --filter "0035"` → PASS, `npm run test:db` 전체 → PASS(특히 `_cases-membership.ts` 의 `ROOM_NOT_RECRUITING` 단언, `backlog-0028-sql.test.ts` 보관 방 승인 차단, `_cases-rooms.ts` tick 단언).
+- [ ] **Step 4: 통과 확인** — `npm run test:db -- --filter "0032"` → PASS, `npm run test:db` 전체 → PASS(특히 `_cases-membership.ts` 의 `ROOM_NOT_RECRUITING` 단언, `backlog-0028-sql.test.ts` 보관 방 승인 차단, `_cases-rooms.ts` tick 단언).
 
 ---
 
-### Task 3: 0035 (3) — 초대: 코드 · 바로 참가 · 코드 조회 (opus)
+### Task 3: 0032 (3) — 초대: 코드 · 바로 참가 · 코드 조회 (opus)
 
-**Files:** Modify `0035_extra_recruit.sql` · Modify `extra-recruit-sql.test.ts` · Modify `supabase/tests/_cases-membership.ts`(invite_get 단언 1곳)
+**Files:** Modify `0032_extra_recruit.sql` · Modify `extra-recruit-sql.test.ts` · Modify `supabase/tests/_cases-membership.ts`(invite_get 단언 1곳)
 
 **Interfaces:**
 - 내부: `invite_bypass_ok(i public.room_invites, r public.rooms) → boolean` · `invite_json(i public.room_invites, r public.rooms) → jsonb` · `room_join_by_invite(p_slug text, p_token text) → jsonb`
@@ -596,7 +596,7 @@ grant execute on function public.room_extra_recruit_close(text)                t
 
 ```ts
       const [{ g }] = await q(`select public.invite_get($1) as g`, ["docker"]);
-      // 0035: code·bypass 가 붙었다 — 기존 3키는 그대로
+      // 0032: code·bypass 가 붙었다 — 기존 3키는 그대로
       assertEquals({ today: g.today, token: g.token, url: g.url }, { today: TODAY, token: "seed-docker", url: "/invite/seed-docker" });
       assertEquals([/^[0-9A-HJKMNP-TV-Z]{8}$/.test(g.code), g.bypass], [true, null]);
 ```
@@ -607,7 +607,7 @@ grant execute on function public.room_extra_recruit_close(text)                t
 const bypassSet = (q: Q, slug: string, until: string | null, max: number | null = null) =>
   rpc(q, "public.invite_bypass_set($1, $2::date, $3::int)", [slug, until, max]);
 
-cases("extra recruit 0035 · invite", db, [
+cases("extra recruit 0032 · invite", db, [
   { name: "invite_get fills code lazily for seed rows; bypass_set; rotate → new token+code, bypass off", run: async (q) => {
     await as(q, "민수");
     const g = await rpc(q, "public.invite_get('aws')");
@@ -730,9 +730,9 @@ cases("extra recruit 0035 · invite", db, [
 ]);
 ```
 
-- [ ] **Step 3: 실패 확인** — `npm run test:db -- --filter "0035"` → invite 묶음 FAIL.
+- [ ] **Step 3: 실패 확인** — `npm run test:db -- --filter "0032"` → invite 묶음 FAIL.
 
-- [ ] **Step 4: 구현(0035 뒤에 추가)**
+- [ ] **Step 4: 구현(0032 뒤에 추가)**
 
 ```sql
 -- ───────── 9. 초대: 판정 · JSON (D7·D8) ─────────
@@ -764,11 +764,11 @@ begin
   if v_token is null then
     -- 동시 요청이면 ux_room_invites_active 에 걸린다 → 23505 원문 대신 이긴 쪽 토큰을 다시 읽는다 (D9)
     insert into public.room_invites (token, room_id, created_by, code)
-    values (replace(gen_random_uuid()::text, '-', ''), p_room, p_by, public.invite_code_new())   -- 0035: 코드도
+    values (replace(gen_random_uuid()::text, '-', ''), p_room, p_by, public.invite_code_new())   -- 0032: 코드도
     on conflict do nothing;
     select token into v_token from public.room_invites where room_id = p_room and revoked_at is null;
   elsif v_code is null then
-    -- 0035: 코드 없는 기존 행(로컬 seed 등) — 처음 볼 때 채운다
+    -- 0032: 코드 없는 기존 행(로컬 seed 등) — 처음 볼 때 채운다
     update public.room_invites set code = public.invite_code_new() where token = v_token and code is null;
   end if;
   return v_token;
@@ -780,7 +780,7 @@ end $$;
 ```sql
   v_token := public.invite_ensure(r.id, v_uid);
   select * into i from public.room_invites where token = v_token;
-  return public.invite_json(i, r);   -- 0035: code·bypass
+  return public.invite_json(i, r);   -- 0032: code·bypass
 ```
 
 (`declare` 에 `i public.room_invites;` 추가.) `invite_rotate` ← 0005 도 같은 방식으로 마지막 `return` 교체(회전 = 새 행 → 바로 참가 꺼짐).
@@ -854,7 +854,7 @@ declare v_uid uuid := public.require_user(); r public.rooms; i public.room_invit
 begin
   r := public.invite_resolve(p_token);
   select * into i from public.room_invites where token = p_token;
-  -- 0035: 바로 참가 초대 → 모집 상태·참가 방식과 무관하게 바로(D8). 아니면 지금과 같음(precheck 가 모집 열림 판정)
+  -- 0032: 바로 참가 초대 → 모집 상태·참가 방식과 무관하게 바로(D8). 아니면 지금과 같음(precheck 가 모집 열림 판정)
   if public.invite_bypass_ok(i, r) then return public.room_join_by_invite(r.slug, p_token); end if;
   if r.join_mode = 'DIRECT' then return public.room_join(r.slug, p_token); end if;
   return public.room_apply(r.slug, p_token, p_message);
@@ -872,7 +872,7 @@ end $$;
 `'room'` 객체에 `'recruitUntil', case when r.status = 'ACTIVE' and v_open then to_char(r.recruit_until, 'YYYY-MM-DD') end` 를, 최상위에 아래 키를 더한다(`'me'` 다음):
 
 ```sql
-    -- 0035: 지금 이 초대로 할 수 있는 것. mode null = 참가 불가(종료·모집 끝)
+    -- 0032: 지금 이 초대로 할 수 있는 것. mode null = 참가 불가(종료·모집 끝)
     'join', jsonb_build_object(
       'mode',  case when v_bypass then 'direct' when v_open then lower(r.join_mode) end,
       'via',   case when v_bypass then 'invite' when v_open and r.status = 'ACTIVE' then 'extra' when v_open then 'recruit' end,
@@ -914,13 +914,13 @@ grant execute on function public.invite_bypass_set(text, date, int) to authentic
 grant execute on function public.invite_code_lookup(text)           to authenticated;
 ```
 
-- [ ] **Step 5: 통과 확인** — `npm run test:db -- --filter "0035"` · `npm run test:db -- --filter "membership"` → PASS, 그다음 전체.
+- [ ] **Step 5: 통과 확인** — `npm run test:db -- --filter "0032"` · `npm run test:db -- --filter "membership"` → PASS, 그다음 전체.
 
 ---
 
-### Task 4: 0035 (4) — 읽기: `room_detail_json` · `rooms_list` · `room_matches` + 커밋 (opus)
+### Task 4: 0032 (4) — 읽기: `room_detail_json` · `rooms_list` · `room_matches` + 커밋 (opus)
 
-**Files:** Modify `0035_extra_recruit.sql` · Modify `extra-recruit-sql.test.ts`
+**Files:** Modify `0032_extra_recruit.sql` · Modify `extra-recruit-sql.test.ts`
 
 **Interfaces:**
 - `RoomDetail.recruit = {open: boolean, extraUntil: string | null}`(모두에게) · `RoomDetail.invite` = 그룹장에게 `invite_json − today`(`url` 키 유지), 그 외 null
@@ -930,7 +930,7 @@ grant execute on function public.invite_code_lookup(text)           to authentic
 - [ ] **Step 1: 실패하는 테스트 추가**
 
 ```ts
-cases("extra recruit 0035 · reads", db, [
+cases("extra recruit 0032 · reads", db, [
   { name: "list: recruit filter includes extra window; card fields; still under active", run: async (q) => {
     await as(q, "민수");
     await openExtra(q, "aws", "2026-10-19");
@@ -974,7 +974,7 @@ cases("extra recruit 0035 · reads", db, [
 ```sql
   if v_is_leader then
     -- 읽기 전용(GET 안전): 활성 토큰을 SELECT 만 한다. 생성은 invite_get·invite_rotate·room_create 몫
-    -- 0035: 코드·바로 참가 설정까지(그룹장에게만, D9). 코드 없는 행이면 code null — 화면이 invite_get 으로 채운다
+    -- 0032: 코드·바로 참가 설정까지(그룹장에게만, D9). 코드 없는 행이면 code null — 화면이 invite_get 으로 채운다
     select public.invite_json(i, r) - 'today' into v_invite
     from public.room_invites i where i.room_id = p_room and i.revoked_at is null;
 ```
@@ -984,7 +984,7 @@ cases("extra recruit 0035 · reads", db, [
 ```sql
     'recruit', jsonb_build_object(
       'open', public.room_recruit_open(r),
-      'extraUntil', case when r.status = 'ACTIVE' and public.room_recruit_open(r) then to_char(r.recruit_until, 'YYYY-MM-DD') end),   -- 0035
+      'extraUntil', case when r.status = 'ACTIVE' and public.room_recruit_open(r) then to_char(r.recruit_until, 'YYYY-MM-DD') end),   -- 0032
 ```
 
 `room_matches` ← 0004 복사, 상태 조건 한 줄:
@@ -992,14 +992,14 @@ cases("extra recruit 0035 · reads", db, [
 ```sql
       and (p_status = 'all' or r.status = upper(p_status)
            or (p_status = 'recruit' and r.status = 'ACTIVE' and r.archived_at is null
-               and r.recruit_until is not null and r.recruit_until >= public.kst_today()))   -- 0035: 추가 모집도 '모집중'(D5)
+               and r.recruit_until is not null and r.recruit_until >= public.kst_today()))   -- 0032: 추가 모집도 '모집중'(D5)
 ```
 
 `rooms_list` ← **0024** 판 전체 복사(page CTE 는 `r.*` 라 `recruit_until` 이 이미 실린다), 항목 JSON 두 군데:
 
 ```sql
     'status', lower(p.status),
-    -- 0035: 모집 열림(RECRUIT ∨ 추가 모집 창) ∧ 꽉 참
+    -- 0032: 모집 열림(RECRUIT ∨ 추가 모집 창) ∧ 꽉 참
     -- coalesce: recruit_until null 이면 비교가 null 이라 isFull 이 false 대신 null 이 된다
     'isFull', (p.status = 'RECRUIT' or (p.status = 'ACTIVE' and coalesce(p.recruit_until >= v_today, false))) and p.member_count >= p.max_members,
     'recruitUntil', case when p.status = 'ACTIVE' and p.recruit_until >= v_today then to_char(p.recruit_until, 'YYYY-MM-DD') end,
@@ -1009,9 +1009,9 @@ cases("extra recruit 0035 · reads", db, [
 
 - [ ] **Step 4: 통과 확인** — `npm run test:db` 전체 PASS.
 
-- [ ] **Step 5: 원문 정적 점검** — `grep -c "create or replace function" supabase/migrations/0035_extra_recruit.sql` 가 Interfaces 합계(새 12 + 재정의 16 = 28)와 맞는지, `grep -n "status <> 'RECRUIT'" supabase/migrations/0035_extra_recruit.sql` 가 비어 있는지 확인.
+- [ ] **Step 5: 원문 정적 점검** — `grep -c "create or replace function" supabase/migrations/0032_extra_recruit.sql` 가 Interfaces 합계(새 12 + 재정의 16 = 28)와 맞는지, `grep -n "status <> 'RECRUIT'" supabase/migrations/0032_extra_recruit.sql` 가 비어 있는지 확인.
 
-- [ ] **Step 6: 커밋** — `git commit -- supabase/migrations/0035_extra_recruit.sql supabase/tests/extra-recruit-sql.test.ts supabase/tests/_cases-membership.ts -m "feat(db): 0035 — 추가 모집(진행중 모집 창·자동 마감·중간 합류 배정)과 초대 코드·바로 참가(기한·인원 한도·실패 제한)"`
+- [ ] **Step 6: 커밋** — `git commit -- supabase/migrations/0032_extra_recruit.sql supabase/tests/extra-recruit-sql.test.ts supabase/tests/_cases-membership.ts -m "feat(db): 0032 — 추가 모집(진행중 모집 창·자동 마감·중간 합류 배정)과 초대 코드·바로 참가(기한·인원 한도·실패 제한)"`
 
 ---
 
@@ -1022,8 +1022,8 @@ cases("extra recruit 0035 · reads", db, [
 - Create: `src/lib/api/recruit.ts` · `src/lib/api/recruit.test.ts`
 
 **Interfaces:**
-- `types.ts`: `RoomRecruit` · `InviteBypass` · `InviteInfo` · `InviteJoin`; `RoomDetail.recruit?: RoomRecruit`, `RoomDetail.invite: InviteInfo | null`; `RoomCardDto.recruitUntil?: string | null`; `InvitePreview.join?: InviteJoin`, `InvitePreview.room.recruitUntil?: string | null`; `NOTIFICATION_KINDS` 끝 `// 0035` `"MEMBER_JOINED"`(AI 0033 이 먼저면 그 줄 뒤)
-  - 선택(`?`)으로 두는 이유: 기존 픽스처·DTO 생성 테스트가 깨지지 않게. 서버는 0035 뒤 항상 보낸다.
+- `types.ts`: `RoomRecruit` · `InviteBypass` · `InviteInfo` · `InviteJoin`; `RoomDetail.recruit?: RoomRecruit`, `RoomDetail.invite: InviteInfo | null`; `RoomCardDto.recruitUntil?: string | null`; `InvitePreview.join?: InviteJoin`, `InvitePreview.room.recruitUntil?: string | null`; `NOTIFICATION_KINDS` 끝 `// 0032` `"MEMBER_JOINED"`
+  - 선택(`?`)으로 두는 이유: 기존 픽스처·DTO 생성 테스트가 깨지지 않게. 서버는 0032 뒤 항상 보낸다.
 - `recruit.ts`: `openExtraRecruit` · `closeExtraRecruit` · `setInviteBypass` · `lookupInviteCode` · `normalizeCode` · `isCodeShape` · `formatCode` · `codeInputView` · `extraRecruitDefaults` · `recruitMaxDate` · `extraRecruitNote` · `inviteNote` · `recruitErrorText`
 - `room-view.ts` `closedAction` 이 `recruit.open` 을 본다 · `invite.ts` `inviteActionOf` 가 `join` 을 본다 · `leader.ts` `showApplications` · `InviteLink` 확장
 
@@ -1126,20 +1126,20 @@ describe("toRoomCard extra badge", () => {
 `src/lib/api/types.ts`(RoomDetail 위):
 
 ```ts
-/** 0035 — 모집 열림(RECRUIT 또는 추가 모집 창) · 추가 모집 마감일(진행중 + 창 열림일 때만) */
+/** 0032 — 모집 열림(RECRUIT 또는 추가 모집 창) · 추가 모집 마감일(진행중 + 창 열림일 때만) */
 export type RoomRecruit = { open: boolean; extraUntil: string | null };
-/** 0035 — 모집 상태와 무관한 "바로 참가". active = 지금 유효(기한 안 · 한도 남음 · 방 모집중/진행중) */
+/** 0032 — 모집 상태와 무관한 "바로 참가". active = 지금 유효(기한 안 · 한도 남음 · 방 모집중/진행중) */
 export type InviteBypass = { until: string; max: number | null; used: number; active: boolean };
-/** 그룹장에게만 오는 초대 정보(room_detail_json.invite). code 는 0035 전 행이면 null — invite_get 이 채운다 */
+/** 그룹장에게만 오는 초대 정보(room_detail_json.invite). code 는 0032 전 행이면 null — invite_get 이 채운다 */
 export type InviteInfo = { url: string; token: string; code: string | null; bypass: InviteBypass | null };
-/** 0035 invite_preview.join — 이 초대로 지금 할 수 있는 것. mode null = 참가 불가 */
+/** 0032 invite_preview.join — 이 초대로 지금 할 수 있는 것. mode null = 참가 불가 */
 export type InviteJoin = { mode: JoinMode | null; via: "recruit" | "extra" | "invite" | null; until: string | null };
 ```
 
 `RoomDetail` 의 `invite: { url: string } | null;` → `invite: InviteInfo | null;` 와 `recruit?: RoomRecruit;`. `RoomCardDto` 에 `recruitUntil?: string | null;`. `InvitePreview` 에 `join?: InviteJoin;`, `room` 에 `recruitUntil?: string | null;`. `NOTIFICATION_KINDS` 끝:
 
 ```ts
-  // 0035
+  // 0032
   "MEMBER_JOINED",
 ```
 
@@ -1154,7 +1154,7 @@ import { mmdd } from "@/lib/api/format";
 import type { InviteLink } from "@/lib/api/leader";
 import type { JoinMode, RoomDetail } from "@/lib/api/types";
 
-/* 추가 모집 · 초대 코드(0035). 쓰기 RPC 는 모두 그룹장 전용 — 서버가 다시 검사한다 */
+/* 추가 모집 · 초대 코드(0032). 쓰기 RPC 는 모두 그룹장 전용 — 서버가 다시 검사한다 */
 
 export const openExtraRecruit = (slug: string, v: { until: string; maxMembers: number; joinMode: JoinMode }, client?: Db) =>
   rpc<RoomDetail>("room_extra_recruit_open", { p_slug: slug, p_until: v.until, p_max_members: v.maxMembers, p_join_mode: v.joinMode }, client);
@@ -1233,7 +1233,7 @@ export const showApplications = (d: Pick<RoomDetail, "status" | "joinMode" | "pe
 ```ts
 type ActionInput = Pick<RoomDetail, "status" | "joinMode" | "memberCount" | "maxMembers" | "me"> & { archived?: boolean; recruit?: RoomDetail["recruit"] };
 
-/** 지금 참가할 수 없는 방 상태 — 진행중이라도 추가 모집 창이 열려 있으면 닫힘이 아니다(0035) */
+/** 지금 참가할 수 없는 방 상태 — 진행중이라도 추가 모집 창이 열려 있으면 닫힘이 아니다(0032) */
 export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "maxMembers"> & { recruit?: RoomDetail["recruit"] }): "ended" | "activeClosed" | "full" | null {
   if (d.status === "ended") return "ended";
   if (d.status === "active" && !d.recruit?.open) return "activeClosed";
@@ -1247,7 +1247,7 @@ export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "max
 `src/lib/api/invite.ts`:
 
 ```ts
-/** 0035: 서버 join 을 따른다. join 이 없으면(0035 전 응답) 기존 규칙 */
+/** 0032: 서버 join 을 따른다. join 이 없으면(0032 전 응답) 기존 규칙 */
 function inviteClosed(p: InvitePreview): "ended" | "activeClosed" | "full" | null {
   const r = p.room;
   if (!p.join) return closedAction(r);
@@ -1268,7 +1268,7 @@ export function inviteActionOf(p: InvitePreview): InviteAction {
 }
 ```
 
-`src/data/rooms.ts` 의 카드 `Room` 에 `/** 0035 진행중 추가 모집 — open·full */ extra?: "open" | "full";`. `src/lib/api/rooms.ts` `toRoomCard` 반환에:
+`src/data/rooms.ts` 의 카드 `Room` 에 `/** 0032 진행중 추가 모집 — open·full */ extra?: "open" | "full";`. `src/lib/api/rooms.ts` `toRoomCard` 반환에:
 
 ```ts
     extra: d.status === "active" && d.recruitUntil ? (d.isFull ? "full" : "open") : undefined,
@@ -1386,7 +1386,7 @@ describe("RecruitInviteSection", () => {
   - `JoinCodeForm.dom.test.ts`: 초기 `?code=k7qm3xpa` → input value `K7QM-3XPA`; 라벨 "초대 코드"; 버튼 "다음".
   - InviteScreen: `join.via === "invite"` 면 "초대로 바로 참가 · 10/19까지" 와 "진행중인 스터디예요" 안내, CTA "바로 참가하기"; `join.mode null` 진행중이면 "모집이 끝났어요 · 그룹장에게 새 초대를 받아 주세요".
 - [ ] **Step 2: 구현**
-  - `routes.ts`: `/** 초대 코드 입력 (0035) */ join: (code?: string) => (code ? `/join?code=${encodeURIComponent(code)}` : "/join"),`
+  - `routes.ts`: `/** 초대 코드 입력 (0032) */ join: (code?: string) => (code ? `/join?code=${encodeURIComponent(code)}` : "/join"),`
   - `return-to.ts`: `PROTECTED_PREFIXES` 와 `RETURN_TO_PREFIXES` 에 `"/join"`(정확히 `/join` 또는 `/join?`·`/join/` 만 — `RETURN_TO_PREFIXES` 의 `startsWith` 판정이 `/joinx` 를 통과시키지 않게 `"/join"` 대신 판정식에 `raw === "/join" || raw.startsWith("/join?")` 를 더한다).
   - `src/app/join/page.tsx`:
 
@@ -1399,7 +1399,7 @@ import { routes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "초대 코드로 참가" };
 
-/** 초대 코드 입력 (0035, D10) — 로그인 필수. 맞으면 /invite/{token} 랜딩으로 넘긴다(미리보기·CTA 는 랜딩 한 곳) */
+/** 초대 코드 입력 (0032, D10) — 로그인 필수. 맞으면 /invite/{token} 랜딩으로 넘긴다(미리보기·CTA 는 랜딩 한 곳) */
 export default async function JoinPage({ searchParams }: { searchParams: Promise<{ code?: string | string[] }> }) {
   const sp = await searchParams;
   const code = Array.isArray(sp.code) ? sp.code[0] : sp.code;

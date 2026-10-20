@@ -263,7 +263,7 @@ sqld · 2주차
 | D17 | 진행목표 되돌리기 | **`preview_curriculum_plan(study, undo: previewId)`** — 〔Codex #4, 2026-10-20 축소〕 **적용 때 날짜가 실제로 바뀐 기존 노드만 기록된 옛 날짜로 복원**하는 초안을 서버가 만들어 같은 미리보기→승인 경로로(〔Codex N2〕 그 계획이 만든 새 노드는 건드리지 않음). 이동(리프 → 묶음 전환·라벨 소실을 되살릴 수 없음)·생성(D5)·제목 등은 되돌리지 않음 → 요약에 "웹에서" + 링크. 적용 뒤 그 일정이 다시 바뀌었으면 미리보기·적용(〔N1〕 방 잠금 안에서 재확인) 모두 `UNDO_STALE` | 2단계 `revert_plan`(스펙 원안) | `plan_undo_check`·`plan_undo_run`·`sched_changes` 제거, 도구 입력 `undo` 제거 |
 | D18 | 새 과제 알림 | **계획 적용으로 생긴 신규 공통 배정을 수신자별로 세어(지정은 이미 `TASK_ASSIGNED`) 묶음 알림에 `새 과제 n건`** — 일정·담당과 합쳐 수신자당 최대 1건. 웹 단건 생성은 그대로(무알림) | 현행(새 과제 무알림) | Task 5 의 `newTask` 집계 제거 |
 | D19 | 초안 작성 지침 | **MCP prompt `draft-curriculum` 1개 MVP**(정적 텍스트, 상주 비용 0) | 2단계 | Task 8 `prompts.ts` 제거 |
-| D20 | 항목 첨부(0030) | **`get_curriculum` full 에 `첨부 n` 개수만.** 목록·다운로드는 2단계 OAuth 이후(사용자 JWT 로 서명 URL) | (a) 완전 제외 (b) 파일 이름 목록 1단계 | (a): 0034 `fileCounts` 제거 |
+| D20 | 항목 첨부(0030) | **`get_curriculum` full 에 `첨부 n` 개수만.** 목록·다운로드는 2단계 OAuth 이후(사용자 JWT 로 서명 URL) | (a) 완전 제외 (b) 파일 이름 목록 1단계 | (a): 0035 `fileCounts` 제거 |
 | D21 | 설치 안내 | **`claude mcp add --scope user …`** + 읽기·미리보기 도구 허용 명령 1줄(`/permissions` 또는 settings `allow: ["mcp__sgtudy__list_my_studies", …, "mcp__sgtudy__preview_curriculum_plan"]`). apply·remove 는 기본 묻기 | local 스코프(기본) | `mcpAddCommand` 문자열만 |
 
 ### 기술 결정 (사용자 선택 불필요, 반영함)
@@ -285,4 +285,4 @@ sqld · 2주차
 |---|---|
 | 스펙 | 상태 줄, §4.3 스코프 표(op 이름), §4.4 설치 명령, §5 전체(도구 7개·흐름·shift·알림·2단계 목록), §6 안전(annotations·확인), §7.1 출력 형식, §7.2 계획서(`shift`·선택자·`assignees`·응답), §8 DB 객체, §10 완료 기준, §11 위험, §12 D11~D21 |
 | 플랜 | Goal·Architecture, Global Constraints(내부 함수 목록), Review Focus #3, Task 1(`api_idempotency` 제거·scope 표), Task 3(`plan_resolve`), Task 4(preview/apply 분리·초안 표·undo), Task 5(새 과제 집계), Task 6(op 목록·이름 해석·`personal_delete_many`·meta), Task 7(`format.ts`), Task 8(도구 7개·prompt·인증 왕복), Task 9(설치 명령), 「결정에 따른 변경」 |
-| 마이그레이션 번호 | **0032~0034 유지**. 초안 표 `api_plan_drafts` 는 `curriculum_plan` 과 같은 0033 에 둔다(0032 는 토큰·감사만). |
+| 마이그레이션 번호 | **0033~0035 유지**. 초안 표 `api_plan_drafts` 는 `curriculum_plan` 과 같은 0034 에 둔다(0033 는 토큰·감사만). |
