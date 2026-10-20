@@ -4,11 +4,27 @@
 
 **Goal:** 이미 시작한(ACTIVE) 스터디에 참가자를 더 받는다 — ① 그룹장이 마감일을 정해 여는 **추가 모집**(기존 참가/신청·승인 흐름 재사용, 둘러보기 노출, 마감일 자동 종료), ② 모집이 닫혀 있어도 들어오는 **초대 링크·8자 코드 "바로 참가"**(기한·인원 한도·회전). 중간 합류자는 합류일 이후 마감인 공통 과제만 맡는다.
 
-**Architecture:** DB = 마이그레이션 1개 `0032_extra_recruit.sql`(추가형, **확정 — AI 연동보다 먼저 배포**, 아래 "번호" 절). 판정 함수 `room_recruit_open(r)`(RECRUIT ∨ ACTIVE ∧ `recruit_until ≥ today`) 하나로 `room_join_precheck`·`room_decide_precheck` 의 `status <> 'RECRUIT'` 를 대체하고, 기존 방당 1개 초대(`room_invites`)에 `code`·`bypass_until`·`bypass_max`·`bypass_used` 를 붙여 `invite_join` 이 "바로 참가"면 `room_join_by_invite` 로 보낸다. 중간 합류는 `room_members.assign_from` + `assignment_resync` 한 줄. 웹 = 어댑터·순수 로직 `src/lib/api/recruit.ts` → 방 설정 「추가 모집 · 초대」 섹션(바로 저장) → 그룹장 패널·참가 카드·방 카드 표시 → 초대 랜딩 CTA 확장 + `/join` 코드 입력 페이지.
+**Architecture:** DB = 마이그레이션 1개 `0032_extra_recruit.sql`(추가형, **확정 — AI 연동보다 먼저 배포**, 아래 "번호" 절). 판정 함수 `room_recruit_open(r)`(RECRUIT ∨ ACTIVE ∧ `least(recruit_until, end_date) ≥ today`) 하나로 `room_join_precheck`·`room_decide_precheck` 의 `status <> 'RECRUIT'` 를 대체하고, 기존 방당 1개 초대(`room_invites`)에 `code`·`bypass_until`·`bypass_max`·`bypass_used` 를 붙여 `invite_join` 이 "바로 참가"면 `room_join_by_invite` 로 보낸다. 중간 합류는 `room_members.assign_from` + `assignment_resync` 한 줄. 웹 = 어댑터·순수 로직 `src/lib/api/recruit.ts` → 방 설정 「추가 모집 · 초대」 섹션(바로 저장) → 그룹장 패널·참가 카드·방 카드 표시 → 초대 랜딩 CTA 확장 + `/join` 코드 입력 페이지.
 
 **Tech Stack:** Next.js 16 (App Router) · React 19 · Tailwind v4 · Supabase PG17(plpgsql `security definer set search_path=''`, `public.fail`) · vitest(`src/**/*.test.ts`, DOM 은 `// @vitest-environment jsdom` + `renderToStaticMarkup`) · deno + PGlite SQL 테스트(`npm run test:db`).
 
-**Spec:** `docs/superpowers/specs/2026-10-20-extra-recruit-design.md`. 스펙 §8 D1~D13 은 **권장안 기준(사용자 승인 대기)**. 승인 때 바뀌는 결정은 맨 끝 "결정에 따른 변경" 표를 따라 해당 Task 만 고친다.
+**Spec:** `docs/superpowers/specs/2026-10-20-extra-recruit-design.md`. 스펙 §8 D1~D14 는 **권장안 기준(사용자 승인 대기)**. 승인 때 바뀌는 결정은 맨 끝 "결정에 따른 변경" 표를 따라 해당 Task 만 고친다.
+
+## Codex 리뷰 반영 (2026-10-20, review-1 · 판정 needs rework → 9건 모두 수용)
+
+| # | 지적 | 반영 | 위치 |
+|---|---|---|---|
+| 1 | tick 만료가 잠금 대기 중 연장된 창까지 닫음 | 수동 마감(`room_extra_recruit_expire`, 호출자가 방 잠금) ↔ 자동 만료(`room_extra_recruit_auto_expire`: 방 행 `for update` → 최신 상태로 조건 재검사 → 아직 유효하면 손대지 않음) 분리. tick 은 자동 만료만 부른다 | Task 2 · Task 9(두 연결 경쟁) |
+| 2 | 마감 뒤 tick 전에 다시 열면 옛 PENDING 이 새 창으로 넘어감 | `room_extra_recruit_open` 이 지난 창(실효 마감 < 오늘)을 먼저 만료(대기 → EXPIRED + 알림)한 뒤 새 창을 연다. 같은 창 연장은 대기 유지 | Task 2 테스트 "reopen after lapse" |
+| 3 | 종료일 단축 시 정리 순서·초대 기한 불일치 | 실효 마감 = `least(recruit_until, end_date)`·`least(bypass_until, end_date)` 로 판정·표시(`room_recruit_until`). tick 의 창 정리 루프를 ACTIVE→ENDED 루프 **뒤**로 옮겨 같은 tick(트랜잭션)에서 종료 전이 + 대기 만료. 테스트는 `room_update` 로 실제 단축 | Task 1·2·3·4 |
+| 4 | 추가 모집 신청자가 내 스터디에서 사라짐 | `me_studies` ←0024 재정의: 모집 열린 ACTIVE 방의 PENDING 을 `recruit` 그룹("모집중 · 승인 대기")에, `when = {kind:'recruitEnd', date: 실효 마감}` → "MM.DD 모집 마감" | Task 4 · Task 5 |
+| 5 | 편집 미리보기 공통 담당자 ≠ 서버 | `curriculum_json` ←0024 재정의로 멤버에 `assignFrom`. `model.ts` 공통 재계산 = 기존 담당 ∪ (`assignFrom` 없음 ∨ 마감 ≥ `assignFrom`), 공통 과제 날짜만 바꿔도 중간 합류자가 있으면 재계산 | Task 4 · Task 5 |
+| 6 | `min_members` > 새 정원이면 원시 제약 오류 | `public.fail('VALIDATION_FAILED', …, {field:'maxMembers', minMembers})` | Task 2 |
+| 7 | 성공 기록 무한 누적·다계정 방어 과장 | 표를 `invite_code_failures`(실패만)로, 성공은 저장 안 함. 1일 지난 실패는 `room_tick` 이 지운다(재정의 이미 함 — `job_cleanup` 추가 재정의 회피). 스펙 §6 에서 다계정 방어 주장 삭제 → 한계로 명시 | Task 1·3 · 스펙 §6 |
+| 8 | 추가 모집이 바꾼 `joinMode` 가 설정 폼에 안 보임 | `settings.ts` `syncServerFields(base, v, next)` — 서버가 바꾼 `maxMembers`·`joinMode` 를 기준값·현재값에 반영, 다른 미저장 칸 유지(테스트) | Task 6 |
+| 9 | 단일 연결 테스트로는 경쟁·커밋 지속성 미검증 | 새 Task 9 `extra-recruit-db.test.ts`(로컬 supabase 전용, 두 연결): 마지막 좌석 동시 참가 · 바로 참가 한도 경쟁 · tick↔연장 경쟁 · 별도 트랜잭션 실패 누적. 로그인 복귀 코드 보존은 `middleware.test.ts` 실행 테스트 + 브라우저 시나리오 | Task 8·9·10 |
+
+16개 재정의 복사 원본은 Codex 가 0031 기준 최신으로 확인. 이번 반영으로 재정의가 2개(`me_studies`·`curriculum_json`, 둘 다 ←0024) 늘었다 — AI 연동 플랜(0033~0035)은 둘 다 재정의하지 않는다(`api_studies` 가 `me_studies` 출력을 소비하므로 `when.kind = 'recruitEnd'`·ACTIVE 방 PENDING 항목이 새로 보일 수 있다 — 동작 상호작용으로 컨트롤러에 알림).
 
 ## 번호 (중요)
 
@@ -22,9 +38,11 @@
 ## Global Constraints
 
 - 마이그레이션은 **`0032_extra_recruit.sql` 하나만**. 0001~0031 수정 금지. 0033~0035 는 AI 연동 예약 — 만들지 않는다. Task 0 에서 `0032_*` 가 이미 있으면 멈추고 번호를 컨트롤러와 다시 정한다.
-- **재정의는 최신 판 복사 후 표시한 곳만 고친다**(Task 0 Step 2 로 최신 판 확정): `assignment_resync` ←0014 · `room_join_precheck`·`room_join`·`room_approve`·`room_decide_precheck` ←0005 · `room_tick`·`invite_ensure`·`room_matches` ←0004 · `invite_get`·`invite_rotate`·`invite_preview` ←0005 · `invite_join` ←0024 · `room_detail_json` ←0026 · `rooms_list` ←0024 · `notification_kinds` ←0024 · `notify_render` ←0028. `create or replace` 는 이름·인자명·기본값 동일 → GRANT 유지.
+- **재정의는 최신 판 복사 후 표시한 곳만 고친다**(Task 0 Step 2 로 최신 판 확정): `assignment_resync` ←0014 · `room_join_precheck`·`room_join`·`room_approve`·`room_decide_precheck` ←0005 · `room_tick`·`invite_ensure`·`room_matches` ←0004 · `invite_get`·`invite_rotate`·`invite_preview` ←0005 · `invite_join` ←0024 · `room_detail_json` ←0026 · `rooms_list` ←0024 · `notification_kinds` ←0024 · `notify_render` ←0028 · `me_studies` ←0024 · `curriculum_json` ←0024(Codex #4·#5). `create or replace` 는 이름·인자명·기본값 동일 → GRANT 유지.
 - **재정의 금지**: `room_apply`(precheck 가 관문) · `room_leave` · `room_update` · `notify_link` · `notify_enabled` · `invite_resolve` · `room_transition_active`/`room_transition_ended` · `member_deactivate`.
 - `room_tick()` 반환 모양 `{activated, ended}` 는 그대로(기존 `_cases-rooms.ts` 가 객체 전체를 단언).
+- **실효 마감**: 모집 창·바로 참가 기한은 언제나 `least(…, rooms.end_date)` 로 판정·표시한다(종료일 단축 대응, Codex #3). 저장값을 고치지 않는다(`room_update` 재정의 금지 유지).
+- **자동 만료는 방 행을 잠근 뒤 재판정**한다. tick 이 고른 후보 목록을 그대로 믿지 않는다(Codex #1).
 - 새 plpgsql 함수: `security definer set search_path = ''`, 객체는 `public.` 접두, 실패는 `perform public.fail(code, 한국어 문구, details)`. 공개 RPC 만 GRANT(`room_extra_recruit_open`·`room_extra_recruit_close`·`invite_bypass_set`·`invite_code_lookup` → `authenticated`). 내부 헬퍼는 0002 기본 권한으로 닫혀 있다 — 아무것도 하지 않는다.
 - 시간: 날짜는 `public.kst_today()`(테스트 `app.today`), 시각 비교는 `public.app_now()`(테스트 `app.now`).
 - 잠금 순서: 방 행(`room_lock`) → 초대 행(`for update`) → 사용자 advisory(코드 조회는 방을 잡지 않으므로 독립).
@@ -52,6 +70,9 @@
 6. **대기 신청 정리** — 창이 닫히면(수동·tick·방 종료·종료일 단축) PENDING 이 남지 않는다. tick 반환 모양 불변. → Task 2.
 7. **노출 범위** — 코드·토큰·바로 참가 설정은 그룹장에게만(`room_detail_json.invite`), 비로그인 `room_get` 에는 `recruit` 만. → Task 4.
 8. **AI 플랜과의 재정의 충돌** — `notification_kinds`·`notify_render` 를 실제 최신 판(0024·0028)에서 복사했는가. → Task 0·2.
+9. **창 경계 정리** — 마감 뒤 tick 전 재개·종료일 단축·tick↔연장 경쟁 어느 경로에서도 옛 PENDING 이 새 창으로 넘어가거나 새 창이 닫히지 않는다. → Task 2·9.
+10. **화면 = 서버** — 내 스터디 목록(`me_studies`)·편집 미리보기(`model.ts`)가 서버 배정·노출 규칙과 같은가. → Task 4·5.
+11. **실패 기록 수명** — 성공은 저장 안 함, 실패만 1일 보관(tick 정리). 실패 누적이 요청(트랜잭션) 사이에 유지되는가(실 DB). → Task 3·9.
 
 ---
 
@@ -66,8 +87,8 @@ Expected: `supabase/migrations/**`·`supabase/tests/**`·`src/lib/api/**`·`src/
 
 - [ ] **Step 2: 복사 원본 확정**
 
-Run: `cd /Users/picpal/Desktop/workspace/sgtudy && for f in assignment_resync room_join_precheck room_join room_approve room_decide_precheck room_tick invite_ensure invite_get invite_rotate invite_preview invite_join room_detail_json rooms_list room_matches notification_kinds notify_render room_apply room_leave room_update notify_link; do echo "$f: $(grep -lE "create (or replace )?function public\.$f\(" supabase/migrations/*.sql | sort | tail -1 | xargs basename)"; done`
-Expected: `assignment_resync: 0014…` · `room_join_precheck/room_join/room_approve/room_decide_precheck/invite_get/invite_rotate/invite_preview: 0005…` · `room_tick/invite_ensure/room_matches: 0004…` · `invite_join: 0024…` · `room_detail_json: 0026…` · `rooms_list: 0024…` · `notification_kinds: 0024…` · `notify_render: 0028…` · `room_apply: 0026…` · `room_leave: 0005…` · `room_update: 0018…` · `notify_link: 0028…`.그 밖의 줄이 다르면 그 파일 판을 원본으로 쓰고 컨트롤러에 알린다.
+Run: `cd /Users/picpal/Desktop/workspace/sgtudy && for f in assignment_resync room_join_precheck room_join room_approve room_decide_precheck room_tick invite_ensure invite_get invite_rotate invite_preview invite_join room_detail_json rooms_list room_matches notification_kinds notify_render room_apply room_leave room_update notify_link me_studies curriculum_json job_cleanup; do echo "$f: $(grep -lE "create (or replace )?function public\.$f\(" supabase/migrations/*.sql | sort | tail -1 | xargs basename)"; done`
+Expected: `assignment_resync: 0014…` · `room_join_precheck/room_join/room_approve/room_decide_precheck/invite_get/invite_rotate/invite_preview: 0005…` · `room_tick/invite_ensure/room_matches: 0004…` · `invite_join: 0024…` · `room_detail_json: 0026…` · `rooms_list: 0024…` · `notification_kinds: 0024…` · `notify_render: 0028…` · `room_apply: 0026…` · `room_leave: 0005…` · `room_update: 0018…` · `notify_link: 0028…` · `me_studies: 0024…` · `curriculum_json: 0024…` · `job_cleanup: 0030…`(재정의하지 않음 — 확인만). 그 밖의 줄이 다르면 그 파일 판을 원본으로 쓰고 컨트롤러에 알린다.
 
 - [ ] **Step 3: 게이트 기준선**
 
@@ -84,8 +105,8 @@ Expected: 모두 통과(env 없이 돌리면 `*-db.test.ts` 는 ignored). 실패
 
 **Interfaces (이 Task 가 만드는 것):**
 - 열 `rooms.recruit_until date` · `room_members.assign_from date` · `room_invites.code varchar(8)`·`bypass_until date`·`bypass_max int`·`bypass_used int not null default 0`, 체크 2개, 유니크 인덱스 `ux_room_invites_code`
-- 표 `invite_code_attempts(id, user_id, ok, created_at)` + 인덱스, RLS on(정책 없음), anon·authenticated 권한 회수
-- `invite_code_norm(text) → text`(immutable, INVOKER) · `invite_code_new() → text` · `room_recruit_open(public.rooms) → boolean`
+- 표 `invite_code_failures(id, user_id, created_at)` — **실패만**(Codex #7) + 인덱스 2개, RLS on(정책 없음), anon·authenticated 권한 회수
+- `invite_code_norm(text) → text`(immutable, INVOKER) · `invite_code_new() → text` · `room_recruit_open(public.rooms) → boolean` · `room_recruit_until(public.rooms) → date`(실효 마감 = `least(recruit_until, end_date)`, ACTIVE 아니면 null)
 - `assignment_resync(bigint)` 재정의(0014 + 1줄)
 
 - [ ] **Step 1: 실패하는 테스트 작성** — `supabase/tests/extra-recruit-sql.test.ts`
@@ -95,6 +116,8 @@ Expected: 모두 통과(env 없이 돌리면 `*-db.test.ts` 는 ignored). 실패
 import { assert, assertEquals, assertMatch, assertNotEquals } from "@std/assert";
 import { applySeed, asAnon, asUser, expectFail, newUser, openDb, setToday } from "./_harness.ts";
 import { cases, nodeId, one, roomId, setNow, uidOf, type Q, type Row } from "./_fixtures.ts";
+import { openRoom } from "./_cases-membership.ts";   // 리프 있는 RECRUIT 방 (실제 종료일 단축 사례)
+import { USERS } from "./_cases-rooms.ts";
 
 const db = await openDb();
 await applySeed(db);
@@ -142,6 +165,11 @@ cases("extra recruit 0032 · schema & helpers", db, [
     assertEquals(await recruitOpen(q, "aws"), false);
     await q("update public.rooms set recruit_until = '2026-10-20' where slug = 'algo'");
     assertEquals(await recruitOpen(q, "algo"), false);               // ENDED
+    // 실효 마감 = least(recruit_until, end_date) (Codex #3)
+    await q("update public.rooms set archived_at = null, recruit_until = '2026-11-30', end_date = '2026-10-14' where slug = 'aws'");
+    assertEquals((await one(q, "select to_char(public.room_recruit_until(r), 'YYYY-MM-DD') as v from public.rooms r where slug = 'aws'")).v, "2026-10-14");
+    await setToday(q, "2026-10-15");
+    assertEquals(await recruitOpen(q, "aws"), false);                // 종료일이 지나면 tick 전에도 닫힘
   } },
   { name: "assignment_resync: assign_from skips COMMON leaves that ended before it; others unchanged", run: async (q) => {
     const aws = await roomId(q, "aws");
@@ -165,8 +193,8 @@ cases("extra recruit 0032 · schema & helpers", db, [
     assertEquals(await live(q, past, jieun), true);
     assertEquals(await live(q, today, late), true);                  // 마감 = 합류일 → 배정
   } },
-  { name: "invite_code_attempts: closed to clients", run: async (q) => {
-    const p = async (role: string, priv: string) => (await one(q, "select has_table_privilege($1, 'public.invite_code_attempts', $2) as v", [role, priv])).v;
+  { name: "invite_code_failures: closed to clients", run: async (q) => {
+    const p = async (role: string, priv: string) => (await one(q, "select has_table_privilege($1, 'public.invite_code_failures', $2) as v", [role, priv])).v;
     for (const role of ["anon", "authenticated"]) for (const priv of ["select", "insert"]) assertEquals(await p(role, priv), false, `${role} ${priv}`);
   } },
 ]);
@@ -199,16 +227,17 @@ alter table public.room_invites add constraint ck_room_invites_code   check (cod
 alter table public.room_invites add constraint ck_room_invites_bypass check (bypass_max is null or bypass_max between 1 and 100);
 create unique index ux_room_invites_code on public.room_invites (code) where code is not null;
 
--- 코드 조회 시도(성공·실패). 사용자별 실패 10회/1시간 제한(§6). 클라이언트 접근 없음 — DEFINER RPC 만
-create table public.invite_code_attempts (
+-- 코드 조회 실패만(성공은 저장 안 함 — Codex #7). 사용자별 실패 10회/1시간 제한(§6). 1일 지난 행은 room_tick 이 지운다.
+-- 클라이언트 접근 없음 — DEFINER RPC 만
+create table public.invite_code_failures (
   id         bigint generated always as identity primary key,
   user_id    uuid        not null references public.profiles(id) on delete cascade,
-  ok         boolean     not null,
   created_at timestamptz not null default now()
 );
-create index ix_invite_code_attempts_user on public.invite_code_attempts (user_id, created_at);
-alter table public.invite_code_attempts enable row level security;
-revoke all on public.invite_code_attempts from anon, authenticated;
+create index ix_invite_code_failures_user on public.invite_code_failures (user_id, created_at);
+create index ix_invite_code_failures_at   on public.invite_code_failures (created_at);   -- tick 정리용
+alter table public.invite_code_failures enable row level security;
+revoke all on public.invite_code_failures from anon, authenticated;
 
 -- ───────── 2. 코드 ─────────
 -- 입력 정규화(순수 헬퍼: INVOKER·GRANT 없음): 대문자, 공백·하이픈 제거, 헷갈리는 글자 O→0, I·L→1
@@ -250,12 +279,19 @@ begin
 end $$;
 
 -- ───────── 3. 모집 열림 판정 (D1) ─────────
--- RECRUIT, 또는 ACTIVE 인데 추가 모집 창 안(마감일 포함). 보관 방은 언제나 닫힘
+-- 추가 모집 실효 마감(KST, 포함) = least(recruit_until, end_date). ACTIVE 가 아니거나 창이 없으면 null.
+-- 종료일을 모집 마감보다 앞당겨도 저장값을 고치지 않고 여기서 자른다(Codex #3 — room_update 재정의 없음)
+create or replace function public.room_recruit_until(r public.rooms) returns date
+language sql stable security definer set search_path = '' as $$
+  select case when r.status = 'ACTIVE' and r.recruit_until is not null then least(r.recruit_until, r.end_date) end
+$$;
+
+-- RECRUIT, 또는 ACTIVE 인데 추가 모집 창 안(실효 마감 포함). 보관 방은 언제나 닫힘
 create or replace function public.room_recruit_open(r public.rooms) returns boolean
 language sql stable security definer set search_path = '' as $$
   select r.archived_at is null and (
        r.status = 'RECRUIT'
-    or (r.status = 'ACTIVE' and r.recruit_until is not null and r.recruit_until >= public.kst_today()))
+    or coalesce(public.room_recruit_until(r) >= public.kst_today(), false))
 $$;
 
 -- ───────── 4. assignment_resync (0014 판 + 1줄, D6) ─────────
@@ -284,10 +320,10 @@ Run: `cd /Users/picpal/Desktop/workspace/sgtudy && npm run test:db -- --filter "
 **Files:** Modify `supabase/migrations/0032_extra_recruit.sql`(뒤에 추가) · Modify `supabase/tests/extra-recruit-sql.test.ts`(묶음 추가)
 
 **Interfaces:**
-- 내부: `room_member_activate(r public.rooms, p_uid uuid, p_via text) → void` · `room_extra_recruit_expire(p_room bigint, p_actor uuid) → void`
+- 내부: `room_member_activate(r public.rooms, p_uid uuid, p_via text) → void` · `room_extra_recruit_expire(p_room bigint, p_actor uuid) → void`(**호출자가 방 행을 잠갔다고 가정**, 무조건 닫기 — 수동 마감·재개용) · `room_extra_recruit_auto_expire(p_room bigint) → boolean`(tick 용: 방 행 `for update` → 최신 상태 재검사 → 지났을 때만 닫기, Codex #1)
 - 공개: `room_extra_recruit_open(p_slug text, p_until date, p_max_members int default null, p_join_mode text default null) → jsonb(RoomDetail)` · `room_extra_recruit_close(p_slug text) → jsonb(RoomDetail)`
 - 재정의: `room_join_precheck` · `room_join` · `room_decide_precheck` · `room_approve` · `room_tick` · `notification_kinds` · `notify_render`
-- 오류 코드: `ROOM_STATUS_INVALID` · `INVALID_PERIOD {field:'recruitUntil', maxDate}` · `CAPACITY_NO_SEAT {field:'maxMembers', memberCount}` · `VALIDATION_FAILED {field}` · 기존 `ROOM_NOT_RECRUITING`
+- 오류 코드: `ROOM_STATUS_INVALID` · `INVALID_PERIOD {field:'recruitUntil', maxDate}` · `CAPACITY_NO_SEAT {field:'maxMembers', memberCount}` · `VALIDATION_FAILED {field}`(정원 < 최소 인원이면 `{field:'maxMembers', minMembers}` — Codex #6) · 기존 `ROOM_NOT_RECRUITING`
 
 - [ ] **Step 1: 실패하는 테스트 추가**
 
@@ -302,6 +338,9 @@ cases("extra recruit 0032 · window", db, [
     await expectFail(openExtra(q, "aws", "2026-10-19", 4), "CAPACITY_NO_SEAT");     // 4/4
     await expectFail(openExtra(q, "aws", "2026-10-19", 101), "VALIDATION_FAILED");
     await expectFail(openExtra(q, "aws", "2026-10-19", null, "free"), "VALIDATION_FAILED");
+    await q("update public.rooms set min_members = 6 where slug = 'aws'");          // 최소 6 > 새 정원 5 > 참가 4
+    await expectFail(openExtra(q, "aws", "2026-10-19", 5), "VALIDATION_FAILED");     // 원시 ck_rooms_members 오류가 아니라 fail (Codex #6)
+    await q("update public.rooms set min_members = 3 where slug = 'aws'");
     const d = await openExtra(q, "aws", "2026-11-11", 7, "direct");                  // 경계 = 오늘+30
     assertEquals([d.recruit, d.maxMembers, d.joinMode, d.status], [{ open: true, extraUntil: "2026-11-11" }, 7, "direct", "active"]);
     await as(q, "서연");
@@ -361,7 +400,7 @@ cases("extra recruit 0032 · window", db, [
     const key = (await one(q, "select n.dedupe_key from public.notifications n where n.kind = 'JOIN_EXPIRED' and n.user_id = $1::uuid", [seoyeon])).dedupe_key as string;
     assertMatch(key, new RegExp(`^JOIN_EXPIRED:${await roomId(q, "aws")}:extra:\\d+:`));
   } },
-  { name: "tick: closes past windows and windows of non-ACTIVE rooms; return shape unchanged", run: async (q) => {
+  { name: "tick: closes past windows; return shape unchanged", run: async (q) => {
     await as(q, "민수");
     await openExtra(q, "aws", "2026-10-13");
     await as(q, "서연"); await rpc(q, "public.room_apply('aws')");
@@ -372,10 +411,53 @@ cases("extra recruit 0032 · window", db, [
     assertEquals((await one(q, "select public.room_tick() as r")).r, { activated: 0, ended: 0 });
     assertEquals((await one(q, "select recruit_until from public.rooms where slug = 'aws'")).recruit_until, null);
     assertEquals((await memberRow(q, "aws", await uidOf(q, "서연"))).status, "EXPIRED");
-    // 종료일 단축 등으로 창이 남은 채 ENDED 가 된 방
-    await q("update public.rooms set recruit_until = '2026-10-30', status = 'ENDED' where slug = 'react'");
-    await q("select public.room_tick()");
-    assertEquals((await one(q, "select recruit_until from public.rooms where slug = 'react'")).recruit_until, null);
+  } },
+  { name: "reopen after lapse without tick: old PENDING expires first; extending a live window keeps PENDING (Codex #2)", run: async (q) => {
+    const seoyeon = await uidOf(q, "서연");
+    await as(q, "민수"); await openExtra(q, "aws", "2026-10-13");
+    await as(q, "서연"); await rpc(q, "public.room_apply('aws')");
+    await setToday(q, "2026-10-15");                                                   // tick 없음
+    await as(q, "민수");
+    await expectFail(rpc(q, "public.room_approve('aws', $1::uuid)", [seoyeon]), "ROOM_NOT_RECRUITING");   // 지난 창은 승인 불가
+    const d = await openExtra(q, "aws", "2026-10-20");
+    assertEquals([d.recruit, d.pendingCount], [{ open: true, extraUntil: "2026-10-20" }, 0]);
+    assertEquals((await memberRow(q, "aws", seoyeon)).status, "EXPIRED");
+    assertEquals((await notes(q, "서연", "JOIN_EXPIRED", "aws")).length, 1);
+    await expectFail(rpc(q, "public.room_approve('aws', $1::uuid)", [seoyeon]), "ALREADY_DECIDED");
+    const gaeun = await uidOf(q, "가은");
+    await as(q, "가은"); await rpc(q, "public.room_apply('aws')");
+    await as(q, "민수"); await openExtra(q, "aws", "2026-10-25");                    // 열린 창 연장 → 대기 유지
+    assertEquals((await memberRow(q, "aws", gaeun)).status, "PENDING");
+  } },
+  { name: "auto_expire re-checks fresh state: a window extended after the tick picked it is left alone (Codex #1)", run: async (q) => {
+    const aws = await roomId(q, "aws");
+    await as(q, "민수"); await openExtra(q, "aws", "2026-10-13");
+    await setToday(q, "2026-10-14");
+    // tick 이 후보로 고른 뒤(옛 상태) 그룹장이 먼저 다시 열었다고 가정 — 실제 두 연결 경쟁은 Task 9
+    await openExtra(q, "aws", "2026-10-20");
+    await as(q, "가은"); await rpc(q, "public.room_apply('aws')");
+    assertEquals((await one(q, "select public.room_extra_recruit_auto_expire($1::bigint) as v", [aws])).v, false);
+    assertEquals((await one(q, "select to_char(recruit_until, 'YYYY-MM-DD') as v from public.rooms where id = $1::bigint", [aws])).v, "2026-10-20");
+    assertEquals((await memberRow(q, "aws", await uidOf(q, "가은"))).status, "PENDING");
+    await setToday(q, "2026-10-21");
+    assertEquals((await one(q, "select public.room_extra_recruit_auto_expire($1::bigint) as v", [aws])).v, true);
+  } },
+  { name: "real end-date shortening: window capped by end_date; the ending tick expires PENDING in the same run (Codex #3)", run: async (q) => {
+    const r = await openRoom(q, USERS.서연, { joinMode: "approval", maxMembers: 4 });   // 리프 11/01~11/07, 종료 11/28
+    await q("select public.room_start($1)", [r.slug]);                                    // 10/12 → ACTIVE
+    await openExtra(q, r.slug, "2026-11-11");
+    await asUser(q, USERS.민수); await rpc(q, "public.room_apply($1)", [r.slug]);
+    await asUser(q, USERS.서연);
+    await rpc(q, "public.room_update($1, $2::jsonb)", [r.slug, JSON.stringify({ endDate: "2026-11-08" })]);   // 실제 단축(마지막 과제 11/07 이후)
+    assertEquals((await rpc(q, "public.room_get($1)", [r.slug])).recruit, { open: true, extraUntil: "2026-11-08" });
+    await setToday(q, "2026-11-09");
+    assertEquals(await recruitOpen(q, r.slug), false);                                    // tick 전에도 닫힘
+    await asUser(q, USERS.현우);
+    await expectFail(rpc(q, "public.room_apply($1)", [r.slug]), "ROOM_NOT_RECRUITING");
+    await q("select public.room_tick()");                                                 // 한 번의 tick 으로 종료 + 대기 만료
+    const row = await one(q, "select status, recruit_until from public.rooms where slug = $1", [r.slug]);
+    assertEquals([row.status, row.recruit_until], ["ENDED", null]);
+    assertEquals((await memberRow(q, r.slug, USERS.민수)).status, "EXPIRED");
   } },
   { name: "kinds & grants", run: async (q) => {
     assert((await one(q, "select 'MEMBER_JOINED' = any(public.notification_kinds()) as v")).v);
@@ -383,7 +465,7 @@ cases("extra recruit 0032 · window", db, [
     assertEquals(await can("authenticated", "public.room_extra_recruit_open(text, date, integer, text)"), true);
     assertEquals(await can("authenticated", "public.room_extra_recruit_close(text)"), true);
     assertEquals(await can("anon", "public.room_extra_recruit_open(text, date, integer, text)"), false);
-    for (const f of ["public.room_member_activate(public.rooms, uuid, text)", "public.room_extra_recruit_expire(bigint, uuid)", "public.room_recruit_open(public.rooms)", "public.invite_code_new()"]) {
+    for (const f of ["public.room_member_activate(public.rooms, uuid, text)", "public.room_extra_recruit_expire(bigint, uuid)", "public.room_extra_recruit_auto_expire(bigint)", "public.room_recruit_open(public.rooms)", "public.room_recruit_until(public.rooms)", "public.invite_code_new()"]) {
       assertEquals(await can("authenticated", f), false, f);
     }
   } },
@@ -462,7 +544,8 @@ end $$;
 
 ```sql
 -- ───────── 7. 추가 모집 열기·닫기 (D1~D4) ─────────
--- 창 닫기(내부): recruit_until null, 남은 PENDING → EXPIRED + JOIN_EXPIRED. 이미 닫혀 있으면 아무 일도 없다
+-- 창 닫기(내부): recruit_until null, 남은 PENDING → EXPIRED + JOIN_EXPIRED. 이미 닫혀 있으면 아무 일도 없다.
+-- 호출자가 방 행을 잠갔다고 가정한다(room_extra_recruit_close·room_extra_recruit_open 은 room_lock, tick 은 auto_expire 경유)
 create or replace function public.room_extra_recruit_expire(p_room bigint, p_actor uuid) returns void
 language plpgsql security definer set search_path = '' as $$
 declare v_expired uuid[];
@@ -481,7 +564,21 @@ begin
   end if;
 end $$;
 
--- 열기(이미 열려 있으면 마감일·정원·방식 바꾸기). 진행중·미보관, 마감일 = 오늘..min(종료일, 오늘+30), 빈자리 필수(D3)
+-- 자동 만료(tick 용, Codex #1): 후보를 고른 뒤 그룹장이 연장·재개했을 수 있다 → 방 행을 잠그고 최신 상태로 다시 판정.
+-- 닫을 조건 = 창이 있고 보관 아님 ∧ (ACTIVE 아님 ∨ 실효 마감 < 오늘). 닫았으면 true
+create or replace function public.room_extra_recruit_auto_expire(p_room bigint) returns boolean
+language plpgsql security definer set search_path = '' as $$
+declare r public.rooms;
+begin
+  select * into r from public.rooms where id = p_room for update;
+  if not found or r.recruit_until is null or r.archived_at is not null then return false; end if;
+  if r.status = 'ACTIVE' and public.room_recruit_until(r) >= public.kst_today() then return false; end if;   -- 연장됨
+  perform public.room_extra_recruit_expire(p_room, null);
+  return true;
+end $$;
+
+-- 열기(이미 열려 있으면 마감일·정원·방식 바꾸기). 진행중·미보관, 마감일 = 오늘..min(종료일, 오늘+30), 빈자리 필수(D3).
+-- 지난 창(실효 마감 < 오늘)이 tick 전이라 남아 있으면 먼저 만료시킨다 — 옛 PENDING 을 새 창으로 넘기지 않는다(Codex #2)
 create or replace function public.room_extra_recruit_open(p_slug text, p_until date, p_max_members int default null, p_join_mode text default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -505,12 +602,20 @@ begin
   if v_max < 2 or v_max > 100 then
     perform public.fail('VALIDATION_FAILED', '정원은 2~100명이에요', '{"field":"maxMembers"}'::jsonb);
   end if;
+  -- Codex #6: ck_rooms_members(min ≤ max) 원시 오류 대신
+  if r.min_members is not null and v_max < r.min_members then
+    perform public.fail('VALIDATION_FAILED', format('정원은 최소 인원(%s명) 이상이어야 해요', r.min_members),
+      jsonb_build_object('field', 'maxMembers', 'minMembers', r.min_members));
+  end if;
   if v_max <= r.member_count then
     perform public.fail('CAPACITY_NO_SEAT', '빈자리가 없어요 · 정원을 늘려 주세요',
       jsonb_build_object('field', 'maxMembers', 'memberCount', r.member_count));
   end if;
   if p_join_mode is not null and p_join_mode not in ('direct', 'approval') then
     perform public.fail('VALIDATION_FAILED', '참가 방식은 direct 또는 approval 이에요', '{"field":"joinMode"}'::jsonb);
+  end if;
+  if r.recruit_until is not null and public.room_recruit_until(r) < v_today then
+    perform public.room_extra_recruit_expire(r.id, v_uid);   -- Codex #2: 지난 창 정리(대기 만료 + 알림) 먼저
   end if;
   update public.rooms
      set recruit_until = p_until, max_members = v_max, join_mode = coalesce(upper(p_join_mode), join_mode), updated_at = now()
@@ -533,18 +638,22 @@ grant execute on function public.room_extra_recruit_open(text, date, int, text) 
 grant execute on function public.room_extra_recruit_close(text)                to authenticated;
 ```
 
-`room_tick` ← 0004 전체 복사, **ACTIVE→ENDED 루프 앞**에 루프 하나(반환 모양은 그대로):
+`room_tick` ← 0004 전체 복사. **ACTIVE→ENDED 루프 뒤**(return 앞)에 아래를 더한다(반환 모양은 그대로). 뒤에 두는 이유: 이 tick 에서 막 ENDED 가 된 방(종료일 단축 포함)의 대기 신청을 **같은 트랜잭션**에서 만료시키려고(Codex #3).
 
 ```sql
-  -- 0032: 추가 모집 창 정리 — 마감일이 지났거나 방이 더는 ACTIVE 가 아니면(종료일 단축 후 종료 등) 닫고 대기 만료(D4).
+  -- 0032: 추가 모집 창 정리 — 실효 마감(least(recruit_until, end_date))이 지났거나 방이 더는 ACTIVE 가 아니면 닫고 대기 만료(D4).
+  -- 후보는 잠금 없이 고르고, 닫기는 auto_expire 가 방 행을 잠근 뒤 다시 판정한다(그 사이 연장·재개됐으면 손대지 않음 — Codex #1).
   -- 보관 방은 건드리지 않는다(풀린 뒤 다음 tick). 반환 모양 {activated, ended} 는 기존 테스트가 고정 — 세지 않는다
   for v_id in
     select id from public.rooms
-    where recruit_until is not null and archived_at is null and (status <> 'ACTIVE' or recruit_until < v_today)
+    where recruit_until is not null and archived_at is null
+      and (status <> 'ACTIVE' or least(recruit_until, end_date) < v_today)
     order by id
   loop
-    perform public.room_extra_recruit_expire(v_id, null);
+    perform public.room_extra_recruit_auto_expire(v_id);
   end loop;
+  -- 0032: 초대 코드 조회 실패 기록 정리(1일 지난 것, Codex #7) — job_cleanup(0030) 재정의를 피해 여기서
+  delete from public.invite_code_failures where created_at < public.app_now() - interval '1 day';
 ```
 
 ```sql
@@ -634,6 +743,11 @@ cases("extra recruit 0032 · invite", db, [
     await as(q, "수민");
     await expectFail(bypassSet(q, "jcg", "2026-11-05"), "INVALID_PERIOD");           // jcg 종료 11/01 넘김
     assertEquals((await bypassSet(q, "jcg", "2026-10-19")).bypass.active, true);    // 모집중 방에서도 켤 수 있다
+    // 실효 기한 = least(bypass_until, end_date): 종료일이 당겨지면 기한도 따라 줄어든다 (Codex #3)
+    await q("update public.rooms set start_date = '2026-10-12', end_date = '2026-10-15' where slug = 'jcg'");   // ck_rooms_period(시작 ≤ 종료)
+    assertEquals((await rpc(q, "public.invite_get('jcg')")).bypass.until, "2026-10-15");
+    await setToday(q, "2026-10-16");
+    assertEquals((await rpc(q, "public.invite_get('jcg')")).bypass.active, false);
   } },
   { name: "old invites stay closed for ACTIVE rooms (no bypass) — preview join.mode null", run: async (q) => {
     await as(q, "서연");
@@ -705,9 +819,14 @@ cases("extra recruit 0032 · invite", db, [
     const miss = code === "ZZZZZZZZ" ? "YYYYYYYY" : "ZZZZZZZZ";
     for (let i = 9; i >= 0; i--) assertEquals(await rpc(q, "public.invite_code_lookup($1)", [miss]), { found: false, remaining: i });
     await expectFail(rpc(q, "public.invite_code_lookup($1)", [code]), "RATE_LIMITED");   // 맞는 코드도 막힌다
-    assertEquals((await one(q, "select count(*)::int as n from public.invite_code_attempts where not ok")).n, 10);
+    const fails = async () => (await one(q, "select count(*)::int as n from public.invite_code_failures where user_id = $1::uuid", [await uidOf(q, "서연")])).n;
+    assertEquals(await fails(), 10);                                                       // 성공(첫 조회)은 저장 안 함 (Codex #7)
     await setNow(q, "2026-10-12T04:01:00Z");
     assertEquals((await rpc(q, "public.invite_code_lookup('abc')")).found, false);         // 모양이 틀려도 실패로 센다
+    // tick 이 1일 지난 실패를 지운다 (요청 사이 커밋 지속성은 Task 9 실 DB 에서)
+    await setNow(q, "2026-10-13T05:00:00Z");
+    await q("select public.room_tick()");
+    assertEquals(await fails(), 0);
     // 회전된 코드 → 옛 링크로 보낸다(랜딩이 INVITE_REVOKED 를 보여 줌), 실패로 세지 않음
     await as(q, "민수");
     await rpc(q, "public.invite_rotate('aws')");
@@ -738,7 +857,8 @@ cases("extra recruit 0032 · invite", db, [
 -- ───────── 9. 초대: 판정 · JSON (D7·D8) ─────────
 create or replace function public.invite_bypass_ok(i public.room_invites, r public.rooms) returns boolean
 language sql stable security definer set search_path = '' as $$
-  select i.revoked_at is null and i.bypass_until is not null and i.bypass_until >= public.kst_today()
+  -- 실효 기한 = least(bypass_until, 방 종료일) (Codex #3 — 종료일 단축 대응)
+  select i.revoked_at is null and i.bypass_until is not null and least(i.bypass_until, r.end_date) >= public.kst_today()
      and (i.bypass_max is null or i.bypass_used < i.bypass_max)
      and r.archived_at is null and r.status in ('RECRUIT', 'ACTIVE')
 $$;
@@ -750,7 +870,7 @@ language sql stable security definer set search_path = '' as $$
     'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
     'token', i.token, 'url', '/invite/' || i.token, 'code', i.code,
     'bypass', case when i.bypass_until is null then null else jsonb_build_object(
-      'until', to_char(i.bypass_until, 'YYYY-MM-DD'), 'max', i.bypass_max, 'used', i.bypass_used,
+      'until', to_char(least(i.bypass_until, r.end_date), 'YYYY-MM-DD'), 'max', i.bypass_max, 'used', i.bypass_used,   -- 실효 기한
       'active', public.invite_bypass_ok(i, r)) end)
 $$;
 ```
@@ -869,21 +989,23 @@ end $$;
   v_open   := public.room_recruit_open(r);
 ```
 
-`'room'` 객체에 `'recruitUntil', case when r.status = 'ACTIVE' and v_open then to_char(r.recruit_until, 'YYYY-MM-DD') end` 를, 최상위에 아래 키를 더한다(`'me'` 다음):
+`'room'` 객체에 `'recruitUntil', case when v_open then to_char(public.room_recruit_until(r), 'YYYY-MM-DD') end` 를, 최상위에 아래 키를 더한다(`'me'` 다음):
 
 ```sql
     -- 0032: 지금 이 초대로 할 수 있는 것. mode null = 참가 불가(종료·모집 끝)
     'join', jsonb_build_object(
       'mode',  case when v_bypass then 'direct' when v_open then lower(r.join_mode) end,
       'via',   case when v_bypass then 'invite' when v_open and r.status = 'ACTIVE' then 'extra' when v_open then 'recruit' end,
-      'until', case when v_bypass then to_char(i.bypass_until, 'YYYY-MM-DD')
-                    when v_open and r.status = 'ACTIVE' then to_char(r.recruit_until, 'YYYY-MM-DD') end)
+      'until', case when v_bypass then to_char(least(i.bypass_until, r.end_date), 'YYYY-MM-DD')   -- 실효 기한
+                    when v_open and r.status = 'ACTIVE' then to_char(public.room_recruit_until(r), 'YYYY-MM-DD') end)
 ```
 
 ```sql
 -- ───────── 12. 코드 조회 (D9·D10, §6) ─────────
 -- 로그인 필수. 사용자별 실패 10회/1시간. 못 찾음은 "반환"한다 — fail 로 던지면 실패 기록 INSERT 가 롤백돼 제한이 무력해진다.
--- 회전된 코드는 옛 링크로 보낸다(랜딩이 INVITE_REVOKED 를 보여 준다) — 실패로 세지 않는다
+-- 실패만 기록한다(성공·회전 코드 적중은 저장 안 함 — Codex #7). 정리는 room_tick(1일).
+-- 회전된 코드는 옛 링크로 보낸다(랜딩이 INVITE_REVOKED 를 보여 준다) — 실패로 세지 않는다.
+-- 한계: 사용자별 제한이라 여러 계정으로 나눠 시도하는 것은 막지 못한다(스펙 §6 — 필요하면 요청/IP 제한을 따로 설계)
 create or replace function public.invite_code_lookup(p_code text) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -894,17 +1016,16 @@ declare
   v_token text;
 begin
   perform pg_advisory_xact_lock(hashtextextended('sgtudy.invite_code:' || v_uid, 0));
-  delete from public.invite_code_attempts where user_id = v_uid and created_at < public.app_now() - interval '1 day';
-  select count(*)::int into v_fails from public.invite_code_attempts
-  where user_id = v_uid and not ok and created_at > public.app_now() - interval '1 hour';
+  select count(*)::int into v_fails from public.invite_code_failures
+  where user_id = v_uid and created_at > public.app_now() - interval '1 hour';
   if v_fails >= v_limit then
     perform public.fail('RATE_LIMITED', '코드를 너무 많이 틀렸어요 · 1시간 뒤에 다시 시도해 주세요', '{"retryAfterMinutes":60}'::jsonb);
   end if;
   if v_code ~ '^[0-9A-HJKMNP-TV-Z]{8}$' then
     select token into v_token from public.room_invites where code = v_code;
   end if;
-  insert into public.invite_code_attempts (user_id, ok, created_at) values (v_uid, v_token is not null, public.app_now());
   if v_token is null then
+    insert into public.invite_code_failures (user_id, created_at) values (v_uid, public.app_now());
     return jsonb_build_object('found', false, 'remaining', v_limit - v_fails - 1);
   end if;
   return jsonb_build_object('found', true, 'url', '/invite/' || v_token);
@@ -918,7 +1039,7 @@ grant execute on function public.invite_code_lookup(text)           to authentic
 
 ---
 
-### Task 4: 0032 (4) — 읽기: `room_detail_json` · `rooms_list` · `room_matches` + 커밋 (opus)
+### Task 4: 0032 (4) — 읽기: `room_detail_json` · `rooms_list` · `room_matches` · `me_studies` · `curriculum_json` + 커밋 (opus)
 
 **Files:** Modify `0032_extra_recruit.sql` · Modify `extra-recruit-sql.test.ts`
 
@@ -926,6 +1047,8 @@ grant execute on function public.invite_code_lookup(text)           to authentic
 - `RoomDetail.recruit = {open: boolean, extraUntil: string | null}`(모두에게) · `RoomDetail.invite` = 그룹장에게 `invite_json − today`(`url` 키 유지), 그 외 null
 - `RoomCardDto.recruitUntil: string | null`(ACTIVE ∧ 창 열림일 때만), `isFull` = 모집 열림 ∧ 꽉 참
 - `rooms_list(p_status='recruit')` 가 추가 모집 중인 ACTIVE 방을 포함(D5)
+- `me_studies`(←0024): 모집 열린 ACTIVE 방의 내 PENDING → `recruit` 그룹 항목, `when = {kind:'recruitEnd', date: 실효 마감}`(Codex #4, 스펙 D14)
+- `curriculum_json`(←0024): `members[].assignFrom: 'YYYY-MM-DD' | null`(Codex #5)
 
 - [ ] **Step 1: 실패하는 테스트 추가**
 
@@ -962,6 +1085,25 @@ cases("extra recruit 0032 · reads", db, [
     assertMatch(d.invite.code, CODE_RE);
     assertEquals((await rpc(q, "public.room_get('toeic')")).recruit, { open: true, extraUntil: null });
   } },
+  { name: "me_studies: PENDING in an open extra window shows under recruit with recruitEnd; hidden once closed (Codex #4)", run: async (q) => {
+    await as(q, "민수"); await openExtra(q, "aws", "2026-10-19");
+    await as(q, "서연"); await rpc(q, "public.room_apply('aws')");
+    const g = (await rpc(q, "public.me_studies()")).groups as Row[];
+    const rec = g.find((x) => x.kind === "recruit")!.items as Row[];
+    const it = rec.find((x) => x.slug === "aws")!;
+    assertEquals([it.membership, it.when], ["pending", { kind: "recruitEnd", date: "2026-10-19" }]);
+    assert(!(g.find((x) => x.kind === "active")!.items as Row[]).some((x) => x.slug === "aws"));
+    await setToday(q, "2026-10-20");                                                   // 창 지남(tick 전)
+    assert(!((await rpc(q, "public.me_studies()")).groups as Row[]).flatMap((x) => x.items as Row[]).some((x) => x.slug === "aws"));
+  } },
+  { name: "curriculum_json: members carry assignFrom (null for recruit-phase members) (Codex #5)", run: async (q) => {
+    await as(q, "민수"); await rpc(q, "public.invite_bypass_set('aws', '2026-10-19'::date, null)");
+    await as(q, "서연"); await rpc(q, "public.invite_join('seed-aws')");
+    await as(q, "민수");
+    const ms = (await rpc(q, "public.curriculum_get('aws', true)")).members as Row[];
+    assertEquals(ms.find((m) => m.nickname === "서연")!.assignFrom, "2026-10-12");
+    assertEquals(ms.find((m) => m.nickname === "지은")!.assignFrom, null);
+  } },
 ]);
 ```
 
@@ -984,7 +1126,7 @@ cases("extra recruit 0032 · reads", db, [
 ```sql
     'recruit', jsonb_build_object(
       'open', public.room_recruit_open(r),
-      'extraUntil', case when r.status = 'ACTIVE' and public.room_recruit_open(r) then to_char(r.recruit_until, 'YYYY-MM-DD') end),   -- 0032
+      'extraUntil', case when r.status = 'ACTIVE' and public.room_recruit_open(r) then to_char(public.room_recruit_until(r), 'YYYY-MM-DD') end),   -- 0032 실효 마감
 ```
 
 `room_matches` ← 0004 복사, 상태 조건 한 줄:
@@ -992,7 +1134,7 @@ cases("extra recruit 0032 · reads", db, [
 ```sql
       and (p_status = 'all' or r.status = upper(p_status)
            or (p_status = 'recruit' and r.status = 'ACTIVE' and r.archived_at is null
-               and r.recruit_until is not null and r.recruit_until >= public.kst_today()))   -- 0032: 추가 모집도 '모집중'(D5)
+               and r.recruit_until is not null and least(r.recruit_until, r.end_date) >= public.kst_today()))   -- 0032: 추가 모집도 '모집중'(D5), 실효 마감
 ```
 
 `rooms_list` ← **0024** 판 전체 복사(page CTE 는 `r.*` 라 `recruit_until` 이 이미 실린다), 항목 JSON 두 군데:
@@ -1001,15 +1143,50 @@ cases("extra recruit 0032 · reads", db, [
     'status', lower(p.status),
     -- 0032: 모집 열림(RECRUIT ∨ 추가 모집 창) ∧ 꽉 참
     -- coalesce: recruit_until null 이면 비교가 null 이라 isFull 이 false 대신 null 이 된다
-    'isFull', (p.status = 'RECRUIT' or (p.status = 'ACTIVE' and coalesce(p.recruit_until >= v_today, false))) and p.member_count >= p.max_members,
-    'recruitUntil', case when p.status = 'ACTIVE' and p.recruit_until >= v_today then to_char(p.recruit_until, 'YYYY-MM-DD') end,
+    'isFull', (p.status = 'RECRUIT' or (p.status = 'ACTIVE' and coalesce(least(p.recruit_until, p.end_date) >= v_today, false))) and p.member_count >= p.max_members,
+    'recruitUntil', case when p.status = 'ACTIVE' and least(p.recruit_until, p.end_date) >= v_today then to_char(least(p.recruit_until, p.end_date), 'YYYY-MM-DD') end,
 ```
 
 (원본 `'isFull', p.status = 'RECRUIT' and p.member_count >= p.max_members,` 를 대체. 그 밖의 CTE·정렬·탭 총계는 그대로.)
 
+`me_studies` ← **0024** 판 전체 복사(`drop`·`create`·`grant` 가 아니라 `create or replace` — 시그니처 `(p_include_archived boolean default false)` 동일), `mine` CTE 세 군데(Codex #4):
+
+```sql
+  with mine as (
+    select r.id, r.slug, r.title, r.intro, r.start_date, r.end_date,
+           case when r.leader_id = v_uid then 'leader' when m.status = 'PENDING' then 'pending' else 'joined' end as membership,
+           -- 0032: 대기 신청은 방 상태와 무관하게 '모집중' 묶음(추가 모집 신청 포함)
+           case when m.status = 'PENDING' and r.leader_id <> v_uid then 'recruit'
+                when r.status = 'ACTIVE' then 'active' when r.status in ('RECRUIT', 'DRAFT') then 'recruit' else 'ended' end as kind,
+           public.room_recruit_until(r) as recruit_end   -- 0032: ACTIVE 추가 모집 실효 마감(아니면 null)
+    from public.rooms r
+    join public.room_members m on m.room_id = r.id and m.user_id = v_uid
+    where r.archived_at is null
+      -- 그룹장 분기: 방장은 room_members 행의 status 와 무관하게 자기 방을 항상 본다(DRAFT 포함). 멤버는 ACTIVE, 대기자는 모집 중인 방만.
+      -- 0032: 대기자 = RECRUIT·DRAFT 방, 또는 추가 모집 창이 열린 ACTIVE 방
+      and (r.leader_id = v_uid or m.status = 'ACTIVE'
+           or (m.status = 'PENDING' and (r.status in ('RECRUIT', 'DRAFT') or public.room_recruit_open(r))))),
+```
+
+`items` 의 `when` 에서 `recruit` 갈래만:
+
+```sql
+               when 'recruit' then case when m.recruit_end is not null
+                                        then jsonb_build_object('kind', 'recruitEnd', 'date', to_char(m.recruit_end, 'YYYY-MM-DD'))   -- 0032
+                                        else jsonb_build_object('kind', 'start', 'date', to_char(m.start_date, 'YYYY-MM-DD')) end
+```
+
+(`mine` 에서 `public.room_recruit_until(r)`·`public.room_recruit_open(r)` 의 `r` 은 행 별칭 — 행 전체가 `public.rooms` 로 넘어간다. 보관 묶음은 그대로.)
+
+`curriculum_json` ← **0024** 판 전체 복사, 멤버 객체(`'doesTasks', m.status = 'ACTIVE' and …` 가 있는 `jsonb_build_object`)에 한 키(Codex #5):
+
+```sql
+             'assignFrom', to_char(m.assign_from, 'YYYY-MM-DD'),   -- 0032: 중간 합류자 공통 과제 배정 시작일(null = 처음부터)
+```
+
 - [ ] **Step 4: 통과 확인** — `npm run test:db` 전체 PASS.
 
-- [ ] **Step 5: 원문 정적 점검** — `grep -c "create or replace function" supabase/migrations/0032_extra_recruit.sql` 가 Interfaces 합계(새 12 + 재정의 16 = 28)와 맞는지, `grep -n "status <> 'RECRUIT'" supabase/migrations/0032_extra_recruit.sql` 가 비어 있는지 확인.
+- [ ] **Step 5: 원문 정적 점검** — `grep -c "create or replace function" supabase/migrations/0032_extra_recruit.sql` 가 Interfaces 합계(새 14 + 재정의 18 = 32)와 맞는지(`me_studies` 는 0024 에서 `create function` 이었지만 여기서는 `create or replace`), `grep -n "status <> 'RECRUIT'" supabase/migrations/0032_extra_recruit.sql` 가 비어 있는지 확인.
 
 - [ ] **Step 6: 커밋** — `git commit -- supabase/migrations/0032_extra_recruit.sql supabase/tests/extra-recruit-sql.test.ts supabase/tests/_cases-membership.ts -m "feat(db): 0032 — 추가 모집(진행중 모집 창·자동 마감·중간 합류 배정)과 초대 코드·바로 참가(기한·인원 한도·실패 제한)"`
 
@@ -1020,12 +1197,15 @@ cases("extra recruit 0032 · reads", db, [
 **Files:**
 - Modify: `src/lib/api/types.ts` · `src/lib/api/leader.ts` · `src/lib/api/room-view.ts` · `src/lib/api/invite.ts` · `src/lib/api/rooms.ts` · `src/data/rooms.ts`(카드 `Room` 에 `extra?`)
 - Create: `src/lib/api/recruit.ts` · `src/lib/api/recruit.test.ts`
+- Modify(Codex #4·#5): `src/lib/api/my-study.ts` · `src/lib/api/my-study.test.ts` · `src/components/my-study/model.ts` · `src/components/my-study/model.test.ts`
 
 **Interfaces:**
 - `types.ts`: `RoomRecruit` · `InviteBypass` · `InviteInfo` · `InviteJoin`; `RoomDetail.recruit?: RoomRecruit`, `RoomDetail.invite: InviteInfo | null`; `RoomCardDto.recruitUntil?: string | null`; `InvitePreview.join?: InviteJoin`, `InvitePreview.room.recruitUntil?: string | null`; `NOTIFICATION_KINDS` 끝 `// 0032` `"MEMBER_JOINED"`
   - 선택(`?`)으로 두는 이유: 기존 픽스처·DTO 생성 테스트가 깨지지 않게. 서버는 0032 뒤 항상 보낸다.
 - `recruit.ts`: `openExtraRecruit` · `closeExtraRecruit` · `setInviteBypass` · `lookupInviteCode` · `normalizeCode` · `isCodeShape` · `formatCode` · `codeInputView` · `extraRecruitDefaults` · `recruitMaxDate` · `extraRecruitNote` · `inviteNote` · `recruitErrorText`
 - `room-view.ts` `closedAction` 이 `recruit.open` 을 본다 · `invite.ts` `inviteActionOf` 가 `join` 을 본다 · `leader.ts` `showApplications` · `InviteLink` 확장
+- (Codex #4) `StudyItem.when.kind` 에 `"recruitEnd"`, `my-study.ts` `toSidebarGroups` 의 when 문구 `"MM.DD 모집 마감"`
+- (Codex #5) `CurriculumMember.assignFrom?: string | null`, `model.ts` `TreeMember.assignFrom`·공통 재계산 규칙
 
 - [ ] **Step 1: 실패하는 테스트** — `src/lib/api/recruit.test.ts`
 
@@ -1119,7 +1299,47 @@ describe("toRoomCard extra badge", () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인** — `npx vitest run src/lib/api/recruit.test.ts` → FAIL.
+추가(Codex #4) — `src/lib/api/my-study.test.ts`:
+
+```ts
+it("sidebar: extra-recruit PENDING sits in 모집중 · 승인 대기 with '모집 마감' date", () => {
+  const ms: MeStudies = { today: "2026-10-12", groups: [
+    { kind: "active", items: [] },
+    { kind: "recruit", items: [{ slug: "aws", title: "AWS", intro: "", membership: "pending", archived: false, when: { kind: "recruitEnd", date: "2026-10-19" } }] },
+    { kind: "ended", items: [] } ] };
+  const g = toSidebarGroups(ms, "2026-10-12").find((x) => x.items.some((it) => it.id === "aws"))!;
+  expect(g.label).toBe("모집중 · 승인 대기");
+  expect(g.items[0].when).toContain("모집 마감");
+});
+```
+
+(라벨 문자열은 `MEMBERSHIP_LABEL.pending` 실제 값에 맞춘다.)
+
+추가(Codex #5) — `src/components/my-study/model.test.ts`(`fixtures.ts` 의 `AWS` 에 늦게 들어온 멤버를 더한 사본):
+
+```ts
+describe("late joiner (assignFrom) — preview equals server assignment_resync", () => {
+  const late = { userId: "u6", nickname: "서연", tone: "amber" as const, role: "member" as const, status: "active" as const, doesTasks: true, canEditCurriculum: false, assignFrom: "2026-10-12" };
+  const cur = { ...AWS, members: [...AWS.members, late] };
+  const ids = (t: ReturnType<typeof buildTree>, id: string) => (t.nodes.find((n) => n.id === id) as LeafNode).people.map((p) => p.userId);
+  it("temp leaf under a past round (ends 10/07) excludes the late joiner", () => {
+    const t = buildTree(cur, { ...EMPTY_OVERRIDES, added: { "1": ["지난 과제"] } }, REF_DAY);
+    const temp = t.nodes.find((n) => n.temp && n.leaf)!;
+    expect(ids(t, temp.id)).not.toContain("u6");
+  });
+  it("designated → 공통 on a leaf ending 10/14 includes the late joiner", () => {
+    expect(ids(buildTree(cur, { ...EMPTY_OVERRIDES, typeOv: { "21": "공통" } }, REF_DAY), "21")).toContain("u6");
+  });
+  it("moving a past 공통 leaf's end past assignFrom adds the late joiner (server resync does too)", () => {
+    expect(ids(buildTree(cur, EMPTY_OVERRIDES, REF_DAY), "11")).not.toContain("u6");
+    expect(ids(buildTree(cur, { ...EMPTY_OVERRIDES, dates: { "11": { e: "2026-10-20" } } }, REF_DAY), "11")).toContain("u6");
+  });
+});
+```
+
+(`ov.dates` 의 실제 모양 — `{ s?, e? }` — 은 `model.ts` 의 `Overrides` 를 따른다.)
+
+- [ ] **Step 2: 실패 확인** — `npx vitest run src/lib/api/recruit.test.ts src/lib/api/my-study.test.ts src/components/my-study/model.test.ts` → 새 사례 FAIL.
 
 - [ ] **Step 3: 구현**
 
@@ -1274,9 +1494,29 @@ export function inviteActionOf(p: InvitePreview): InviteAction {
     extra: d.status === "active" && d.recruitUntil ? (d.isFull ? "full" : "open") : undefined,
 ```
 
-- [ ] **Step 4: 통과 확인** — `npx vitest run src/lib/api` → PASS. `npx tsc --noEmit` → 픽스처 오류가 나면 위 지시대로 채운다.
+추가(Codex #4) — `src/lib/api/types.ts` `StudyItem.when.kind` 에 `"recruitEnd"`. `src/lib/api/my-study.ts` `toSidebarGroups` 의 `when` 문구:
 
-- [ ] **Step 5: 커밋** — `git commit -- src/lib/api/types.ts src/lib/api/leader.ts src/lib/api/room-view.ts src/lib/api/invite.ts src/lib/api/rooms.ts src/lib/api/recruit.ts src/lib/api/recruit.test.ts src/data/rooms.ts <고친 픽스처> -m "feat(web): 추가 모집·초대 코드 타입·어댑터·판정(closedAction·inviteActionOf·카드 배지)"`
+```ts
+        const when = w.kind === "deadline" ? `${d} 마감` : w.kind === "start" ? `${d} 시작` : w.kind === "recruitEnd" ? `${d} 모집 마감` : g.kind === "active" ? `${d} 까지` : `${d} 종료`;
+```
+
+추가(Codex #5) — `types.ts` `CurriculumMember` 에 `/** 0032 중간 합류자 공통 과제 배정 시작일. null·없음 = 처음부터 */ assignFrom?: string | null;`. `src/components/my-study/model.ts`:
+
+```ts
+export type TreeMember = { userId: string; name: string; tone: Tone; doesTasks: boolean; assignFrom: string | null };
+// buildTree: members 매핑에 assignFrom: m.assignFrom ?? null
+// 리프 재계산 조건 — 공통 과제 날짜만 바꿔도 중간 합류자가 있으면 다시 계산(서버 node_update → assignment_resync 가 새로 배정하므로)
+const recompute = !personal && (temp || n.id in ov.typeOv || n.id in ov.assignOv || (type === "공통" && n.id in ov.dates && doers.some((m) => m.assignFrom)));
+// 공통 담당 = 이미 배정된 사람 ∪ 배정 자격(assignFrom 없음 ∨ 마감 ≥ assignFrom) — 서버 assignment_resync 1단계와 같은 규칙
+const commonDoers = doers.filter((m) => known.has(m.userId) || !m.assignFrom || e >= m.assignFrom);
+const chosen = type === "공통" ? commonDoers : ov.assignOv[n.id] ? doers.filter((m) => ov.assignOv[n.id].includes(m.userId)) : doers.filter((m) => known.has(m.userId));
+```
+
+(일반 조회(재계산 없음)는 서버 배정 행을 그대로 쓰므로 바뀌지 않는다.)
+
+- [ ] **Step 4: 통과 확인** — `npx vitest run src/lib/api src/components/my-study` → PASS. `npx tsc --noEmit` → 픽스처 오류가 나면 위 지시대로 채운다.
+
+- [ ] **Step 5: 커밋** — `git commit -- src/lib/api/types.ts src/lib/api/leader.ts src/lib/api/room-view.ts src/lib/api/invite.ts src/lib/api/rooms.ts src/lib/api/recruit.ts src/lib/api/recruit.test.ts src/lib/api/my-study.ts src/lib/api/my-study.test.ts src/components/my-study/model.ts src/components/my-study/model.test.ts src/data/rooms.ts <고친 픽스처> -m "feat(web): 추가 모집·초대 코드 타입·어댑터·판정(closedAction·inviteActionOf·카드 배지)"`
 
 ---
 
@@ -1298,7 +1538,19 @@ export function inviteActionOf(p: InvitePreview): InviteAction {
   - 코드 `formatCode` 를 `font-mono text-[28px] tracking-[0.08em] whitespace-nowrap` 로, [코드 복사](`navigator.clipboard.writeText(formatCode(code))`), [초대 링크 복사](`absoluteUrl`), [새 코드로 바꾸기](ConfirmDialog — 기존 LeaderPanel rotate 문구 + "바로 참가 설정도 꺼져요") → `rotateInvite`.
   - `Switch` "모집이 끝나도 이 초대로 바로 참가" — 켜면 기한(date, 기본 `min(today+7, recruitMaxDate)`)·인원(number, 비우면 null) 입력과 [저장] → `setInviteBypass`. 끄면 즉시 `setInviteBypass(slug, null, null)`.
   - 켜져 있을 때 안내: `{used}명 사용{max ? ` / ${max}명` : ""} · 승인 없이 바로 참가해요`, `bypass.active === false` 면 "기한이 지났거나 인원이 찼어요 · 기한을 늘리거나 새 코드로 바꿔 주세요"(warn 색).
-- `RoomSettingsForm` 연결: 섹션의 `onDetail(next)` 가 `setD(next)` 하고, 방 정보 폼의 기준값·현재값 중 **`maxMembers` 만** `String(next.maxMembers)` 로 맞춘다(다른 칸의 미저장 수정은 유지). 폼 내부가 `initial`/`values` 를 어떤 이름으로 들고 있는지 먼저 읽고 맞춘다.
+- `RoomSettingsForm` 연결(Codex #8): 폼은 `base`(기준값)·`v`(현재값)를 들고 있다(`RoomSettingsForm.tsx` 48–49행). 섹션의 `onDetail(next)` 는 `setD(next)` 하고, **서버가 바꾼 칸(`maxMembers`·`joinMode`)만** 기준값·현재값 둘 다에 반영한다 — 다른 칸의 미저장 수정은 그대로. 순수 함수로 `settings.ts` 에 둔다:
+
+```ts
+/** 추가 모집 등 폼 밖 RPC 가 바꾼 칸을 폼에 반영 — 서버가 바꾼 칸은 기준값·현재값 모두 서버 값, 나머지 미저장 수정은 유지 (Codex #8) */
+export const SERVER_SYNCED: Field[] = ["maxMembers", "joinMode"];
+export function syncServerFields(base: NewRoomValues, v: NewRoomValues, next: Src): { base: NewRoomValues; v: NewRoomValues } {
+  const fresh = valuesOf(next);
+  const pick = Object.fromEntries(SERVER_SYNCED.map((k) => [k, fresh[k]])) as Partial<NewRoomValues>;
+  return { base: { ...base, ...pick }, v: { ...v, ...pick } };
+}
+```
+
+폼: `const onRecruitDetail = (next: RoomDetail) => { setD(next); const s = syncServerFields(base, v, next); setBase(s.base); setV(s.v); };`. 진행중엔 `joinMode` 칸이 잠겨 있어 사용자가 고칠 수 없으므로 서버 값으로 덮어도 잃는 입력이 없다. `maxMembers` 는 섹션에서 방금 저장한 값이 진실.
 - 모바일 390: 카드 안 입력은 한 줄 1개(`grid-cols-[72px_minmax(0,1fr)]` 라벨-값), 버튼은 전체 폭 `h-11`. 820 이상에서 버튼 오른쪽 정렬.
 
 - [ ] **Step 1: 실패하는 DOM 테스트** — `RecruitInviteSection.dom.test.ts`
@@ -1347,10 +1599,24 @@ describe("RecruitInviteSection", () => {
 
 (`mmdd` 표기가 `10/27` 이 아니면 그 함수 출력에 맞춰 단언을 고친다.)
 
+추가(Codex #8) — `src/components/room-settings/settings.test.ts`:
+
+```ts
+it("syncServerFields: server-changed maxMembers·joinMode land in base and v; other unsaved edits stay", () => {
+  const d = { title: "t", intro: "i", descriptionMd: "", rulesMd: "", startDate: "2026-10-01", endDate: "2026-12-31", maxMembers: 6, minMembers: 3, isPublic: true, joinMode: "approval" as const, leaderDoesTasks: true };
+  const base = valuesOf(d);
+  const v = { ...base, title: "고친 제목" };
+  const s = syncServerFields(base, v, { ...d, maxMembers: 8, joinMode: "direct" });
+  expect([s.base.maxMembers, s.base.joinMode, s.v.maxMembers, s.v.joinMode]).toEqual(["8", "direct", "8", "direct"]);
+  expect(s.v.title).toBe("고친 제목");
+  expect(buildPatch(s.base, s.v)).toEqual({ title: "고친 제목" });   // 저장 막대에는 제목만 남는다
+});
+```
+
 - [ ] **Step 2: 실패 확인** — `npx vitest run src/components/room-settings` → FAIL.
 - [ ] **Step 3: 구현** — 위 동작대로. 상태는 `useState` 로 입력값만 들고, 서버 응답(`RoomDetail`·`InviteLink`)이 진실. 버튼 `aria-label` 에 동작 이름. `ConfirmDialog`·`ChoiceList`·`Switch`·`Toast` 는 기존 것.
 - [ ] **Step 4: 통과 + 게이트** — `npm run lint && npx tsc --noEmit && npx vitest run`
-- [ ] **Step 5: 커밋** — `git commit -- src/components/room-settings/RecruitInviteSection.tsx src/components/room-settings/RecruitInviteSection.dom.test.ts src/components/room-settings/RoomSettingsForm.tsx -m "feat(settings): 방 설정 「추가 모집 · 초대」 — 추가 모집 열기·마감, 초대 코드·링크, 바로 참가 기한·인원"`
+- [ ] **Step 5: 커밋** — `git commit -- src/components/room-settings/RecruitInviteSection.tsx src/components/room-settings/RecruitInviteSection.dom.test.ts src/components/room-settings/RoomSettingsForm.tsx src/components/room-settings/settings.ts src/components/room-settings/settings.test.ts -m "feat(settings): 방 설정 「추가 모집 · 초대」 — 추가 모집 열기·마감, 초대 코드·링크, 바로 참가 기한·인원"`
 
 ---
 
@@ -1382,7 +1648,23 @@ describe("RecruitInviteSection", () => {
 - Create: `src/app/join/page.tsx` · `src/components/auth/JoinCodeForm.tsx` · `src/components/auth/JoinCodeForm.dom.test.ts`
 
 - [ ] **Step 1: 테스트 먼저**
-  - `return-to.test.ts`: `safeReturnTo("/join")` = `"/join"`, `safeReturnTo("/join?code=K7QM3XPA")` 통과, `isProtectedPath("/join")` = true.
+  - `return-to.test.ts`: `safeReturnTo("/join")` = `"/join"`, `safeReturnTo("/join?code=K7QM3XPA")` 통과, `safeReturnTo("/joinx")` = `"/"`, `isProtectedPath("/join")` = true.
+  - (Codex #9) **로그인 복귀 실행 테스트** — `src/lib/supabase/middleware.test.ts` 에 기존 `@supabase/ssr` 목(`auth.claims = null`)으로:
+
+```ts
+it("unauthenticated /join?code=… → /login?returnTo keeps the code, and the login page's safeReturnTo returns it intact", async () => {
+  auth.claims = null;
+  const res = await updateSession(new NextRequest("http://localhost:3000/join?code=k7qm-3xpa"));
+  const loc = new URL(res.headers.get("location")!);
+  expect(loc.pathname).toBe("/login");
+  const back = loc.searchParams.get("returnTo");
+  expect(back).toBe("/join?code=k7qm-3xpa");
+  expect(safeReturnTo(back)).toBe("/join?code=k7qm-3xpa");                       // LoginScreen 이 로그인 뒤 router.push 하는 값
+  expect(new URL(back!, "http://x").searchParams.get("code")).toBe("k7qm-3xpa");  // /join 페이지가 칸을 채우는 값
+});
+```
+
+(목·env 준비는 같은 파일의 기존 "updateSession with env" 묶음을 따른다. `safeReturnTo` 는 `./return-to` 에서 import.)
   - `JoinCodeForm.dom.test.ts`: 초기 `?code=k7qm3xpa` → input value `K7QM-3XPA`; 라벨 "초대 코드"; 버튼 "다음".
   - InviteScreen: `join.via === "invite"` 면 "초대로 바로 참가 · 10/19까지" 와 "진행중인 스터디예요" 안내, CTA "바로 참가하기"; `join.mode null` 진행중이면 "모집이 끝났어요 · 그룹장에게 새 초대를 받아 주세요".
 - [ ] **Step 2: 구현**
@@ -1425,7 +1707,156 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
 
 ---
 
-### Task 9: 로컬 DB 적용 · 브라우저 확인 (sonnet)
+### Task 9: 실 PostgreSQL 두 연결 게이트 `extra-recruit-db.test.ts` (opus, Codex #9)
+
+**Files:** Create `supabase/tests/extra-recruit-db.test.ts`
+
+PGlite 는 단일 연결이라 경쟁과 "요청(트랜잭션) 사이 지속"을 증명하지 못한다. 기존 `_testenv.ts` 의 `dbTest`(env 없으면 ignore → `npm run test:db` 기본 실행 영향 없음) + AI 플랜 `api-invoke-db.test.ts` 와 같은 로컬 강제·직접 연결 패턴. **로컬 supabase 전용**(호스티드 금지). 실행:
+
+```
+cd /Users/picpal/Desktop/workspace/sgtudy && npx supabase db reset   # 로컬만
+eval "$(npx supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY SUPABASE_DB_URL=$DB_URL
+deno test -A --config supabase/tests/deno.json supabase/tests/extra-recruit-db.test.ts
+```
+
+설계: ① **제어된 동시 시작** — 직접 연결이 `begin; select … from rooms where id = $1 for update` 로 방 행을 쥔 채 요청들을 쏘고, 400ms 뒤 **전부 아직 대기 중인지 확인한 다음** `commit` — 잠금이 실제로 그 요청들을 막았음을 증명한다. ② tick↔연장 경쟁은 쥔 트랜잭션 안에서 **그룹장 신원으로 실제 RPC**(`set local role authenticated` + `request.jwt.claims`)를 부른 뒤, 다른 연결에서 tick 을 쏴 후보 선택(옛 상태) → 잠금 대기 → 커밋 뒤 재판정을 재현한다. ③ 날짜는 로컬 seed 의 `internal.settings 'today'` — 바꾼 테스트는 `finally` 에서 되돌린다. ④ 정리는 이 파일이 만든 방(제목에 `RUN`)·자기 테스트 사용자 행만.
+
+- [ ] **Step 1: 테스트 작성**
+
+```ts
+// supabase/tests/extra-recruit-db.test.ts — 0032 실 PostgreSQL(두 연결) 게이트. PGlite 로 증명 못 하는 경쟁·커밋 지속만. 로컬 supabase 전용
+import { assertEquals } from "@std/assert";
+import postgres from "npm:postgres@3.4.5";
+import type { SupabaseClient } from "supabase-js";
+import { dbTest, hasEnv, RUN, service, userClient } from "./_testenv.ts";
+
+const LOCAL = /^(https?:\/\/)?(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/;
+const DB_URL = Deno.env.get("SUPABASE_DB_URL") ?? "";
+if (hasEnv && (!LOCAL.test(Deno.env.get("SUPABASE_URL") ?? "") || !/@(127\.0\.0\.1|localhost):/.test(DB_URL))) {
+  throw new Error("extra-recruit-db.test.ts 는 로컬 supabase 전용이에요 — SUPABASE_URL·SUPABASE_DB_URL 이 127.0.0.1/localhost 여야 해요");
+}
+const pg = hasEnv ? postgres(DB_URL, { max: 4, onnotice: () => {} }) : (null as never);
+
+type R = { data: unknown; error: { message: string } | null };
+const ok = <T = unknown>(r: R, label: string): T => { if (r.error) throw new Error(`${label}: ${r.error.message}`); return r.data as T; };
+const code = (r: R) => r.error?.message ?? "OK";
+
+async function member(n: number): Promise<{ id: string; c: SupabaseClient }> {
+  const { u, c } = await userClient(n);
+  ok(await c.rpc("me_update", { p_nickname: `er${n}${RUN}` }), "me_update");
+  return { id: u.id, c };
+}
+const today = async () => (await pg`select public.kst_today()::text as d`)[0].d as string;
+const plus = async (n: number) => (await pg`select (public.kst_today() + ${n}::int)::text as d`)[0].d as string;
+
+/** 리프 1개 있는 ACTIVE 방(지금 시작). max 는 그룹장 포함 정원 */
+async function activeRoom(leader: { c: SupabaseClient }, max: number, joinMode: "direct" | "approval") {
+  const room = ok<{ id: string; slug: string }>(await leader.c.rpc("room_create", {
+    p_title: `추가모집 ${RUN} ${crypto.randomUUID().slice(0, 4)}`, p_intro: "게이트", p_start_date: await today(), p_end_date: await plus(40),
+    p_max_members: max, p_is_public: true, p_join_mode: joinMode }), "room_create");
+  const admin = service();
+  const { data: round, error: e1 } = await admin.from("goal_nodes").insert({ room_id: Number(room.id), parent_id: null, depth: 2, sort_order: 0, label: "1주차", title: "회차", start_date: await today(), end_date: await plus(6) }).select("id").single();
+  if (e1) throw new Error(e1.message);
+  await admin.from("goal_nodes").update({ round_id: round!.id }).eq("id", round!.id);
+  const { error: e2 } = await admin.from("goal_nodes").insert({ room_id: Number(room.id), parent_id: round!.id, round_id: round!.id, depth: 3, sort_order: 0, title: "과제", start_date: await today(), end_date: await plus(6), task_type: "COMMON" });
+  if (e2) throw new Error(e2.message);
+  ok(await leader.c.rpc("room_open_recruit", { p_slug: room.slug }), "open_recruit");
+  ok(await leader.c.rpc("room_start", { p_slug: room.slug }), "room_start");
+  return room;
+}
+const dropRoom = async (id: string) => { const { error } = await service().from("rooms").delete().eq("id", Number(id)); if (error) console.error("cleanup room", id, error.message); };
+
+/** 방 행을 쥔 채 fire → 400ms 뒤 전부 대기 중인지 확인 → during(쥔 트랜잭션 안 작업) → commit */
+async function heldRoom<T>(roomId: string, fire: () => PromiseLike<T>[], during?: (tx: postgres.ReservedSql) => Promise<void>): Promise<T[]> {
+  const tx = await pg.reserve();
+  try {
+    await tx`begin`;
+    await tx`select 1 from public.rooms where id = ${roomId} for update`;
+    if (during) await during(tx);
+    const settled: boolean[] = [];
+    const ps = fire().map((p, i) => Promise.resolve(p).then((v) => { settled[i] = true; return v; }));
+    await new Promise((r) => setTimeout(r, 400));
+    assertEquals(settled.filter(Boolean).length, 0, "요청이 방 잠금에 막혀 있어야 해요");
+    await tx`commit`;
+    return await Promise.all(ps);
+  } catch (e) { await tx`rollback`.catch(() => {}); throw e; } finally { tx.release(); }
+}
+
+dbTest("extra window: two concurrent direct joins for the last seat → one OK, one ROOM_FULL", async () => {
+  const leader = await member(31);
+  const room = await activeRoom(leader, 2, "direct");
+  try {
+    ok(await leader.c.rpc("room_extra_recruit_open", { p_slug: room.slug, p_until: await plus(3), p_max_members: 2, p_join_mode: "direct" }), "extra_open");
+    const [a, b] = [await member(32), await member(33)];
+    const res = await heldRoom(room.id, () => [a.c.rpc("room_join", { p_slug: room.slug }), b.c.rpc("room_join", { p_slug: room.slug })]);
+    assertEquals(res.map(code).sort(), ["OK", "ROOM_FULL"]);
+    assertEquals((await pg`select member_count from public.rooms where id = ${room.id}`)[0].member_count, 2);
+  } finally { await dropRoom(room.id); }
+});
+
+dbTest("bypass invite: limit 1, two concurrent invite_join → one OK, one INVITE_EXPIRED, used = 1", async () => {
+  const leader = await member(34);
+  const room = await activeRoom(leader, 6, "approval");
+  try {
+    const inv = ok<{ token: string }>(await leader.c.rpc("invite_bypass_set", { p_slug: room.slug, p_until: await plus(3), p_max: 1 }), "bypass_set");
+    const [a, b] = [await member(35), await member(36)];
+    const res = await heldRoom(room.id, () => [a.c.rpc("invite_join", { p_token: inv.token }), b.c.rpc("invite_join", { p_token: inv.token })]);
+    assertEquals(res.map(code).sort(), ["INVITE_EXPIRED", "OK"]);
+    assertEquals((await pg`select bypass_used from public.room_invites where token = ${inv.token}`)[0].bypass_used, 1);
+  } finally { await dropRoom(room.id); }
+});
+
+dbTest("tick vs extend: tick picks a lapsed window, leader reopens while holding the row → tick re-checks and leaves the new window", async () => {
+  const leader = await member(37);
+  const room = await activeRoom(leader, 6, "approval");
+  const saved = await today();
+  try {
+    ok(await leader.c.rpc("room_extra_recruit_open", { p_slug: room.slug, p_until: saved, p_max_members: null, p_join_mode: null }), "extra_open");
+    await pg`update internal.settings set value = ${await plus(1)} where key = 'today'`;   // 창이 지난 날
+    const until = await plus(5);
+    const [tick] = await heldRoom(room.id, () => [pg`select public.room_tick() as r`], async (tx) => {
+      await tx`set local role authenticated`;
+      await tx`select set_config('request.jwt.claims', ${JSON.stringify({ sub: leader.id, role: "authenticated" })}, true)`;
+      await tx`select public.room_extra_recruit_open(${room.slug}, ${until}::date, null, null)`;   // 실제 RPC, 커밋 전
+    });
+    assertEquals((tick as { r: unknown }[])[0].r !== undefined, true);
+    assertEquals((await pg`select recruit_until::text as u from public.rooms where id = ${room.id}`)[0].u, until);   // 새 창이 살아 있다
+  } finally {
+    await pg`update internal.settings set value = ${saved} where key = 'today'`;
+    await dropRoom(room.id);
+  }
+});
+
+dbTest("code lookup: failures persist across separate requests (10 → RATE_LIMITED); successes are not stored", async () => {
+  const leader = await member(38);
+  const room = await activeRoom(leader, 6, "approval");
+  const u = await member(39);
+  try {
+    const { code: real } = ok<{ code: string }>(await leader.c.rpc("invite_get", { p_slug: room.slug }), "invite_get");
+    await pg`delete from public.invite_code_failures where user_id = ${u.id}`;
+    ok(await u.c.rpc("invite_code_lookup", { p_code: real }), "hit");
+    assertEquals((await pg`select count(*)::int as n from public.invite_code_failures where user_id = ${u.id}`)[0].n, 0);
+    const miss = real === "ZZZZZZZZ" ? "YYYYYYYY" : "ZZZZZZZZ";
+    for (let i = 9; i >= 0; i--) assertEquals(ok(await u.c.rpc("invite_code_lookup", { p_code: miss }), "miss"), { found: false, remaining: i });   // 요청마다 별도 트랜잭션
+    assertEquals(code(await u.c.rpc("invite_code_lookup", { p_code: real })), "RATE_LIMITED");
+    assertEquals((await pg`select count(*)::int as n from public.invite_code_failures where user_id = ${u.id}`)[0].n, 10);
+  } finally {
+    await pg`delete from public.invite_code_failures where user_id = ${u.id}`;
+    await dropRoom(room.id);
+  }
+});
+
+addEventListener("unload", () => { if (hasEnv) void pg.end(); });
+```
+
+(`room_start` 인자는 0025 판 시그니처를 따른다 — 기본값이면 `p_slug` 만. `public.fail` 은 PostgREST 오류 `message` 에 코드를 싣는다 — `rooms-db.test.ts` 와 같은 판정. 실패 원문이 다르면 그 형식에 맞춘다.)
+
+- [ ] **Step 2: 실행** — env 없이 `npm run test:db` → 이 파일은 ignored(정상). 로컬 supabase 가 있으면 위 명령으로 4 passed. 없으면 노트에 "실 DB 게이트 미실행 — Task 10 에서 사용자 실행 요청" 을 남기고 **배포 전 필수 게이트**로 표시.
+- [ ] **Step 3: 커밋** — `git commit -- supabase/tests/extra-recruit-db.test.ts -m "test(db): 0032 실 PostgreSQL 두 연결 게이트 — 마지막 좌석·바로 참가 한도·tick↔연장 경쟁, 코드 실패 누적"`
+
+---
+
+### Task 10: 로컬 DB 적용 · 브라우저 확인 (sonnet)
 
 **Files:** 없음(확인만, 문제 있으면 해당 Task 로 되돌림)
 
@@ -1438,8 +1869,10 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
   4. 민수: [지금 마감] → 남은 신청 만료 확인.
   5. 민수: 바로 참가 켜기(인원 1) → 코드 복사 → 가은: 헤더 메뉴 "초대 코드 입력" → 소문자·하이픈 섞어 입력 → 랜딩 "바로 참가하기" → 내 스터디 이동. 민수 알림 "가은님이 … 합류했어요".
   6. 예린: 같은 코드 → 랜딩이 닫힘 CTA(한도 소진). 틀린 코드 연속 입력 → 남은 횟수 문구.
-  7. 비로그인으로 `/join?code=…` → 로그인 → `/join` 으로 복귀, 칸 채워짐.
-  8. 폭 390 / 820 / 1440 에서 설정 섹션·랜딩·`/join` 스크린샷, 가로 스크롤 없음(`document.documentElement.scrollWidth <= innerWidth`), 코드 한 줄.
+  7. 비로그인으로 `/join?code=…` → 로그인 → `/join?code=…` 로 복귀, 칸 채워짐(Task 8 실행 테스트의 브라우저 확인).
+  8. 민수: 종료일을 추가 모집 마감보다 앞으로 당김 → 설정 섹션·패널 마감 표시가 종료일로 줄어듦. 서연(추가 모집 신청자) 내 스터디 사이드바 "모집중 · 승인 대기" 에 "MM.DD 모집 마감".
+  9. Task 9 가 미실행이면 여기서 로컬 supabase 로 실행(배포 전 필수).
+  10. 폭 390 / 820 / 1440 에서 설정 섹션·랜딩·`/join` 스크린샷, 가로 스크롤 없음(`document.documentElement.scrollWidth <= innerWidth`), 코드 한 줄.
 - [ ] **Step 4: 정리** — dev 서버 종료. 결과(스크린샷 경로·이상 사항) 보고.
 
 ---
@@ -1454,7 +1887,8 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
 | 6 | opus | 5 |
 | 7 | sonnet | 5 (6 과 병렬 가능 — 파일 겹침 없음) |
 | 8 | sonnet | 5 (6·7 과 병렬 가능, `InviteScreen` 은 8 만 만진다) |
-| 9 | sonnet | 전부 |
+| 9 | opus | 4 (로컬 supabase 필요 — 없으면 10 에서) |
+| 10 | sonnet | 전부 |
 
 ## 결정에 따른 변경 (스펙 §8 — 승인 때 권장안과 다르게 정하면)
 
@@ -1462,6 +1896,7 @@ export default async function JoinPage({ searchParams }: { searchParams: Promise
 |---|---|
 | D2 B(항상 승인제) | Task 2 `room_extra_recruit_open` 에서 `p_join_mode` 제거·`join_mode = 'APPROVAL'` 고정, Task 6 방식 선택 삭제 |
 | D3 B(차면 자동 마감) | Task 2 `room_join`·`room_approve` 뒤 `member_count >= max_members` 면 `room_extra_recruit_expire` 호출, 테스트 1건 |
+| D14 B(진행중 묶음에 대기 표시) | Task 4 `me_studies` 의 `kind` 를 방 상태 그대로 두고 `when` 만 `recruitEnd`, Task 5 사이드바 문구·테스트 |
 | D4 B(대기 유지) | Task 2 `room_extra_recruit_expire` 에서 PENDING 만료 제거, `room_decide_precheck` 를 `status in ('RECRUIT','ACTIVE')` 로, ENDED 전이 때 만료 처리(=`room_transition_ended` 재정의 추가) |
 | D5 B(별도 필터) | Task 4 `room_matches` 대신 `rooms_list` 에 `p_status = 'extra'` 허용값 추가, FilterBar 칩 |
 | D6 B(전부 배정) | Task 1 `assignment_resync` 재정의·`assign_from` 열 제거, Task 2·3 의 `assign_from` 줄 제거 |

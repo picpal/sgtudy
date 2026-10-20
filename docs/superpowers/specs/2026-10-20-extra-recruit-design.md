@@ -4,6 +4,7 @@
 - 요청(원문): "이미 시작한 스터디에 참가자 추가하고 싶은데, 추가 모집 기능이 없어. 추가 모집 하기위해 모집 기간을 설정하거나, 초대 코드를 통해서 이미 모집 종료되었더라도 초대 코드로 들어오면 참가 가능한 형태가 필요해"
 - 플랜: `docs/superpowers/plans/2026-10-20-extra-recruit.md`
 - 마이그레이션: `0032_extra_recruit.sql`(§10)
+- 개정: 2026-10-20 Codex 플랜 리뷰 1차(9건) 반영 — 실효 마감(종료일로 자르기)·tick 재판정·재개 시 정리·내 스터디 노출·편집 미리보기·최소 인원·실패만 기록·폼 동기화·실 DB 경쟁 테스트(§3·§4.6·§6·§7·§11)
 
 ---
 
@@ -45,14 +46,22 @@
 ### 3.1 "모집 열림" 판정 하나로 통일
 
 ```
-room_recruit_open(r) := r.archived_at is null and (
+room_recruit_until(r) := case when r.status = 'ACTIVE' and r.recruit_until is not null
+                              then least(r.recruit_until, r.end_date) end      -- 실효 마감
+room_recruit_open(r)  := r.archived_at is null and (
      r.status = 'RECRUIT'
-  or (r.status = 'ACTIVE' and r.recruit_until is not null and r.recruit_until >= kst_today()))
+  or coalesce(room_recruit_until(r) >= kst_today(), false))
 ```
+
+- **실효 마감 = `least(recruit_until, end_date)`.** 종료일을 모집 마감보다 앞당겨도(진행중 `room_update`) 저장값은 그대로 두고 판정·표시에서 자른다. 종료일이 지나면 tick 전이라도 닫힌다.
 
 - `rooms.recruit_until date` (KST, 포함) — **방 상태는 ACTIVE 그대로**(D1). 회차·알림·통계 등 ACTIVE 에 걸린 로직을 하나도 건드리지 않는다.
 - `room_join_precheck`·`room_decide_precheck` 의 `status <> 'RECRUIT'` 를 `not room_recruit_open(r)` 로 바꾼다 → 추가 모집 창 안에서는 `room_join`·`room_apply`·`room_approve`·`room_reject` 가 그대로 동작. 창 밖 진행중 방은 지금과 똑같이 `ROOM_NOT_RECRUITING`(기존 테스트 유지).
-- 창이 닫히는 순간(마감일 다음날 첫 tick, 또는 그룹장 "지금 마감") 남은 PENDING → `EXPIRED` + `JOIN_EXPIRED`(D4) — RECRUIT→ACTIVE 때와 같은 규칙.
+- 창이 닫히는 순간 남은 PENDING → `EXPIRED` + `JOIN_EXPIRED`(D4) — RECRUIT→ACTIVE 때와 같은 규칙. 닫히는 경로 셋:
+  1. **수동 마감**(그룹장 "지금 마감") — 방 행 잠금 안에서 바로.
+  2. **자동 만료**(5분 tick) — 후보는 잠금 없이 고르되, 닫기 전에 **방 행을 잠그고 최신 상태로 다시 판정**한다. 그 사이 그룹장이 연장·재개했으면 손대지 않는다. tick 은 ACTIVE→ENDED 전이 **뒤**에 창을 정리해, 이번 tick 에 막 끝난 방(종료일 단축 포함)의 대기 신청도 같은 트랜잭션에서 만료한다.
+  3. **재개 시 정리** — 실효 마감이 지났는데 tick 전에 그룹장이 다시 열면, 새 창을 열기 전에 옛 창의 PENDING 을 먼저 만료한다(옛 신청이 새 창으로 넘어가 승인되는 일 없음). 아직 열린 창을 연장하면 대기 신청은 유지.
+- 지난 창의 PENDING 은 tick 전이라도 승인·거절할 수 없다(`room_decide_precheck` 가 같은 판정).
 
 ### 3.2 초대 = 기존 방당 1개 + 속성 3개
 
@@ -65,7 +74,7 @@ room_recruit_open(r) := r.archived_at is null and (
 | `bypass_max int` | 바로 참가 인원 한도(1~100). null = 정원까지 |
 | `bypass_used int` | 바로 참가로 들어온 수 |
 
-- `invite_bypass_ok(i, r)` := 회전 안 됨 ∧ `bypass_until ≥ today` ∧ (한도 없음 ∨ `used < max`) ∧ 방이 RECRUIT·ACTIVE ∧ 보관 아님.
+- `invite_bypass_ok(i, r)` := 회전 안 됨 ∧ `least(bypass_until, end_date) ≥ today`(실효 기한 — 종료일 단축을 따른다) ∧ (한도 없음 ∨ `used < max`) ∧ 방이 RECRUIT·ACTIVE ∧ 보관 아님. 화면·응답의 기한도 실효 기한.
 - `invite_join` 판정 순서: **바로 참가 유효 → `room_join_by_invite`(승인 없이 ACTIVE)** / 아니면 지금과 같음(`join_mode` 따라 `room_join`/`room_apply` → precheck 가 모집 열림 판정).
 - 바로 참가도 **정원은 지킨다**(`ROOM_FULL`) — 그룹장이 정원을 늘린다(D3).
 - 회전(`invite_rotate`) = 새 토큰·새 코드·바로 참가 꺼짐. 이미 퍼진 링크·코드가 한 번에 죽는다.
@@ -77,6 +86,7 @@ room_recruit_open(r) := r.archived_at is null and (
 - `assignment_resync` 1단계(공통 과제 채우기)에 `and (m.assign_from is null or n.end_date >= m.assign_from)` 한 줄. 오늘 열려 있는 과제(마감 ≥ 오늘)·앞으로의 과제는 배정, 이미 마감된 과제는 배정 안 함(D6).
 - 지정 과제는 지금처럼 그룹장이 직접 정한다(지난 과제에 지정해도 막지 않음 — 그룹장 판단).
 - 개인 목표는 제약 없음(지금 규칙 그대로).
+- **편집 미리보기도 같은 규칙**: `curriculum_get` 멤버에 `assignFrom` 을 싣고, 진행목표 편집의 공통 담당 재계산(`model.ts`)이 `기존 담당 ∪ (assignFrom 없음 ∨ 마감 ≥ assignFrom)` 을 쓴다. 공통 과제의 날짜만 바꿔도 중간 합류자가 있으면 다시 계산한다(서버 `node_update → assignment_resync` 가 새로 배정하므로). 미리보기 = 저장 결과.
 
 ---
 
@@ -187,6 +197,11 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 - 로그인 필수(`PROTECTED_PREFIXES` + `RETURN_TO_PREFIXES` 에 `/join`). 비로그인 → `/login?returnTo=/join` → 돌아와 입력. `?code=` 가 붙어 오면 칸을 채워 둔다(사용자가 [다음]).
 - 성공하면 `/invite/{token}` 으로 이동 — 미리보기·CTA 는 랜딩이 한다(로직 한 곳).
 - 진입점: 헤더 계정 메뉴 "초대 코드 입력", 홈 '참가한 스터디' 빈 상태 링크.
+- 로그인 복귀: 비로그인 `/join?code=…` → 프록시가 `/login?returnTo=/join?code=…` 로 보낸다 → 로그인 뒤 같은 주소로 돌아와 칸이 채워진다(실행 테스트로 고정).
+
+### 4.6 내 스터디 목록 (`me_studies`)
+
+- 추가 모집 창에 신청해 승인 대기 중인 방은 사이드바 **"모집중 · 승인 대기"** 묶음에 보인다(모집중 방 신청과 같은 묶음, D14). 날짜 문구는 `MM.DD 모집 마감`(실효 마감). 창이 닫히면(만료) 목록에서 빠진다 — 모집중 방 신청이 시작 때 만료되면 빠지는 것과 같다.
 
 ---
 
@@ -206,9 +221,10 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 ## 6. 보안 · 남용 방지
 
 - **링크 토큰** 128bit(uuid hex) — 지금 그대로, 추측 불가. 비로그인 미리보기 허용(지금 그대로).
-- **코드** 40bit. 조회 RPC `invite_code_lookup` 은 **로그인 필수** + 사용자별 실패 10회/1시간(`invite_code_attempts`). 실패는 예외를 던지지 않고 `{found:false, remaining}` 을 **반환**한다 — `public.fail` 로 던지면 실패 기록 INSERT 까지 롤백돼 제한이 무력해진다(Review Focus). 한도 초과만 `RATE_LIMITED` 로 던진다(기록할 것이 없다).
-  - 활성 코드 1만 개 가정 시 1회 적중 확률 ≈ 1e4 / 32^8 ≈ 9e-9, 계정당 하루 최대 240회 → 실용적 무작위 대입 불가. 다계정 공격도 계정 생성 비용(이메일 인증)이 앞선다.
-  - 기록은 사용자별 하루 지난 것을 조회 때 지운다(cron·`job_cleanup` 재정의 없음).
+- **코드** 40bit. 조회 RPC `invite_code_lookup` 은 **로그인 필수** + 사용자별 실패 10회/1시간(`invite_code_failures`). 실패는 예외를 던지지 않고 `{found:false, remaining}` 을 **반환**한다 — `public.fail` 로 던지면 실패 기록 INSERT 까지 롤백돼 제한이 무력해진다(Review Focus). 한도 초과만 `RATE_LIMITED` 로 던진다(기록할 것이 없다).
+  - **실패만 저장**한다. 성공·회전 코드 적중은 기록하지 않는다(아는 코드를 반복 조회해도 행이 쌓이지 않음). 1일 지난 실패는 5분 tick(`room_tick`)이 지운다 — 다시 방문하지 않는 계정의 기록도 남지 않는다.
+  - 활성 코드 1만 개 가정 시 1회 적중 확률 ≈ 1e4 / 32^8 ≈ 9e-9, 계정당 하루 최대 240회.
+  - **한계(명시)**: 제한은 사용자별이다. 여러 계정으로 나눠 시도하는 공격은 이 기능이 막지 않는다(계정 수에 비례해 시도 횟수가 늘어난다). 필요해지면 요청·IP 단위 제한(Edge/프록시 레벨)을 별도로 설계한다 — v1 범위 밖.
 - 코드·토큰·바로 참가 설정은 **그룹장만** 본다(`room_detail_json.invite` 는 그룹장에게만, `invite_get`·`invite_bypass_set` 은 `require_leader`). 위임 편집자 불가.
 - 바로 참가 남용 상한: 기한 최대 30일 ∧ 방 종료일 이전, 인원 한도(선택), 정원. 퍼졌으면 "새 코드로 바꾸기" 한 번에 무효.
 - 회전된 코드로 조회하면 `found:true` 로 랜딩에 보내고 랜딩이 "더 이상 쓸 수 없는 초대 링크예요"(INVITE_REVOKED) — 실패 횟수에 넣지 않는다.
@@ -220,7 +236,10 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 | 사례 | 처리 |
 |---|---|
 | 종료·보관 방 | 추가 모집 열기 `ROOM_STATUS_INVALID`. 바로 참가 판정 거짓 → 랜딩 닫힘 CTA. 보관 중 열린 창은 판정이 거짓(보관 풀면 다시 참) |
-| 종료일 단축으로 `recruit_until > end_date` | 방이 ENDED 가 되면 판정 거짓. tick 이 `status <> 'ACTIVE' ∨ recruit_until < today` 인 창을 닫고 대기 만료 |
+| 종료일 단축으로 `recruit_until > end_date` | 판정·표시가 실효 마감(`least(recruit_until, end_date)`)을 쓴다 → 종료일이 지나면 tick 전이라도 닫힘. 종료일 다음 tick 이 종료 전이와 대기 만료를 **같은 트랜잭션**에서. 바로 참가 기한도 `least(bypass_until, end_date)` |
+| 마감 뒤 tick 전에 그룹장이 다시 엶 | 옛 창의 PENDING 을 먼저 만료(+알림)하고 새 창을 연다 |
+| tick 이 후보를 고른 뒤 그룹장이 연장 | 자동 만료가 방 행을 잠근 뒤 재판정 → 연장된 창은 그대로 |
+| 새 정원 < 최소 인원 | `VALIDATION_FAILED {field:'maxMembers', minMembers}`(원시 제약 오류 아님) |
 | 이미 PENDING 인 사람이 바로 참가 초대를 받음 | 바로 ACTIVE 로 승격(승인 불필요). 그룹장 대기 목록에서 사라짐 |
 | REJECTED·CANCELED·EXPIRED | 추가 모집 창에서 다시 신청/참가 가능(지금 규칙). 바로 참가 초대로도 가능 |
 | INACTIVE(이탈 처리) | 추가 모집·바로 참가 모두 `MEMBER_NOT_ACTIVE`(D12) |
@@ -234,7 +253,7 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 
 ---
 
-## 8. 결정 (D1~D13)
+## 8. 결정 (D1~D14)
 
 각 항목 **권장안**과 대안. 사용자 승인 전까지 권장안 기준으로 플랜을 쓴다.
 
@@ -253,6 +272,7 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 | D11 | 알림 | **`MEMBER_JOINED` 신규(그룹장, 진행중 바로 참가만)**, 팀원 알림 없음 | B) 팀원에게도 · C) 신규 kind 없이 생략 → AI 플랜과 `notification_kinds`·`notify_render` 충돌 0(§10) |
 | D12 | 중간 합류자 취소·이탈자 복귀 | **취소 = 탈퇴 요청 경로, INACTIVE 복귀 불가(초대로도)** | B) 창 안에서는 참가 취소 허용(`room_leave` 재정의 필요) · C) 그룹장이 INACTIVE 복귀 허용(해제된 배정 복원 문제) |
 | D13 | 합류 전 기록 열람 | **전부 열람**(제출물 포함 — 지금 ACTIVE 멤버 규칙 그대로) | B) 합류 전 제출물 숨김(`can_read_submission` 재정의) |
+| D14 | 추가 모집 신청자의 내 스터디 묶음 (Codex #4 로 추가) | **"모집중 · 승인 대기" 묶음 + `MM.DD 모집 마감`** — 신청 상태가 같으면 같은 자리 | B) "진행중" 묶음에 대기 배지(방 상태 기준 묶음 유지) |
 
 ---
 
@@ -261,15 +281,17 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 | 종류 | 대상 |
 |---|---|
 | 열 | `rooms.recruit_until` · `room_members.assign_from` · `room_invites.code/bypass_until/bypass_max/bypass_used` (+ 체크·유니크 인덱스) |
-| 표 | `invite_code_attempts`(RLS on, 정책 없음, anon·authenticated 권한 회수) |
+| 표 | `invite_code_failures`(실패만, RLS on, 정책 없음, anon·authenticated 권한 회수, 1일 뒤 tick 정리) |
 | 데이터 | 활성 초대 행에 코드 채우기(DO 루프, 기존 행 의미 무변경) |
 | 새 함수(공개) | `room_extra_recruit_open(text, date, int, text)` · `room_extra_recruit_close(text)` · `invite_bypass_set(text, date, int)` · `invite_code_lookup(text)` → authenticated |
-| 새 함수(내부) | `room_recruit_open` · `room_member_activate` · `room_extra_recruit_expire` · `room_join_by_invite` · `invite_code_new` · `invite_code_norm` · `invite_json` · `invite_bypass_ok` |
-| 재정의(최신 판 복사) | `assignment_resync` ←0014 · `room_join_precheck` ←0005 · `room_join` ←0005 · `room_approve` ←0005 · `room_decide_precheck` ←0005 · `room_tick` ←0004 · `invite_ensure` ←0004 · `invite_get`·`invite_rotate`·`invite_preview` ←0005 · `invite_join` ←0024 · `room_detail_json` ←0026 · `rooms_list` ←0024 · `room_matches` ←0004 · `notification_kinds` ←0024* · `notify_render` ←0028* |
+| 새 함수(내부) | `room_recruit_open` · `room_recruit_until` · `room_member_activate` · `room_extra_recruit_expire`(수동·재개, 호출자 잠금) · `room_extra_recruit_auto_expire`(tick, 잠금 후 재판정) · `room_join_by_invite` · `invite_code_new` · `invite_code_norm` · `invite_json` · `invite_bypass_ok` |
+| 재정의(최신 판 복사) | `assignment_resync` ←0014 · `room_join_precheck` ←0005 · `room_join` ←0005 · `room_approve` ←0005 · `room_decide_precheck` ←0005 · `room_tick` ←0004 · `invite_ensure` ←0004 · `invite_get`·`invite_rotate`·`invite_preview` ←0005 · `invite_join` ←0024 · `room_detail_json` ←0026 · `rooms_list` ←0024 · `room_matches` ←0004 · `notification_kinds` ←0024* · `notify_render` ←0028* · `me_studies` ←0024 · `curriculum_json` ←0024 |
 
 \* AI 플랜(0034)도 재정의 — §10.
 
-재정의하지 않는 것: `room_apply`(precheck 가 관문), `room_leave`, `room_update`, `notify_link`, `notify_enabled`, `invite_resolve`, `room_transition_*`.
+재정의하지 않는 것: `room_apply`(precheck 가 관문), `room_leave`, `room_update`, `notify_link`, `notify_enabled`, `invite_resolve`, `room_transition_*`, `job_cleanup`(실패 기록 정리는 `room_tick` 에서).
+
+`me_studies`·`curriculum_json` 은 AI 연동 플랜(0033~0035)이 재정의하지 않는다. 다만 AI 의 `api_studies` 가 `me_studies` 출력을 소비하므로 `when.kind = 'recruitEnd'`·진행중 방의 대기 항목이 새로 나타난다(함수 충돌 아님, 동작 상호작용).
 
 ---
 
@@ -292,4 +314,7 @@ CTA 결정(`inviteActionOf`, 서버 `invite_preview.join` 을 따른다):
 - SQL(PGlite, `supabase/tests/extra-recruit-sql.test.ts`): 판정 함수 표, 추가 모집 열기·닫기·tick 만료, precheck/승인 창 안팎, 중간 합류 배정(aws 시드: 지난 COMMON `IAM 정책 이해`·`VPC 실습` 미배정, `ALB vs NLB 실습` 이후 배정), 바로 참가(기한·한도·정원·INACTIVE·PENDING 승격·회전), 코드 조회(정규화·실패 기록 유지·한도·회전 코드), 목록 필터·카드 필드, 알림, GRANT.
 - 기존 테스트 수정 1곳: `_cases-membership.ts` "invite_get/rotate" 의 `invite_get` 전체 객체 단언 → 기존 3키 부분 단언 + `code` 형식.
 - 웹(vitest): `closedAction`/`actionOf`/`inviteActionOf` 표, 코드 정규화·표시, 추가 모집 기본값·검증, `toRoomCard` 배지, DOM: 설정 섹션·랜딩 안내·`/join` 폼.
-- 브라우저(ego-browser, 390/820/1440): 그룹장 설정 → 추가 모집 시작 → 다른 계정 둘러보기 → 신청 → 승인 → 내 스터디에서 지난 과제 미배정 확인 / 바로 참가 켜기 → 코드 입력 → 바로 참가.
+- SQL 추가(Codex): 재개 시 옛 대기 만료, 자동 만료 재판정, `room_update` 로 **실제** 종료일 단축 → 같은 tick 에서 종료 + 대기 만료, 최소 인원 검증, 실패만 기록·tick 정리, `me_studies` 노출, `curriculum_get.assignFrom`.
+- **실 PostgreSQL 두 연결**(`supabase/tests/extra-recruit-db.test.ts`, 로컬 supabase 전용, URL 가드): 추가 모집 마지막 좌석 동시 참가(한쪽 `ROOM_FULL`), 바로 참가 한도 경쟁(한쪽 `INVITE_EXPIRED`), tick↔연장 경쟁(새 창 유지), 별도 요청(트랜잭션)에 걸친 실패 누적 → `RATE_LIMITED`. 배포 전 필수 게이트.
+- 웹 추가: 편집 미리보기(`model.ts`) 중간 합류자 규칙 = 서버, 설정 폼 서버 칸 동기화(`syncServerFields`), 사이드바 "모집 마감", 로그인 복귀(`middleware.test.ts` 로 `/join?code=` 보존 실행).
+- 브라우저(ego-browser, 390/820/1440): 그룹장 설정 → 추가 모집 시작 → 다른 계정 둘러보기 → 신청 → 승인 → 내 스터디에서 지난 과제 미배정 확인 / 바로 참가 켜기 → 코드 입력 → 바로 참가 / 비로그인 `/join?code=` → 로그인 → 복귀 / 종료일 단축 후 마감 표시.
