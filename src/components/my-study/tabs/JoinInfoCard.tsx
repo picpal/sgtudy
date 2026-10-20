@@ -22,9 +22,9 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
   return (
     <aside aria-label="참가 정보" className="flex max-w-[360px] flex-[1_1_300px] flex-col gap-[14px] @max-[788px]:grid @max-[788px]:max-w-none @max-[788px]:grid-cols-[repeat(auto-fit,minmax(280px,1fr))] @max-[788px]:items-start">
       <div className="flex flex-col gap-4 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <StatusBadge status={room.status} draft={room.draft} archived={room.archived} />
-          <span className="text-[13px] font-semibold text-ink">{room.ddayLong}</span>
+          <span className="min-w-0 text-right text-[13px] font-semibold leading-[1.4] text-ink">{room.ddayLong}</span>
         </div>
 
         <div className="flex flex-col gap-2">
