@@ -47,7 +47,7 @@
 
 ## Global Constraints
 
-- 마이그레이션은 **`0033_api_tokens.sql`, `0034_curriculum_plan.sql`, `0035_api_invoke.sql` 세 개만** 만든다. 0001~0031 수정 금지(0029_mine_scope_includes_led·0030_node_attachments·0031_orphan_objects 는 다른 작업 몫 — 2026-10-19 D7: 항목 첨부를 먼저 배포, 0031 = 미등록 Storage 고아 객체 정리 `file_orphan_candidates`). 다른 작업이 0033 를 먼저 차지했으면 멈추고 번호를 컨트롤러와 다시 정한다.
+- 마이그레이션은 **`0033_api_tokens.sql`, `0034_curriculum_plan.sql`, `0035_api_invoke.sql` 세 개만** 만든다. 0001~0032 수정 금지(0032_extra_recruit = 추가 모집, 먼저 배포 · 0029_mine_scope_includes_led·0030_node_attachments·0031_orphan_objects 는 다른 작업 몫 — 2026-10-19 D7: 항목 첨부를 먼저 배포, 0031 = 미등록 Storage 고아 객체 정리 `file_orphan_candidates`). 다른 작업이 0033 를 먼저 차지했으면 멈추고 번호를 컨트롤러와 다시 정한다.
 - **추가형·무손실**: 기존 행 UPDATE/DELETE 없음. 함수 재정의는 **최신 판을 복사해 고친다**(Task 0 Step 2 로 최신 판 확인): `current_user_id` ← 0002, `node_create` ← 0024, `notification_kinds` ← **0032(추가 모집)**, `notify_render` ← **0032(추가 모집)**, `notify_link` ← 0028. 0032 판은 `MEMBER_JOINED` 를 포함하므로 AI 판도 **`MEMBER_JOINED` 를 유지**해야 한다(빠뜨리면 추가 모집 알림 회귀). `create or replace` 는 시그니처(이름·인자명·기본값) 동일 → GRANT 유지.
 - 함수 규칙: `security definer set search_path = ''`, 모든 객체 `public.` 접두, 오류는 `public.fail(code, 한국어 문구, detail jsonb)`. 공개 RPC 만 GRANT — `pat_create/pat_list/pat_revoke/curriculum_plan_preview/curriculum_plan_apply` → `authenticated`, `api_invoke` → `anon, authenticated`. 내부 헬퍼(`api_authenticate`, `api_rate_check`, `api_scope_of`, `api_limits`, `api_token_json`, `api_error_json`, `api_resolve_study`, `api_studies`, `api_node_file_counts`, `api_curriculum_view`, `node_create_core`, `curriculum_version`, `plan_*`(`plan_shape_check`·`plan_warn_text`·`plan_undo_check`·`plan_undo_run` 포함), `personal_create_many`, `personal_delete_many`)는 GRANT 없음(0002 기본 권한이 막는다).
 - **`sgtudy.api_uid` 를 `set_config` 하는 함수는 `api_authenticate` 하나뿐**이다(Task 6 정적 테스트가 고정).
@@ -95,7 +95,7 @@
 - [ ] **Step 1: 작업 트리·마이그레이션 번호**
 
 Run: `git -C /Users/picpal/Desktop/workspace/sgtudy status --short && ls /Users/picpal/Desktop/workspace/sgtudy/supabase/migrations | tail -3`
-Expected: 마지막이 `0031_orphan_objects.sql`(미등록 Storage 고아 객체 정리 후보 `file_orphan_candidates`·`file_orphan_grace` 추가, service_role 전용 — 다른 작업), 그 앞이 `0030_node_attachments.sql`(진행목표 항목 첨부, 다른 작업 — 먼저 배포)·`0029_mine_scope_includes_led.sql`(rooms_list mine 스코프 = 내가 그룹장인 방 포함), `0033_*` 없음, 모두 커밋됨(`git log --oneline -1 -- supabase/migrations/0031_orphan_objects.sql` 결과 있음). `0030`·`0031` 이 아직 없으면(첨부·고아 정리 작업 미완) 멈추고 컨트롤러에 순서를 묻는다. 아니면 멈추고 보고.
+Expected: 마지막이 `0032_*`(추가 모집·초대 코드 — 먼저 배포, `MEMBER_JOINED` 추가), 그 앞이 `0031_orphan_objects.sql`(미등록 Storage 고아 객체 정리 후보 `file_orphan_candidates`·`file_orphan_grace` 추가, service_role 전용 — 다른 작업), 그 앞이 `0030_node_attachments.sql`(진행목표 항목 첨부, 다른 작업 — 먼저 배포)·`0029_mine_scope_includes_led.sql`(rooms_list mine 스코프 = 내가 그룹장인 방 포함), `0033_*` 없음, 모두 커밋됨(`git log --oneline -1 -- supabase/migrations/0032_*` 결과 있음). `0032` 가 아직 없으면(추가 모집 미완) 멈추고 컨트롤러에 순서를 묻는다. 아니면 멈추고 보고.
 
 **0030 이 재정의·추가한 것 확인(공유 객체 충돌 방지):** 0030 은 `files`(purpose `NODE_DOC`·열 `attached_at`), Storage/`files_select` 정책, `goal_nodes` 삭제 트리거, `job_cleanup`, `node_files_*` RPC 를 만들거나 재정의한다. 이 플랜이 무언가를 재정의하기 전에 그 함수·표가 0030 에서 바뀌었는지 본다:
 Run: `cd /Users/picpal/Desktop/workspace/sgtudy && grep -nE "create (or replace )?(function|trigger|policy)|alter table|create table" supabase/migrations/0030_node_attachments.sql`
