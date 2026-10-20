@@ -1,6 +1,7 @@
 import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { mmdd } from "@/lib/api/format";
 import { routes } from "@/lib/routes";
 import { MEMBERSHIP_LABEL } from "@/lib/types";
 import { type Action, type Room, type RoomMember } from "@/data/room-view";
@@ -11,7 +12,7 @@ type Props = { room: Room; act: Action; busy?: boolean; loginHref: string; onJoi
 
 const DISABLED: Partial<Record<Action, [label: string, note: string]>> = {
   full: ["정원 마감", "자리가 생기면 다시 참가할 수 있어요"],
-  activeClosed: ["모집 종료", "이미 진행 중인 스터디는 참가할 수 없어요"],
+  activeClosed: ["모집 종료", "진행중인 스터디예요 · 그룹장에게 초대 코드를 받으면 참가할 수 있어요"],
   ended: ["모집 종료", "종료된 스터디예요 · 기록은 계속 볼 수 있어요"],
   inactive: ["참가할 수 없어요", "이탈 처리된 멤버예요 · 그룹장에게 문의해 주세요"],
   archived: ["보관된 스터디", "그룹장이 보관했어요 · 기록만 볼 수 있어요"],
@@ -50,7 +51,14 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
           <button type="button" onClick={act === "join" ? onJoin : onApply} disabled={busy} className={`${PRIMARY} bg-navy text-[16px]`}>
             {act === "join" ? "참가하기" : "참가 신청"}
           </button>
-          <span className={NOTE}>{act === "join" ? "바로 참가돼요 · 시작 전까지 언제든 취소할 수 있어요" : "그룹장이 승인하면 참가가 확정돼요"}</span>
+          {room.status === "active" ? (
+            <>
+              <span className={NOTE}>진행중인 스터디예요 · 오늘 이후 마감인 과제부터 함께해요{room.extraUntil ? ` · ${mmdd(room.extraUntil)}까지 모집` : ""}</span>
+              <span className={NOTE}>참가 뒤에는 취소 대신 탈퇴 요청으로 나갈 수 있어요</span>
+            </>
+          ) : (
+            <span className={NOTE}>{act === "join" ? "바로 참가돼요 · 시작 전까지 언제든 취소할 수 있어요" : "그룹장이 승인하면 참가가 확정돼요"}</span>
+          )}
         </div>
       );
     case "pending":

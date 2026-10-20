@@ -20,3 +20,14 @@ describe("RoomCard 그룹장 배지 (참가한 스터디에 그룹장 방 포함
     expect(html(true, "created")).not.toContain("그룹장");
   });
 });
+
+describe("RoomCard 추가 모집 배지 (0032)", () => {
+  const withExtra = (extra?: "open" | "full") =>
+    renderToStaticMarkup(createElement(RoomCard, { room: { ...base, approval: false, extra }, selectedTags: [] }));
+  it("extra open → '추가 모집', full → '정원 마감'", () => {
+    expect(withExtra("open")).toContain("추가 모집");
+    expect(withExtra("open")).not.toContain("추가 모집 · 정원 마감");
+    expect(withExtra("full")).toContain("추가 모집 · 정원 마감");
+    expect(withExtra(undefined)).not.toContain("추가 모집");
+  });
+});

@@ -42,3 +42,15 @@ describe("JoinCard — 보관된 방의 승인 대기", () => {
     act(() => root.unmount());
   });
 });
+
+// 0032: 진행중 방 참가 안내 (D12)
+describe("JoinCard — 진행중 방 참가", () => {
+  it("과제 안내 + 마감일 + 탈퇴 요청 안내", () => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(JoinCard, { room: { ...room, archived: false, status: "active", extraUntil: "2026-10-27" }, act: "join", loginHref: "/login", onJoin: () => {}, onApply: () => {}, onCancel: () => {} })));
+    expect(host.textContent).toContain("진행중인 스터디예요 · 오늘 이후 마감인 과제부터 함께해요 · 10.27까지 모집");
+    expect(host.textContent).toContain("참가 뒤에는 취소 대신 탈퇴 요청으로 나갈 수 있어요");
+    act(() => root.unmount());
+  });
+});

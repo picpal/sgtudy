@@ -198,3 +198,26 @@ describe("LeaderPanel 담당 미정 안내", () => {
     }
   });
 });
+
+// 0032: 진행중 + 추가 모집 창 닫힘 → 이 링크로 참가 불가 안내 + 방 설정 링크, 열림이면 칩, 코드가 있으면 코드 복사
+describe("LeaderPanel 초대 행 — 추가 모집·초대 코드", () => {
+  const active = { ...detail, status: "active" as const, startDate: "2026-10-01", recruit: { open: false, extraUntil: null } };
+  const render = (d: object) => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(LeaderPanel, { detail: d as typeof detail, toast: vi.fn() })));
+    return host;
+  };
+  it("진행중·창 닫힘: 안내 문구 + 방 설정 링크", () => {
+    const host = render(active);
+    expect(host.textContent).toContain("지금은 이 링크로 참가할 수 없어요");
+    const a = Array.from(host.querySelectorAll("a")).find((x) => x.textContent?.includes("방 설정 →"));
+    expect(a?.getAttribute("href")).toBe("/rooms/r1/settings?from=%2Frooms%2Fr1");
+  });
+  it("추가 모집 열림: 칩 + 코드 복사 버튼", () => {
+    const host = render({ ...active, recruit: { open: true, extraUntil: "2026-10-27" }, invite: { url: "/i/t", token: "t", code: "ABCD2345", bypass: null } });
+    expect(host.textContent).toContain("추가 모집 ~10.27");
+    expect(host.textContent).toContain("코드 ABCD-2345 복사");
+    expect(host.textContent).not.toContain("방 설정 →");
+  });
+});

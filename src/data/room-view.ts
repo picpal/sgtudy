@@ -60,6 +60,8 @@ export type Room = {
   leaderTone?: Tone;
   /** 그룹장 userId — 아바타 변형(avatarColors) */
   leaderId?: string;
+  /** 추가 모집 마감일 — 진행중 + 창 열림일 때만 */
+  extraUntil?: string | null;
   tags: RoomTag[];
   capCur: number;
   capMax: number;

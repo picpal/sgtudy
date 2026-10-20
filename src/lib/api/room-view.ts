@@ -80,6 +80,7 @@ export function toRoom(dto: RoomDetail, today: string, meId: string | null): Roo
     leader: d.leader.nickname,
     leaderTone: d.leader.tone,
     leaderId: d.leader.userId,
+    extraUntil: dto.recruit?.extraUntil ?? null,
     tags: d.tags.map((t) => ({ label: t.label, tone: t.tone, auto: t.auto })),
     capCur: d.memberCount,
     capMax: d.maxMembers,

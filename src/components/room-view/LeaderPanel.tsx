@@ -11,6 +11,7 @@ import { toApiError } from "@/lib/api/errors";
 import { useHashTarget } from "@/lib/hashTarget";
 import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { mmdd, ymd } from "@/lib/api/format";
+import { formatCode, inviteNote } from "@/lib/api/recruit";
 import {
   absoluteUrl,
   approveApplicant,
@@ -35,7 +36,7 @@ import type { MembershipResult, RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { EndDateForm } from "./EndDateForm";
 
-type Detail = Pick<RoomDetail, "today" | "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite" | "startDate" | "endDate"> & { stats?: Pick<RoomDetail["stats"], "unassignedCount"> };
+type Detail = Pick<RoomDetail, "today" | "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite" | "startDate" | "endDate"> & { recruit?: RoomDetail["recruit"]; stats?: Pick<RoomDetail["stats"], "unassignedCount"> };
 /** onDetail/onMembership: 화면이 RoomDetail 을 state 로 들고 있으면(방 화면) 응답으로 바로 교체. 어느 쪽이든 끝나면 router.refresh */
 type Props = { detail: Detail; toast: (m: ToastMsg) => void; onDetail?: (d: RoomDetail) => void; onMembership?: (r: MembershipResult) => void };
 
@@ -49,6 +50,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"open" | "start" | "rotate" | null>(null);
   const [inviteUrl, setInviteUrl] = useState(detail.invite?.url ?? null);
+  const inviteCode = detail.invite?.code ?? null;
   // 예정보다 일찍 시작 — 일정을 오늘로 당길지 (시나리오 QA D1, 기본 당기기). 0 이면 묻지 않는다
   const early = earlyStartDays(detail);
   const [shift, setShift] = useState<"shift" | "keep">("shift");
@@ -108,6 +110,16 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
     }
   };
 
+  const copyCode = async () => {
+    if (!inviteCode) return;
+    try {
+      await navigator.clipboard.writeText(inviteCode);
+      toast({ text: "초대 코드를 복사했어요", tone: "ok" });
+    } catch {
+      toast({ text: "코드를 복사하지 못했어요", tone: "bad" });
+    }
+  };
+
   const rotate = async () => {
     setBusy(true);
     try {
@@ -132,6 +144,9 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
         </h3>
         <span className="flex items-center gap-1">
           <span className="rounded-[7px] bg-bg px-2 py-[2px] text-[12px] font-semibold text-ink-3">지금 {detail.archived ? "보관됨" : statusStepLabel(detail.status)}</span>
+          {detail.recruit?.extraUntil && (
+            <span className="rounded-[7px] bg-[#E3ECFD] px-2 py-[2px] text-[12px] font-semibold text-[#2F5BC2]">추가 모집 ~{mmdd(detail.recruit.extraUntil)}</span>
+          )}
           {/* 방 정보·태그·기간 수정, 삭제·보관 (Q3-1·Q2-2) */}
           <Link href={routes.roomSettings(detail.slug, routes.room(detail.slug))} className="-mr-2 inline-flex h-11 items-center gap-1 rounded-[10px] px-2 text-[13px] font-semibold text-ink-3 hover:text-ink">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -202,16 +217,25 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
             </svg>
             초대 링크 복사
           </button>
+          {inviteCode && (
+            <button type="button" onClick={() => void copyCode()} disabled={busy} className={`${SECONDARY} whitespace-nowrap font-mono`}>
+              코드 {formatCode(inviteCode)} 복사
+            </button>
+          )}
           <button type="button" onClick={() => setConfirm("rotate")} disabled={busy} className="h-11 whitespace-nowrap rounded-[22px] px-3 text-[13px] font-medium text-ink-3 underline-offset-2 hover:underline disabled:opacity-60">
             새 링크로 바꾸기
           </button>
         </div>
         <span className="text-[12px] leading-[1.5] text-muted">
-          {detail.status === "draft"
-            ? "모집을 시작하면 이 링크로 들어올 수 있어요"
-            : detail.isPublic
-              ? "링크를 받은 사람은 바로 이 방으로 와요"
-              : "비공개 방이라 이 링크를 받은 사람만 들어올 수 있어요"}
+          {inviteNote(detail)}
+          {detail.status === "active" && !detail.recruit?.open && !detail.invite?.bypass?.active && (
+            <>
+              {" "}
+              <Link href={routes.roomSettings(detail.slug, routes.room(detail.slug))} className="inline-flex min-h-11 items-center font-semibold text-ink-3 underline underline-offset-2">
+                방 설정 →
+              </Link>
+            </>
+          )}
         </span>
       </div>
 
@@ -224,7 +248,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
           confirm === "open"
             ? `모집을 시작하면 ${openRecruitNote(detail)}. 모집중에도 방 설정에서 공개 여부·참가 방식을 바꿀 수 있어요.`
             : confirm === "start"
-              ? `${early > 0 ? `예정 시작일 ${mmdd(detail.startDate)}보다 ${early}일 일찍 시작해요. ` : ""}진행중이 되면 새 참가를 받지 않고, 승인 대기 중인 신청은 만료돼요.`
+              ? `${early > 0 ? `예정 시작일 ${mmdd(detail.startDate)}보다 ${early}일 일찍 시작해요. ` : ""}진행중이 되면 새 참가는 방 설정의 추가 모집·바로 참가로만 받고, 승인 대기 중인 신청은 만료돼요.`
               : "지금 링크는 더 이상 열리지 않아요. 이미 참가한 사람에게는 영향이 없어요."
         }
         confirmLabel={confirm === "open" ? "모집 시작" : confirm === "start" ? "지금 시작" : "새 링크 만들기"}
