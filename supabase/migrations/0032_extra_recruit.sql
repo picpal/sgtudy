@@ -680,3 +680,475 @@ end $$;
 
 grant execute on function public.invite_bypass_set(text, date, int) to authenticated;
 grant execute on function public.invite_code_lookup(text)           to authenticated;
+
+-- ───────── 13. 읽기 경로 (D5·D9·D14, Codex #4·#5) ─────────
+-- room_detail_json ← 0026 판. 0032: recruit {open, extraUntil}(모두에게) · invite = invite_json − today(그룹장에게만)
+create or replace function public.room_detail_json(p_room bigint, p_uid uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  r          public.rooms;
+  v_today    date := public.kst_today();
+  v_is_leader boolean;
+  v_does_tasks boolean;        -- 내가 담당 자격(ACTIVE 멤버, 그룹장은 leader_does_tasks)
+  v_tags     jsonb;
+  v_members  jsonb;
+  v_rounds   jsonb;
+  v_stats    jsonb;
+  v_current  jsonb := null;
+  v_cur_id   bigint;
+  v_my       jsonb := null;
+  v_invite   jsonb := null;
+  v_pending  int := 0;
+  v_leaves   int := 0;         -- 0024
+begin
+  select * into r from public.rooms where id = p_room;
+  if not found then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
+
+  v_is_leader  := p_uid is not null and r.leader_id = p_uid;
+  v_does_tasks := p_uid is not null and exists (
+    select 1 from public.room_members m
+    where m.room_id = p_room and m.user_id = p_uid and m.status = 'ACTIVE' and (m.role = 'MEMBER' or r.leader_does_tasks));
+  v_members := public.room_members_json(p_room, p_uid);
+
+  v_tags := public.room_tags_json(p_room);
+
+  -- 회차(depth 2) 집계: 리프 asg/sub 를 round_id 로 합산
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', round_id::text, 'label', label, 'title', title,
+           'startDate', to_char(start_date, 'YYYY-MM-DD'), 'endDate', to_char(end_date, 'YYYY-MM-DD'),
+           'leafCount', leaf_count, 'assigned', asg, 'submitted', sub, 'pct', public.pct(asg, sub))
+           order by sort_order, round_id), '[]'::jsonb)
+  into v_rounds from public.room_round_stats(p_room);
+
+  -- stats (roomview §3.7 glance 원재료)
+  select jsonb_build_object(
+    'roundCount', (select count(*) from public.goal_nodes n where n.room_id = p_room and n.depth = 2 and n.archived_at is null),
+    'leafCount', count(*),
+    'commonCount', count(*) filter (where l.task_type = 'COMMON'),
+    'designatedCount', count(*) filter (where l.task_type = 'DESIGNATED'),
+    'totalAssignments', coalesce(sum(l.asg), 0),
+    'totalSubmissions', coalesce(sum(l.sub), 0),
+    'overallPct', public.pct(coalesce(sum(l.asg), 0)::int, coalesce(sum(l.sub), 0)::int),
+    'unassignedCount', count(*) filter (where l.task_type = 'DESIGNATED' and l.asg = 0),
+    'startWeekdays', (select coalesce(jsonb_agg(d order by d), '[]'::jsonb) from (
+        select distinct extract(isodow from n.start_date)::int as d
+        from public.goal_nodes n where n.room_id = p_room and n.depth = 2 and n.archived_at is null) w))
+  into v_stats
+  from public.room_leaf_stats(p_room) l;
+
+  -- 현재 회차: ACTIVE 일 때만. 오늘을 포함하는 회차 중 start 가 가장 늦은 것, 없으면 직전 회차 (roomview §3.3)
+  if r.status = 'ACTIVE' then
+    v_cur_id := public.room_current_round_id(p_room, v_today);
+  end if;
+  if v_cur_id is not null then
+    select (select e from jsonb_array_elements(v_rounds) e where e->>'id' = v_cur_id::text)
+           || jsonb_build_object('tasks', coalesce((
+                select jsonb_agg(jsonb_build_object(
+                         'id', ls.node_id::text, 'title', ls.title, 'type', lower(ls.task_type),
+                         'startDate', to_char(ls.start_date, 'YYYY-MM-DD'), 'endDate', to_char(ls.end_date, 'YYYY-MM-DD'),
+                         'people', coalesce((
+                           select jsonb_agg(public.person_json(a.user_id)
+                                    || jsonb_build_object('status', public.task_code(ls.start_date, ls.end_date, s.first_submitted_at, s.is_late, v_today))
+                                    order by a.assigned_at, a.id)
+                           from public.task_assignments a
+                           left join public.submissions s on s.node_id = a.node_id and s.user_id = a.user_id
+                           where a.node_id = ls.node_id and a.released_at is null), '[]'::jsonb))
+                       order by ls.start_date, ls.sort_order, ls.node_id)
+                from public.room_leaf_stats(p_room) ls where ls.round_id = v_cur_id), '[]'::jsonb))
+    into v_current;
+  end if;
+
+  -- 내 진척률: 담당 자격이 있으면 상태 무관(모집중 방도 D4 실체화 덕에 같은 쿼리 — 시드 sqld 는 leader_does_tasks=false 라 null)
+  -- nextDue 는 OPEN 만(D14): start ≤ today ≤ end ∧ 미제출. 시작 전·마감 지남은 제외
+  if v_does_tasks then
+    select jsonb_build_object(
+      'submitted', count(*) filter (where s.id is not null),
+      'assigned', count(*),
+      'nextDue', (
+        select jsonb_build_object('nodeId', l2.node_id::text, 'title', l2.title, 'roundLabel', rn.label,
+                                  'dueDate', to_char(l2.end_date, 'YYYY-MM-DD'))
+        from public.room_leaf_stats(p_room) l2
+        join public.task_assignments a2 on a2.node_id = l2.node_id and a2.user_id = p_uid and a2.released_at is null
+        join public.goal_nodes rn on rn.id = l2.round_id
+        left join public.submissions s2 on s2.node_id = l2.node_id and s2.user_id = p_uid
+        where s2.id is null and l2.start_date <= v_today and l2.end_date >= v_today
+        order by l2.end_date, rn.sort_order, l2.sort_order, l2.node_id
+        limit 1))
+    into v_my
+    from public.room_leaf_stats(p_room) l
+    join public.task_assignments a on a.node_id = l.node_id and a.user_id = p_uid and a.released_at is null
+    left join public.submissions s on s.node_id = l.node_id and s.user_id = p_uid;
+  end if;
+
+  if v_is_leader then
+    -- 읽기 전용(GET 안전): 활성 토큰을 SELECT 만 한다. 생성은 invite_get·invite_rotate·room_create 몫
+    -- 0032: 코드·바로 참가 설정까지(그룹장에게만, D9). 코드 없는 행이면 code null — 화면이 invite_get 으로 채운다
+    select public.invite_json(i, r) - 'today' into v_invite
+    from public.room_invites i where i.room_id = p_room and i.revoked_at is null;
+    select count(*)::int into v_pending from public.room_members m where m.room_id = p_room and m.status = 'PENDING';
+    -- 0024: 처리할 탈퇴 요청 (방 ACTIVE·미보관일 때만 의미)
+    if r.status = 'ACTIVE' and r.archived_at is null then
+      select count(*)::int into v_leaves from public.room_members m
+      join public.member_requests q on q.room_id = m.room_id and q.user_id = m.user_id   -- 0026
+      where m.room_id = p_room and m.status = 'ACTIVE' and q.leave_requested_at is not null;
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'today', to_char(v_today, 'YYYY-MM-DD'),
+    'id', r.id::text, 'slug', r.slug, 'title', r.title, 'intro', r.intro,
+    'descriptionMd', r.description_md, 'rulesMd', r.rules_md,
+    'status', lower(r.status), 'archived', r.archived_at is not null,
+    'isPublic', r.visibility = 'PUBLIC', 'joinMode', lower(r.join_mode),
+    'startDate', to_char(r.start_date, 'YYYY-MM-DD'), 'endDate', to_char(r.end_date, 'YYYY-MM-DD'),
+    'maxMembers', r.max_members, 'minMembers', r.min_members,
+    'memberCount', r.member_count,
+    'leader', public.person_json(r.leader_id), 'leaderDoesTasks', r.leader_does_tasks,
+    'tags', v_tags, 'members', v_members, 'me', public.room_me_json(p_room, p_uid),
+    'currentRound', v_current, 'rounds', v_rounds, 'stats', v_stats, 'myProgress', v_my,
+    'recruit', jsonb_build_object(
+      'open', public.room_recruit_open(r),
+      'extraUntil', case when r.status = 'ACTIVE' and public.room_recruit_open(r) then to_char(public.room_recruit_until(r), 'YYYY-MM-DD') end),   -- 0032 실효 마감
+    'invite', v_invite, 'pendingCount', v_pending, 'leaveRequestCount', v_leaves,
+    'myPermissions', jsonb_build_object('canEditCurriculum', public.can_edit_curriculum(r, p_uid)));
+end $$;
+
+
+-- room_matches ← 0004 판. 0032: status 'recruit' 가 추가 모집 창이 열린 ACTIVE 방도 포함(D5)
+create or replace function public.room_matches(p_room bigint, p_status text, p_q text, p_tags text[]) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.rooms r
+    where r.id = p_room
+      and (p_status = 'all' or r.status = upper(p_status)
+           -- 0032: 추가 모집도 '모집중'(D5). 실효 마감·NULL 가드는 room_recruit_open(→ room_recruit_until) 한 곳에서
+           or (p_status = 'recruit' and r.status = 'ACTIVE' and public.room_recruit_open(r)))
+      and (p_q is null
+           or r.title ilike '%' || public.like_escape(p_q) || '%'
+           or exists (select 1 from public.room_tags rt join public.tags t on t.slug = rt.tag_slug
+                      where rt.room_id = r.id
+                        and (t.label ilike '%' || public.like_escape(p_q) || '%'
+                             or exists (select 1 from unnest(t.aliases) a where a ilike '%' || public.like_escape(p_q) || '%'))))
+      and (p_tags is null or exists (select 1 from public.room_tags rt where rt.room_id = r.id and rt.tag_slug = any(p_tags))))
+$$;
+
+
+-- rooms_list ← 0024 판. 0032: 카드 isFull(모집 열림 ∧ 꽉 참) · recruitUntil(ACTIVE ∧ 창 열림일 때 실효 마감)
+create or replace function public.rooms_list(
+  p_scope text default 'public', p_status text default 'all', p_q text default null, p_tags text[] default null,
+  p_page int default 0, p_size int default 24, p_sort text default 'default')
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid    uuid := public.current_user_id();
+  v_today  date := public.kst_today();
+  v_scope  text := coalesce(p_scope, 'public');
+  v_status text := coalesce(p_status, 'all');
+  v_q      text := nullif(trim(coalesce(p_q, '')), '');
+  v_tags   text[] := case when p_tags is null or cardinality(p_tags) = 0 then null else p_tags end;
+  v_page   int := greatest(coalesce(p_page, 0), 0);
+  v_size   int := least(greatest(coalesce(p_size, 24), 1), 100);
+  v_sort   text := coalesce(p_sort, 'default');
+  v_total  int;
+  v_items  jsonb;
+  v_counts jsonb;
+  v_facets jsonb;
+begin
+  if v_scope not in ('public', 'mine', 'created') then
+    perform public.fail('VALIDATION_FAILED', 'scope 는 public·mine·created 중 하나예요', '{"field":"scope"}'::jsonb);
+  end if;
+  if v_status not in ('all', 'recruit', 'active', 'ended') then
+    perform public.fail('VALIDATION_FAILED', 'status 는 all·recruit·active·ended 중 하나예요', '{"field":"status"}'::jsonb);
+  end if;
+  if v_sort not in ('default', 'latest', 'startDate') then
+    perform public.fail('VALIDATION_FAILED', 'sort 는 default·latest·startDate 중 하나예요', '{"field":"sort"}'::jsonb);
+  end if;
+  if v_scope <> 'public' and v_uid is null then
+    perform public.fail('AUTH_REQUIRED', '로그인이 필요해요');
+  end if;
+
+  -- 탭 총계(0024, #19): 범위마다 현재 상태·검색어·태그 조건을 적용한 수 — 조건을 걸면 탭 숫자도 따라 바뀐다. 비로그인은 mine/created 0.
+  -- room_matches 는 방마다 한 번만(where 절) 평가하고, 범위 판정만 세 번 — 0004 고정값과 같은 스캔 한 번
+  select jsonb_build_object(
+    'public',  count(*) filter (where public.room_in_scope(r.id, 'public', v_uid)),
+    'mine',    count(*) filter (where v_uid is not null and public.room_in_scope(r.id, 'mine', v_uid)),
+    'created', count(*) filter (where v_uid is not null and public.room_in_scope(r.id, 'created', v_uid)))
+  into v_counts
+  from public.rooms r where r.archived_at is null and public.room_matches(r.id, v_status, v_q, v_tags);
+
+  -- 태그 facet: 현재 scope 집합(상태·검색·태그 미적용), count desc → label
+  select coalesce(jsonb_agg(jsonb_build_object('slug', f.slug, 'label', f.label, 'count', f.n) order by f.n desc, f.label), '[]'::jsonb)
+  into v_facets
+  from (
+    select t.slug, t.label, count(*)::int as n
+    from public.rooms r
+    join public.room_tags rt on rt.room_id = r.id
+    join public.tags t on t.slug = rt.tag_slug
+    where public.room_in_scope(r.id, v_scope, v_uid)
+    group by t.slug, t.label) f;
+
+  select count(*)::int into v_total
+  from public.rooms r
+  where public.room_in_scope(r.id, v_scope, v_uid) and public.room_matches(r.id, v_status, v_q, v_tags);
+
+  with page as (   -- 순서는 row_number() over (order by …) 로 고정(D5). 창 함수는 limit 전에 계산된다
+    select o.*
+    from (
+      select r.*, row_number() over (order by
+               case when v_sort = 'default' then case r.status when 'ACTIVE' then 0 when 'RECRUIT' then 1 when 'DRAFT' then 2 else 3 end end,
+               case when v_sort in ('default', 'startDate') then r.start_date end,
+               case when v_sort <> 'startDate' then r.created_at end desc, r.id desc) as ord   -- startDate: start_date asc, id desc
+      from public.rooms r
+      where public.room_in_scope(r.id, v_scope, v_uid) and public.room_matches(r.id, v_status, v_q, v_tags)) o
+    order by o.ord
+    limit v_size offset (v_page::bigint * v_size)   -- int 곱셈 22003 방지
+  ),
+  mem as (
+    select m.room_id, lower(m.role) as role, lower(m.status) as status
+    from public.room_members m
+    where v_uid is not null and m.user_id = v_uid and m.room_id in (select id from page)
+  ),
+  rs as (
+    select p.id as room_id, count(x.round_id)::int as total_rounds,
+           coalesce(sum(x.asg), 0)::int as asg, coalesce(sum(x.sub), 0)::int as sub
+    from page p left join lateral public.room_round_stats(p.id) x on true
+    group by p.id
+  ),
+  cur as (
+    select p.id as room_id, c.idx, c.label, c.title
+    from page p
+    cross join lateral (
+      select x.idx, x.label, x.title
+      from (select rr.round_id, rr.label, rr.title, row_number() over (order by rr.sort_order, rr.round_id)::int as idx
+            from public.room_round_stats(p.id) rr) x
+      where x.round_id = public.room_current_round_id(p.id, v_today)) c
+    where p.status = 'ACTIVE'
+  ),
+  does as (   -- 내가 담당 자격: ACTIVE 멤버, 그룹장은 leader_does_tasks
+    select p.id as room_id from page p
+    where v_uid is not null and exists (
+      select 1 from public.room_members m
+      where m.room_id = p.id and m.user_id = v_uid and m.status = 'ACTIVE' and (m.role = 'MEMBER' or p.leader_does_tasks))
+  ),
+  mine as (
+    select n.room_id, count(*) filter (where s.id is not null)::int as submitted, count(*)::int as assigned
+    from public.goal_nodes n
+    join public.task_assignments a on a.node_id = n.id and a.user_id = v_uid and a.released_at is null
+    left join public.submissions s on s.node_id = n.id and s.user_id = v_uid
+    where n.room_id in (select room_id from does) and n.task_type is not null and n.archived_at is null
+    group by n.room_id
+  ),
+  nxt as (   -- OPEN(start ≤ today ≤ end) ∧ 미제출 중 마감 빠른 것, 같은 날이면 트리 순서 (main §3-2, D14)
+    select distinct on (n.room_id) n.room_id, n.id as node_id, n.title, n.end_date
+    from public.goal_nodes n
+    join public.task_assignments a on a.node_id = n.id and a.user_id = v_uid and a.released_at is null
+    join public.goal_nodes rn on rn.id = n.round_id
+    left join public.submissions s on s.node_id = n.id and s.user_id = v_uid
+    where n.room_id in (select room_id from does) and n.task_type is not null and n.archived_at is null
+      and s.id is null and n.start_date <= v_today and n.end_date >= v_today
+    order by n.room_id, n.end_date, rn.sort_order, n.sort_order, n.id
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'id', p.id::text, 'slug', p.slug, 'title', p.title, 'intro', p.intro,
+    'status', lower(p.status),
+    -- 0032: 모집 열림(RECRUIT ∨ 추가 모집 창) ∧ 꽉 참
+    -- 주의(Codex 2-1): least(NULL, end_date) = end_date — 창이 없는 방을 걸러야 하므로 recruit_until is not null 가드 필수
+    'isFull', (p.status = 'RECRUIT'
+               or (p.status = 'ACTIVE' and p.recruit_until is not null and least(p.recruit_until, p.end_date) >= v_today))
+              and p.member_count >= p.max_members,
+    'recruitUntil', case when p.status = 'ACTIVE' and p.recruit_until is not null and least(p.recruit_until, p.end_date) >= v_today
+                         then to_char(least(p.recruit_until, p.end_date), 'YYYY-MM-DD') end,
+    'isPublic', p.visibility = 'PUBLIC', 'joinMode', lower(p.join_mode),
+    'memberCount', p.member_count, 'maxMembers', p.max_members,
+    'leader', public.person_json(p.leader_id), 'tags', public.room_tags_json(p.id),
+    'startDate', to_char(p.start_date, 'YYYY-MM-DD'), 'endDate', to_char(p.end_date, 'YYYY-MM-DD'),
+    'membership', case when mem.room_id is null then null else jsonb_build_object('role', mem.role, 'status', mem.status) end,
+    'progress', case
+      when p.status in ('RECRUIT', 'DRAFT') then jsonb_build_object('kind', 'recruit')
+      when p.status = 'ACTIVE' and d.room_id is not null then jsonb_build_object(
+        'kind', 'mine', 'submitted', coalesce(mi.submitted, 0), 'assigned', coalesce(mi.assigned, 0),
+        'nextTask', case when nx.node_id is null then null
+                         else jsonb_build_object('nodeId', nx.node_id::text, 'title', nx.title, 'dueDate', to_char(nx.end_date, 'YYYY-MM-DD')) end)
+      when p.status = 'ACTIVE' then jsonb_build_object(
+        'kind', 'team',
+        'currentRound', case when c.idx is null then null else jsonb_build_object('index', c.idx, 'label', c.label, 'title', c.title) end,
+        'totalRounds', rs.total_rounds)
+      else jsonb_build_object('kind', 'final', 'submitted', rs.sub, 'assigned', rs.asg, 'totalRounds', rs.total_rounds) end
+  ) order by p.ord), '[]'::jsonb)
+  into v_items
+  from page p
+  left join mem  on mem.room_id = p.id
+  left join rs   on rs.room_id = p.id
+  left join cur c on c.room_id = p.id
+  left join does d on d.room_id = p.id
+  left join mine mi on mi.room_id = p.id
+  left join nxt nx on nx.room_id = p.id;
+
+  return jsonb_build_object(
+    'today', to_char(v_today, 'YYYY-MM-DD'),
+    'items', v_items, 'page', v_page, 'size', v_size, 'totalElements', v_total,
+    'tabCounts', v_counts, 'tagFacets', v_facets);
+end $$;
+
+
+-- me_studies ← 0024 판(create or replace — 시그니처 동일, GRANT 유지). 0032: 추가 모집 대기 신청 → recruit 묶음, when.kind 'recruitEnd' (Codex #4)
+create or replace function public.me_studies(p_include_archived boolean default false) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid   uuid := public.require_user();
+  v_today date := public.kst_today();
+  v_out   jsonb;
+  v_arch  jsonb;
+begin
+  with mine as (
+    select r.id, r.slug, r.title, r.intro, r.start_date, r.end_date,
+           case when r.leader_id = v_uid then 'leader' when m.status = 'PENDING' then 'pending' else 'joined' end as membership,
+           -- 0032: 대기 신청은 방 상태와 무관하게 '모집중' 묶음(추가 모집 신청 포함)
+           case when m.status = 'PENDING' and r.leader_id <> v_uid then 'recruit'
+                when r.status = 'ACTIVE' then 'active' when r.status in ('RECRUIT', 'DRAFT') then 'recruit' else 'ended' end as kind,
+           public.room_recruit_until(r) as recruit_end   -- 0032: ACTIVE 추가 모집 실효 마감(아니면 null)
+    from public.rooms r
+    join public.room_members m on m.room_id = r.id and m.user_id = v_uid
+    where r.archived_at is null
+      -- 그룹장 분기: 방장은 room_members 행의 status 와 무관하게 자기 방을 항상 본다(DRAFT 포함). 멤버는 ACTIVE, 대기자는 모집 중인 방만.
+      -- 0032: 대기자 = RECRUIT·DRAFT 방, 또는 추가 모집 창이 열린 ACTIVE 방
+      and (r.leader_id = v_uid or m.status = 'ACTIVE'
+           or (m.status = 'PENDING' and (r.status in ('RECRUIT', 'DRAFT') or public.room_recruit_open(r))))),
+  due as (
+    -- 내 OPEN 과제(미제출, 기간 안, 보관 아님) 중 가장 빠른 마감
+    select n.room_id, min(n.end_date) as d
+    from public.goal_nodes n
+    join public.task_assignments a on a.node_id = n.id and a.user_id = v_uid and a.released_at is null
+    left join public.submissions s on s.node_id = n.id and s.user_id = v_uid
+    where n.task_type is not null and n.archived_at is null and s.id is null
+      and n.start_date <= v_today and v_today <= n.end_date
+    group by n.room_id),
+  items as (
+    select m.*, d.d,
+           jsonb_build_object('slug', m.slug, 'title', m.title, 'intro', m.intro, 'membership', m.membership, 'archived', false,
+             'when', case m.kind
+               when 'active'  then jsonb_build_object('kind', case when d.d is null then 'end' else 'deadline' end,
+                                                      'date', to_char(coalesce(d.d, m.end_date), 'YYYY-MM-DD'))
+               when 'recruit' then case when m.recruit_end is not null
+                                        then jsonb_build_object('kind', 'recruitEnd', 'date', to_char(m.recruit_end, 'YYYY-MM-DD'))   -- 0032
+                                        else jsonb_build_object('kind', 'start', 'date', to_char(m.start_date, 'YYYY-MM-DD')) end
+               else                jsonb_build_object('kind', 'end',   'date', to_char(m.end_date, 'YYYY-MM-DD')) end) as j
+    from mine m left join due d on d.room_id = m.id)
+  select jsonb_build_array(
+    jsonb_build_object('kind', 'active',  'items', coalesce((select jsonb_agg(j order by coalesce(d, end_date), id) from items where kind = 'active'),  '[]'::jsonb)),
+    jsonb_build_object('kind', 'recruit', 'items', coalesce((select jsonb_agg(j order by start_date, id)          from items where kind = 'recruit'), '[]'::jsonb)),
+    jsonb_build_object('kind', 'ended',   'items', coalesce((select jsonb_agg(j order by end_date desc, id)       from items where kind = 'ended'),   '[]'::jsonb)))
+  into v_out;
+  -- 0024 (#5): 보관된 방 — 내가 그룹장이거나 ACTIVE 멤버였던 방(활성 목록과 같은 자격). 보관 최신순
+  if coalesce(p_include_archived, false) then
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'slug', r.slug, 'title', r.title, 'intro', r.intro,
+             'membership', case when r.leader_id = v_uid then 'leader' else 'joined' end, 'archived', true,
+             'when', jsonb_build_object('kind', 'end', 'date', to_char(r.end_date, 'YYYY-MM-DD')))
+             order by r.archived_at desc, r.id), '[]'::jsonb)
+    into v_arch
+    from public.rooms r
+    join public.room_members m on m.room_id = r.id and m.user_id = v_uid
+    where r.archived_at is not null and (r.leader_id = v_uid or m.status = 'ACTIVE');
+    v_out := v_out || jsonb_build_array(jsonb_build_object('kind', 'archived', 'items', v_arch));
+  end if;
+  return jsonb_build_object('today', to_char(v_today, 'YYYY-MM-DD'), 'groups', v_out);
+end $$;
+
+-- curriculum_json ← 0024 판. 0032: members[].assignFrom (Codex #5) — 그룹장·ACTIVE/INACTIVE 멤버 호출에만(Codex 2-6)
+create or replace function public.curriculum_json(p_room bigint, p_uid uuid, p_include_archived boolean) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  r         public.rooms;
+  v_today   date := public.kst_today();
+  v_people  boolean;     -- 팀 과제 people 노출: 그룹장 | ACTIVE·INACTIVE·PENDING 멤버
+  v_viewer  boolean;     -- 남의 개인 목표 노출: 그룹장 | ACTIVE·INACTIVE 멤버 (0014)
+  v_members jsonb;
+  v_nodes   jsonb;
+  v_stats   jsonb;
+begin
+  select * into r from public.rooms where id = p_room;
+  v_people := p_uid is not null and (r.leader_id = p_uid or exists (
+    select 1 from public.room_members m where m.room_id = p_room and m.user_id = p_uid and m.status in ('ACTIVE', 'INACTIVE', 'PENDING')));
+  v_viewer := public.personal_viewer(p_room, p_uid);
+
+  select coalesce(jsonb_agg(
+           public.person_json(m.user_id) || jsonb_build_object(
+             'role', lower(m.role), 'status', lower(m.status),
+             'doesTasks', m.status = 'ACTIVE' and (m.role = 'MEMBER' or r.leader_does_tasks),
+             'canEditCurriculum', public.member_can_edit_curriculum(r, m))
+           -- 0032: 중간 합류자 공통 과제 배정 시작일(null = 처음부터). 방 사람(v_viewer)에게만 — 공개 방 익명·외부인에겐 키 없음(Codex 2-6)
+           || case when v_viewer then jsonb_build_object('assignFrom', to_char(m.assign_from, 'YYYY-MM-DD')) else '{}'::jsonb end
+           order by (m.role = 'LEADER') desc, m.joined_at nulls last, m.id), '[]'::jsonb)
+  into v_members
+  from public.room_members m
+  where m.room_id = p_room and m.status in ('ACTIVE', 'INACTIVE');
+
+  with recursive prog as materialized (
+    select * from public.room_progress(p_room)),
+  t as (
+    select n.*, array[n.sort_order::bigint, n.id] as path
+    from public.goal_nodes n where n.room_id = p_room and n.parent_id is null
+    union all
+    select c.*, t.path || array[c.sort_order::bigint, c.id]
+    from public.goal_nodes c join t on c.parent_id = t.id),
+  nodes as (
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'id', t.id::text, 'parentId', t.parent_id::text, 'roundId', t.round_id::text,
+             'depth', t.depth, 'sortOrder', t.sort_order, 'label', t.label, 'title', t.title,
+             'descriptionMd', t.description_md,
+             'startDate', to_char(t.start_date, 'YYYY-MM-DD'), 'endDate', to_char(t.end_date, 'YYYY-MM-DD'),
+             'archived', t.archived_at is not null,
+             'ownerId', t.owner_id::text,
+             'createdBy', case when t.created_by is null then null else public.person_json(t.created_by) end,   -- 0024
+             'assigned', coalesce(ps.asg, p.asg), 'submitted', coalesce(ps.sub, p.sub),
+             'pct', case when ps.asg is null then p.pct else public.pct(ps.asg, ps.sub) end,
+             'task', case
+               when t.task_type is null then null
+               when t.task_type = 'PERSONAL' then jsonb_build_object(
+                 'type', 'personal', 'assigned', ps.asg, 'submitted', ps.sub,
+                 'state', public.leaf_state(ps.asg, ps.sub, t.start_date, t.end_date, v_today),
+                 'people', jsonb_build_array(public.person_json(t.owner_id)
+                             || jsonb_build_object('status', public.task_code(t.start_date, t.end_date, ps.first_at, ps.late, v_today))))
+               else jsonb_build_object(
+                 'type', lower(t.task_type),
+                 'assigned', p.asg, 'submitted', p.sub,
+                 'state', public.leaf_state(p.asg, p.sub, t.start_date, t.end_date, v_today),
+                 -- people 은 의도적으로 멤버 순서(그룹장, joined_at, id) — room_get 의 assigned_at 순서와 다르다
+                 'people', case when not v_people then '[]'::jsonb else coalesce((
+                   select jsonb_agg(public.person_json(a.user_id)
+                            || jsonb_build_object('status', public.task_code(t.start_date, t.end_date, s.first_submitted_at, s.is_late, v_today))
+                            order by (m.role = 'LEADER') desc, m.joined_at nulls last, m.id)
+                   from public.task_assignments a
+                   join public.room_members m on m.room_id = p_room and m.user_id = a.user_id
+                   left join public.submissions s on s.node_id = a.node_id and s.user_id = a.user_id
+                   where a.node_id = t.id and a.released_at is null and t.archived_at is null), '[]'::jsonb) end) end)
+             order by t.path), '[]'::jsonb) as j
+    from t
+    join prog p on p.node_id = t.id
+    left join lateral (
+      select case when t.archived_at is null then 1 else 0 end as asg,
+             case when t.archived_at is null and s.id is not null then 1 else 0 end as sub,
+             s.first_submitted_at as first_at, s.is_late as late
+      from (select 1) one
+      left join public.submissions s on s.node_id = t.id and s.user_id = t.owner_id) ps on t.task_type = 'PERSONAL'
+    where (p_include_archived or t.archived_at is null)
+      and (t.owner_id is null or t.owner_id = p_uid or v_viewer)),
+  stats as (
+    select jsonb_build_object(
+      'overallPct', public.pct(coalesce(sum(p.asg), 0)::int, coalesce(sum(p.sub), 0)::int),
+      'leafCount', count(*),
+      'unassignedCount', count(*) filter (where n.task_type = 'DESIGNATED' and p.asg = 0)) as j
+    from public.goal_nodes n join prog p on p.node_id = n.id
+    where n.room_id = p_room and n.task_type in ('COMMON', 'DESIGNATED') and n.archived_at is null)
+  select (select j from nodes), (select j from stats) into v_nodes, v_stats;
+
+  return jsonb_build_object(
+    'today', to_char(v_today, 'YYYY-MM-DD'),
+    'room', jsonb_build_object('slug', r.slug, 'status', lower(r.status), 'leaderDoesTasks', r.leader_does_tasks),
+    'members', v_members, 'nodes', v_nodes, 'stats', v_stats,
+    'myPermissions', jsonb_build_object('canEditCurriculum', public.can_edit_curriculum(r, p_uid)),
+    'personal', jsonb_build_object(
+      'canAdd', r.archived_at is null and r.status in ('RECRUIT', 'ACTIVE') and public.personal_eligible(p_room, p_uid),
+      'perRound', public.personal_limit()));
+end $$;
+

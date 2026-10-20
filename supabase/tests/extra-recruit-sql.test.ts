@@ -86,7 +86,7 @@ cases("extra recruit 0032 · schema & helpers", db, [
 ]);
 
 // ───────── Task 2: 추가 모집 창 · 관문 · 승인 · tick · MEMBER_JOINED ─────────
-// (room_detail_json/room_get 의 `recruit` 키는 Task 4 — 여기선 rooms 열·RPC 반환의 다른 필드로 창 상태를 본다)
+// (room_detail_json/room_get 의 `recruit` 키 단언은 Task 4 에서 함께 추가)
 const until = async (q: Q, slug: string) =>
   (await one(q, "select to_char(recruit_until, 'YYYY-MM-DD') as v from public.rooms where slug = $1", [slug])).v as string | null;
 const effUntil = async (q: Q, slug: string) =>
@@ -108,6 +108,7 @@ cases("extra recruit 0032 · window", db, [
     assertEquals(await until(q, "aws"), null);                                       // 실패한 시도는 아무것도 남기지 않는다
     const d = await openExtra(q, "aws", "2026-11-11", 7, "direct");                  // 경계 = 오늘+30
     assertEquals([d.maxMembers, d.joinMode, d.status], [7, "direct", "active"]);
+    assertEquals(d.recruit, { open: true, extraUntil: "2026-11-11" });
     assertEquals(await until(q, "aws"), "2026-11-11");
     assertEquals(await recruitOpen(q, "aws"), true);
     await as(q, "서연");
@@ -175,6 +176,7 @@ cases("extra recruit 0032 · window", db, [
     await as(q, "민수");
     const d = await rpc(q, "public.room_extra_recruit_close('aws')");
     assertEquals(d.pendingCount, 0);
+    assertEquals(d.recruit, { open: false, extraUntil: null });
     assertEquals(await until(q, "aws"), null);
     for (const u of [seoyeon, gaeun]) assertEquals((await memberRow(q, "aws", u)).status, "EXPIRED");
     assertEquals((await notes(q, "서연", "JOIN_EXPIRED", "aws")).length, 1);
@@ -233,6 +235,7 @@ cases("extra recruit 0032 · window", db, [
     await expectFail(rpc(q, "public.room_approve('aws', $1::uuid)", [seoyeon]), "ROOM_NOT_RECRUITING");   // 지난 창은 승인 불가
     const d = await openExtra(q, "aws", "2026-10-20");
     assertEquals(d.pendingCount, 0);
+    assertEquals(d.recruit, { open: true, extraUntil: "2026-10-20" });
     assertEquals(await until(q, "aws"), "2026-10-20");
     assertEquals((await memberRow(q, "aws", seoyeon)).status, "EXPIRED");
     assertEquals((await notes(q, "서연", "JOIN_EXPIRED", "aws")).length, 1);
@@ -301,6 +304,7 @@ cases("extra recruit 0032 · window", db, [
     await rpc(q, "public.room_update($1, $2::jsonb)", [r.slug, JSON.stringify({ endDate: "2026-11-08" })]);   // 실제 단축(마지막 과제 11/07 이후)
     assertEquals(await until(q, r.slug), "2026-11-11");                                   // 저장값은 그대로
     assertEquals(await effUntil(q, r.slug), "2026-11-08");                                // 실효 마감은 종료일로 잘림
+    assertEquals((await rpc(q, "public.room_get($1)", [r.slug])).recruit, { open: true, extraUntil: "2026-11-08" });
     await setToday(q, "2026-11-09");
     assertEquals(await recruitOpen(q, r.slug), false);                                    // tick 전에도 닫힘
     await asUser(q, USERS.현우);
@@ -454,5 +458,67 @@ cases("extra recruit 0032 · invite", db, [
     for (const f of ["public.room_join_by_invite(text, text)", "public.invite_json(public.room_invites, public.rooms)", "public.invite_bypass_ok(public.room_invites, public.rooms)"]) {
       assertEquals(await can("authenticated", f), false, f);
     }
+  } },
+]);
+
+// ───────── Task 4: 읽기 경로 — rooms_list · room_get · me_studies · curriculum_json ─────────
+cases("extra recruit 0032 · reads", db, [
+  { name: "list: recruit filter includes extra window; card fields; still under active", run: async (q) => {
+    await as(q, "민수");
+    await openExtra(q, "aws", "2026-10-19");
+    await asAnon(q);
+    const rec = await rpc(q, "public.rooms_list('public', 'recruit')");
+    const aws = (rec.items as Row[]).find((x) => x.slug === "aws")!;
+    assertEquals([aws.status, aws.recruitUntil, aws.isFull], ["active", "2026-10-19", false]);
+    assert(((await rpc(q, "public.rooms_list('public', 'active')")).items as Row[]).some((x) => x.slug === "aws"));
+    // 창 없는 ACTIVE 방: least(NULL, end_date) 회귀 방지(Codex 2-1) — 꽉 차도 isFull false, recruitUntil null
+    await q("update public.rooms set member_count = max_members where slug = 'react'");
+    const react = ((await rpc(q, "public.rooms_list('public', 'active')")).items as Row[]).find((x) => x.slug === "react")!;
+    assertEquals([react.recruitUntil, react.isFull], [null, false]);
+    assert(!((await rpc(q, "public.rooms_list('public', 'recruit')")).items as Row[]).some((x) => x.slug === "react"));
+    await q("update public.rooms set member_count = max_members where slug = 'aws'");
+    const full = ((await rpc(q, "public.rooms_list('public', 'recruit')")).items as Row[]).find((x) => x.slug === "aws")!;
+    assertEquals(full.isFull, true);
+    await setToday(q, "2026-10-20");
+    assert(!((await rpc(q, "public.rooms_list('public', 'recruit')")).items as Row[]).some((x) => x.slug === "aws"));
+  } },
+  { name: "detail: recruit for everyone; invite (code, bypass) only for leader", run: async (q) => {
+    await as(q, "민수");
+    await rpc(q, "public.invite_get('aws')");                       // seed 행 코드 채우기
+    await openExtra(q, "aws", "2026-10-19");
+    await asAnon(q);
+    const anon = await rpc(q, "public.room_get('aws')");
+    assertEquals([anon.recruit, anon.invite], [{ open: true, extraUntil: "2026-10-19" }, null]);
+    await as(q, "지은");
+    assertEquals((await rpc(q, "public.room_get('aws')")).invite, null);
+    await as(q, "민수");
+    const d = await rpc(q, "public.room_get('aws')");
+    assertEquals([d.invite.url, d.invite.token, d.invite.bypass, "today" in d.invite], ["/invite/seed-aws", "seed-aws", null, false]);
+    assertMatch(d.invite.code, CODE_RE);
+    assertEquals((await rpc(q, "public.room_get('toeic')")).recruit, { open: true, extraUntil: null });
+  } },
+  { name: "me_studies: PENDING in an open extra window shows under recruit with recruitEnd; hidden once closed (Codex #4)", run: async (q) => {
+    await as(q, "민수"); await openExtra(q, "aws", "2026-10-19");
+    await as(q, "서연"); await rpc(q, "public.room_apply('aws')");
+    const g = (await rpc(q, "public.me_studies()")).groups as Row[];
+    const rec = g.find((x) => x.kind === "recruit")!.items as Row[];
+    const it = rec.find((x) => x.slug === "aws")!;
+    assertEquals([it.membership, it.when], ["pending", { kind: "recruitEnd", date: "2026-10-19" }]);
+    assert(!(g.find((x) => x.kind === "active")!.items as Row[]).some((x) => x.slug === "aws"));
+    await setToday(q, "2026-10-20");                                                   // 창 지남(tick 전)
+    assert(!((await rpc(q, "public.me_studies()")).groups as Row[]).flatMap((x) => x.items as Row[]).some((x) => x.slug === "aws"));
+  } },
+  { name: "curriculum_json: members carry assignFrom (null for recruit-phase members) (Codex #5)", run: async (q) => {
+    await as(q, "민수"); await rpc(q, "public.invite_bypass_set('aws', '2026-10-19'::date, null)");
+    await as(q, "서연"); await rpc(q, "public.invite_join('seed-aws')");
+    await as(q, "민수");
+    const ms = (await rpc(q, "public.curriculum_get('aws', true)")).members as Row[];
+    assertEquals(ms.find((m) => m.nickname === "서연")!.assignFrom, "2026-10-12");
+    assertEquals(ms.find((m) => m.nickname === "지은")!.assignFrom, null);
+    // 공개 방이라도 익명·외부인에게는 키 자체가 없다 (Codex 2-6)
+    await asAnon(q);
+    assert(((await rpc(q, "public.curriculum_get('aws', false)")).members as Row[]).every((m) => !("assignFrom" in m)));
+    await as(q, "예린");
+    assert(((await rpc(q, "public.curriculum_get('aws', false)")).members as Row[]).every((m) => !("assignFrom" in m)));
   } },
 ]);

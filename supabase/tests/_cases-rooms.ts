@@ -113,7 +113,7 @@ export const ROOM_CASES: Case[] = [
       assertEquals(await n(), before);
       // invite_get 이 만들면 다시 보인다
       const [{ g }] = await q(`select public.invite_get($1) as g`, ["docker"]);
-      assertEquals((await q(`select public.room_get($1) as r`, ["docker"]))[0].r.invite, { url: g.url });
+      assertEquals((await q(`select public.room_get($1) as r`, ["docker"]))[0].r.invite, { token: g.token, url: g.url, code: g.code, bypass: g.bypass });   // 0032: invite_json − today
     },
   },
   {
@@ -729,7 +729,7 @@ export const ROOM_CASES: Case[] = [
       await setToday(q, TODAY);
       await asUser(q, USERS.가은);
       const [{ a }] = await q(`select public.room_get($1) as a`, ["sqld"]);
-      assertEquals([a.me, a.pendingCount, a.invite], [{ state: "leader" }, 1, { url: "/invite/seed-sqld" }]);
+      assertEquals([a.me, a.pendingCount, a.invite], [{ state: "leader" }, 1, { token: "seed-sqld", url: "/invite/seed-sqld", code: null, bypass: null }]);   // 0032: seed 행은 invite_get 전까지 code null
       assertEquals(a.members.map((m: any) => m.nickname), ["가은"]);                 // 타인의 PENDING 은 members 에 없음
       await asUser(q, USERS.철수);
       const [{ b }] = await q(`select public.room_get($1) as b`, ["sqld"]);
