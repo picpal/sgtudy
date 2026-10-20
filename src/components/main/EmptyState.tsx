@@ -8,7 +8,7 @@ type Props = { q: string; tab: Tab; status: StatusFilter; tagLabels: string[]; o
 const cta = "mt-2 flex h-11 items-center rounded-[12px] bg-navy px-[18px] text-[14px] font-semibold text-white hover:text-white";
 
 export function EmptyState({ q, tab, status, tagLabels, onReset, onClearQuery, onBrowse }: Props) {
-  const { title, body, action } = emptyCopy(q.trim(), tab, status, tagLabels);
+  const { title, body, action, secondary } = emptyCopy(q.trim(), tab, status, tagLabels);
   return (
     <div className="mb-6 flex flex-col items-center gap-3 rounded-[20px] border border-dashed border-line-dash bg-surface px-6 py-16 text-center">
       <svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true">
@@ -33,6 +33,11 @@ export function EmptyState({ q, tab, status, tagLabels, onReset, onClearQuery, o
         <button type="button" onClick={onReset} className={cta}>
           {q.trim() ? "필터·검색어 초기화" : "필터 초기화"}
         </button>
+      )}
+      {secondary === "join-code" && (
+        <Link href={routes.join()} className="flex min-h-11 items-center text-[13px] font-semibold text-mint">
+          초대 코드가 있나요?
+        </Link>
       )}
       {action === "clear" && (
         <>

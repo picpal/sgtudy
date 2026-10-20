@@ -6,10 +6,11 @@ import { useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ReasonField } from "@/components/ui/ReasonField";
 import { toApiError } from "@/lib/api/errors";
+import { recruitErrorText } from "@/lib/api/recruit";
 import { inviteActionOf, joinByInvite, type InviteAction } from "@/lib/api/invite";
 import type { InvitePreview } from "@/lib/api/types";
 import { JOIN_MODE_LABEL } from "@/lib/types";
-import { periodLong } from "@/lib/api/format";
+import { mmdd, periodLong } from "@/lib/api/format";
 import { PAL } from "@/lib/palette";
 import { routes } from "@/lib/routes";
 import { AuthShell } from "./AuthShell";
@@ -37,6 +38,11 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
       const err = toApiError(e);
       if (err.code === "AUTH_REQUIRED") return router.push(routes.login(routes.invite(token)));
       if (err.code === "ONBOARDING_REQUIRED") return router.push(routes.onboarding(routes.invite(token)));
+      if (err.code === "INVITE_EXPIRED") {
+        setError(recruitErrorText(err.code, err.message));
+        router.refresh(); // 미리보기를 다시 받는다
+        return;
+      }
       setError(err.message);
     } finally {
       setBusy(false);
@@ -64,12 +70,12 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
           <>
             {act === "apply" && <ReasonField value={message} onChange={setMessage} label="그룹장에게 한마디 (선택)" placeholder="자기소개나 참여 계획을 짧게 남겨 주세요" />}
           <button type="button" onClick={go} disabled={busy} className={`${primary} bg-navy disabled:bg-slate-soft disabled:text-muted`}>
-            {busy ? "처리 중…" : act === "join" ? "참가하기" : "참가 신청"}
+            {busy ? "처리 중…" : act === "join" ? (p.join?.via === "invite" ? "바로 참가하기" : "참가하기") : "참가 신청"}
           </button>
           </>
         );
       default: {
-        const text = act === "inactive" ? "이탈 처리된 멤버예요" : act === "full" ? "정원 마감" : act === "ended" ? "종료된 스터디예요" : "이미 진행 중인 스터디예요";
+        const text = act === "inactive" ? "이탈 처리된 멤버예요" : act === "full" ? "정원 마감" : act === "ended" ? "종료된 스터디예요" : "모집이 끝났어요 · 그룹장에게 새 초대를 받아 주세요";
         return <button type="button" disabled className="h-12 rounded-[24px] bg-slate-soft text-[15px] font-semibold text-muted">{text}</button>;
       }
     }
@@ -96,6 +102,15 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
           </div>
         )}
       </div>
+      {r.status === "active" && p.join?.mode && (
+        <div role="note" className="flex flex-col gap-1 rounded-[12px] bg-bg px-4 py-3 text-[13px] leading-[1.6] text-ink-2">
+          <p className="m-0">
+            <b className="font-semibold text-ink">진행중인 스터디예요</b> · 오늘 이후 마감인 과제부터 함께해요. 지난 회차 기록은 볼 수 있어요.
+          </p>
+          {p.join.via === "invite" && p.join.until && <p className="m-0 font-semibold text-ink">초대로 바로 참가 · {mmdd(p.join.until)}까지</p>}
+          {p.join.via === "extra" && p.join.until && <p className="m-0 font-semibold text-ink">추가 모집 · {mmdd(p.join.until)}까지</p>}
+        </div>
+      )}
       {error && <p role="alert" className="m-0 text-[13px] text-warn">{error}</p>}
       <div className="flex flex-col gap-2">{cta()}</div>
     </AuthShell>

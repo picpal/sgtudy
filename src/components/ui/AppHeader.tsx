@@ -224,6 +224,9 @@ export function AppHeader({ active, children, bell }: Props) {
                 <Link role="menuitem" href={routes.me()} onClick={() => setOpen(false)} className="flex h-11 items-center rounded-[10px] px-3 text-[14px] font-medium text-ink hover:bg-bg">
                   내 프로필
                 </Link>
+                <Link role="menuitem" href={routes.join()} onClick={() => setOpen(false)} className="flex h-11 items-center rounded-[10px] px-3 text-[14px] font-medium text-ink hover:bg-bg">
+                  초대 코드 입력
+                </Link>
                 <button role="menuitem" type="button" onClick={logout} className="flex h-11 items-center rounded-[10px] px-3 text-left text-[14px] font-medium text-ink hover:bg-bg">
                   로그아웃
                 </button>

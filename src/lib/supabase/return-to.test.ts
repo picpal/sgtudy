@@ -3,7 +3,8 @@ import { isProtectedPath, loginUrl, safeReturnTo } from "./return-to";
 
 describe("isProtectedPath", () => {
   it("protects my-study, schedule, tasks, me, rooms/new", () => {
-    for (const p of ["/my-study", "/my-study/aws", "/schedule", "/tasks", "/me", "/rooms/new"]) expect(isProtectedPath(p)).toBe(true);
+    for (const p of ["/my-study", "/my-study/aws", "/schedule", "/tasks", "/me", "/rooms/new", "/join"]) expect(isProtectedPath(p)).toBe(true);
+    expect(isProtectedPath("/joinx")).toBe(false);
   });
   it("leaves public pages alone", () => {
     for (const p of ["/", "/rooms", "/rooms/aws", "/login", "/invite/abc", "/onboarding"]) expect(isProtectedPath(p)).toBe(false);
@@ -18,6 +19,12 @@ describe("safeReturnTo", () => {
     expect(safeReturnTo("/tasks")).toBe("/tasks");
     expect(safeReturnTo("/tasks?group=due&scope=all")).toBe("/tasks?group=due&scope=all");
     expect(safeReturnTo("/invite/abc123")).toBe("/invite/abc123");
+    expect(safeReturnTo("/join")).toBe("/join");
+    expect(safeReturnTo("/join?code=K7QM3XPA")).toBe("/join?code=K7QM3XPA");
+    expect(safeReturnTo("/join/x")).toBe("/join/x");
+  });
+  it("rejects look-alikes of /join", () => {
+    for (const bad of ["/joinx", "/joinx?code=1", "/join%2Fx"]) expect(safeReturnTo(bad)).toBe("/");
   });
   it("falls back to / for anything else (Review Focus 2)", () => {
     for (const bad of [null, undefined, "", "/", "/me", "//evil.com", "/\\evil.com", "https://evil.com", "/rooms/../me",

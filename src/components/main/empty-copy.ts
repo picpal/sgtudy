@@ -5,7 +5,8 @@ const STATUS_LABEL: Record<Exclude<StatusFilter, "all">, string> = { recruit: "�
 
 /** create: 방 만들기 · browse: 전체 공개 방 탭으로 · reset: 상태·태그 필터(와 검색어) 초기화 · clear: 검색어 지우기(방 만들기는 보조) */
 export type EmptyAction = "create" | "browse" | "reset" | "clear";
-export type EmptyCopy = { title: string; body: string; action: EmptyAction };
+/** secondary: 주 버튼 아래 보조 링크 — join-code: 초대 코드 입력(/join) */
+export type EmptyCopy = { title: string; body: string; action: EmptyAction; secondary?: "join-code" };
 
 /**
  * 빈 상태 문구 — spec main §4 우선순위에, 걸려 있는 상태·태그 필터를 알려 주는 갈래를 더했다(Q3-15).
@@ -20,6 +21,6 @@ export function emptyCopy(q: string, tab: Tab, status: StatusFilter, tagLabels: 
   }
   if (filters) return { title: "조건에 맞는 방이 없어요", body: `${filters} 필터에 맞는 방이 없어요.`, action: "reset" };
   if (tab === "created") return { title: "아직 만든 방이 없어요", body: BODY, action: "create" };
-  if (tab === "mine") return { title: "참가한 방이 없어요", body: "마음에 드는 스터디를 찾아 참가해 보세요.", action: "browse" };
+  if (tab === "mine") return { title: "참가한 방이 없어요", body: "마음에 드는 스터디를 찾아 참가해 보세요.", action: "browse", secondary: "join-code" };
   return { title: "조건에 맞는 방이 없어요", body: BODY, action: "create" };
 }

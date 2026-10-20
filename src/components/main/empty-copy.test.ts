@@ -19,6 +19,7 @@ describe("emptyCopy", () => {
     expect(emptyCopy("", "mine", "ended", [])).toEqual({ title: "조건에 맞는 방이 없어요", body: "종료 필터에 맞는 방이 없어요.", action: "reset" });
   });
   it("empty 내가 참가한 방 → browse CTA (Q3-16)", () => {
-    expect(emptyCopy("", "mine", "all", [])).toEqual({ title: "참가한 방이 없어요", body: "마음에 드는 스터디를 찾아 참가해 보세요.", action: "browse" });
+    expect(emptyCopy("", "mine", "all", [])).toEqual({ title: "참가한 방이 없어요", body: "마음에 드는 스터디를 찾아 참가해 보세요.", action: "browse", secondary: "join-code" });
+    expect(emptyCopy("", "created", "all", [])).not.toHaveProperty("secondary");
   });
 });

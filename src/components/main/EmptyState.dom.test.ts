@@ -15,3 +15,12 @@ describe("EmptyState 초기화 버튼 (Q3-5)", () => {
   it("검색어 + 필터: 둘 다 지운다고 말한다", () => expect(labels("aws", "recruit", ["SQL"])).toEqual(["필터·검색어 초기화"]));
   it("필터만: 필터 초기화", () => expect(labels("", "recruit", [])).toEqual(["필터 초기화"]));
 });
+
+describe("EmptyState 초대 코드 보조 링크 (0032)", () => {
+  it("내가 참가한 방이 비면 '초대 코드가 있나요?' → /join", () => {
+    const root = document.createElement("div");
+    root.innerHTML = renderToStaticMarkup(createElement(EmptyState, { q: "", tab: "mine", status: "all", tagLabels: [], onReset: () => {}, onClearQuery: () => {}, onBrowse: () => {} }));
+    const a = Array.from(root.querySelectorAll("a")).find((x) => x.textContent === "초대 코드가 있나요?");
+    expect(a?.getAttribute("href")).toBe("/join");
+  });
+});

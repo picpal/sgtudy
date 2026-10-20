@@ -21,6 +21,7 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 const { updateSession } = await import("./middleware");
+const { safeReturnTo } = await import("./return-to");
 
 describe("updateSession without Supabase env (I2)", () => {
   const saved = { url: process.env.NEXT_PUBLIC_SUPABASE_URL, key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY };
@@ -59,6 +60,17 @@ describe("updateSession guard via getClaims", () => {
     const res = await updateSession(new NextRequest("http://localhost:3000/my-study/aws?tab=gantt"));
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toBe("http://localhost:3000/login?returnTo=%2Fmy-study%2Faws%3Ftab%3Dgantt");
+  });
+
+  it("unauthenticated /join?code=… → /login?returnTo keeps the code, and the login page's safeReturnTo returns it intact", async () => {
+    auth.claims = null;
+    const res = await updateSession(new NextRequest("http://localhost:3000/join?code=k7qm-3xpa"));
+    const loc = new URL(res.headers.get("location")!);
+    expect(loc.pathname).toBe("/login");
+    const back = loc.searchParams.get("returnTo");
+    expect(back).toBe("/join?code=k7qm-3xpa");
+    expect(safeReturnTo(back)).toBe("/join?code=k7qm-3xpa"); // LoginScreen 이 로그인 뒤 router.push 하는 값
+    expect(new URL(back!, "http://x").searchParams.get("code")).toBe("k7qm-3xpa"); // /join 페이지가 칸을 채우는 값
   });
 
   it("lets an anonymous visitor through public routes", async () => {

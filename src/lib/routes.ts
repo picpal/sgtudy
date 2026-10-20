@@ -46,6 +46,8 @@ export const routes = {
   me: () => "/me",
   /** 초대 링크 진입 (§4.12) */
   invite: (token: string) => `/invite/${token}`,
+  /** 초대 코드 입력 (0032) */
+  join: (code?: string) => (code ? `/join?code=${encodeURIComponent(code)}` : "/join"),
 } as const;
 
 /** 내 스터디 탭 키 — StudyHeaderInfo 의 TabId 가 이 목록에서 나온다(설정 "이전 페이지" from 검증이 같은 목록을 쓴다) */
