@@ -1,14 +1,15 @@
 import { rpc, type ApiError, type Db } from "@/lib/api/errors";
 import { mmdd, ymd } from "@/lib/api/format";
+import { recruitErrorText } from "@/lib/api/recruit";
 import { diffDays } from "@/lib/date";
-import type { MembershipResult, Person, RoomDetail, RoomStatusDto } from "@/lib/api/types";
+import type { InviteBypass, MembershipResult, Person, RoomDetail, RoomStatusDto } from "@/lib/api/types";
 
 /* 그룹장 패널(plan 06 P0) — 상태 액션 · 초대 링크 · 승인 대기. 모든 RPC 는 그룹장 전용(NOT_LEADER) */
 
 /** message: 참가 신청 한마디(0024 D4 — 없으면 null) */
 export type Applicant = Person & { appliedAt: string; message?: string | null };
 export type Applications = { today: string; items: Applicant[] };
-export type InviteLink = { today: string; token: string; url: string };
+export type InviteLink = { today: string; token: string; url: string; code: string | null; bypass: InviteBypass | null };
 /** room_start 경고 — 담당자 없는 지정 과제 · (일정을 당겼을 때) 방 기간 밖 노드 */
 export type StartWarning = { code: "UNASSIGNED_TASK" | "PERIOD_OUTSIDE_ROOM" | (string & {}); nodeId: string };
 /** 0024 D1 — 실제로 당긴 날수(0 = 안 당김)·옮긴 노드 수(보관 포함) */
@@ -44,9 +45,10 @@ export function openRecruitNote(d: Pick<RoomDetail, "isPublic" | "joinMode">): s
   return `${who} ${d.joinMode === "approval" ? "참가 신청할 수 있어요 · 신청은 여기서 승인해요" : "바로 참가할 수 있어요"}`;
 }
 
-/** 승인 대기 목록을 보여 줄지 — 모집중이고 승인제이거나, 대기자가 남아 있을 때(참가 방식을 바꾼 뒤에도 처리할 수 있게) */
-export const showApplications = (d: Pick<RoomDetail, "status" | "joinMode" | "pendingCount" | "archived">) =>
-  !d.archived && d.status === "recruit" && (d.joinMode === "approval" || d.pendingCount > 0);
+/** 승인 대기 목록을 보여 줄지 — 모집 열림(모집중·추가 모집)이고 승인제이거나, 대기자가 남아 있을 때(참가 방식을 바꾼 뒤에도 처리할 수 있게) */
+export const showApplications = (d: Pick<RoomDetail, "status" | "joinMode" | "pendingCount" | "archived"> & { recruit?: RoomDetail["recruit"] }) =>
+  !d.archived && (d.status === "recruit" || d.status === "active") &&
+  (((d.recruit?.open ?? d.status === "recruit") && d.joinMode === "approval") || d.pendingCount > 0);
 
 /** /invite/{token} → 이 사이트의 절대 주소 */
 export const absoluteUrl = (path: string, origin: string) => new URL(path, origin).href;
@@ -67,6 +69,9 @@ export function leaderErrorText(code: string, message: string): string {
       return "이미 처리된 신청이에요";
     case "ROOM_NOT_RECRUITING":
       return "모집중인 방에서만 신청을 처리할 수 있어요";
+    case "CAPACITY_NO_SEAT":
+    case "INVITE_EXPIRED":
+      return recruitErrorText(code, message);
     default:
       return message || "처리하지 못했어요 · 잠시 후 다시 시도해 주세요";
   }

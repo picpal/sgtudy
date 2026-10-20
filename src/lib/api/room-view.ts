@@ -22,12 +22,12 @@ export const firstParam = (v: string | string[] | undefined): string | undefined
 export const leaveRoom = (slug: string) => rpc<MembershipResult>("room_leave", { p_slug: slug });
 export const cancelApplication = (slug: string) => rpc<MembershipResult>("room_cancel_application", { p_slug: slug });
 
-type ActionInput = Pick<RoomDetail, "status" | "joinMode" | "memberCount" | "maxMembers" | "me"> & { archived?: boolean };
+type ActionInput = Pick<RoomDetail, "status" | "joinMode" | "memberCount" | "maxMembers" | "me"> & { archived?: boolean; recruit?: RoomDetail["recruit"] };
 
-/** 지금 참가할 수 없는 방 상태 — 비로그인도 로그인 전에 알 수 있게 먼저 보여 준다 (Q2-11) */
-export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "maxMembers">): "ended" | "activeClosed" | "full" | null {
+/** 지금 참가할 수 없는 방 상태 — 비로그인도 로그인 전에 알 수 있게 먼저 보여 준다 (Q2-11). 진행중이라도 추가 모집 창이 열려 있으면 닫힘이 아니다(0032) */
+export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "maxMembers"> & { recruit?: RoomDetail["recruit"] }): "ended" | "activeClosed" | "full" | null {
   if (d.status === "ended") return "ended";
-  if (d.status === "active") return "activeClosed";
+  if (d.status === "active" && !d.recruit?.open) return "activeClosed";
   if (d.memberCount >= d.maxMembers) return "full";
   return null;
 }

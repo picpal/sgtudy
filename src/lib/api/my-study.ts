@@ -147,7 +147,7 @@ export function toSidebarGroups(ms: MeStudies, today: string): SidebarGroup[] {
         const w = it.when;
         // 진행중 방에 열린 과제가 없으면 서버는 kind "end"(방 종료일)를 준다 → "MM.DD 까지" (preflight C5). 올해가 아니면 연도까지(Q2-13)
         const d = dateShort(w.date, today);
-        const when = w.kind === "deadline" ? `${d} 마감` : w.kind === "start" ? `${d} 시작` : g.kind === "active" ? `${d} 까지` : `${d} 종료`;
+        const when = w.kind === "deadline" ? `${d} 마감` : w.kind === "start" ? `${d} 시작` : w.kind === "recruitEnd" ? `${d} 모집 마감` : g.kind === "active" ? `${d} 까지` : `${d} 종료`;
         return w.kind === "deadline" ? { id: it.slug, title: it.title, intro: it.intro, when, left: diffDays(today, w.date) } : { id: it.slug, title: it.title, intro: it.intro, when };
       }),
     }));

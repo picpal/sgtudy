@@ -342,3 +342,29 @@ it("isDirty counts attachment overrides; dropFieldOv drops them", () => {
 it("stripFieldOv resets attachment overrides", () => {
   expect(stripFieldOv({ ...EMPTY_OVERRIDES, files: { "21": ["f1"] } }).files).toEqual({});
 });
+
+describe("late joiner (assignFrom) — preview equals server assignment_resync", () => {
+  const late = { userId: "u6", nickname: "서연", tone: "amber" as const, role: "member" as const, status: "active" as const, doesTasks: true, canEditCurriculum: false, assignFrom: "2026-10-12" };
+  const cur = { ...AWS, members: [...AWS.members, late] };
+  const ids = (t: ReturnType<typeof buildTree>, id: string) => (t.nodes.find((n) => n.id === id) as LeafNode).people.map((p) => p.userId);
+  it("temp leaf under a past round (ends 10/07) excludes the late joiner", () => {
+    const t = buildTree(cur, { ...EMPTY_OVERRIDES, added: { "1": ["지난 과제"] } }, REF_DAY);
+    const temp = t.nodes.find((n) => n.temp && n.leaf)!;
+    expect(ids(t, temp.id)).not.toContain("u6");
+  });
+  it("designated → 공통 on a leaf ending 10/14 includes the late joiner", () => {
+    expect(ids(buildTree(cur, { ...EMPTY_OVERRIDES, typeOv: { "21": "공통" } }, REF_DAY), "21")).toContain("u6");
+  });
+  it("designated → 공통 on a PAST leaf drops a late joiner who was designated there (server releases DESIGNATED first)", () => {
+    const past = { ...cur, nodes: cur.nodes.map((n) => n.id !== "21" ? n : { ...n, endDate: "2026-10-10",
+      task: { ...n.task!, people: [...n.task!.people, { userId: "u6", nickname: "서연", tone: "amber" as const, status: "missed" as const }] } }) };
+    expect(ids(buildTree(past, EMPTY_OVERRIDES, REF_DAY), "21")).toContain("u6");
+    const after = ids(buildTree(past, { ...EMPTY_OVERRIDES, typeOv: { "21": "공통" } }, REF_DAY), "21");
+    expect(after).not.toContain("u6");
+    expect(after).toEqual(expect.arrayContaining(["u2", "u3", "u1", "u4"]));
+  });
+  it("moving a past 공통 leaf's end past assignFrom adds the late joiner (server resync does too)", () => {
+    expect(ids(buildTree(cur, EMPTY_OVERRIDES, REF_DAY), "11")).not.toContain("u6");
+    expect(ids(buildTree(cur, { ...EMPTY_OVERRIDES, dates: { "11": { e: "2026-10-20" } } }, REF_DAY), "11")).toContain("u6");
+  });
+});

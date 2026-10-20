@@ -53,6 +53,8 @@ export type RoomCardDto = {
   endDate: string;
   membership: Membership;
   progress: RoomCardProgress;
+  /** 0032 진행중 추가 모집 마감(창이 열린 방만) */
+  recruitUntil?: string | null;
 };
 
 export type RoomListResponse = {
@@ -119,6 +121,15 @@ export type RoomMemberAdminDto = Person & {
   /** 0024 — 진행중 방 ACTIVE 멤버의 탈퇴 요청 시각(없으면 null) */
   leaveRequestedAt?: string | null;
 };
+/** 0032 — 모집 열림(RECRUIT 또는 추가 모집 창) · 추가 모집 마감일(진행중 + 창 열림일 때만) */
+export type RoomRecruit = { open: boolean; extraUntil: string | null };
+/** 0032 — 모집 상태와 무관한 "바로 참가". active = 지금 유효(기한 안 · 한도 남음 · 방 모집중/진행중) */
+export type InviteBypass = { until: string; max: number | null; used: number; active: boolean };
+/** 그룹장에게만 오는 초대 정보(room_detail_json.invite). code 는 0032 전 행이면 null — invite_get 이 채운다 */
+export type InviteInfo = { url: string; token: string; code: string | null; bypass: InviteBypass | null };
+/** 0032 invite_preview.join — 이 초대로 지금 할 수 있는 것. mode null = 참가 불가 */
+export type InviteJoin = { mode: JoinMode | null; via: "recruit" | "extra" | "invite" | null; until: string | null };
+
 export type RoomDetail = {
   today: string;
   id: string;
@@ -159,7 +170,9 @@ export type RoomDetail = {
     assigned: number;
     nextDue: { nodeId: string; title: string; roundLabel: string; dueDate: string } | null;
   } | null;
-  invite: { url: string } | null;
+  invite: InviteInfo | null;
+  /** 0032 — 모집 열림 · 추가 모집 마감(진행중 + 창 열림일 때만). 서버는 항상 보낸다 */
+  recruit?: RoomRecruit;
   pendingCount: number;
   /** 0024 — 처리할 탈퇴 요청 수(그룹장에게만 실제 수, 그 외 0) */
   leaveRequestCount?: number;
@@ -187,13 +200,17 @@ export type InvitePreview = {
     isPublic: boolean;
     joinMode: JoinMode;
     tags: RoomTagDto[];
+    recruitUntil?: string | null;
   };
   leader: Person;
   me: MeState;
+  join?: InviteJoin;
 };
 
 /* ---------- 커리큘럼 ---------- */
-export type CurriculumMember = Person & { role: "leader" | "member"; status: "active" | "inactive"; doesTasks: boolean; canEditCurriculum: boolean };
+export type CurriculumMember = Person & { role: "leader" | "member"; status: "active" | "inactive"; doesTasks: boolean; canEditCurriculum: boolean;
+  /** 0032 중간 합류자 공통 과제 배정 시작일. null·없음 = 처음부터 */
+  assignFrom?: string | null };
 export type NodeDto = {
   id: string;
   parentId: string | null;
@@ -252,7 +269,7 @@ export type StudyItem = {
   title: string;
   intro: string;
   membership: "leader" | "joined" | "pending";
-  when: { kind: "deadline" | "start" | "end"; date: string };
+  when: { kind: "deadline" | "start" | "end" | "recruitEnd"; date: string };
   /** 0024 — 보관된 방(me_studies(p_include_archived) 의 archived 그룹) */
   archived?: boolean;
 };
@@ -323,6 +340,8 @@ export const NOTIFICATION_KINDS = [
   "ROOM_PERIOD_CHANGED",
   // 0024
   "ROUND_SCHEDULE_CHANGED", "ROOM_ARCHIVED", "PERSONAL_ARCHIVED", "LEAVE_REQUESTED", "LEAVE_REQUEST_DISMISSED", "SUBMISSION_DIGEST",
+  // 0032
+  "MEMBER_JOINED",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export type NotificationDto = {

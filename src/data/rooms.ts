@@ -14,6 +14,8 @@ export type Slot = {
 };
 
 export type Room = {
+  /** 0032 진행중 추가 모집 — open·full */
+  extra?: "open" | "full";
   id: string;
   title: string;
   intro: string;

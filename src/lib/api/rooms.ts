@@ -76,5 +76,6 @@ export function toRoomCard(d: RoomCardDto, today: string): Room {
     created: m?.role === "leader",
     period: periodCard(d.startDate, d.endDate),
     slot: slotOf(d, today),
+    extra: d.status === "active" && d.recruitUntil ? (d.isFull ? "full" : "open") : undefined,
   };
 }

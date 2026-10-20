@@ -14,7 +14,7 @@ import type { TaskType } from "@/data/my-study";
 export type Code = "D" | "L" | "M" | "O" | "P";
 export type LeafState = "unassigned" | "complete" | "planned" | "delayed" | "progress";
 export type Person = { userId: string; name: string; tone: Tone; c: Code };
-export type TreeMember = { userId: string; name: string; tone: Tone; doesTasks: boolean };
+export type TreeMember = { userId: string; name: string; tone: Tone; doesTasks: boolean; assignFrom: string | null };
 
 export const CODE_LABEL: Record<Code, string> = { D: "기한내 제출", L: "지각 제출", M: "미제출", O: "진행중", P: "예정" };
 /** 개인 목표 상태 문구 — 제출이 아니라 완료한다. 마감 지난 미완료(M)는 "기한 지남" */
@@ -158,7 +158,7 @@ export function leafState(asg: number, sub: number, s: string, e: string, today:
 
 /** Curriculum + 오버라이드 → 집계된 트리. 서버 사람별 코드를 그대로 쓰고, 유형/담당자 오버라이드가 있는 리프만 다시 계산한다. */
 export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
-  const members: TreeMember[] = cur.members.filter((m) => m.status === "active").map((m) => ({ userId: m.userId, name: m.nickname, tone: m.tone, doesTasks: m.doesTasks }));
+  const members: TreeMember[] = cur.members.filter((m) => m.status === "active").map((m) => ({ userId: m.userId, name: m.nickname, tone: m.tone, doesTasks: m.doesTasks, assignFrom: m.assignFrom ?? null }));
   const doers = members.filter((m) => m.doesTasks);
   const rank = new Map(cur.members.map((m, i) => [m.userId, i]));
   const activeIds = new Set(members.map((m) => m.userId));
@@ -196,11 +196,15 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
       // 개인 목표는 편집 패널 대상이 아니다 — 유형/담당 오버라이드를 무시하고 서버 people(= [소유자])을 그대로 쓴다
       const type: TaskType = personal ? "개인" : (ov.typeOv[n.id] ?? TASK_TYPE_KO[n.task.type]);
       const known = new Map(n.task.people.map((p) => [p.userId, STATUS_CODE[p.status]]));
-      const recompute = !personal && (temp || n.id in ov.typeOv || n.id in ov.assignOv);
+      const recompute = !personal && (temp || n.id in ov.typeOv || n.id in ov.assignOv || (type === "공통" && n.id in ov.dates && doers.some((m) => m.assignFrom)));
       let people: Person[];
       if (!recompute) people = n.task.people.map((p) => ({ userId: p.userId, name: p.nickname, tone: p.tone, c: STATUS_CODE[p.status] }));
       else {
-        const chosen = type === "공통" ? doers : ov.assignOv[n.id] ? doers.filter((m) => ov.assignOv[n.id].includes(m.userId)) : doers.filter((m) => known.has(m.userId));
+        // 공통 담당 = (원래 공통 과제였다면) 이미 배정된 사람 ∪ 배정 자격(assignFrom 없음 ∨ 마감 ≥ assignFrom) — 서버 assignment_resync 1단계와 같은 규칙.
+        // 지정→공통 전환은 서버가 기존 DESIGNATED 배정을 먼저 해제한다(node_update 0028) → 기존 담당 유지는 원래 COMMON 배정에만
+        const keepKnown = n.task.type === "common";
+        const commonDoers = doers.filter((m) => (keepKnown && known.has(m.userId)) || !m.assignFrom || e >= m.assignFrom);
+        const chosen = type === "공통" ? commonDoers : ov.assignOv[n.id] ? doers.filter((m) => ov.assignOv[n.id].includes(m.userId)) : doers.filter((m) => known.has(m.userId));
         people = chosen.map((m) => ({ userId: m.userId, name: m.name, tone: m.tone, c: known.get(m.userId) ?? fresh(s) }));
       }
       const asg = people.length;

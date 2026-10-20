@@ -55,7 +55,9 @@ describe("showApplications", () => {
   });
   it("not outside recruit or when archived", () => {
     expect(showApplications({ ...d, status: "draft" })).toBe(false);
-    expect(showApplications({ ...d, status: "active", pendingCount: 1 })).toBe(false);
+    expect(showApplications({ ...d, status: "ended", pendingCount: 1 })).toBe(false);
+    expect(showApplications({ ...d, status: "active" })).toBe(false); // 0032: 진행중은 창이 열렸을 때만(대기자 없으면)
+    expect(showApplications({ ...d, status: "active", pendingCount: 1 })).toBe(true); // 0032 스펙 §승인 대기 목록: 대기자가 남아 있으면 진행중도
     expect(showApplications({ ...d, archived: true })).toBe(false);
   });
 });

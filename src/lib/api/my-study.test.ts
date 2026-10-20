@@ -312,3 +312,15 @@ describe("recheckCurriculumEdit — 편집 모드 진입 전 권한 재확인 (�
     expect(r).toEqual({ allowed: true, cur: null });
   });
 });
+
+describe("sidebar extra-recruit (0032)", () => {
+  it("extra-recruit PENDING sits in 모집중 · 승인 대기중 with '모집 마감' date", () => {
+    const ms: MeStudies = { today: "2026-10-12", groups: [
+      { kind: "active", items: [] },
+      { kind: "recruit", items: [{ slug: "aws", title: "AWS", intro: "", membership: "pending", archived: false, when: { kind: "recruitEnd", date: "2026-10-19" } }] },
+      { kind: "ended", items: [] } ] };
+    const g = toSidebarGroups(ms, "2026-10-12").find((x) => x.items.some((it) => it.id === "aws"))!;
+    expect(g.label).toBe("모집중 · 승인 대기중");
+    expect(g.items[0].when).toBe("10.19 모집 마감");
+  });
+});
