@@ -283,3 +283,15 @@ describe("announceTask · useTaskAnnounce", () => {
     act(() => root.unmount());
   });
 });
+
+describe("깨진 해시(리뷰 M11)", () => {
+  it("decodeURIComponent 가 던지는 해시(#%E0)는 날 것 그대로 — peekHashPrefix 는 null, 던지지 않는다", () => {
+    expect(hashOf("/my-study/aws#%E0")).toBe("%E0");
+    window.history.replaceState(null, "", "/my-study/aws?task=3#%E0");
+    expect(() => peekHashPrefix("comment-")).not.toThrow();
+    expect(peekHashPrefix("comment-")).toBeNull();
+    window.history.replaceState(null, "", "/my-study/aws?task=3#comment-%E0");
+    expect(peekHashPrefix("comment-")).toBe("comment-%E0");
+    expect(commentIdOfHash("comment-%E0")).toBeNull();
+  });
+});

@@ -660,6 +660,13 @@ describe("MyStudyScreen — 댓글 딥링크", () => {
     expect(detailTitle(host)).toContain(title("311"));
     expect(comments.fetchComments).toHaveBeenLastCalledWith("aws", "311", { from: "7" });
   });
+  it("깨진 해시(#%E0)로 들어와도 화면이 그려진다 — 제출 영역 포커스 그대로(리뷰 M11)", async () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=311#%E0");
+    const { host } = mount({ initialLeaf: "311", initialTab: "overview", key: "aws:311:overview" } as Partial<Props>);
+    await act(async () => {});
+    expect(detailTitle(host)).toContain(title("311"));
+    expect(comments.fetchComments).toHaveBeenCalledWith("aws", "311");
+  });
   it("다른 과제의 알림은 받지 않는다(그 과제 화면이 새로 마운트된다)", async () => {
     window.history.replaceState(null, "", "/my-study/aws?task=311");
     const { host } = mount({ initialLeaf: "311", initialTab: "overview", key: "aws:311:overview" } as Partial<Props>);

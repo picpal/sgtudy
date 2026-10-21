@@ -19,7 +19,14 @@ type Announce = { hash: string; path: string; search: string };
 /** 링크의 해시(# 없이) */
 export const hashOf = (href: string): string => {
   const i = href.indexOf("#");
-  return i < 0 ? "" : decodeURIComponent(href.slice(i + 1));
+  if (i < 0) return "";
+  const raw = href.slice(i + 1);
+  // 손으로 만든 깨진 해시(#%E0)는 던진다 — 렌더 경로(peekHashPrefix)에서도 불리므로 날 것 그대로 둔다(어떤 앵커와도 맞지 않는다)
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 };
 const pathOf = (href: string): string => new URL(href, "http://x").pathname;
 const searchOf = (href: string): string => new URL(href, "http://x").search;
