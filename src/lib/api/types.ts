@@ -351,6 +351,8 @@ export const NOTIFICATION_KINDS = [
   "EXAM_PUBLISHED",
   // 0040
   "NOTICE_POSTED",
+  // 0041
+  "MENTIONED",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export type NotificationDto = {
@@ -459,3 +461,43 @@ export type NoticeInbox = { unread: boolean; popups: Notice[] };
 export type NoticeInput = { title: string; bodyMd: string; popup?: boolean; pinned?: boolean };
 /** renotify=true → 팝업을 켜고 멤버에게 다시 띄움 + 벨 재발행 */
 export type NoticePatch = Partial<NoticeInput> & { renotify?: boolean };
+
+/* ---------- 댓글 (0041_node_comments.sql) ---------- */
+/** body = 저장 본문(멘션은 `<@uuid>` 토큰 — lib/mention 으로 나눠 그린다). edited = 본문이 작성 1분 뒤 바뀜 */
+export type CommentDto = {
+  id: string;
+  body: string;
+  /** 탈퇴 등으로 프로필이 지워지면 null */
+  author: Person | null;
+  createdAt: string;
+  updatedAt: string;
+  edited: boolean;
+  mine: boolean;
+  /** 본인 ∧ 쓰기 가능 */
+  canEdit: boolean;
+  /** (본인 ∨ 그룹장) ∧ 쓰기 가능 */
+  canDelete: boolean;
+};
+/** 멘션 uid → 사람(그 방의 그룹장·멤버 행이 있는 사람만). 없는 uid 는 "@알 수 없음" */
+export type CommentPeople = Record<string, Person>;
+export type CommentWriteBlock = "ended" | "inactive" | "archived_node" | "exam_locked";
+export type CommentLimits = { bodyMax: number; mentionsMax: number; perNode: number; perMinute: number; perHour: number; page: number; fromMax: number };
+/** comment_list — items 는 오래된 → 최신. total = 살아 있는 댓글 수(시험 잠금이어도 센다) */
+export type CommentPage = {
+  items: CommentDto[];
+  people: CommentPeople;
+  /** items 보다 오래된 댓글이 있다 → [이전 댓글 더 보기](before = items[0].id) */
+  hasOlder: boolean;
+  /** from 딥링크가 200개를 넘겨 최신 쪽이 잘렸다 → 기본 쪽(최신 50)을 다시 부르면 된다 */
+  hasNewer: boolean;
+  total: number;
+  canWrite: boolean;
+  writeBlock: CommentWriteBlock | null;
+  /** 시험 잠금(D4) — items·people 은 비어 온다 */
+  locked: { reason: "exam" } | null;
+  /** from 을 넘겼을 때만. deleted·missing 이면 items 는 기본 쪽(최신 50) */
+  target: { id: string; state: "ok" | "deleted" | "missing" } | null;
+  limits: CommentLimits;
+};
+/** comment_create·comment_update 응답 */
+export type CommentSaved = { comment: CommentDto; people: CommentPeople };

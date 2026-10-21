@@ -781,6 +781,88 @@ export type Database = {
           },
         ]
       }
+      node_comments: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          id: number
+          mention_ids: string[]
+          node_id: number
+          room_id: number
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: never
+          mention_ids?: string[]
+          node_id: number
+          room_id: number
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: never
+          mention_ids?: string[]
+          node_id?: number
+          room_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "node_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "node_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "node_comments_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "node_comments_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "node_comments_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "goal_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "node_comments_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           actor_user_id: string | null
@@ -1625,6 +1707,141 @@ export type Database = {
         Returns: boolean
       }
       can_read_submissions: { Args: { p_room: number }; Returns: boolean }
+      comment_assert_writable: {
+        Args: {
+          n: Database["public"]["Tables"]["goal_nodes"]["Row"]
+          p_uid: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: undefined
+      }
+      comment_create: {
+        Args: { p_body: string; p_node: number; p_slug: string }
+        Returns: Json
+      }
+      comment_delete: {
+        Args: { p_id: number; p_slug: string }
+        Returns: undefined
+      }
+      comment_exam_locked: {
+        Args: {
+          n: Database["public"]["Tables"]["goal_nodes"]["Row"]
+          p_uid: string
+        }
+        Returns: boolean
+      }
+      comment_excerpt: {
+        Args: { p_body: string; p_room: number }
+        Returns: string
+      }
+      comment_items: {
+        Args: {
+          p_can_write: boolean
+          p_leader: boolean
+          p_rows: Database["public"]["Tables"]["node_comments"]["Row"][]
+          p_viewer: string
+        }
+        Returns: Record<string, unknown>
+      }
+      comment_json: {
+        Args: {
+          c: Database["public"]["Tables"]["node_comments"]["Row"]
+          p_can_write: boolean
+          p_leader: boolean
+          p_viewer: string
+        }
+        Returns: Json
+      }
+      comment_limits: { Args: never; Returns: Json }
+      comment_list: {
+        Args: {
+          p_before?: number
+          p_from?: number
+          p_node: number
+          p_slug: string
+        }
+        Returns: Json
+      }
+      comment_notify: {
+        Args: {
+          c: Database["public"]["Tables"]["node_comments"]["Row"]
+          p_actor: string
+          p_new: string[]
+        }
+        Returns: number
+      }
+      comment_parse: {
+        Args: { p_body: string }
+        Returns: Record<string, unknown>
+      }
+      comment_people: {
+        Args: { p_ids: string[]; p_room: number }
+        Returns: Json
+      }
+      comment_rate_check: { Args: { p_uid: string }; Returns: undefined }
+      comment_reader: {
+        Args: { p_node: number; p_slug: string }
+        Returns: Record<string, unknown>
+      }
+      comment_reader_room: {
+        Args: { p_slug: string }
+        Returns: {
+          archived_at: string | null
+          cover_file_id: string | null
+          created_at: string
+          description_md: string
+          end_date: string
+          ended_at: string | null
+          id: number
+          intro: string
+          join_mode: string
+          leader_does_tasks: boolean
+          leader_id: string
+          max_members: number
+          member_count: number
+          min_members: number | null
+          recruit_until: string | null
+          rules_md: string
+          slug: string
+          start_date: string
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+          visibility: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rooms"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      comment_row: {
+        Args: { p_id: number; r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: Record<string, unknown>
+      }
+      comment_target_ok: {
+        Args: { n: Database["public"]["Tables"]["goal_nodes"]["Row"] }
+        Returns: boolean
+      }
+      comment_token_re: { Args: never; Returns: string }
+      comment_update: {
+        Args: { p_body: string; p_id: number; p_slug: string }
+        Returns: Json
+      }
+      comment_validate: {
+        Args: { p_body: string }
+        Returns: Record<string, unknown>
+      }
+      comment_writable: {
+        Args: {
+          n: Database["public"]["Tables"]["goal_nodes"]["Row"]
+          p_uid: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: string
+      }
       current_user_id: { Args: never; Returns: string }
       curriculum_get: {
         Args: { p_include_archived?: boolean; p_slug: string }
@@ -2342,18 +2559,32 @@ export type Database = {
         Args: { p_kind: string; p_node: number; p_room: number; p_user: string }
         Returns: string
       }
-      notify_publish: {
-        Args: {
-          p_actor: string
-          p_dedupe_prefix: string
-          p_kind: string
-          p_model: Json
-          p_node: number
-          p_recipients: string[]
-          p_room: number
-        }
-        Returns: number
-      }
+      notify_publish:
+        | {
+            Args: {
+              p_actor: string
+              p_dedupe_prefix: string
+              p_kind: string
+              p_model: Json
+              p_node: number
+              p_recipients: string[]
+              p_room: number
+            }
+            Returns: number
+          }
+        | {
+            Args: {
+              p_actor: string
+              p_dedupe_prefix: string
+              p_kind: string
+              p_link_hash: string
+              p_model: Json
+              p_node: number
+              p_recipients: string[]
+              p_room: number
+            }
+            Returns: number
+          }
       notify_range: {
         Args: { p_e: string; p_s: string; p_today: string }
         Returns: string
