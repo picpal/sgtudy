@@ -9,8 +9,6 @@ import { StatusBadge } from "./StatusBadge";
 import { CurrentRoundCard } from "./CurrentRoundCard";
 import { ScheduleList } from "./ScheduleList";
 
-const TABS = ["개요", "진행목표", "보드", "캘린더", "간트"];
-
 const dtIcon = (d: ReactNode, extra?: ReactNode) => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {d}
@@ -110,20 +108,6 @@ export function RoomInfo({ room, onShare, more }: { room: Room; onShare: () => v
           ))}
         </dd>
       </dl>
-
-      {/* 스펙상 개요만 있는 탭 모양 — 전환되지 않으므로 탭으로 알리지 않고 나머지는 비활성으로 둔다 */}
-      <div role="group" aria-label="방 상세 보기" className="mt-[26px] flex flex-wrap gap-1 border-y border-line-2 py-2">
-        {TABS.map((t, i) => (
-          <span
-            key={t}
-            aria-current={i === 0 ? "page" : undefined}
-            aria-disabled={i === 0 ? undefined : true}
-            className={`inline-flex h-[38px] cursor-default select-none items-center rounded-[10px] px-[14px] text-[14px] ${i === 0 ? "bg-bg font-semibold text-ink" : "bg-transparent text-ink-3"}`}
-          >
-            {t}
-          </span>
-        ))}
-      </div>
 
       <CurrentRoundCard cur={room.cur} />
 

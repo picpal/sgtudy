@@ -20,21 +20,21 @@ describe("roomMoreItems — 방 상세 더보기 (링크 복사는 옆 공유 �
 });
 
 describe("studyMoreItems — 내 스터디 더보기", () => {
-  it("모두 방 정보 보기, 모집 기간 참가자는 참가 취소, 승인 대기는 신청 취소", () => {
-    expect(studyMoreItems("owner")).toEqual(["room", "settings"]);
-    expect(studyMoreItems("joined")).toEqual(["room"]);
-    expect(studyMoreItems("closed")).toEqual(["room"]);
-    expect(studyMoreItems("leave")).toEqual(["room", "leave"]);
-    expect(studyMoreItems("pending")).toEqual(["room", "cancel"]);
+  it("방 정보 보기 없음 — 그룹장은 방 설정, 모집 기간 참가자는 참가 취소, 승인 대기는 신청 취소, 그 밖엔 메뉴 없음", () => {
+    expect(studyMoreItems("owner")).toEqual(["settings"]);
+    expect(studyMoreItems("joined")).toEqual([]);
+    expect(studyMoreItems("closed")).toEqual([]);
+    expect(studyMoreItems("leave")).toEqual(["leave"]);
+    expect(studyMoreItems("pending")).toEqual(["cancel"]);
   });
 });
 
 // 시나리오 QA D3 (#4 — 은지가 더보기에서 나가기를 찾았다): 진행 중 참가자는 더보기에서도 탈퇴 요청·요청 취소
 describe("studyMoreItems — 진행 중 탈퇴 요청", () => {
   it("참가 중이면 탈퇴 요청, 요청 중이면 요청 취소", () => {
-    expect(studyMoreItems("joined", { canRequestLeave: true })).toEqual(["room", "leaveRequest"]);
-    expect(studyMoreItems("joined", { canRequestLeave: true, leaveRequested: true })).toEqual(["room", "leaveRequestCancel"]);
-    expect(studyMoreItems("closed", { canRequestLeave: false })).toEqual(["room"]);
+    expect(studyMoreItems("joined", { canRequestLeave: true })).toEqual(["leaveRequest"]);
+    expect(studyMoreItems("joined", { canRequestLeave: true, leaveRequested: true })).toEqual(["leaveRequestCancel"]);
+    expect(studyMoreItems("closed", { canRequestLeave: false })).toEqual([]);
   });
   it("메뉴 항목 — 탈퇴 요청은 위험 동작, 요청 취소는 일반", () => {
     const picked: string[] = [];
@@ -46,18 +46,17 @@ describe("studyMoreItems — 진행 중 탈퇴 요청", () => {
 });
 
 describe("menuItemsOf — 메뉴 항목으로 (링크는 href, 취소는 확인 대화상자)", () => {
-  it("내 스터디·방 정보·방 설정은 링크, 참가/신청 취소는 위험 동작", () => {
+  it("내 스터디·방 설정은 링크, 참가/신청 취소는 위험 동작", () => {
     const picked: string[] = [];
-    const items = menuItemsOf(["myStudy", "room", "settings", "leave", "cancel"], "aws", (k) => picked.push(k));
+    const items = menuItemsOf(["myStudy", "settings", "leave", "cancel"], "aws", (k) => picked.push(k));
     expect(items.map((i) => [i.key, i.label, i.href ?? null, !!i.danger])).toEqual([
       ["myStudy", "내 스터디에서 보기", "/my-study/aws", false],
-      ["room", "방 정보 보기", "/rooms/aws", false],
       ["settings", "방 설정", "/rooms/aws/settings", false],
       ["leave", "참가 취소", null, true],
       ["cancel", "신청 취소", null, true],
     ]);
+    items[2].onSelect?.();
     items[3].onSelect?.();
-    items[4].onSelect?.();
     expect(picked).toEqual(["leave", "cancel"]);
   });
 });

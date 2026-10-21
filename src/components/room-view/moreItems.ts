@@ -7,12 +7,12 @@ import { routes } from "@/lib/routes";
  * 방 헤더 "더보기" 메뉴 항목. 그룹장은 방 설정(/rooms/{slug}/settings — 정보·태그·기간 수정, 삭제·보관)까지.
  * 링크 복사는 바로 옆 공유 버튼이 한다.
  */
-export type MoreItem = "myStudy" | "room" | "settings" | "leave" | "cancel" | "leaveRequest" | "leaveRequestCancel";
+export type MoreItem = "myStudy" | "settings" | "leave" | "cancel" | "leaveRequest" | "leaveRequestCancel";
 /** 확인 대화상자를 여는 항목 (나머지는 링크) */
 export type MoreAction = Extract<MoreItem, "leave" | "cancel" | "leaveRequest" | "leaveRequestCancel">;
 
 export const MORE_LABEL: Record<MoreItem, string> = {
-  myStudy: "내 스터디에서 보기", room: "방 정보 보기", settings: "방 설정", leave: "참가 취소", cancel: "신청 취소",
+  myStudy: "내 스터디에서 보기", settings: "방 설정", leave: "참가 취소", cancel: "신청 취소",
   leaveRequest: "탈퇴 요청", leaveRequestCancel: "탈퇴 요청 취소",
 };
 
@@ -38,16 +38,19 @@ export function roomMoreItems(act: Action): MoreItem[] {
   }
 }
 
-/** 내 스터디(/my-study/[slug]). 진행 중 참가자(canRequestLeave)는 탈퇴 요청 · 요청 중이면 요청 취소 (시나리오 QA D3) */
+/**
+ * 내 스터디(/my-study/[slug]) — 빈 배열이면 더보기 버튼을 숨긴다. 진행 중 참가자(canRequestLeave)는 탈퇴 요청 · 요청 중이면 요청 취소 (시나리오 QA D3).
+ * "방 정보 보기"(방 화면 링크)는 뺐다 — 같은 정보가 이미 이 화면에 있고, 방 화면의 탭 모양 줄이 눌리지 않아 혼란만 줬다
+ */
 export function studyMoreItems(act: StudyAction, o: { canRequestLeave?: boolean; leaveRequested?: boolean } = {}): MoreItem[] {
-  if (act === "joined" && o.canRequestLeave) return ["room", o.leaveRequested ? "leaveRequestCancel" : "leaveRequest"];
-  if (act === "leave") return ["room", "leave"];
-  if (act === "pending") return ["room", "cancel"];
-  if (act === "owner") return ["room", "settings"];
-  return ["room"];
+  if (act === "joined" && o.canRequestLeave) return [o.leaveRequested ? "leaveRequestCancel" : "leaveRequest"];
+  if (act === "leave") return ["leave"];
+  if (act === "pending") return ["cancel"];
+  if (act === "owner") return ["settings"];
+  return [];
 }
 
-const HREF: Partial<Record<MoreItem, (slug: string) => string>> = { myStudy: routes.myStudy, room: routes.room, settings: routes.roomSettings };
+const HREF: Partial<Record<MoreItem, (slug: string) => string>> = { myStudy: routes.myStudy, settings: routes.roomSettings };
 
 /**
  * 메뉴 항목으로 — 이동 항목은 링크, 참가/신청 취소·탈퇴 요청은 onCancel(확인 대화상자를 연다). 요청 취소는 되돌리는 동작이라 위험 표시 없음.
