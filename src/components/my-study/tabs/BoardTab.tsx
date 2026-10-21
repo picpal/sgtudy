@@ -5,8 +5,9 @@ import { StatusIcon } from "@/components/ui/StatusIcon";
 import { diffDays, md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
-import { AvatarStack, Seg, TypeBadge } from "../bits";
-import { CODE_COLOR, CODE_STATUS, boardColumn, codeLabel, ddayLabel, myCode, type BoardCol, type LeafNode, type Tree } from "../model";
+import { Seg, TypeBadge } from "../bits";
+import { TaskAvatars } from "../TaskAvatars";
+import { CODE_COLOR, CODE_LABEL, CODE_STATUS, boardColumn, codeLabel, ddayLabel, myCode, type BoardCol, type LeafNode, type Tree } from "../model";
 import { boardSource } from "../sources";
 import type { BoardMode, ScreenState, Update } from "../state";
 
@@ -98,10 +99,10 @@ function Card({ l, mine, today, meId, onOpen }: { l: LeafNode; mine: boolean; to
   const left = diffDays(today, l.e);
   const hot = overdue || (left >= 0 && left <= 2);
   return (
-    <button
-      type="button"
+    // 카드 전체가 누르는 영역 — 안에 아바타 펼치기 버튼이 있어 버튼 안 버튼을 피해 div 클릭으로 받고, 키보드·보조기기는 제목 버튼(Enter·Space 의 click 이 카드로 올라온다)
+    <div
       onClick={onOpen}
-      className="flex w-full flex-col items-stretch gap-[6px] rounded-[14px] border p-[14px] text-left text-ink transition-[box-shadow,border-color] duration-150 hover:border-line-dash hover:shadow-[0_6px_16px_rgba(27,34,48,.08)]"
+      className="flex w-full cursor-pointer flex-col items-stretch gap-[6px] rounded-[14px] border p-[14px] text-left text-ink transition-[box-shadow,border-color] duration-150 hover:border-line-dash hover:shadow-[0_6px_16px_rgba(27,34,48,.08)] has-[button[data-card-open]:focus-visible]:outline-2 has-[button[data-card-open]:focus-visible]:outline-offset-2 has-[button[data-card-open]:focus-visible]:outline-mint"
       style={{ borderColor: overdue ? "#E7A9A3" : l.personal ? "var(--personal-edge)" : "#E4ECEA", background: overdue ? "#FFF6F5" : l.personal ? "var(--personal-bg)" : "#FFFFFF" }}
     >
       <span className="flex flex-wrap items-center gap-[6px]">
@@ -121,7 +122,9 @@ function Card({ l, mine, today, meId, onOpen }: { l: LeafNode; mine: boolean; to
           </span>
         )}
       </span>
-      <span className="text-[14px] font-semibold leading-[1.4] text-ink">{l.title}</span>
+      <button type="button" data-card-open className="bg-transparent p-0 text-left focus-visible:outline-none">
+        <span className="text-[14px] font-semibold leading-[1.4] text-ink">{l.title}</span>
+      </button>
       <span className="text-[12px] text-muted">{l.crumb}</span>
       <span className="flex items-center gap-[5px] text-[12px] text-ink-2">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -139,11 +142,18 @@ function Card({ l, mine, today, meId, onOpen }: { l: LeafNode; mine: boolean; to
         </span>
       ) : (
         <span className="mt-[2px] flex items-center gap-[10px] border-t border-line-2 pt-2">
-          <AvatarStack people={l.people} size={26} ring="#FFFFFF" iconSize={13} overflowSize={28} />
+          <TaskAvatars
+            people={l.people.map((p) => ({ key: p.userId, name: p.name, tone: p.tone, id: p.userId, status: CODE_STATUS[p.c], title: `${p.name} · ${CODE_LABEL[p.c]}` }))}
+            size={24}
+            iconSize={13}
+            compactSize={22}
+            compactIconSize={11}
+            ring="#FFFFFF"
+          />
           <span className="flex-1" />
           <span className="text-[12px] font-semibold text-ink-2">{l.asg ? `${l.sub}/${l.asg} 제출` : "담당자 미정"}</span>
         </span>
       )}
-    </button>
+    </div>
   );
 }

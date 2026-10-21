@@ -1,18 +1,16 @@
 "use client";
 
 import { GuardedLink as Link } from "@/components/ui/GuardedLink";
-import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import { STATUS_LABEL, type TaskStatus } from "@/lib/types";
 import type { StudyRoom } from "@/lib/api/my-study";
 import { routes } from "@/lib/routes";
-import { RingedStatus, TypeBadge, toneOfName } from "../bits";
+import { TypeBadge, toneOfName } from "../bits";
+import { TaskAvatars } from "../TaskAvatars";
 import { personalStats, type Tree } from "../model";
 import { personalLineText } from "../personal";
 import { Inline, MarkdownView } from "../MarkdownView";
-
-const MAX_PEOPLE = 4;
 
 /** 빈 섹션 안내 (Q2-11) — 그룹장에게는 채우는 곳으로 가는 링크 */
 function Empty({ text, href, cta }: { text: string; href?: string; cta?: string }) {
@@ -110,8 +108,6 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, onOpenTask, p
               {cur.tasks.map((t) => {
                 const subs = t.people.filter(([, s]) => s === "done" || s === "late").length;
                 const allPlanned = t.people.every(([, s]) => s === "planned");
-                const shown = t.people.slice(0, MAX_PEOPLE);
-                const over = t.people.length - shown.length;
                 const pct = t.people.length === 0 ? 0 : Math.round((subs / t.people.length) * 100);
                 const id = t.id;
                 const open = id && onOpenTask ? () => onOpenTask(id) : undefined;
@@ -135,17 +131,14 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, onOpenTask, p
                       </div>
                       <div className="mt-1 text-[12px] text-muted">{t.dates}</div>
                     </div>
-                    <div className="flex items-center">
-                      {shown.map(([name, s], i) => (
-                        <span key={name} title={`${name} · ${STATUS_LABEL[s]}`} className="relative inline-flex rounded-full border-2 border-[#F7FAF9]" style={{ marginLeft: i === 0 ? 0 : -6 }}>
-                          <Avatar name={name} size={30} tone={t.tones?.[name] ?? toneOfName(name)} id={t.ids?.[name]} />
-                          <span className="absolute -right-[3px] -bottom-[3px] flex">
-                            <RingedStatus status={s} size={15} />
-                          </span>
-                        </span>
-                      ))}
-                      {over > 0 && <span className="-ml-[6px] inline-flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-slate-soft text-[11px] font-bold text-ink-3">+{over}</span>}
-                    </div>
+                    <TaskAvatars
+                      people={t.people.map(([name, s]) => ({ key: name, name, tone: t.tones?.[name] ?? toneOfName(name), id: t.ids?.[name], status: s, title: `${name} · ${STATUS_LABEL[s]}` }))}
+                      size={28}
+                      iconSize={14}
+                      compactSize={26}
+                      compactIconSize={13}
+                      ring="#F7FAF9"
+                    />
                     <div className="flex w-24 flex-col gap-[5px]">
                       {t.people.length === 0 ? (
                         <span className="text-right text-[12px] font-semibold text-muted">담당자 미정</span>

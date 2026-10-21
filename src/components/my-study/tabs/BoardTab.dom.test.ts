@@ -52,7 +52,7 @@ function mount(patch: Partial<ScreenState> = {}, t: Tree = tree) {
   const trigger = host.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
   return { host, trigger, calls };
 }
-const cardTitles = (h: HTMLElement) => Array.from(h.querySelectorAll("section button")).map((b) => b.querySelector("span.text-\\[14px\\]")?.textContent);
+const cardTitles = (h: HTMLElement) => Array.from(h.querySelectorAll("section button[data-card-open]")).map((b) => b.querySelector("span.text-\\[14px\\]")?.textContent);
 const options = (h: HTMLElement) => Array.from(h.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]'));
 const click = (el: Element) => act(() => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
@@ -132,5 +132,29 @@ describe("BoardTab 회차 필터 드롭다운", () => {
     expect(past[1].tag).toEqual({ text: "종료", tone: "muted" });
     const future = boardRoundOptions([{ ...r, s: "2999-01-01", e: "2999-01-07", archived: false }], REF_DAY);
     expect(future[1].tag).toBeUndefined();
+  });
+});
+
+describe("BoardTab 카드", () => {
+  it("카드는 버튼 안 버튼이 없는 div — 제목 버튼·카드 본문 어디를 눌러도 그 과제를 연다, 아바타는 한 단계 작게(26→24)", () => {
+    const opened: string[] = [];
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const S = { ...INITIAL_STATE, tab: "board" as const, bMode: "team" as const };
+    act(() =>
+      root!.render(
+        createElement(MeProvider, { me } as ComponentProps<typeof MeProvider>, createElement(TodayProvider, { today: REF_DAY } as ComponentProps<typeof TodayProvider>, createElement(BoardTab, { tree, S, update: () => {}, goLeaf: (id: string) => opened.push(id) }))),
+      ),
+    );
+    expect(host.querySelector("section button button")).toBeNull();
+    const title = [...host.querySelectorAll<HTMLButtonElement>("section button[data-card-open]")].find((b) => b.parentElement!.querySelector("[data-avatar]"))!;
+    const card = title.parentElement!;
+    act(() => title.click());
+    act(() => void card.querySelector("[data-avatar] [title]")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(opened).toHaveLength(2);
+    expect(opened[0]).toBe(opened[1]);
+    expect(card.className).toContain("has-[button[data-card-open]:focus-visible]:outline-2");
+    expect(card.querySelector<HTMLElement>("[data-avatar] [title] > span")!.style.width).toBe("24px");
   });
 });

@@ -106,6 +106,20 @@ describe("OverviewTab 이번 회차 과제 카드 누름", () => {
     expect(card("EC2").className).toContain("has-[button:focus-visible]:outline-2");
     expect(btn.className).toContain("focus-visible:outline-none");
   });
+  it("5명 이상이면 3명 + '+N' 펼치기 버튼 — 눌러도 과제를 열지 않는다", () => {
+    const five = { ...room, cur: { ...room.cur, tasks: [{ id: "23", title: "VPC 설계", type: "공통", dates: "10.08 – 10.14", people: ["지은", "철수", "영희", "민수", "수진"].map((n) => [n, "open"]) }] } } as unknown as StudyRoom;
+    const opened: string[] = [];
+    act(() => {
+      root = createRoot(document.body.appendChild(document.createElement("div")));
+      root.render(createElement(OverviewTab, { room: five, tree, roundId: null, onGoCurriculum: () => {}, onOpenTask: (id: string) => opened.push(id) }));
+    });
+    const toggle = document.querySelector<HTMLButtonElement>("li button[data-avatar-toggle]")!;
+    expect(toggle.getAttribute("aria-label")).toBe("참가자 5명 모두 보기");
+    expect(toggle.textContent).toContain("+2");
+    click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(opened).toEqual([]);
+  });
   it("카드 밖 '진행목표 전체 보기' 는 과제를 열지 않는다", () => {
     const { host, opened, goCur } = mount();
     click([...host.querySelectorAll("button")].find((b) => b.textContent === "진행목표 전체 보기")!);
