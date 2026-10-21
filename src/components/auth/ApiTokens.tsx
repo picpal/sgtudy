@@ -30,11 +30,11 @@ const useOrigin = () => useSyncExternalStore(noop, () => window.location.origin,
 
 const BAD = "#B4462B";
 const OK = "#0D7A64";
-const codeClass = "m-0 block whitespace-pre-wrap break-all rounded-[10px] bg-surface-3 px-3 py-[10px] font-mono text-[12px] leading-[1.6] text-ink";
+const codeClass = "m-0 block select-all whitespace-pre-wrap break-all rounded-[10px] bg-surface-3 px-3 py-[10px] font-mono text-[12px] leading-[1.6] text-ink";
 const ghostBtn = "flex min-h-11 shrink-0 items-center justify-center rounded-[22px] border border-line-3 bg-surface px-4 text-[13px] font-semibold text-ink";
 
-/** 복사 줄 — 위에 제목, 아래 코드(긴 토큰은 줄바꿈), 오른쪽 [복사] */
-function CopyBlock({ label, text, copied, onCopy }: { label: string; text: string; copied: boolean; onCopy: () => void }) {
+/** 복사 줄 — 위에 제목, 아래 코드(긴 토큰은 줄바꿈), 오른쪽 [복사]. 클립보드가 막히면 코드를 그대로 두고 직접 복사하라고 알린다 */
+function CopyBlock({ label, text, copied, failed, onCopy }: { label: string; text: string; copied: boolean; failed: boolean; onCopy: () => void }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -44,6 +44,7 @@ function CopyBlock({ label, text, copied, onCopy }: { label: string; text: strin
         </button>
       </div>
       <code className={codeClass}>{text}</code>
+      {failed && <p role="alert" className="m-0 text-[12px]" style={{ color: BAD }}>복사하지 못했어요 · 직접 선택해 복사해 주세요</p>}
     </div>
   );
 }
@@ -64,6 +65,7 @@ export function ApiTokens() {
   const [error, setError] = useState("");
   const [created, setCreated] = useState<CreatedToken | null>(null);
   const [copied, setCopied] = useState("");
+  const [copyFailed, setCopyFailed] = useState("");
   const [target, setTarget] = useState<ApiToken | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState("");
@@ -85,8 +87,10 @@ export function ApiTokens() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(key);
+      setCopyFailed("");
     } catch {
       setCopied("");
+      setCopyFailed(key);
     }
   };
 
@@ -100,6 +104,7 @@ export function ApiTokens() {
       const t = await createToken(name, scopes, days);
       setCreated(t);
       setCopied("");
+      setCopyFailed("");
       // 목록은 서버 판(원문 없음)으로 다시 받는다. 실패해도 만든 토큰은 위에 보이니 목록만 그대로 둔다
       const r = await listTokens().catch(() => null);
       if (r) {
@@ -150,14 +155,14 @@ export function ApiTokens() {
           <p role="status" className="m-0 text-[13px] font-semibold" style={{ color: OK }}>
             「{created.name}」 토큰을 만들었어요 · 이 화면을 떠나면 토큰을 다시 볼 수 없어요
           </p>
-          <CopyBlock label="토큰" text={created.token} copied={copied === "token"} onCopy={() => copy("token", created.token)} />
+          <CopyBlock label="토큰" text={created.token} copied={copied === "token"} failed={copyFailed === "token"} onCopy={() => copy("token", created.token)} />
           <ol className="m-0 flex list-none flex-col gap-4 p-0">
             <li className="flex min-w-0 flex-col gap-1">
-              <CopyBlock label="① 터미널에서 연결" text={mcpAddCommand(origin, created.token)} copied={copied === "add"} onCopy={() => copy("add", mcpAddCommand(origin, created.token))} />
+              <CopyBlock label="① 터미널에서 연결" text={mcpAddCommand(origin, created.token)} copied={copied === "add"} failed={copyFailed === "add"} onCopy={() => copy("add", mcpAddCommand(origin, created.token))} />
               <span className="text-[12px] text-muted">모든 폴더에서 쓰도록 --scope user 로 등록해요</span>
             </li>
             <li className="flex min-w-0 flex-col gap-1">
-              <CopyBlock label="② (선택) 자동 허용" text={MCP_ALLOW_SNIPPET} copied={copied === "allow"} onCopy={() => copy("allow", MCP_ALLOW_SNIPPET)} />
+              <CopyBlock label="② (선택) 자동 허용" text={MCP_ALLOW_SNIPPET} copied={copied === "allow"} failed={copyFailed === "allow"} onCopy={() => copy("allow", MCP_ALLOW_SNIPPET)} />
               <span className="text-[12px] leading-[1.6] text-muted">
                 <code className="font-mono">~/.claude/settings.json</code> 에 넣으면 읽기·미리보기는 묻지 않아요. 적용·삭제는 계속 물어요
               </span>

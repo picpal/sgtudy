@@ -35,7 +35,7 @@ describe("ApiTokens — 정적", () => {
 describe("ApiTokens — 만들기·폐기", () => {
   let host: HTMLDivElement;
   let root: Root;
-  const write = vi.fn(() => Promise.resolve());
+  const write = vi.fn<(text: string) => Promise<void>>(() => Promise.resolve());
   beforeEach(async () => {
     Object.defineProperty(navigator, "clipboard", { value: { writeText: write }, configurable: true });
     api.listTokens.mockResolvedValue({ today: "2026-10-21", items: [row("t1", { expired: true, lastUsedAt: "2026-10-20T01:00:00.000Z" })] });
@@ -76,6 +76,20 @@ describe("ApiTokens — 만들기·폐기", () => {
     act(() => Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.startsWith("다 했어요"))!.click());
     expect(host.textContent).not.toContain(RAW);
     expect(host.querySelector("form")).not.toBeNull();
+  });
+
+  it("복사가 막히면 알리고 원문은 그대로 보인다", async () => {
+    api.createToken.mockResolvedValue({ ...row("t2"), token: RAW });
+    act(() => host.querySelector("form")!.requestSubmit());
+    await flush();
+    write.mockRejectedValueOnce(new Error("denied"));
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="토큰 복사"]')!.click());
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("복사하지 못했어요 · 직접 선택해 복사해 주세요");
+    expect(host.querySelector("code.select-all")?.textContent).toBeTruthy();
+    expect(host.textContent).toContain(RAW);
+    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="토큰 복사"]')!.click());
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.querySelector('button[aria-label="토큰 복사"]')?.textContent).toBe("복사했어요");
   });
 
   it("폐기는 앱 확인 대화상자를 거친다", async () => {
