@@ -1,6 +1,6 @@
 import type { ApiError } from "@/lib/api/errors";
 import type { ExamDraft, ExamDraftQuestion } from "@/lib/api/exam";
-import type { ExamAttempt, ExamBrief, ExamDifficulty, ExamQType, ExamQuestion, ExamReveal, ExamSummary, ExamView } from "@/lib/api/types";
+import type { ExamAttempt, ExamBrief, ExamDifficulty, ExamQType, ExamQuestion, ExamResults, ExamReveal, ExamSummary, ExamView } from "@/lib/api/types";
 import { md } from "@/lib/date";
 import { notAssignedText, stampKst } from "./submission";
 
@@ -56,6 +56,21 @@ export function resultSummary(v: ExamView): { headline: string; sub: string | nu
 /** "10.18(일) 21:03 제출 · 기한 내|지각" */
 export const submittedLine = (a: Pick<ExamAttempt, "submittedAt" | "isLate">): string | null =>
   a.submittedAt ? `${stampKst(a.submittedAt)} 제출 · ${a.isLate ? "지각" : "기한 내"}` : null;
+
+/** 편집자 결과 요약 줄 — "3/4 제출 · 평균 3.7/5 · 최고 5". 제출 0명이면 평균·최고 없음 */
+export function resultsHead(r: Pick<ExamResults, "submitted" | "assigned" | "maxScore" | "avg" | "max">): string {
+  const parts = [`${r.submitted}/${r.assigned} 제출`];
+  if (r.avg != null) parts.push(`평균 ${Math.round(r.avg * 10) / 10}/${r.maxScore}`);
+  if (r.max != null) parts.push(`최고 ${r.max}`);
+  return parts.join(" · ");
+}
+
+/** 문항별 정답률 글자 — 제출 0명(null)이면 "—" */
+export const rateText = (pct: number | null): string => (pct == null ? "—" : `${pct}%`);
+
+const KST_YMD = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
+/** 제출 시각 → KST 날짜 "10.18" */
+export const kstMd = (iso: string): string => md(KST_YMD.format(new Date(iso)));
 
 /** 제출 확인 문구 */
 export const submitAsk = (unanswered: number): string =>

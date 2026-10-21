@@ -10,11 +10,13 @@ import { SubmissionSection, type SubmissionSectionProps } from "./SubmissionSect
 export function LeafBody(p: SubmissionSectionProps & { canRemoveFiles?: boolean; onExamUnsavedChange?: (unsaved: boolean) => void }) {
   const { canRemoveFiles = false, onExamUnsavedChange, ...sub } = p;
   const { n } = sub;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 시험은 파일을 올리지 않는다
+  const { onUploadingChange, ...exam } = sub;
   return (
     <div className="flex flex-col gap-5">
       {n.desc.trim() ? <MarkdownView src={n.desc} className="text-[14px] leading-[1.75]" /> : <p className="m-0 text-[13px] text-muted">{emptyDescText(n.personal)}</p>}
       <NodeAttachments nodeId={n.id} canRemove={canRemoveFiles} toast={p.toast} />
-      {n.exam ? <ExamSection {...sub} onUnsavedChange={onExamUnsavedChange} /> : <SubmissionSection {...sub} />}
+      {n.exam ? <ExamSection {...exam} onUnsavedChange={onExamUnsavedChange} /> : <SubmissionSection {...sub} />}
     </div>
   );
 }

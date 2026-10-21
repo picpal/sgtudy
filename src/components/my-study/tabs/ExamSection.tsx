@@ -10,6 +10,7 @@ import { statusRows, type StatusRow } from "../submission";
 import { useExamTake, type ExamSaveState } from "../useExamTake";
 import { useTaskDetail } from "../useTaskDetail";
 import { ExamQuestionView } from "./ExamQuestionView";
+import { ExamResults } from "./ExamResults";
 import { InlineConfirm } from "./InlineConfirm";
 import type { SubmissionSectionProps } from "./SubmissionSection";
 import { SubmissionStatusList } from "./SubmissionStatusList";
@@ -186,6 +187,9 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
       )}
 
       <SubmissionStatusList rows={rows} sub={tk ? tk.submitted : n.sub} asg={tk ? tk.assigned : n.asg} note={note} archived={n.archived} headingRef={statusRef} onOpenFile={() => {}} expandable={false} />
+
+      {/* 그룹장·편집자만 — 점수는 본인과 편집자만 본다(D7). 발행 전에는 응시가 없다 */}
+      {v?.viewer.canEdit && v.exam.status === "published" && <ExamResults slug={slug} nodeId={n.id} toast={toast} refreshKey={`${v.attempt?.status ?? ""}:${tk?.submitted ?? ""}`} />}
     </div>
   );
 }

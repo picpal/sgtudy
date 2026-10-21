@@ -10,6 +10,8 @@ type Props = {
   no: number;
   /** 내 답(저장된 값 + 아직 보내지 않은 값) — 없으면 null */
   mine: unknown;
+  /** 한 화면에 같은 문항이 여러 번 그려질 때(편집자 결과의 멤버 답안) id 가 겹치지 않게 */
+  idScope?: string;
 } & (
   | { mode: "take"; onChange: (answer: unknown) => void; disabled?: boolean }
   /** 결과: 정오·배점은 서버 results 가 있을 때만(after_deadline 마감 뒤 미제출이면 null) */
@@ -23,8 +25,8 @@ const row = "flex min-h-11 scroll-mb-20 items-center gap-3 rounded-[10px] border
 
 /** 시험 문항 1개 — 응시(라디오·체크·O/X 두 버튼·단답 칸) 또는 결과(내 답·정답·정오·해설). 서버가 보낸 키만 그린다 */
 export function ExamQuestionView(p: Props) {
-  const { q, no, mine } = p;
-  const headId = `exam-q-${q.id}`;
+  const { q, no, mine, idScope } = p;
+  const headId = `exam-q-${idScope ? `${idScope}-` : ""}${q.id}`;
   const kind = q.type === "single" ? null : QTYPE_KO[q.type];
   const hasKey = "answer" in q;
   const key = q.answer;
