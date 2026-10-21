@@ -816,6 +816,8 @@ export const ROOM_CASES: Case[] = [
         "can_read_room(bigint)", "can_read_submission(bigint,uuid)", "can_read_submissions(bigint)", "current_user_id()",
         "invite_preview(text)", "curriculum_get(text,boolean)", "is_room_leader(bigint)", "is_room_member(bigint)", "meta_get()", "node_doc_readable_me(bigint)",
         "room_get(text,text)", "room_tags_get(text)", "rooms_list(text,text,text,text[],integer,integer,text)", "task_get(text,bigint)", "tags_search(text)",
+        // 0035: AI 연동 게이트웨이(PAT 는 anon 키로 부른다 — 내부 api_*·personal_*_many 는 GRANT 없음)
+        "api_invoke(text,text,jsonb)",
       ];
       const AUTH = [
         ...ANON,

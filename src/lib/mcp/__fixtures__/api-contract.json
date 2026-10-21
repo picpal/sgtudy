@@ -1,0 +1,1097 @@
+{
+  "curriculum_get": {
+    "currentRoundId": "n1",
+    "fileCounts": {},
+    "members": [
+      {
+        "assignFrom": null,
+        "canEditCurriculum": true,
+        "doesTasks": true,
+        "nickname": "민수",
+        "role": "leader",
+        "status": "active",
+        "tone": "mint",
+        "userId": "u1"
+      },
+      {
+        "assignFrom": null,
+        "canEditCurriculum": false,
+        "doesTasks": true,
+        "nickname": "지은",
+        "role": "member",
+        "status": "active",
+        "tone": "peach",
+        "userId": "u2"
+      },
+      {
+        "assignFrom": null,
+        "canEditCurriculum": false,
+        "doesTasks": true,
+        "nickname": "철수",
+        "role": "member",
+        "status": "active",
+        "tone": "blue",
+        "userId": "u3"
+      },
+      {
+        "assignFrom": null,
+        "canEditCurriculum": false,
+        "doesTasks": true,
+        "nickname": "하나",
+        "role": "member",
+        "status": "active",
+        "tone": "lav",
+        "userId": "u4"
+      },
+      {
+        "assignFrom": null,
+        "canEditCurriculum": false,
+        "doesTasks": false,
+        "nickname": "도윤",
+        "role": "member",
+        "status": "inactive",
+        "tone": "slate",
+        "userId": "u5"
+      }
+    ],
+    "myPermissions": {
+      "canEditCurriculum": false
+    },
+    "nodes": [
+      {
+        "archived": false,
+        "assigned": 8,
+        "createdBy": null,
+        "depth": 2,
+        "descriptionMd": "",
+        "endDate": "2026-10-07",
+        "id": "n2",
+        "isMine": false,
+        "label": "1주차",
+        "ownerId": null,
+        "parentId": null,
+        "pct": 63,
+        "roundId": "n2",
+        "sortOrder": 0,
+        "startDate": "2026-10-01",
+        "submitted": 5,
+        "task": null,
+        "title": "IAM·VPC"
+      },
+      {
+        "archived": false,
+        "assigned": 4,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-10-03",
+        "id": "n3",
+        "isMine": false,
+        "label": null,
+        "ownerId": null,
+        "parentId": "n2",
+        "pct": 75,
+        "roundId": "n2",
+        "sortOrder": 0,
+        "startDate": "2026-10-01",
+        "submitted": 3,
+        "task": {
+          "assigned": 4,
+          "people": [
+            {
+              "nickname": "민수",
+              "status": "done",
+              "tone": "mint",
+              "userId": "u1"
+            },
+            {
+              "nickname": "지은",
+              "status": "late",
+              "tone": "peach",
+              "userId": "u2"
+            },
+            {
+              "nickname": "철수",
+              "status": "done",
+              "tone": "blue",
+              "userId": "u3"
+            },
+            {
+              "nickname": "하나",
+              "status": "missed",
+              "tone": "lav",
+              "userId": "u4"
+            }
+          ],
+          "state": "delayed",
+          "submitted": 3,
+          "type": "common"
+        },
+        "title": "IAM 정책 이해"
+      },
+      {
+        "archived": false,
+        "assigned": 4,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-10-07",
+        "id": "n4",
+        "isMine": false,
+        "label": null,
+        "ownerId": null,
+        "parentId": "n2",
+        "pct": 50,
+        "roundId": "n2",
+        "sortOrder": 1,
+        "startDate": "2026-10-04",
+        "submitted": 2,
+        "task": {
+          "assigned": 4,
+          "people": [
+            {
+              "nickname": "민수",
+              "status": "done",
+              "tone": "mint",
+              "userId": "u1"
+            },
+            {
+              "nickname": "지은",
+              "status": "missed",
+              "tone": "peach",
+              "userId": "u2"
+            },
+            {
+              "nickname": "철수",
+              "status": "done",
+              "tone": "blue",
+              "userId": "u3"
+            },
+            {
+              "nickname": "하나",
+              "status": "missed",
+              "tone": "lav",
+              "userId": "u4"
+            }
+          ],
+          "state": "delayed",
+          "submitted": 2,
+          "type": "common"
+        },
+        "title": "VPC 실습"
+      },
+      {
+        "archived": false,
+        "assigned": 3,
+        "createdBy": null,
+        "depth": 2,
+        "descriptionMd": "",
+        "endDate": "2026-10-14",
+        "id": "n1",
+        "isMine": false,
+        "label": "2주차",
+        "ownerId": null,
+        "parentId": null,
+        "pct": 33,
+        "roundId": "n1",
+        "sortOrder": 1,
+        "startDate": "2026-10-08",
+        "submitted": 1,
+        "task": null,
+        "title": "EC2·S3"
+      },
+      {
+        "archived": false,
+        "assigned": 2,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-10-14",
+        "id": "n5",
+        "isMine": false,
+        "label": null,
+        "ownerId": null,
+        "parentId": "n1",
+        "pct": 50,
+        "roundId": "n1",
+        "sortOrder": 0,
+        "startDate": "2026-10-08",
+        "submitted": 1,
+        "task": {
+          "assigned": 2,
+          "people": [
+            {
+              "nickname": "지은",
+              "status": "done",
+              "tone": "peach",
+              "userId": "u2"
+            },
+            {
+              "nickname": "철수",
+              "status": "open",
+              "tone": "blue",
+              "userId": "u3"
+            }
+          ],
+          "state": "progress",
+          "submitted": 1,
+          "type": "designated"
+        },
+        "title": "EC2 인스턴스 유형 정리"
+      },
+      {
+        "archived": false,
+        "assigned": 1,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-10-14",
+        "id": "n6",
+        "isMine": false,
+        "label": null,
+        "ownerId": null,
+        "parentId": "n1",
+        "pct": 0,
+        "roundId": "n1",
+        "sortOrder": 1,
+        "startDate": "2026-10-10",
+        "submitted": 0,
+        "task": {
+          "assigned": 1,
+          "people": [
+            {
+              "nickname": "하나",
+              "status": "open",
+              "tone": "lav",
+              "userId": "u4"
+            }
+          ],
+          "state": "progress",
+          "submitted": 0,
+          "type": "designated"
+        },
+        "title": "S3 스토리지 클래스 발표자료"
+      },
+      {
+        "archived": false,
+        "assigned": 1,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-10-14",
+        "id": "n7",
+        "isMine": false,
+        "label": null,
+        "ownerId": "u3",
+        "parentId": "n1",
+        "pct": 0,
+        "roundId": "n1",
+        "sortOrder": 2,
+        "startDate": "2026-10-08",
+        "submitted": 0,
+        "task": {
+          "assigned": 1,
+          "people": [
+            {
+              "nickname": "철수",
+              "status": "open",
+              "tone": "blue",
+              "userId": "u3"
+            }
+          ],
+          "state": "progress",
+          "submitted": 0,
+          "type": "personal"
+        },
+        "title": "철수 목표"
+      },
+      {
+        "archived": false,
+        "assigned": 1,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-10-14",
+        "id": "n8",
+        "isMine": true,
+        "label": null,
+        "ownerId": "u2",
+        "parentId": "n1",
+        "pct": 0,
+        "roundId": "n1",
+        "sortOrder": 3,
+        "startDate": "2026-10-08",
+        "submitted": 0,
+        "task": {
+          "assigned": 1,
+          "people": [
+            {
+              "nickname": "지은",
+              "status": "open",
+              "tone": "peach",
+              "userId": "u2"
+            }
+          ],
+          "state": "progress",
+          "submitted": 0,
+          "type": "personal"
+        },
+        "title": "지은 목표"
+      },
+      {
+        "archived": false,
+        "assigned": 1,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-10-16",
+        "id": "n9",
+        "isMine": true,
+        "label": null,
+        "ownerId": "u2",
+        "parentId": "n1",
+        "pct": 0,
+        "roundId": "n1",
+        "sortOrder": 4,
+        "startDate": "2026-10-15",
+        "submitted": 0,
+        "task": {
+          "assigned": 1,
+          "people": [
+            {
+              "nickname": "지은",
+              "status": "planned",
+              "tone": "peach",
+              "userId": "u2"
+            }
+          ],
+          "state": "planned",
+          "submitted": 0,
+          "type": "personal"
+        },
+        "title": "지은 목표 2"
+      },
+      {
+        "archived": false,
+        "assigned": 4,
+        "createdBy": null,
+        "depth": 2,
+        "descriptionMd": "",
+        "endDate": "2026-10-21",
+        "id": "n10",
+        "isMine": false,
+        "label": "3주차",
+        "ownerId": null,
+        "parentId": null,
+        "pct": 0,
+        "roundId": "n10",
+        "sortOrder": 2,
+        "startDate": "2026-10-15",
+        "submitted": 0,
+        "task": null,
+        "title": "고가용성 아키텍처"
+      },
+      {
+        "archived": false,
+        "assigned": 4,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-10-21",
+        "id": "n11",
+        "isMine": false,
+        "label": null,
+        "ownerId": null,
+        "parentId": "n10",
+        "pct": 0,
+        "roundId": "n10",
+        "sortOrder": 0,
+        "startDate": "2026-10-15",
+        "submitted": 0,
+        "task": null,
+        "title": "로드밸런서 비교"
+      },
+      {
+        "archived": false,
+        "assigned": 4,
+        "createdBy": null,
+        "depth": 4,
+        "descriptionMd": "",
+        "endDate": "2026-10-21",
+        "id": "n12",
+        "isMine": false,
+        "label": null,
+        "ownerId": null,
+        "parentId": "n11",
+        "pct": 0,
+        "roundId": "n10",
+        "sortOrder": 0,
+        "startDate": "2026-10-15",
+        "submitted": 0,
+        "task": {
+          "assigned": 4,
+          "people": [
+            {
+              "nickname": "민수",
+              "status": "planned",
+              "tone": "mint",
+              "userId": "u1"
+            },
+            {
+              "nickname": "지은",
+              "status": "planned",
+              "tone": "peach",
+              "userId": "u2"
+            },
+            {
+              "nickname": "철수",
+              "status": "planned",
+              "tone": "blue",
+              "userId": "u3"
+            },
+            {
+              "nickname": "하나",
+              "status": "planned",
+              "tone": "lav",
+              "userId": "u4"
+            }
+          ],
+          "state": "planned",
+          "submitted": 0,
+          "type": "common"
+        },
+        "title": "ALB vs NLB 실습"
+      },
+      {
+        "archived": false,
+        "assigned": 4,
+        "createdBy": null,
+        "depth": 2,
+        "descriptionMd": "",
+        "endDate": "2026-10-28",
+        "id": "n13",
+        "isMine": false,
+        "label": "4주차",
+        "ownerId": null,
+        "parentId": null,
+        "pct": 0,
+        "roundId": "n13",
+        "sortOrder": 3,
+        "startDate": "2026-10-22",
+        "submitted": 0,
+        "task": null,
+        "title": "오토스케일링"
+      },
+      {
+        "archived": false,
+        "assigned": 4,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-10-28",
+        "id": "n14",
+        "isMine": false,
+        "label": null,
+        "ownerId": null,
+        "parentId": "n13",
+        "pct": 0,
+        "roundId": "n13",
+        "sortOrder": 0,
+        "startDate": "2026-10-22",
+        "submitted": 0,
+        "task": {
+          "assigned": 4,
+          "people": [
+            {
+              "nickname": "민수",
+              "status": "planned",
+              "tone": "mint",
+              "userId": "u1"
+            },
+            {
+              "nickname": "지은",
+              "status": "planned",
+              "tone": "peach",
+              "userId": "u2"
+            },
+            {
+              "nickname": "철수",
+              "status": "planned",
+              "tone": "blue",
+              "userId": "u3"
+            },
+            {
+              "nickname": "하나",
+              "status": "planned",
+              "tone": "lav",
+              "userId": "u4"
+            }
+          ],
+          "state": "planned",
+          "submitted": 0,
+          "type": "common"
+        },
+        "title": "Auto Scaling 정책 정리"
+      },
+      {
+        "archived": false,
+        "assigned": 6,
+        "createdBy": null,
+        "depth": 2,
+        "descriptionMd": "",
+        "endDate": "2026-11-04",
+        "id": "n15",
+        "isMine": false,
+        "label": "5주차",
+        "ownerId": null,
+        "parentId": null,
+        "pct": 0,
+        "roundId": "n15",
+        "sortOrder": 4,
+        "startDate": "2026-10-29",
+        "submitted": 0,
+        "task": null,
+        "title": "데이터베이스"
+      },
+      {
+        "archived": false,
+        "assigned": 4,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-11-04",
+        "id": "n16",
+        "isMine": false,
+        "label": null,
+        "ownerId": null,
+        "parentId": "n15",
+        "pct": 0,
+        "roundId": "n15",
+        "sortOrder": 0,
+        "startDate": "2026-10-29",
+        "submitted": 0,
+        "task": {
+          "assigned": 4,
+          "people": [
+            {
+              "nickname": "민수",
+              "status": "planned",
+              "tone": "mint",
+              "userId": "u1"
+            },
+            {
+              "nickname": "지은",
+              "status": "planned",
+              "tone": "peach",
+              "userId": "u2"
+            },
+            {
+              "nickname": "철수",
+              "status": "planned",
+              "tone": "blue",
+              "userId": "u3"
+            },
+            {
+              "nickname": "하나",
+              "status": "planned",
+              "tone": "lav",
+              "userId": "u4"
+            }
+          ],
+          "state": "planned",
+          "submitted": 0,
+          "type": "common"
+        },
+        "title": "RDS·Aurora 비교"
+      },
+      {
+        "archived": false,
+        "assigned": 2,
+        "createdBy": null,
+        "depth": 3,
+        "descriptionMd": "",
+        "endDate": "2026-11-04",
+        "id": "n17",
+        "isMine": false,
+        "label": null,
+        "ownerId": null,
+        "parentId": "n15",
+        "pct": 0,
+        "roundId": "n15",
+        "sortOrder": 1,
+        "startDate": "2026-11-01",
+        "submitted": 0,
+        "task": {
+          "assigned": 2,
+          "people": [
+            {
+              "nickname": "지은",
+              "status": "planned",
+              "tone": "peach",
+              "userId": "u2"
+            },
+            {
+              "nickname": "하나",
+              "status": "planned",
+              "tone": "lav",
+              "userId": "u4"
+            }
+          ],
+          "state": "planned",
+          "submitted": 0,
+          "type": "designated"
+        },
+        "title": "DynamoDB 설계 퀴즈"
+      }
+    ],
+    "personal": {
+      "canAdd": true,
+      "perRound": 20
+    },
+    "room": {
+      "leaderDoesTasks": true,
+      "slug": "aws",
+      "status": "active"
+    },
+    "stats": {
+      "leafCount": 8,
+      "overallPct": 24,
+      "unassignedCount": 0
+    },
+    "study": {
+      "endDate": "2026-12-31",
+      "slug": "aws",
+      "startDate": "2026-10-01",
+      "status": "active",
+      "title": "AWS SAA 자격증 3개월 완주"
+    },
+    "today": "2026-10-12",
+    "version": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+    "viewer": {
+      "nickname": "지은"
+    }
+  },
+  "curriculum_plan_apply": {
+    "applied": true,
+    "createdIds": [
+      "n18"
+    ],
+    "link": "/my-study/aws?tab=curriculum",
+    "notifications": {
+      "perRecipient": [
+        {
+          "collapsed": true,
+          "count": 2,
+          "newTasks": 0,
+          "nickname": "철수"
+        },
+        {
+          "collapsed": true,
+          "count": 3,
+          "newTasks": 0,
+          "nickname": "지은"
+        },
+        {
+          "collapsed": true,
+          "count": 2,
+          "newTasks": 0,
+          "nickname": "하나"
+        }
+      ],
+      "recipients": 3
+    },
+    "ok": true,
+    "previewId": "pv_000000000001",
+    "refs": {},
+    "summary": {
+      "created": 1,
+      "moved": 1,
+      "restored": 0,
+      "shiftedDescendants": 1,
+      "updated": 2
+    },
+    "undoable": {
+      "notUndoable": {
+        "created": 1,
+        "moved": 1,
+        "otherChanges": 0
+      },
+      "ops": 3
+    },
+    "version": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+  },
+  "curriculum_plan_preview": {
+    "diff": [
+      {
+        "assignees": [
+          "지은"
+        ],
+        "endDate": "2026-10-28",
+        "id": null,
+        "kind": "task",
+        "label": null,
+        "op": "create",
+        "parent": "n13",
+        "parentPath": null,
+        "path": "ops[0]",
+        "ref": null,
+        "startDate": "2026-10-22",
+        "taskType": "designated",
+        "title": "계약 새 과제"
+      },
+      {
+        "changes": {
+          "endDate": [
+            "2026-10-28",
+            "2026-10-30"
+          ]
+        },
+        "id": "n14",
+        "kind": "task",
+        "op": "update",
+        "path": "ops[1]",
+        "title": "Auto Scaling 정책 정리"
+      },
+      {
+        "from": {
+          "index": 1,
+          "parentId": "n15"
+        },
+        "id": "n17",
+        "index": 0,
+        "kind": "task",
+        "op": "move",
+        "parent": "n13",
+        "path": "ops[2]",
+        "ref": null,
+        "title": "DynamoDB 설계 퀴즈"
+      },
+      {
+        "changes": {
+          "endDate": [
+            "2026-11-04",
+            "2026-11-11"
+          ],
+          "startDate": [
+            "2026-10-29",
+            "2026-11-05"
+          ]
+        },
+        "id": "n15",
+        "kind": "round",
+        "op": "update",
+        "path": "ops[3]#0",
+        "rpath": "ops[3]",
+        "title": "데이터베이스"
+      }
+    ],
+    "errors": [],
+    "expiresAt": "2026-01-01T00:00:00.000Z",
+    "notifications": {
+      "perRecipient": [
+        {
+          "collapsed": true,
+          "count": 2,
+          "newTasks": 0,
+          "nickname": "철수"
+        },
+        {
+          "collapsed": true,
+          "count": 3,
+          "newTasks": 0,
+          "nickname": "지은"
+        },
+        {
+          "collapsed": true,
+          "count": 2,
+          "newTasks": 0,
+          "nickname": "하나"
+        }
+      ],
+      "recipients": 3
+    },
+    "ok": true,
+    "previewId": "pv_000000000001",
+    "summary": {
+      "created": 1,
+      "moved": 1,
+      "restored": 0,
+      "shiftedDescendants": 1,
+      "updated": 2
+    },
+    "undoOf": null,
+    "undoable": {
+      "notUndoable": {
+        "created": 1,
+        "moved": 1,
+        "otherChanges": 0
+      },
+      "ops": 3
+    },
+    "version": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+    "warnings": [
+      {
+        "code": "PERIOD_OUTSIDE_PARENT",
+        "message": "상위 항목 기간 밖이에요",
+        "nodeId": "n14",
+        "path": "ops[1]"
+      }
+    ]
+  },
+  "curriculum_plan_preview_undo": {
+    "diff": [
+      {
+        "changes": {
+          "endDate": [
+            "2026-11-11",
+            "2026-11-04"
+          ],
+          "startDate": [
+            "2026-11-05",
+            "2026-10-29"
+          ]
+        },
+        "id": "n15",
+        "kind": "round",
+        "op": "restore",
+        "path": "undo",
+        "title": "데이터베이스"
+      },
+      {
+        "changes": {
+          "endDate": [
+            "2026-10-30",
+            "2026-10-28"
+          ]
+        },
+        "id": "n14",
+        "kind": "task",
+        "op": "restore",
+        "path": "undo",
+        "title": "Auto Scaling 정책 정리"
+      },
+      {
+        "changes": {
+          "endDate": [
+            "2026-11-11",
+            "2026-11-04"
+          ],
+          "startDate": [
+            "2026-11-05",
+            "2026-10-29"
+          ]
+        },
+        "id": "n16",
+        "kind": "task",
+        "op": "restore",
+        "path": "undo",
+        "title": "RDS·Aurora 비교"
+      }
+    ],
+    "errors": [],
+    "expiresAt": "2026-01-01T00:00:00.000Z",
+    "notifications": {
+      "perRecipient": [
+        {
+          "collapsed": true,
+          "count": 2,
+          "newTasks": 0,
+          "nickname": "철수"
+        },
+        {
+          "collapsed": true,
+          "count": 2,
+          "newTasks": 0,
+          "nickname": "지은"
+        },
+        {
+          "collapsed": true,
+          "count": 2,
+          "newTasks": 0,
+          "nickname": "하나"
+        }
+      ],
+      "recipients": 3
+    },
+    "ok": true,
+    "previewId": "pv_000000000002",
+    "summary": {
+      "created": 0,
+      "moved": 0,
+      "restored": 3,
+      "shiftedDescendants": 0,
+      "updated": 0
+    },
+    "undoOf": "pv_000000000001",
+    "undoable": {
+      "notUndoable": {
+        "created": 0,
+        "moved": 0,
+        "otherChanges": 0
+      },
+      "ops": 3
+    },
+    "version": "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+    "warnings": []
+  },
+  "me_schedule": {
+    "markers": [
+      {
+        "date": "2026-10-15",
+        "round": "3주차",
+        "slug": "aws"
+      },
+      {
+        "date": "2026-10-22",
+        "round": "4주차",
+        "slug": "aws"
+      }
+    ],
+    "studies": [
+      {
+        "endDate": "2026-12-31",
+        "membership": "joined",
+        "slug": "aws",
+        "startDate": "2026-10-01",
+        "status": "active",
+        "title": "AWS SAA 자격증 3개월 완주",
+        "tone": "mint"
+      }
+    ],
+    "tasks": [
+      {
+        "e": "2026-10-14",
+        "id": "n5",
+        "personal": false,
+        "round": "2주차",
+        "s": "2026-10-08",
+        "slug": "aws",
+        "st": "done",
+        "title": "EC2 인스턴스 유형 정리"
+      },
+      {
+        "e": "2026-10-16",
+        "id": "n9",
+        "personal": true,
+        "round": "2주차",
+        "s": "2026-10-15",
+        "slug": "aws",
+        "st": "planned",
+        "title": "지은 목표 2"
+      },
+      {
+        "e": "2026-10-21",
+        "id": "n12",
+        "personal": false,
+        "round": "3주차",
+        "s": "2026-10-15",
+        "slug": "aws",
+        "st": "planned",
+        "title": "ALB vs NLB 실습"
+      },
+      {
+        "e": "2026-10-28",
+        "id": "n18",
+        "personal": false,
+        "round": "4주차",
+        "s": "2026-10-22",
+        "slug": "aws",
+        "st": "planned",
+        "title": "계약 새 과제"
+      },
+      {
+        "e": "2026-10-30",
+        "id": "n14",
+        "personal": false,
+        "round": "4주차",
+        "s": "2026-10-22",
+        "slug": "aws",
+        "st": "planned",
+        "title": "Auto Scaling 정책 정리"
+      }
+    ],
+    "today": "2026-10-12",
+    "upcoming": [
+      {
+        "e": "2026-10-16",
+        "id": "n9",
+        "personal": true,
+        "round": "2주차",
+        "s": "2026-10-15",
+        "slug": "aws",
+        "st": "planned",
+        "title": "지은 목표 2"
+      }
+    ]
+  },
+  "me_studies": {
+    "items": [
+      {
+        "archived": false,
+        "canAddPersonal": true,
+        "canEditCurriculum": false,
+        "currentRound": {
+          "endDate": "2026-10-14",
+          "id": "n1",
+          "label": "2주차",
+          "startDate": "2026-10-08",
+          "title": "EC2·S3"
+        },
+        "endDate": "2026-12-31",
+        "intro": "IAM부터 고가용성 아키텍처까지, 매주 회차별 과제로 SAA-C03 합격까지 함께 달려요.",
+        "membership": "joined",
+        "role": "member",
+        "slug": "aws",
+        "startDate": "2026-10-01",
+        "status": "active",
+        "title": "AWS SAA 자격증 3개월 완주",
+        "when": {
+          "date": "2026-12-31",
+          "kind": "end"
+        }
+      }
+    ],
+    "today": "2026-10-12"
+  },
+  "personal_create_many": {
+    "count": 2,
+    "createdIds": [
+      "n8",
+      "n9"
+    ],
+    "remaining": 18,
+    "round": {
+      "id": "n1",
+      "label": "2주차",
+      "title": "EC2·S3"
+    },
+    "skipped": [
+      "지은 목표"
+    ],
+    "warnings": [
+      {
+        "code": "PERIOD_OUTSIDE_PARENT",
+        "message": "상위 항목 기간 밖이에요",
+        "nodeId": "n9"
+      }
+    ]
+  },
+  "personal_delete_many": {
+    "deleted": 1,
+    "skipped": [
+      "n19"
+    ]
+  },
+  "whoami": {
+    "expiresAt": "2026-01-01T00:00:00.000Z",
+    "nickname": "지은",
+    "scopes": [
+      "curriculum:write",
+      "personal:write",
+      "read"
+    ],
+    "source": "pat",
+    "tokenName": "test",
+    "userId": "u2"
+  }
+}
