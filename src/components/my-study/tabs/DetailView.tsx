@@ -31,6 +31,8 @@ type Props = {
   canEdit: boolean;
   onOpen: (id: string) => void;
   onBack: () => void;
+  /** [← …] 단추 글 — 상세를 연 곳(보드·개요·내 과제…). 기본 진행목표 */
+  backLabel?: string;
   onEdit: () => void;
   slug: string;
   roomStatus: RoomStatus;
@@ -134,7 +136,7 @@ function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActio
 }
 
 /** 보기 모드 상세 — 목록 자리를 쓰는 읽기 전용 화면 (?tab=curriculum&item=). 회차는 기간·진척·설명·과제 목록, 과제는 설명·담당자별 상태 */
-export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, isLeader, quietNotAssigned, roots, period, personal, api, onUnsavedChange, pendingLeave }: Props) {
+export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진행목표", onEdit, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, isLeader, quietNotAssigned, roots, period, personal, api, onUnsavedChange, pendingLeave }: Props) {
   const today = useToday();
   const meId = useMe()?.id ?? null;
   // 위 고정 막대 높이 → 제출·개인 목표 편집기 툴바가 그 밑에 붙는다 (Q1-10)
@@ -209,7 +211,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   const onKey = (e: KeyboardEvent<HTMLElement>) => {
     if (e.key !== "Escape" || e.defaultPrevented || unsaved || leave || asking) return;
     const t = e.target as HTMLElement;
-    // 편집 폼: 설명 편집기·날짜 선택기 안의 Esc 는 그쪽 몫, 나머지는 [← 진행목표] 와 같다(미저장이면 묻는다)
+    // 편집 폼: 설명 편집기·날짜 선택기 안의 Esc 는 그쪽 몫, 나머지는 [← 연 곳] 과 같다(미저장이면 묻는다)
     if (editing) {
       if (t.closest(".cm-editor") || (t instanceof HTMLInputElement && t.type === "date")) return;
     } else if (t.closest("input, textarea, [contenteditable=true]")) return; // 제출 작성 칸 안의 Esc 는 나가기가 아니다
@@ -253,7 +255,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M19 12H5M11 6l-6 6 6 6" />
           </svg>
-          진행목표
+          {backLabel}
         </button>
         {/* 개인 목표는 머리 버튼이 2~3개 — 좁으면 경로가 세로로 찌그러지지 않게 버튼 줄을 아래로 내린다 */}
         <nav aria-label="경로" className={`flex min-w-0 flex-wrap items-center gap-x-1 text-[13px] text-muted ${pn ? "flex-[1_1_14rem]" : "flex-1"}`}>

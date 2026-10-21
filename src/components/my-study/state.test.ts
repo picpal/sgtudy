@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editReturn, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, toggleMinePatch, toggleOthersPatch } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editReturn, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, toggleMinePatch, toggleOthersPatch, viewBackLabel, viewBackPatch } from "./state";
 
 describe("goLeafPatch", () => {
   it("opens the task detail view instead of an inline row", () =>
-    expect(goLeafPatch("21")).toEqual({ tab: "curriculum", curMode: "view", viewSel: "21", viewFocus: "submission", editSel: null, closed: {}, calPick: null }));
+    expect(goLeafPatch("21")).toEqual({ tab: "curriculum", curMode: "view", viewSel: "21", viewFocus: "submission", viewFrom: null, editSel: null, closed: {}, calPick: null }));
+  it("연 곳(지금 탭)을 적는다", () => expect(goLeafPatch("21", "board").viewFrom).toBe("board"));
+});
+
+// 상세 [← …] — 연 곳의 이름과 돌아갈 탭. 모르면 진행목표 목록
+describe("viewBackLabel · viewBackPatch", () => {
+  it("단추 글", () => {
+    expect(viewBackLabel("overview")).toBe("개요");
+    expect(viewBackLabel("board")).toBe("보드");
+    expect(viewBackLabel("calendar")).toBe("캘린더");
+    expect(viewBackLabel("gantt")).toBe("간트");
+    expect(viewBackLabel("curriculum")).toBe("진행목표");
+    expect(viewBackLabel("tasks")).toBe("내 과제");
+    expect(viewBackLabel("schedule")).toBe("내 일정");
+    expect(viewBackLabel(null)).toBe("진행목표");
+  });
+  it("방 탭 출발지는 그 탭으로, 진행목표·모름·다른 화면은 진행목표 목록(탭 그대로)", () => {
+    expect(viewBackPatch({ viewFrom: "board" })).toEqual({ viewSel: null, viewFocus: null, viewFrom: null, tab: "board", calPick: null });
+    expect(viewBackPatch({ viewFrom: "overview" }).tab).toBe("overview");
+    for (const f of ["curriculum", null, "tasks"] as const) expect(viewBackPatch({ viewFrom: f })).toEqual({ viewSel: null, viewFocus: null, viewFrom: null });
+  });
 });
 
 describe("viewFocus", () => {

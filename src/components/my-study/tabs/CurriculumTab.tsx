@@ -9,7 +9,7 @@ import { dateShort, rangeShort } from "@/lib/api/format";
 import { useToday } from "@/lib/today";
 import { samePage } from "@/lib/leaveGuard";
 import { allParentsClosed, findNode, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
-import { editUnsaved, modeSwitchPatch, toggleMinePatch, toggleOthersPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
+import { editUnsaved, modeSwitchPatch, toggleMinePatch, toggleOthersPatch, viewBackLabel, viewBackPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
 import { designatedHint, dropPlan, movedPlan, roundOf, rowMoves, withAddRows, withEmptyRounds, withPersonalAddRows, type RowMove } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import type { RoomStatus } from "../submission";
@@ -27,6 +27,8 @@ type Props = {
   tree: Tree;
   S: ScreenState;
   update: Update;
+  /** 보기 상세 [← …] — 연 곳으로 (MyStudyScreen: 다른 화면 출발지는 history.back). 없으면 viewBackPatch */
+  onViewBack?: () => void;
   api: CurriculumApi;
   canEdit: boolean;
   isLeader: boolean;
@@ -64,7 +66,7 @@ function InfoRow({ children, tone = "plain", ...rest }: { children: React.ReactN
 /** 보기 목록 개인 목표 빠른 추가의 S.quickAdd 값 — 편집 목록 팀 과제 빠른 추가(회차 id 그대로)와 겹치지 않게 */
 const pKey = (roundId: string) => `p:${roundId}`;
 
-export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period, slug, roomStatus, viewerPending, toast, personal, periodWarning }: Props) {
+export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLeader, period, slug, roomStatus, viewerPending, toast, personal, periodWarning }: Props) {
   const meId = useMe()?.id ?? null;
   const router = useRouter();
   const today = useToday();
@@ -264,7 +266,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
           nodes={tree.nodes}
           canEdit={canEdit}
           onOpen={(id) => update({ viewSel: id, viewFocus: null })}
-          onBack={() => update({ viewSel: null, viewFocus: null })}
+          onBack={onViewBack ?? (() => update(viewBackPatch))}
+          backLabel={viewBackLabel(S.viewFrom)}
           onEdit={() => void enterEdit()}
           slug={slug}
           roomStatus={roomStatus}

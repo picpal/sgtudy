@@ -1,9 +1,12 @@
-import type { TabId } from "./StudyHeaderInfo";
+import type { TaskOrigin } from "@/lib/taskOrigin";
+import { TABS, type TabId } from "./StudyHeaderInfo";
 import { EMPTY_OVERRIDES, isDirty, type CalMode, type Overrides } from "./model";
 
 export type CurMode = "view" | "edit";
 export type BoardMode = "mine" | "team";
 export type Zoom = "day" | "week";
+/** 보기 상세를 연 곳 — 방 탭(보드 카드·개요 카드 등) 또는 다른 화면(내 과제·내 일정의 과제 링크) */
+export type ViewFrom = TabId | TaskOrigin;
 /** 저장하지 않은 수정이 있는 채로 다른 노드·모드·추가·탭(Q2-1)·다른 화면 주소(헤더 메뉴 등)로 가려 할 때 보류한 목적지 (Q2-05) */
 export type Leave = { sel: string | null } | { mode: CurMode } | { add: string | null } | { tab: TabId } | { href: string } | { view: string | null };
 
@@ -23,6 +26,9 @@ export type ScreenState = {
   viewSel: string | null;
   /** 보기 상세가 열리며 한 번 옮길 포커스 — 보드·캘린더·간트·알림 진입은 제출 영역 (스펙 §2.6) */
   viewFocus: "submission" | null;
+  /** 보기 상세(·그 안에서 옮겨 간 항목·편집)를 연 곳 — 상세의 [← 보드] 가 그리로 돌아간다. null = 모름(새로고침·알림 링크) → 진행목표 목록.
+   *  브라우저 뒤로 가기가 돌아갈 기록(상세 기록 바로 아래)과 같게 맞춘다. 열린 항목이 없어지면 지운다 (MyStudyScreen) */
+  viewFrom: ViewFrom | null;
   /** 빠른 추가 입력이 열린 회차 id — 편집 목록 팀 과제는 그대로 id, 보기 목록 "내 목표 추가" 는 `p:{id}` */
   quickAdd: string | null;
   /** 진행목표(·간트) "내 것만" — 내게 배정된 팀 과제 + 내 개인 목표만. URL 에 싣지 않는다 */
@@ -62,6 +68,7 @@ export const INITIAL_STATE: ScreenState = {
   editFrom: null,
   viewSel: null,
   viewFocus: null,
+  viewFrom: null,
   quickAdd: null,
   mineOnly: false,
   othersPersonal: false,
@@ -86,8 +93,19 @@ export const INITIAL_STATE: ScreenState = {
 export type Patch = Partial<ScreenState> | ((prev: ScreenState) => Partial<ScreenState>);
 export type Update = (patch: Patch) => void;
 
-/** 보드 카드·캘린더 팝오버·간트 리프·알림 → 그 과제의 보기 상세 */
-export const goLeafPatch = (id: string): Partial<ScreenState> => ({ tab: "curriculum", curMode: "view", viewSel: id, viewFocus: "submission", editSel: null, closed: {}, calPick: null });
+/** 보드 카드·캘린더 팝오버·간트 리프·개요 카드·알림 → 그 과제의 보기 상세. from = 누른 곳(지금 탭), 알림 진입은 null */
+export const goLeafPatch = (id: string, from: ViewFrom | null = null): Partial<ScreenState> => ({ tab: "curriculum", curMode: "view", viewSel: id, viewFocus: "submission", viewFrom: from, editSel: null, closed: {}, calPick: null });
+
+const FROM_LABEL: Record<TaskOrigin, string> = { tasks: "내 과제", schedule: "내 일정" };
+/** 상세 [← …] 단추 글 — 연 곳의 이름. 모르면 진행목표 */
+export const viewBackLabel = (from: ViewFrom | null): string =>
+  from === "tasks" || from === "schedule" ? FROM_LABEL[from] : (TABS.find(([id]) => id === (from ?? "curriculum"))?.[1] ?? "진행목표");
+
+/** 상세 [← …] (다른 화면 출발지는 MyStudyScreen 이 history.back 으로) — 상세를 닫고 연 탭으로. 진행목표·모름은 진행목표 목록 */
+export const viewBackPatch = (S: Pick<ScreenState, "viewFrom">): Partial<ScreenState> => {
+  const tab = S.viewFrom && S.viewFrom !== "tasks" && S.viewFrom !== "schedule" ? S.viewFrom : "curriculum";
+  return { viewSel: null, viewFocus: null, viewFrom: null, ...(tab !== "curriculum" ? { tab, calPick: null } : {}) };
+};
 
 /** 보기↔편집 전환 — 열려 있던 항목은 상대 모드의 같은 항목으로 (임시 노드는 넘기지 않는다) */
 export function modeSwitchPatch(S: ScreenState, mode: CurMode): Partial<ScreenState> {
@@ -116,6 +134,7 @@ export const editUnsaved = (S: Pick<ScreenState, "ov" | "uploading" | "examDirty
 export const blocksLeave = (S: ScreenState, canEdit: boolean): boolean =>
   S.tab === "curriculum" && (S.personalUnsaved !== null || (canEdit && S.curMode === "edit" && editUnsaved(S, S.editSel)));
 
-/** 방 탭 누름 — 미저장 수정이 있으면 탭은 그대로 두고 목적지를 보류(편집 화면의 "저장하지 않은 수정이 있어요" 확인) */
+/** 방 탭 누름 — 미저장 수정이 있으면 탭은 그대로 두고 목적지를 보류(편집 화면의 "저장하지 않은 수정이 있어요" 확인).
+ *  진행목표로 돌아와 남아 있던 상세가 다시 열리면 그 기록은 지금 탭 위에 쌓인다 → 연 곳도 지금 탭 */
 export const tabPatch = (S: ScreenState, tab: TabId, canEdit: boolean): Partial<ScreenState> =>
-  tab !== S.tab && blocksLeave(S, canEdit) ? { leave: { tab }, confirm: false } : { tab, calPick: null };
+  tab !== S.tab && blocksLeave(S, canEdit) ? { leave: { tab }, confirm: false } : { tab, calPick: null, ...(tab === "curriculum" && tab !== S.tab ? { viewFrom: S.tab } : {}) };

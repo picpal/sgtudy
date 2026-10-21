@@ -12,6 +12,7 @@ import { fetchMyTasks, personalComplete, personalCreate } from "@/lib/api/person
 import type { MeTaskItem, MeTasks } from "@/lib/api/types";
 import { md, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
+import { markTaskOrigin } from "@/lib/taskOrigin";
 import { AddPersonalForm } from "./AddPersonalForm";
 import { focusFirst, latestApplied } from "./requests";
 import { personalErrorText } from "@/components/my-study/personal";
@@ -240,7 +241,8 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   };
 
   return (
-    <div className="flex min-h-screen flex-col">
+    // 과제 링크를 누르면 출발지를 기억한다 — 상세의 [← 내 과제] 가 이 화면으로 돌아온다
+    <div className="flex min-h-screen flex-col" onClickCapture={(e) => markTaskOrigin("tasks", e)}>
       <AppHeader active="tasks" bell={<NotificationBell />} />
       <PageBody>
         <main aria-busy={pending > 0} className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 rounded-[20px] bg-surface px-7 pb-[30px] pt-[26px] max-sm:px-2 max-sm:pb-7 max-sm:pt-5">

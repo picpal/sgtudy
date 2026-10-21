@@ -17,6 +17,7 @@ import { UpcomingPanel } from "./UpcomingPanel";
 import { ScheduleEmpty } from "./ScheduleEmpty";
 import { monthSel } from "./calc";
 import { stickyAside, useStickyFit } from "@/lib/useStickyFit";
+import { markTaskOrigin } from "@/lib/taskOrigin";
 
 export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   const [data, setData] = useState(() => toScheduleData(initial));
@@ -99,7 +100,8 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   return (
     // 한 페이지 스크롤 — 화면 높이에 가두지 않는다. 예전에는 넓은 화면을 h-screen 에 가두고 달력·패널에 안쪽 스크롤(overflow-auto +
     // overscroll-behavior: contain)을 두었는데, 넘칠 게 없는 안쪽 스크롤러도 휠·터치를 붙잡고 문서로 넘기지 않아 화면 밖 내용을 볼 수 없었다
-    <div className="flex min-h-screen flex-col">
+    // 과제 링크를 누르면 출발지를 기억한다 — 상세의 [← 내 일정] 이 이 화면으로 돌아온다
+    <div className="flex min-h-screen flex-col" onClickCapture={(e) => markTaskOrigin("schedule", e)}>
       <AppHeader active="schedule" bell={<NotificationBell />} />
       <PageBody>
         <div className="flex w-full flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">

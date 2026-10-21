@@ -18,6 +18,7 @@ vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }
 const { MeProvider } = await import("@/lib/me");
 const { announceItem } = await import("@/lib/hashTarget");
 const { MyStudyScreen } = await import("./MyStudyScreen");
+const { markTaskOrigin } = await import("@/lib/taskOrigin");
 
 const P = (userId: string, nickname: string, tone: RoomDetail["leader"]["tone"]) => ({ userId, nickname, tone });
 const detail: RoomDetail = {
@@ -97,7 +98,7 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     back.mockRestore();
   });
 
-  // F 리뷰 n1: 보드 탭에서 연 상세를 화면 안 [← 진행목표]로 닫으면 화면은 진행목표 목록 — 돌아온 목록 기록의 ?tab= 도 화면을 따른다
+  // F 리뷰 n1 → 출발지 복귀: 보드 탭에서 연 상세는 화면 안 [← 보드]로 닫으면 보드 — 돌아온 목록 기록의 ?tab= 도 화면을 따른다
   const selectedTab = (host: HTMLElement) => host.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? "";
   const openFromBoard = () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=board");
@@ -108,14 +109,14 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     expect(detailTitle(m.host)).toContain(title("31"));
     return m;
   };
-  it("보드에서 연 상세를 화면 안에서 닫으면 주소 ?tab= 이 화면(진행목표)과 같다", async () => {
+  it("보드에서 연 상세를 화면 안에서 닫으면 보드로, 주소 ?tab= 이 화면(보드)과 같다", async () => {
     const { host } = openFromBoard();
     const popped = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
-    act(() => buttonByText(host.querySelector("#detail-title")!.closest("section")!, "진행목표").click());
+    act(() => buttonByText(host.querySelector("#detail-title")!.closest("section")!, "보드").click());
     await act(async () => void (await popped));
     expect(detailTitle(host)).toBeNull();
-    expect(selectedTab(host)).toContain("진행목표");
-    expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=curriculum");
+    expect(selectedTab(host)).toContain("보드");
+    expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=board");
   });
   // F 리뷰 n2: 브라우저 뒤로 가기는 상세를 연 목록 기록의 탭(보드)으로 — backTab 회귀를 잡는다
   it("보드에서 연 상세에서 브라우저 뒤로 가기 → 보드 탭", async () => {
@@ -205,6 +206,154 @@ describe("MyStudyScreen — 개요 과제 카드", () => {
     expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("진행목표");
     expect(detailTitle(host)).toContain(title("21"));
     expect(new URLSearchParams(window.location.search).get("item")).toBe("21");
+  });
+});
+
+// 상세 [← …] 는 상세를 연 곳으로 — 보드·개요 카드는 그 탭, 진행목표 목록·새로고침·알림 링크는 진행목표 목록, 내 과제·내 일정 링크는 그 화면(history.back).
+// 브라우저 뒤로 가기와 같은 곳으로 가고, 화면 안 닫기 뒤 앞으로 가기가 기록을 겹쳐 쌓지 않는다
+describe("MyStudyScreen — 상세 [← 연 곳]", () => {
+  const backBtn = (host: HTMLElement) => host.querySelector("#detail-title")!.closest("section")!.querySelector("button")!;
+  const selected = (host: HTMLElement) => host.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? "";
+  const here = () => window.location.pathname + window.location.search;
+  const pop = () => new Promise((r) => window.addEventListener("popstate", r, { once: true }));
+  const withRound = {
+    ...detail,
+    currentRound: { id: "2", label: "2주차", title: "EC2·S3", startDate: "2026-10-08", endDate: "2026-10-14", leafCount: 1, assigned: 2, submitted: 1, pct: 50, tasks: [
+      { id: "21", title: title("21"), type: "designated", startDate: "2026-10-08", endDate: "2026-10-14", people: [{ ...P("u3", "지은", "peach"), status: "done" }, { ...P("u1", "철수", "blue"), status: "open" }] },
+    ] },
+  } as RoomDetail;
+  const openFromOverview = () => {
+    window.history.replaceState(null, "", "/my-study/aws");
+    const m = mount({ detail: withRound, initialTab: "overview" });
+    const card = [...m.host.querySelectorAll("li")].find((li) => li.textContent?.includes(title("21")))!;
+    act(() => void card.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(detailTitle(m.host)).toContain(title("21"));
+    return m;
+  };
+  const openFromBoardCard = () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=board");
+    const m = mount({ initialTab: "board" });
+    const card = m.host.querySelector<HTMLButtonElement>('section[aria-label="예정"] button, section[aria-label="진행중"] button, section[aria-label="제출 완료"] button')!;
+    const name = card.textContent!;
+    act(() => card.click());
+    expect(name).toContain(detailTitle(m.host)!.trim());
+    return m;
+  };
+
+  it("개요 카드 → [← 개요] — 누르면 개요 탭, 쌓았던 상세 기록은 back 으로 걷는다", async () => {
+    const { host } = openFromOverview();
+    expect(backBtn(host).textContent).toBe("개요");
+    const back = vi.spyOn(window.history, "back");
+    const popped = pop();
+    act(() => backBtn(host).click());
+    expect(back).toHaveBeenCalledTimes(1);
+    await act(async () => void (await popped));
+    expect(detailTitle(host)).toBeNull();
+    expect(selected(host)).toContain("개요");
+    expect(here()).toBe("/my-study/aws");
+    back.mockRestore();
+  });
+  it("개요 카드 → 브라우저 뒤로 가기도 개요 탭 (화면 안 단추와 같다)", async () => {
+    const { host } = openFromOverview();
+    const popped = pop();
+    window.history.back();
+    await act(async () => void (await popped));
+    expect(detailTitle(host)).toBeNull();
+    expect(selected(host)).toContain("개요");
+    expect(here()).toBe("/my-study/aws");
+  });
+  it("보드 카드 → [← 보드] — 닫은 뒤 앞으로 가기는 같은 상세(같은 단추 글)로, 기록을 겹쳐 쌓지 않는다", async () => {
+    const { host } = openFromBoardCard();
+    const opened = detailTitle(host);
+    expect(backBtn(host).textContent).toBe("보드");
+    let popped = pop();
+    act(() => backBtn(host).click());
+    await act(async () => void (await popped));
+    expect(selected(host)).toContain("보드");
+    expect(here()).toBe("/my-study/aws?tab=board");
+    const len = window.history.length;
+    popped = pop();
+    window.history.forward();
+    await act(async () => void (await popped));
+    expect(detailTitle(host)).toBe(opened);
+    expect(backBtn(host).textContent).toBe("보드");
+    expect(window.history.length).toBe(len);
+    // 다시 화면 안 단추 → 보드 목록 기록으로 back (새 기록 없이)
+    popped = pop();
+    act(() => backBtn(host).click());
+    await act(async () => void (await popped));
+    expect(selected(host)).toContain("보드");
+    expect(here()).toBe("/my-study/aws?tab=board");
+    expect(window.history.length).toBe(len);
+  });
+  it("진행목표 목록 행 → [← 진행목표] — 진행목표 목록", async () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
+    const { host } = mount({});
+    act(() => host.querySelector<HTMLButtonElement>("[data-row-main]")!.click());
+    expect(detailTitle(host)).not.toBeNull();
+    expect(backBtn(host).textContent).toBe("진행목표");
+    const popped = pop();
+    act(() => backBtn(host).click());
+    await act(async () => void (await popped));
+    expect(detailTitle(host)).toBeNull();
+    expect(selected(host)).toContain("진행목표");
+    expect(here()).toBe("/my-study/aws?tab=curriculum");
+  });
+  it("새로고침(?item=)으로 바로 연 상세 → [← 진행목표] — 앱 밖으로 back 하지 않고 지금 기록을 목록으로 바꾼다", () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum&item=31");
+    const { host } = mount({ initialItem: "31" });
+    expect(backBtn(host).textContent).toBe("진행목표");
+    const back = vi.spyOn(window.history, "back");
+    act(() => backBtn(host).click());
+    expect(back).not.toHaveBeenCalled();
+    expect(detailTitle(host)).toBeNull();
+    expect(selected(host)).toContain("진행목표");
+    expect(here()).toBe("/my-study/aws?tab=curriculum");
+    back.mockRestore();
+  });
+  it("알림 링크(?task=)로 연 상세 → [← 진행목표]", () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=311");
+    const { host } = mount({ initialLeaf: "311" });
+    expect(backBtn(host).textContent).toBe("진행목표");
+  });
+  it("내 과제의 과제 링크로 연 상세 → [← 내 과제] — 누르면 브라우저 뒤로 가기(내 과제 기록)와 같게 back", () => {
+    const a = document.body.appendChild(document.createElement("a"));
+    a.setAttribute("href", "/my-study/aws?task=311");
+    markTaskOrigin("tasks", { target: a, button: 0 });
+    window.history.replaceState(null, "", "/my-study/aws?task=311");
+    const { host } = mount({ initialLeaf: "311" });
+    expect(backBtn(host).textContent).toBe("내 과제");
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    act(() => backBtn(host).click());
+    expect(back).toHaveBeenCalledTimes(1);
+    // 화면은 그대로 — 내 과제 화면으로 가는 이동은 라우터 몫
+    expect(detailTitle(host)).toContain(title("311"));
+    back.mockRestore();
+  });
+  it("내 일정 링크 → [← 내 일정]. 다른 과제 링크의 기억은 쓰지 않는다", () => {
+    const a = document.body.appendChild(document.createElement("a"));
+    a.setAttribute("href", "/my-study/aws?task=21");
+    markTaskOrigin("schedule", { target: a, button: 0 });
+    window.history.replaceState(null, "", "/my-study/aws?task=311");
+    const { host } = mount({ initialLeaf: "311" });
+    expect(backBtn(host).textContent).toBe("진행목표");
+    act(() => root!.unmount());
+    markTaskOrigin("schedule", { target: a, button: 0 });
+    window.history.replaceState(null, "", "/my-study/aws?task=21");
+    const m = mount({ initialLeaf: "21" });
+    expect(backBtn(m.host).textContent).toBe("내 일정");
+  });
+  it("내 과제에서 연 상세 → 탭을 옮겼다 돌아오면 연 곳은 그 탭 (뒤로 가기와 같다)", () => {
+    const a = document.body.appendChild(document.createElement("a"));
+    a.setAttribute("href", "/my-study/aws?task=311");
+    markTaskOrigin("tasks", { target: a, button: 0 });
+    window.history.replaceState(null, "", "/my-study/aws?task=311");
+    const { host } = mount({ initialLeaf: "311" });
+    const tab = (t: string) => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((b) => b.textContent?.includes(t))!;
+    act(() => tab("간트").click());
+    act(() => tab("진행목표").click());
+    expect(detailTitle(host)).toContain(title("311"));
+    expect(backBtn(host).textContent).toBe("간트");
   });
 });
 

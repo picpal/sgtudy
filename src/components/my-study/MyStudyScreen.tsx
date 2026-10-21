@@ -18,13 +18,14 @@ import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { setScreenKey } from "@/lib/leaveGuard";
+import { clearTaskOrigin, taskOriginOf } from "@/lib/taskOrigin";
 import { OVERVIEW_ANCHORS, useHashAnnounce, useItemAnnounce } from "@/lib/hashTarget";
 import { useRefetchOnFocus } from "@/lib/useRefetchOnFocus";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
 import { EMPTY_OVERRIDES, buildTree, findNode, isPersonal, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId, roundsOutsidePeriod } from "./rounds";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, type CurMode, type Patch, type ScreenState } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, viewBackPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
 import { OverviewTab } from "./tabs/OverviewTab";
@@ -86,7 +87,9 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     // 보드는 스프린트 보드처럼 현재 회차로 시작 (칩으로 "전체" 선택 가능)
     bRound: currentRoundId(buildTree(curriculum, EMPTY_OVERRIDES, curriculum.today).roots, curriculum.today),
     curMode: canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) ? initialMode : "view",
-    ...(focusLeaf ? goLeafPatch(focusLeaf) : {}),
+    // 내 과제·내 일정의 과제 링크로 들어왔으면 상세의 [← 내 과제] 가 그 화면으로 — 그 링크가 이 화면 기록을 출발지 기록 바로 위에 쌓았다.
+    // 기억은 클라이언트 이동에만 있다(전체 불러오기는 서버·브라우저 모두 null 이라 하이드레이션이 어긋나지 않는다)
+    ...(focusLeaf ? goLeafPatch(focusLeaf, typeof window === "undefined" ? null : taskOriginOf(routes.myStudy(detail.slug), focusLeaf)) : {}),
     ...itemInit,
   });
   const [toast, setToast] = useState<ToastMsg>(null);
@@ -98,7 +101,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const savedTree = useMemo(() => buildTree(cur, savedOv, today), [cur, savedOv, today]);
   const room = useMemo(() => toStudyRoom(detail, savedTree, today, me?.id ?? ""), [detail, savedTree, today, me]);
   const groups = useMemo(() => toSidebarGroups(studies, today), [studies, today]);
-  const goLeaf = useCallback((id: string) => update(goLeafPatch(id)), [update]);
+  // 연 곳 = 지금 탭 — 상세의 [← 보드] 와 브라우저 뒤로 가기(아래 backTab)가 같은 탭으로 돌아간다
+  const goLeaf = useCallback((id: string) => update((p) => goLeafPatch(id, p.tab)), [update]);
   // 이 화면의 key(page.tsx: task·tab) — 이탈 가드가 "같은 화면 주소" 를 같은 규칙으로 판정한다 (E 리뷰 minor 1)
   useEffect(() => setScreenKey({ tab: initialTab, task: initialLeaf ?? "" }), [initialTab, initialLeaf]);
   const api = useCurriculumApi(detail.slug, setCur, update, setToast, detail.me);
@@ -172,6 +176,15 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     if (!modePush && !(step === "back" && overView.current)) pushed.current = step === "push" || (step === "replace" && pushed.current) ? openItem : null;
     overView.current = modePush;
   }, [openItem, openMode]);
+  useEffect(clearTaskOrigin, []);
+  // 열린 항목이 없어지면(목록·다른 탭) 연 곳도 잊는다 — 다음 상세는 그때 연 곳을 새로 적는다 (렌더 중 맞추기 — 목록이 한 번 더 그려질 뿐)
+  if (openItem === null && S.viewFrom !== null) update({ viewFrom: null });
+  // 상세 [← …] — 다른 화면 출발지는 그 기록이 바로 아래 있을 때(이 화면이 위에 기록을 쌓지 않았다) 브라우저 뒤로 가기와 같게 back.
+  // 방 탭 출발지는 상세를 닫고 그 탭으로 — 위 동기화 effect 가 쌓았던 상세 기록을 back 으로 걷어 브라우저 뒤로 가기와 같은 목록 기록에 선다
+  const viewBack = () => {
+    if ((S.viewFrom === "tasks" || S.viewFrom === "schedule") && pushed.current === null && !overView.current) window.history.back();
+    else update(viewBackPatch);
+  };
   // 위 동기화 effect 가 볼 "직전 렌더의 탭" — 동기화 뒤에 갱신한다
   useEffect(() => {
     shownTab.current = S.tab;
@@ -231,12 +244,14 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       // 앞으로 가기로 연 기록은 목록 기록 위에 있다 → 닫을 때 back. 상세에서 앞으로 가기로 연 같은 항목 편집은 상세 위 기록
       overView.current = target.id !== null && target.id === open && target.mode === "edit";
       if (!overView.current) pushed.current = target.id;
+      // 목록에서 앞으로 가기로 연 기록 — 연 곳은 뒤로 가기가 돌아갈 탭(backTab)과 같게. 상세 ↔ 편집 사이는 연 곳을 그대로
+      const from = open === null ? backTab.current : s.viewFrom;
       update(
         target.id === null
           ? { ...(backTab.current ? { tab: backTab.current } : {}), editSel: null, editFrom: null, viewSel: null, confirm: false, leave: null, saved: "" }
           : target.mode === "edit"
-            ? { tab: "curriculum", curMode: "edit", editSel: target.id, editFrom: overView.current ? { view: target.id } : "list", viewSel: null, confirm: false, leave: null, saved: "" }
-            : { tab: "curriculum", curMode: "view", viewSel: target.id, editSel: null, editFrom: null, confirm: false, leave: null, saved: "" },
+            ? { tab: "curriculum", curMode: "edit", editSel: target.id, editFrom: overView.current ? { view: target.id } : "list", viewSel: null, viewFrom: from, confirm: false, leave: null, saved: "" }
+            : { tab: "curriculum", curMode: "view", viewSel: target.id, viewFrom: from, editSel: null, editFrom: null, confirm: false, leave: null, saved: "" },
       );
     };
     window.addEventListener("popstate", onPop);
@@ -272,10 +287,12 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       overView.current = false;
       backTab.current = shownTab.current;
     }
+    // 알림이 쌓은 기록 아래는 지금 보이던 탭 — 연 곳도 그 탭 (주소만 바뀐 경우는 모름)
+    const from = url === id ? shownTab.current : null;
     update(
       edit
-        ? { tab: "curriculum", curMode: "edit", editSel: id, editFrom: "list", viewSel: null, confirm: false, leave: null, saved: "" }
-        : { tab: "curriculum", curMode: "view", viewSel: id, editSel: null, confirm: false, leave: null, saved: "" },
+        ? { tab: "curriculum", curMode: "edit", editSel: id, editFrom: "list", viewSel: null, viewFrom: from, confirm: false, leave: null, saved: "" }
+        : { tab: "curriculum", curMode: "view", viewSel: id, viewFrom: from, editSel: null, confirm: false, leave: null, saved: "" },
     );
   });
 
@@ -403,7 +420,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                 <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                   <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} />
                   {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} today={today} onGoCurriculum={() => update({ tab: "curriculum" })} onOpenTask={goLeaf} periodWarning={periodWarning(editRounds)} />}
-                  {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
+                  {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} onViewBack={viewBack} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
                   {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                   {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                   {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
