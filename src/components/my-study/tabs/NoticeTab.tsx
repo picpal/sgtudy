@@ -80,7 +80,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
     update({ noticeOpen: open });
     if (!open || n.read || reading.current.has(n.id)) return;
     reading.current.add(n.id);
-    markNoticesRead(slug, [n.id])
+    markNoticesRead(slug, [n.id], [n.rev])
       .then((r) => {
         setList((l) => l && { ...l, items: l.items.map((x) => (x.id === n.id ? { ...x, read: true } : x)) });
         onUnread(r.unread);
@@ -91,7 +91,12 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
 
   // ---- 작성·수정 폼 ----
   const editing = S.noticeEdit;
-  const target = editing && editing.id !== "new" ? (list?.items.find((n) => n.id === editing.id) ?? null) : null;
+  const isNew = editing?.id === "new";
+  // 고치는 공지는 폼을 열 때 찍어 둔다 — 목록을 다시 받아도(다른 기기 고정·삭제) 비교 기준·작성/수정 분기가 바뀌지 않게
+  const [snap, setSnap] = useState<Notice | null>(null);
+  const target = editing && !isNew ? snap : null;
+  // 고치던 공지가 그새 삭제됐다 — 새 공지로 올리지 않는다
+  const gone = !!editing && !isNew && !!list && (!snap || !list.items.some((n) => n.id === editing.id));
   const base = target ? draftOf(target) : EMPTY;
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [fieldErr, setFieldErr] = useState<{ field: "title" | "bodyMd"; text: string } | null>(null);
@@ -99,11 +104,13 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
   const titleRef = useRef<HTMLInputElement>(null);
   const writeBtn = useRef<HTMLButtonElement>(null);
   const formKey = editing?.id ?? null;
-  // 폼을 열면(새 공지·다른 공지) 그 공지 값으로 채운다
+  // 폼을 열면(새 공지·다른 공지) 그 공지 값으로 채운다 — 고치기는 목록이 온 뒤에 찍는다
   const [seenKey, setSeenKey] = useState<string | null>(null);
-  if (formKey !== seenKey) {
+  if (formKey !== seenKey && (isNew || !editing || list)) {
+    const t = editing && !isNew ? (list?.items.find((n) => n.id === editing.id) ?? null) : null;
     setSeenKey(formKey);
-    setDraft(base);
+    setSnap(t);
+    setDraft(t ? draftOf(t) : EMPTY);
     setFieldErr(null);
   }
   useEffect(() => {
@@ -128,20 +135,62 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
       off();
     };
   }, [dirty]);
+  // 브라우저 뒤로 가기(같은 앱 안 이동이라 beforeunload 가 없다) — 처음 고치기 시작하면 같은 주소 기록을 하나 쌓아 두고,
+  // 뒤로 가기로 그 기록이 빠지면 다시 쌓고 묻는다(진행목표 편집 화면과 같은 방식). 폼을 닫을 때는 back 으로 걷은 뒤 닫는다
+  const guardEntry = useRef(false);
+  const afterBack = useRef<(() => void) | null>(null);
+  const [backHeld, setBackHeld] = useState(false);
+  useEffect(() => {
+    if (!dirty || guardEntry.current) return;
+    window.history.pushState(null, "", window.location.href);
+    guardEntry.current = true;
+  }, [dirty]);
+  useEffect(() => {
+    const onPop = () => {
+      if (!guardEntry.current) return;
+      const then = afterBack.current;
+      if (then) {
+        // 폼을 닫으며 걷은 기록 — 이제 닫는다
+        afterBack.current = null;
+        guardEntry.current = false;
+        then();
+        return;
+      }
+      window.history.pushState(null, "", window.location.href);
+      setBackHeld(true);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  /** 폼을 닫는 길(취소·저장·버리고 이동) — 쌓아 둔 기록이 있으면 걷고 나서 then */
+  const leaveForm = (then: () => void) => {
+    if (!guardEntry.current) return then();
+    afterBack.current = then;
+    window.history.back();
+  };
   const closeForm = () => {
     update({ noticeEdit: null, noticeUnsaved: false });
     writeBtn.current?.focus({ preventScroll: true });
   };
-  // 버리기 — 보류한 탭으로 옮기거나 보류한 주소로 간다
+  // 버리기 — 보류한 탭·주소로 가거나, 뒤로 가기였으면 쌓은 기록 아래(그 전 화면)로
   const discardAndGo = () => {
+    if (backHeld) {
+      setBackHeld(false);
+      guardEntry.current = false;
+      update({ noticeEdit: null, noticeUnsaved: false, leave: null });
+      window.history.go(-2);
+      return;
+    }
     const to: Leave | null = S.leave;
     const href = heldHref;
     setHeldHref(null);
-    // 폼을 깨끗하게 본 tabPatch — 보류 없이 옮기며 폼을 닫는다
-    update((p) => ({ noticeEdit: null, noticeUnsaved: false, leave: null, ...(to && "tab" in to ? tabPatch({ ...p, noticeUnsaved: false }, to.tab, false) : {}) }));
-    if (href) router.push(href);
+    leaveForm(() => {
+      // 폼을 깨끗하게 본 tabPatch — 보류 없이 옮기며 폼을 닫는다
+      update((p) => ({ noticeEdit: null, noticeUnsaved: false, leave: null, ...(to && "tab" in to ? tabPatch({ ...p, noticeUnsaved: false }, to.tab, false) : {}) }));
+      if (href) router.push(href);
+    });
   };
-  const asking = (!!S.leave && S.noticeUnsaved) || heldHref !== null;
+  const asking = (!!S.leave && S.noticeUnsaved) || heldHref !== null || backHeld;
 
   const counts = list?.counts;
   const limits = list?.limits;
@@ -151,7 +200,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
   const pinLocked = !base.pinned && atLimit("pinned");
 
   const save = async () => {
-    if (saving || !editing) return;
+    if (saving || !editing || gone) return;
     const bad = validateNotice(draft);
     if (bad) {
       setFieldErr(bad);
@@ -161,11 +210,12 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
     setFieldErr(null);
     setSaving(true);
     try {
-      if (!target) {
+      if (isNew) {
         const n = await createNotice(slug, { title: draft.title.trim(), bodyMd: draft.bodyMd, popup: draft.popup, pinned: draft.pinned });
         toast({ text: n.popup ? "공지를 올렸어요 · 멤버가 들어오면 팝업으로 보여요" : "공지를 올렸어요", tone: "ok" });
-        update({ noticeEdit: null, noticeUnsaved: false, noticeOpen: n.id });
-      } else {
+        leaveForm(() => update({ noticeEdit: null, noticeUnsaved: false, noticeOpen: n.id }));
+      } else if (target) {
+        // 폼을 연 때와 견주어 내가 바꾼 것만 — 그사이 다른 곳에서 한 고정·팝업 변경을 되돌리지 않는다
         const patch: NoticePatch = {};
         if (draft.title !== base.title) patch.title = draft.title.trim();
         if (draft.bodyMd !== base.bodyMd) patch.bodyMd = draft.bodyMd;
@@ -174,7 +224,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
         if (draft.popup && draft.renotify) patch.renotify = true;
         if (Object.keys(patch).length > 0) await updateNotice(slug, target.id, patch);
         toast({ text: patch.renotify ? "공지를 고쳤어요 · 멤버가 들어오면 다시 팝업으로 보여요" : "공지를 고쳤어요", tone: "ok" });
-        update({ noticeEdit: null, noticeUnsaved: false, noticeOpen: target.id });
+        leaveForm(() => update({ noticeEdit: null, noticeUnsaved: false, noticeOpen: target.id }));
       }
       refetch();
     } catch (e) {
@@ -202,7 +252,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
     refetch();
   };
   const menuOf = (n: Notice): MoreMenuItem[] => [
-    { key: "edit", label: "수정", onSelect: () => !S.noticeEdit && update({ noticeEdit: { id: n.id } }) },
+    { key: "edit", label: "수정", onSelect: () => update({ noticeEdit: { id: n.id } }) },
     {
       key: "pin",
       label: n.pinned ? "고정 해제" : "상단에 고정",
@@ -277,8 +327,13 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
           className="flex flex-col gap-4 rounded-[16px] border border-line-2 p-5 max-sm:p-4"
         >
           <h3 id={`${ids}-form`} className="m-0 text-[16px] font-bold">
-            {target ? "공지 고치기" : "새 공지"}
+            {isNew ? "새 공지" : "공지 고치기"}
           </h3>
+          {gone && (
+            <p role="alert" className="m-0 rounded-[10px] bg-[#FFF7F6] px-3 py-[10px] text-[13px] font-medium text-warn">
+              이 공지는 삭제됐어요 · 고친 내용은 저장할 수 없어요. 필요하면 내용을 복사해 새 공지로 올려 주세요
+            </p>
+          )}
           <label className={label}>
             <span>
               제목 <span className="font-normal text-muted">{draft.title.length}/{NOTICE_LIMITS.title}</span>
@@ -320,17 +375,17 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
               hint={popupLocked ? LIMIT_TEXT.popup : "멤버가 방에 들어올 때 한 번 띄워요. 확인하면 다시 뜨지 않아요"}
               warn={popupLocked}
             />
-            {target && draft.popup && (
+            {!isNew && draft.popup && (
               <Check checked={draft.renotify} onChange={(v) => setDraft((d) => ({ ...d, renotify: v }))} text="수정 내용을 다시 팝업으로 알리기" hint="이미 확인한 멤버에게도 다시 띄우고 알림을 보내요" />
             )}
             <Check checked={draft.pinned} disabled={pinLocked} onChange={(v) => setDraft((d) => ({ ...d, pinned: v }))} text="상단에 고정" hint={pinLocked ? LIMIT_TEXT.pinned : undefined} warn={pinLocked} />
           </div>
           <div className="flex justify-end gap-2 max-sm:flex-col-reverse">
-            <button type="button" onClick={closeForm} disabled={saving} className="h-11 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink max-sm:w-full">
+            <button type="button" onClick={() => leaveForm(closeForm)} disabled={saving} className="h-11 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink max-sm:w-full">
               취소
             </button>
-            <button type="submit" disabled={saving || (!!target && !dirty)} aria-busy={saving || undefined} className="h-11 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50 max-sm:w-full">
-              {target ? "저장" : "등록"}
+            <button type="submit" disabled={saving || gone || (!isNew && !dirty)} aria-busy={saving || undefined} className="h-11 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50 max-sm:w-full">
+              {isNew ? "등록" : "저장"}
             </button>
           </div>
           {asking && (
@@ -339,6 +394,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
               cancelLabel="계속 고치기"
               onCancel={() => {
                 setHeldHref(null);
+                setBackHeld(false); // 뒤로 가기였으면 기록은 이미 다시 쌓았다
                 update({ leave: null });
               }}
               actions={[{ label: "버리기", tone: "danger", onClick: discardAndGo }]}
@@ -399,7 +455,8 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
                         {n.author?.nickname ?? "알 수 없음"} · {relativeTime(n.createdAt, now)}
                         {n.edited && ` · ${relativeTime(n.updatedAt, now)} 수정`}
                       </span>
-                      {canWrite && <MoreMenu items={menuOf(n)} label={`${n.title} 메뉴`} />}
+                      {/* 폼이 열린 동안은 메뉴를 숨긴다 — 고치는 중인 공지를 지우거나 고정해 폼 기준과 어긋나지 않게 */}
+                      {canWrite && !editing && <MoreMenu items={menuOf(n)} label={`${n.title} 메뉴`} />}
                     </div>
                     <MarkdownView src={n.bodyMd} />
                   </div>

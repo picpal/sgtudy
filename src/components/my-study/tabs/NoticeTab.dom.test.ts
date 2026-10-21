@@ -24,7 +24,7 @@ const { RoomArchivedProvider } = await import("../roomArchived");
 
 const N = (id: string, o: Partial<Notice> = {}): Notice => ({
   id, title: `공지 ${id}`, bodyMd: `본문 **${id}**`, popup: false, pinned: false, author: { userId: "u2", nickname: "민수", tone: "mint" },
-  createdAt: "2026-10-20T01:00:00.000Z", updatedAt: "2026-10-20T01:00:00.000Z", edited: false, read: true, ...o,
+  createdAt: "2026-10-20T01:00:00.000Z", updatedAt: "2026-10-20T01:00:00.000Z", edited: false, read: true, rev: 1, ...o,
 });
 const L = (items: Notice[], o: Partial<NoticeList> = {}): NoticeList => ({
   items, canWrite: false, limits: { total: 100, pinned: 3, popup: 5 },
@@ -34,19 +34,24 @@ const L = (items: Notice[], o: Partial<NoticeList> = {}): NoticeList => ({
 let root: Root | null = null;
 let state: ScreenState;
 let upd: (p: Patch) => void;
+let bump: () => void; // 목록 다시 받기(같은 화면 공지 알림 등)
 const flush = () => act(async () => {});
+// 폼이 쌓은 기록을 history.back 으로 걷은 뒤(popstate) 닫힌다 — jsdom 은 popstate 를 다음 틱에 보낸다
+const settle = () => act(() => new Promise((r) => setTimeout(r, 10)));
 type Opt = { viewer?: "leader" | "member" | "left" | "pending"; ended?: boolean; archived?: boolean; S?: Partial<ScreenState> };
 async function mount(o: Opt = {}) {
   const onUnread = vi.fn();
   const toast = vi.fn();
   function H() {
     const [S, setS] = useState<ScreenState>({ ...INITIAL_STATE, tab: "notice", ...o.S });
+    const [reload, setReload] = useState(0);
     const update = (p: Patch) => setS((prev) => ({ ...prev, ...(typeof p === "function" ? p(prev) : p) }));
     useEffect(() => {
       state = S;
       upd = update;
+      bump = () => setReload((n) => n + 1);
     });
-    return S.tab === "notice" ? createElement(NoticeTab, { slug: "aws", S, update, viewer: o.viewer ?? "member", ended: !!o.ended, onUnread, toast }) : null;
+    return S.tab === "notice" ? createElement(NoticeTab, { slug: "aws", S, update, viewer: o.viewer ?? "member", ended: !!o.ended, onUnread, toast, reload }) : null;
   }
   const host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
@@ -113,7 +118,7 @@ describe("NoticeTab — 목록·읽기", () => {
     await act(async () => head.click());
     expect(head.getAttribute("aria-expanded")).toBe("true");
     expect(rows(host)[0].querySelector("strong")?.textContent).toBe("3");
-    expect(api.markNoticesRead).toHaveBeenCalledWith("aws", ["3"]);
+    expect(api.markNoticesRead).toHaveBeenCalledWith("aws", ["3"], [1]);
     expect(rows(host)[0].querySelector("[data-unread]")).toBeNull();
     expect(onUnread).toHaveBeenLastCalledWith(false);
     await act(async () => head.click()); // 접고
@@ -157,6 +162,7 @@ describe("NoticeTab — 그룹장 쓰기·고치기·삭제", () => {
     await act(async () => btn(host, "등록")!.click());
     expect(api.createNotice).toHaveBeenCalledWith("aws", { title: "모임 변경", bodyMd: "화요일로 옮겨요", popup: true, pinned: false });
     expect(toast).toHaveBeenCalledWith({ text: "공지를 올렸어요 · 멤버가 들어오면 팝업으로 보여요", tone: "ok" });
+    await settle();
     expect(state).toMatchObject({ noticeEdit: null, noticeUnsaved: false, noticeOpen: "9" });
     expect(api.fetchNotices).toHaveBeenCalledTimes(2);
   });
@@ -237,6 +243,7 @@ describe("NoticeTab — 그룹장 쓰기·고치기·삭제", () => {
     expect(host.querySelector('[role="alertdialog"]')).toBeNull();
     act(() => upd((p) => tabPatch(p, "board", false)));
     act(() => btn(host, "버리기")!.click());
+    await settle();
     expect(state).toMatchObject({ tab: "board", noticeEdit: null, noticeUnsaved: false, leave: null });
   });
 
@@ -250,7 +257,84 @@ describe("NoticeTab — 그룹장 쓰기·고치기·삭제", () => {
     act(() => guardNavigate("/tasks", e));
     expect(e.preventDefault).toHaveBeenCalled();
     act(() => btn(host, "버리기")!.click());
+    await settle();
     expect(push).toHaveBeenCalledWith("/tasks");
     expect(state.noticeEdit).toBeNull();
+  });
+
+  it("브라우저 뒤로 가기 — 고치기 시작하면 같은 주소 기록을 쌓고, 뒤로 가면 다시 쌓고 묻는다 · 버리기는 그 전 화면으로", async () => {
+    api.fetchNotices.mockResolvedValue(L([], { canWrite: true }));
+    window.history.replaceState(null, "", "/my-study/aws?tab=notice");
+    const { host } = await mount({ viewer: "leader" });
+    act(() => btn(host, "공지 쓰기")!.click());
+    const pushState = vi.spyOn(window.history, "pushState");
+    typeIn(host.querySelector<HTMLInputElement>("form input[type=text]")!, "쓰는 중");
+    typeIn(host.querySelector<HTMLInputElement>("form input[type=text]")!, "쓰는 중 더");
+    expect(pushState).toHaveBeenCalledTimes(1); // 처음 고칠 때 한 번만
+    act(() => window.history.back());
+    await settle();
+    expect(pushState).toHaveBeenCalledTimes(2); // 빠진 기록을 다시 쌓았다
+    pushState.mockRestore();
+    expect(host.querySelector('[role="alertdialog"]')?.textContent).toContain("저장하지 않은 수정이 있어요");
+    expect(state.noticeEdit).toEqual({ id: "new" }); // 초안은 그대로
+    act(() => btn(host, "계속 고치기")!.click());
+    expect(host.querySelector('[role="alertdialog"]')).toBeNull();
+    act(() => window.history.back());
+    await settle();
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    act(() => btn(host, "버리기")!.click());
+    expect(go).toHaveBeenCalledWith(-2);
+    expect(state.noticeEdit).toBeNull();
+    go.mockRestore();
+  });
+
+  it("[취소] 는 쌓은 기록을 걷고 닫는다", async () => {
+    api.fetchNotices.mockResolvedValue(L([], { canWrite: true }));
+    const { host } = await mount({ viewer: "leader" });
+    act(() => btn(host, "공지 쓰기")!.click());
+    typeIn(host.querySelector<HTMLInputElement>("form input[type=text]")!, "쓰는 중");
+    const back = vi.spyOn(window.history, "back");
+    act(() => btn(host, "취소")!.click());
+    expect(back).toHaveBeenCalledTimes(1);
+    await settle();
+    expect(state.noticeEdit).toBeNull();
+    back.mockRestore();
+  });
+});
+
+describe("NoticeTab — 고치는 중 대상이 바뀜 (리뷰 I2)", () => {
+  it("폼이 열린 동안 행 메뉴는 숨는다", async () => {
+    api.fetchNotices.mockResolvedValue(L([N("1")], { canWrite: true }));
+    const { host } = await mount({ viewer: "leader", S: { noticeOpen: "1" } });
+    act(() => btn(host, "공지 1 메뉴")!.click());
+    act(() => btn(host, "수정")!.click());
+    expect(btn(host, "공지 1 메뉴")).toBeUndefined();
+  });
+
+  it("고치던 공지가 삭제됨 → 안내 + 저장 막힘, 새 공지로 올리지 않는다", async () => {
+    api.fetchNotices.mockResolvedValue(L([N("1")], { canWrite: true }));
+    api.updateNotice.mockRejectedValue(new ApiException({ code: "NOTICE_NOT_FOUND", message: "공지를 찾을 수 없어요" }));
+    const { host } = await mount({ viewer: "leader", S: { noticeEdit: { id: "1" } } });
+    expect(host.querySelector("h3")?.textContent).toBe("공지 고치기");
+    typeIn(host.querySelector<HTMLInputElement>("form input[type=text]")!, "고친 제목");
+    api.fetchNotices.mockResolvedValue(L([], { canWrite: true }));
+    await act(async () => btn(host, "저장")!.click());
+    await flush();
+    expect(host.querySelector("h3")?.textContent).toBe("공지 고치기"); // "새 공지" 로 바뀌지 않는다
+    expect(host.querySelector('form [role="alert"]')?.textContent).toContain("이 공지는 삭제됐어요");
+    expect(btn(host, "저장")!.disabled).toBe(true);
+    expect(api.createNotice).not.toHaveBeenCalled();
+  });
+
+  it("다른 곳에서 고정이 바뀌어도 저장은 내가 바꾼 것만 — 고정을 되돌리지 않는다", async () => {
+    api.fetchNotices.mockResolvedValue(L([N("1")], { canWrite: true }));
+    api.updateNotice.mockResolvedValue(N("1"));
+    const { host } = await mount({ viewer: "leader", S: { noticeEdit: { id: "1" } } });
+    api.fetchNotices.mockResolvedValue(L([N("1", { pinned: true })], { canWrite: true }));
+    act(() => bump());
+    await flush();
+    typeIn(host.querySelector<HTMLInputElement>("form input[type=text]")!, "고친 제목");
+    await act(async () => btn(host, "저장")!.click());
+    expect(api.updateNotice).toHaveBeenCalledWith("aws", "1", { title: "고친 제목" });
   });
 });
