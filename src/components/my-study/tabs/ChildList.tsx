@@ -8,10 +8,10 @@ import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { TypeBadge } from "../bits";
 import { CODE_COLOR, CODE_LABEL, myCode, removePlan, type ParentNode } from "../model";
 import { InlineConfirm } from "./InlineConfirm";
-import { AddRow, QuickAdd } from "./QuickAdd";
+import { AddRow, QuickAdd, type AddKind } from "./QuickAdd";
 
 /** 편집 화면에서만 — 순서(위/아래)·삭제는 즉시 RPC, 끝에 빠른 과제 추가 */
-export type ChildListEdit = { onMove: (id: string, dir: -1 | 1) => void; onRemove: (id: string) => void; onAdd: (title: string, type?: TaskType) => Promise<boolean>; busy: string | null; canAdd: boolean; designatedNote?: string | null };
+export type ChildListEdit = { onMove: (id: string, dir: -1 | 1) => void; onRemove: (id: string) => void; onAdd: (title: string, type?: TaskType, kind?: AddKind) => Promise<boolean>; busy: string | null; canAdd: boolean; designatedNote?: string | null };
 
 type Props = { parent: ParentNode; onOpen: (id: string) => void; edit?: ChildListEdit };
 

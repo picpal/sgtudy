@@ -89,3 +89,17 @@ describe("TreeRow personal goal row", () => {
     expect(row(jieun)).toBeUndefined();
   });
 });
+
+// 시험 리프(0037) — 유형 배지 옆 "시험", 초안이면 "초안" (exam.status 로 판정)
+describe("TreeRow exam badge", () => {
+  const leaf = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY).nodes.find((x): x is LeafNode => x.leaf && x.type === "공통")!;
+  const badge = (n: TreeNode) => {
+    const root = document.createElement("div");
+    root.innerHTML = renderToStaticMarkup(createElement(TreeRow, { n, isEdit: false, open: false, onToggle: () => {}, onClick: () => {} }));
+    return root.querySelector("[data-exam-badge]")?.textContent ?? null;
+  };
+
+  it("시험 아님 → 배지 없음", () => expect(badge({ ...leaf, exam: null })).toBeNull());
+  it("초안 → 시험 · 초안", () => expect(badge({ ...leaf, exam: { status: "draft" } })).toBe("시험초안"));
+  it("발행됨 → 시험", () => expect(badge({ ...leaf, exam: { status: "published", questionCount: 4, totalPoints: 5 } })).toBe("시험"));
+});

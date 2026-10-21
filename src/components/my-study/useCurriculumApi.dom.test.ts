@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { ToastMsg } from "@/components/ui/Toast";
-import type { FileMeta } from "@/lib/api/types";
+import type { Curriculum, FileMeta } from "@/lib/api/types";
 import { AWS, REF_DAY } from "./fixtures";
 import { EMPTY_OVERRIDES, buildTree, type Overrides } from "./model";
 import { INITIAL_STATE, type Patch, type ScreenState } from "./state";
@@ -11,11 +11,12 @@ import { useCurriculumApi, type CurriculumApi } from "./useCurriculumApi";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const m = vi.hoisted(() => ({ setFiles: vi.fn(), nodeUpdate: vi.fn(), personalUpdate: vi.fn(), calls: [] as string[] }));
+const m = vi.hoisted(() => ({ setFiles: vi.fn(), nodeUpdate: vi.fn(), personalUpdate: vi.fn(), nodeCreate: vi.fn(), fetchCurriculum: vi.fn(), putExam: vi.fn(), calls: [] as string[] }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push: () => {} }) }));
 vi.mock("@/lib/api/nodeFiles", () => ({ setNodeFiles: m.setFiles }));
 vi.mock("@/lib/api/personal", async (orig) => ({ ...(await orig<typeof import("@/lib/api/personal")>()), personalUpdate: m.personalUpdate }));
-vi.mock("@/lib/api/my-study", async (orig) => ({ ...(await orig<typeof import("@/lib/api/my-study")>()), nodeUpdate: m.nodeUpdate }));
+vi.mock("@/lib/api/my-study", async (orig) => ({ ...(await orig<typeof import("@/lib/api/my-study")>()), nodeUpdate: m.nodeUpdate, nodeCreate: m.nodeCreate, fetchCurriculum: m.fetchCurriculum }));
+vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), putExam: m.putExam }));
 
 const leaf = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY).nodes.find((n) => n.id === "21")!;
 const meta = (id: string): FileMeta => ({ id, name: `${id}.pdf`, contentType: "application/pdf", size: 3, status: "ready" });
@@ -24,11 +25,12 @@ let root: Root | null = null;
 let S: ScreenState;
 let toasts: ToastMsg[];
 let api: CurriculumApi;
+let cur: Curriculum;
 const update = (p: Patch) => {
   S = { ...S, ...(typeof p === "function" ? p(S) : p) };
 };
 function Harness() {
-  const a = useCurriculumApi("aws", () => {}, update, (t) => void toasts.push(t));
+  const a = useCurriculumApi("aws", (c) => void (cur = typeof c === "function" ? c(cur) : c), update, (t) => void toasts.push(t));
   useEffect(() => {
     api = a;
   });
@@ -41,6 +43,7 @@ const withOv = (ov: Partial<Overrides>) => {
 
 beforeEach(() => {
   S = INITIAL_STATE;
+  cur = AWS;
   toasts = [];
   m.calls = [];
   m.setFiles.mockReset().mockImplementation(async (_n: string, ids: string[]) => {
@@ -121,5 +124,70 @@ describe("api.updatePersonal — 실패 토스트 앞말", () => {
     m.personalUpdate.mockReset().mockRejectedValue(Object.assign(new Error("x"), { code: "ROOM_NOT_EDITABLE", message: "x" }));
     await api.updatePersonal("32", { title: "a" });
     expect(toasts[0]!.text.startsWith("첨부")).toBe(false);
+  });
+});
+
+describe("api.create — 시험 (exam: true)", () => {
+  const round = AWS.nodes.find((n) => n.parentId === null)!;
+  const sib = AWS.nodes.find((n) => n.parentId === round.id)!;
+  const created: Curriculum = { ...AWS, nodes: [...AWS.nodes, { ...sib, id: "900", title: "3주차 정리 시험", sortOrder: 900, exam: null }] };
+  const withExam: Curriculum = { ...created, nodes: created.nodes.map((n) => (n.id === "900" ? { ...n, exam: { status: "draft", questionCount: 0, totalPoints: 0, reveal: "after_submit" } } : n)) };
+
+  beforeEach(() => {
+    m.nodeCreate.mockReset().mockImplementation(async () => {
+      m.calls.push("node_create");
+      return created;
+    });
+    m.putExam.mockReset().mockImplementation(async () => {
+      m.calls.push("exam_put");
+      return {};
+    });
+    m.fetchCurriculum.mockReset().mockImplementation(async () => {
+      m.calls.push("curriculum_get");
+      return withExam;
+    });
+  });
+
+  it("node_create → exam_put(빈 초안) → 트리 다시 받기 → 새 리프의 출제 화면", async () => {
+    let ok = false;
+    await act(async () => {
+      ok = await api.create(round.id, { title: "3주차 정리 시험", open: false, taskType: "common", exam: true });
+    });
+    expect(ok).toBe(true);
+    expect(m.calls).toEqual(["node_create", "exam_put", "curriculum_get"]);
+    expect(m.putExam).toHaveBeenCalledWith("aws", "900", { reveal: "after_submit", questions: [] });
+    expect(cur.nodes.find((n) => n.id === "900")?.exam?.status).toBe("draft");
+    expect(S).toMatchObject({ curMode: "edit", editSel: "900", editFrom: "list", justAdded: "900", quickAdd: null });
+    expect(toasts).toEqual([]);
+  });
+
+  it("exam_put 실패: 토스트, 리프는 남고 목록에 머문다", async () => {
+    m.putExam.mockRejectedValue(new Error("x"));
+    let ok = false;
+    await act(async () => {
+      ok = await api.create(round.id, { title: "3주차 정리 시험", open: false, exam: true });
+    });
+    expect(ok).toBe(true);
+    expect(m.fetchCurriculum).not.toHaveBeenCalled();
+    expect(cur.nodes.some((n) => n.id === "900")).toBe(true);
+    expect(S.editSel).toBeNull();
+    expect(toasts).toEqual([{ text: "시험을 만들지 못했어요 · 과제는 추가됐어요", tone: "bad" }]);
+  });
+
+  it("트리 다시 받기가 실패해도 새 리프에 초안 요약을 붙여 출제 화면으로", async () => {
+    m.fetchCurriculum.mockRejectedValue(new Error("x"));
+    await act(async () => {
+      await api.create(round.id, { title: "3주차 정리 시험", open: false, exam: true });
+    });
+    expect(cur.nodes.find((n) => n.id === "900")?.exam?.status).toBe("draft");
+    expect(S.editSel).toBe("900");
+  });
+
+  it("exam 없이는 exam_put 을 부르지 않는다", async () => {
+    await act(async () => {
+      await api.create(round.id, { title: "그냥 과제", open: false });
+    });
+    expect(m.putExam).not.toHaveBeenCalled();
+    expect(S.editSel).toBeNull();
   });
 });

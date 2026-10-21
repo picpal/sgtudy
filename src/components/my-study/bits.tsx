@@ -81,6 +81,22 @@ export function TypeBadge({ type }: { type: TaskType }) {
   );
 }
 
+/** 시험 리프 배지(0037) — 유형 배지 옆. 초안이면 "초안" 을 덧붙인다(status 로 판정, warnings 아님) */
+export function ExamBadge({ draft }: { draft: boolean }) {
+  return (
+    <span data-exam-badge className="inline-flex shrink-0 items-center gap-1">
+      <span className="rounded-[6px] px-[7px] py-[2px] text-[11px] font-bold" style={{ background: PAL.blue.bg, color: PAL.blue.fg }}>
+        시험
+      </span>
+      {draft && (
+        <span className="rounded-[6px] px-[7px] py-[2px] text-[11px] font-bold" style={{ background: PAL.amber.bg, color: PAL.amber.fg }}>
+          초안
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** 흰 링이 둘린 상태 아이콘 (아바타 우하단 오버레이용) */
 export function RingedStatus({ status, size }: { status: TaskStatus; size: number }) {
   return (

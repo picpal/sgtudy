@@ -2,7 +2,8 @@
 
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { ArchivedBadge, AvatarStack, TypeBadge } from "../bits";
+import { ArchivedBadge, AvatarStack, ExamBadge, TypeBadge } from "../bits";
+import { isExamDraft } from "../exam";
 import { md } from "@/lib/date";
 import { CODE_CHIP, codeLabel, type TreeNode } from "../model";
 import { isDone, ownerOf } from "../personal";
@@ -117,6 +118,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
         <button type="button" data-row-main onClick={onClick} className="-my-1 flex min-h-11 min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px] self-stretch bg-transparent px-1 py-3 text-left text-ink">
           {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[7px] bg-navy px-2 py-[3px] text-[12px] font-bold text-white">{n.label}</span>}
           {n.leaf && <TypeBadge type={n.type} />}
+          {n.leaf && n.exam && <ExamBadge draft={isExamDraft(n.exam)} />}
           {/* 390: 소유자 이름 칸은 숨기고 남의 목표엔 제목 앞에 이니셜 아바타 (스펙 §4.4) */}
           {other && (
             <span className="shrink-0 sm:hidden" title={other.name}>

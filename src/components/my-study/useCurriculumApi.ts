@@ -3,12 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { toApiError } from "@/lib/api/errors";
+import { putExam } from "@/lib/api/exam";
 import { fetchCurriculum, recheckCurriculumEdit, nodeArchive, nodeCreate, nodeDelete, nodeMove, nodeUpdate, patchOf } from "@/lib/api/my-study";
 import { personalArchive, personalComplete, personalCreate, personalDelete, personalUpdate, type PersonalPatch } from "@/lib/api/personal";
 import { setNodeFiles } from "@/lib/api/nodeFiles";
 import type { Curriculum, FileMeta, MeState, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
+import { EMPTY_DRAFT } from "./exam";
 import { EMPTY_OVERRIDES, dropSentFieldOv, tempId, type Overrides, type TreeNode } from "./model";
 import { saveSteps } from "./nodeFiles";
 import { personalErrorText } from "./personal";
@@ -16,8 +18,9 @@ import { shiftedText, type DatePlan } from "./rounds";
 import type { Update } from "./state";
 
 export type CurriculumApi = {
-  /** open: 만든 항목의 편집 화면을 연다(기본). false = 목록에 머문다(빠른 추가 — 토스트 없음). 성공하면 true */
-  create: (parentId: string | null, opts?: { title?: string; open?: boolean; taskType?: "common" | "designated" }) => Promise<boolean>;
+  /** open: 만든 항목의 편집 화면을 연다(기본). false = 목록에 머문다(빠른 추가 — 토스트 없음). 성공하면 true.
+   *  exam: 시험 리프 — 만든 뒤 빈 초안(exam_put)을 넣고 출제 화면(편집)으로 간다. 초안 실패면 토스트, 리프는 남는다(true) */
+  create: (parentId: string | null, opts?: CreateOpts) => Promise<boolean>;
   /** from: "list" — 진행목표 목록에서 지웠다. 실패해도 편집 화면을 열지 않는다.
    *  "child" — 회차 편집 화면의 과제 섹션에서 지웠다. 열린 편집 화면(editSel)을 그대로 둔다. okText = 성공 토스트(기본 "삭제했어요") */
   remove: (id: string, from?: "edit" | "list" | "child", okText?: string) => Promise<void>;
@@ -46,6 +49,8 @@ export type CurriculumApi = {
   /** 편집 모드 진입 전 권한 재확인 (시나리오 QA #10) — 거뒀으면 토스트 + 보기로 두고 false */
   recheckEdit: () => Promise<boolean>;
 };
+
+export type CreateOpts = { title?: string; open?: boolean; taskType?: "common" | "designated"; exam?: true };
 
 /** onSaved: 저장에 성공하면 그 안내 문구(S.saved 와 같은 글) — 저장하고 화면을 떠나는 호출자가 토스트로 보여 준다 */
 export type SaveOpts = { shift?: boolean; onFiles?: (f: FileMeta[]) => void; skipFiles?: boolean; onSaved?: (text: string) => void };
@@ -88,7 +93,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   );
 
   const create = useCallback(
-    async (parentId: string | null, opts: { title?: string; open?: boolean; taskType?: "common" | "designated" } = {}) => {
+    async (parentId: string | null, opts: CreateOpts = {}) => {
       const key = parentId ?? "root";
       const open = opts.open ?? true;
       const label = opts.title ?? (parentId ? "새 과제" : "새 회차");
@@ -103,11 +108,31 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       });
       try {
         const cur = await nodeCreate(slug, parentId, opts.title, undefined, opts.taskType);
-        const created = cur.nodes.filter((n) => n.parentId === parentId).sort((a, b) => b.sortOrder - a.sortOrder)[0];
+        const siblings = cur.nodes.filter((n) => n.parentId === parentId);
+        // 시험은 같은 부모·같은 제목 중 끝 행 — 그새 다른 사람이 덧붙인 행을 출제 화면으로 열지 않게
+        const pool = opts.exam ? siblings.filter((n) => n.title === opts.title) : siblings;
+        const created = pool.sort((a, b) => b.sortOrder - a.sortOrder)[0];
         setCur(cur);
         update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key, label) }, ...(open ? { editSel: created?.id ?? null, justAdded: created?.id ?? null } : {}) }));
         if (open) toast({ text: parentId ? "새 과제를 추가했어요" : "새 회차를 추가했어요", tone: "ok" }); // Q3-14 — 빠른 추가는 행이 나타나는 것으로 충분
         router.refresh(); // 개요의 회차 창·현재 회차는 room_get(detail) 에서 온다
+        if (opts.exam && created) {
+          try {
+            await putExam(slug, created.id, EMPTY_DRAFT);
+          } catch {
+            // 리프는 남는다 — 편집 화면 「문제」 섹션에서 다시 만들 수 있다
+            toast({ text: "시험을 만들지 못했어요 · 과제는 추가됐어요", tone: "bad" });
+            return true;
+          }
+          // 트리를 다시 받아 n.exam 을 채운 뒤 출제 화면으로 — 없으면 편집 화면이 시험 섹션을 그리지 않는다
+          try {
+            setCur(await fetchCurriculum(slug));
+          } catch {
+            setCur((c) => ({ ...c, nodes: c.nodes.map((n) => (n.id === created.id ? { ...n, exam: { status: "draft", questionCount: 0, totalPoints: 0, reveal: "after_submit" } } : n)) }));
+          }
+          // 회차 편집 화면(ChildList)에서 만들었으면 돌아갈 곳(editFrom)은 그대로 — 목록에서면 "list"
+          update((p) => ({ curMode: "edit", editSel: created.id, editFrom: p.editSel === null ? "list" : p.editFrom, justAdded: created.id, quickAdd: null, confirm: false, saved: "" }));
+        }
         return true;
       } catch (e) {
         // 만들지 못한 임시 노드의 편집 화면은 닫는다 (목록으로)

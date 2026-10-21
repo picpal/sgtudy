@@ -10,10 +10,10 @@ import { AWS, REF_DAY } from "../fixtures";
 
 const round = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY).roots[0];
 
-const mount = (onClose = vi.fn(), onAdd = vi.fn(async () => true)) => {
+const mount = (onClose = vi.fn(), onAdd = vi.fn(async () => true), tone: "team" | "personal" = "team") => {
   const host = document.body.appendChild(document.createElement("div"));
   const root = createRoot(host);
-  act(() => root.render(createElement(QuickAdd, { round, indent: 0, onAdd, onClose })));
+  act(() => root.render(createElement(QuickAdd, { round, indent: 0, onAdd, onClose, tone })));
   const input = host.querySelector<HTMLInputElement>("input")!;
   const btn = (t: string) => Array.from(host.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === t)!;
   const done = () => {
@@ -95,7 +95,66 @@ describe("QuickAdd 공통/지정 전환", () => {
     await act(async () => {
       input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
-    expect(t.onAdd).toHaveBeenCalledWith("새 과제", "지정");
+    expect(t.onAdd).toHaveBeenCalledWith("새 과제", "지정", "task");
+    t.done();
+  });
+});
+
+const typeAndEnter = async (host: HTMLElement, text: string) => {
+  const input = host.querySelector<HTMLInputElement>("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+};
+
+describe("QuickAdd 종류(과제/시험)", () => {
+  const EXAM_NOTE = "시험은 초안으로 만들어져요 · 문제를 쓰고 발행해야 팀원에게 열려요";
+
+  it("종류 세그먼트가 유형 세그먼트 앞에, 기본은 과제", () => {
+    const t = mount();
+    const groups = Array.from(t.host.querySelectorAll('[role="group"]')).map((g) => g.getAttribute("aria-label"));
+    expect(groups).toEqual(["추가할 종류", "추가할 과제 유형"]);
+    expect(t.btn("과제").getAttribute("aria-pressed")).toBe("true");
+    expect(t.input.placeholder).toBe("과제 제목을 쓰고 Enter · Esc 닫기");
+    expect(t.host.textContent).not.toContain(EXAM_NOTE);
+    t.done();
+  });
+
+  for (const [name, focusesButton] of [["Safari·Firefox(버튼에 포커스 없음)", false], ["Chromium(버튼에 포커스)", true]] as const) {
+    it(`${name}: 빈 입력에서 '시험' 을 눌러도 닫히지 않고, mousedown 은 기본 동작이 막힌다`, () => {
+      const t = mount();
+      t.input.focus();
+      const notCancelled = t.btn("시험").dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      expect(notCancelled).toBe(false); // preventDefault — 입력이 blur 되지 않는다
+      realClick(t.btn("시험"), focusesButton);
+      expect(t.onClose).not.toHaveBeenCalled();
+      expect(t.btn("시험").getAttribute("aria-pressed")).toBe("true");
+      expect(document.activeElement).toBe(t.host.querySelector("input"));
+      t.done();
+    });
+  }
+
+  it("'시험' 을 고르면 placeholder·안내 줄이 바뀌고 Enter 는 onAdd(t, '공통', 'exam')", async () => {
+    const t = mount();
+    t.input.focus();
+    realClick(t.btn("시험"), false);
+    expect(t.host.querySelector("input")!.placeholder).toBe("시험 제목을 쓰고 Enter · Esc 닫기");
+    expect(t.host.textContent).toContain(EXAM_NOTE);
+    await typeAndEnter(t.host, "3주차 정리 시험");
+    expect(t.onAdd).toHaveBeenCalledWith("3주차 정리 시험", "공통", "exam");
+    t.done();
+  });
+
+  it("개인 목표 빠른 추가에는 종류 세그먼트가 없고 onAdd 는 제목만", async () => {
+    const t = mount(undefined, undefined, "personal");
+    expect(t.host.querySelector('[aria-label="추가할 종류"]')).toBeNull();
+    expect(t.btn("시험")).toBeUndefined();
+    await typeAndEnter(t.host, "내 목표");
+    expect(t.onAdd).toHaveBeenCalledWith("내 목표");
     t.done();
   });
 });

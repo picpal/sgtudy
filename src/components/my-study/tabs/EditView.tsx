@@ -465,7 +465,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             edit={{
               busy,
               canAdd: !n.archived && !n.temp,
-              onAdd: (t, ty) => api.create(n.id, { title: t, open: false, taskType: ty === "지정" ? "designated" : "common" }),
+              onAdd: (t, ty, kind) => api.create(n.id, { title: t, open: false, taskType: ty === "지정" ? "designated" : "common", ...(kind === "exam" ? { exam: true } : {}) }),
               designatedNote: designatedHint(roomStatus),
               onRemove: (cid) => {
                 const k = n.kids.find((x) => x.id === cid);

@@ -335,7 +335,7 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
           {entries.map((entry) => {
             if (entry.kind === "add")
               return S.quickAdd === entry.round.id ? (
-                <QuickAdd key={`qa-${entry.round.id}`} round={entry.round} indent={1} onAdd={(t, ty) => api.create(entry.round.id, { title: t, open: false, taskType: ty === "지정" ? "designated" : "common" })} onClose={() => closeAdd(entry.round.id)} inTree designatedNote={designatedHint(roomStatus)} />
+                <QuickAdd key={`qa-${entry.round.id}`} round={entry.round} indent={1} onAdd={(t, ty, kind) => api.create(entry.round.id, { title: t, open: false, taskType: ty === "지정" ? "designated" : "common", ...(kind === "exam" ? { exam: true } : {}) })} onClose={() => closeAdd(entry.round.id)} inTree designatedNote={designatedHint(roomStatus)} />
               ) : (
                 <AddRow key={`add-${entry.round.id}`} round={entry.round} indent={1} onOpen={() => openAdd(entry.round.id)} inTree />
               );

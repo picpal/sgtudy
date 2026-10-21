@@ -18,6 +18,9 @@ export type AddTone = "team" | "personal";
 /** "{회차 라벨} {회차 제목}" — 개인 목표 문구(스펙 §6)용 */
 const roundName = (r: ParentNode) => (r.label ? `${r.label} ${r.title}` : r.title);
 
+/** 팀 빠른 추가의 종류 — 시험은 리프를 만든 뒤 빈 초안을 넣고 출제 화면으로 (스펙 2026-10-21-round-exam §4.1) */
+export type AddKind = "task" | "exam";
+
 /** 펼친 회차 끝의 "+ 과제 추가" / "＋ 내 목표 추가" 줄 */
 export function AddRow({ round, indent, onOpen, inTree = false, tone = "team" }: { round: ParentNode; indent: number; onOpen: () => void; inTree?: boolean; tone?: AddTone }) {
   const personal = tone === "personal";
@@ -47,8 +50,8 @@ export function QuickAdd({
 }: {
   round: ParentNode;
   indent: number;
-  /** type: 팀 빠른 추가에서 고른 과제 유형(공통/지정, 시나리오 QA D4). 개인 목표는 늘 undefined */
-  onAdd: (title: string, type?: TaskType) => Promise<boolean>;
+  /** type: 팀 빠른 추가에서 고른 과제 유형(공통/지정, 시나리오 QA D4), kind: 과제/시험. 개인 목표는 둘 다 늘 undefined */
+  onAdd: (title: string, type?: TaskType, kind?: AddKind) => Promise<boolean>;
   onClose: () => void;
   inTree?: boolean;
   tone?: AddTone;
@@ -61,6 +64,8 @@ export function QuickAdd({
   const [text, setText] = useState("");
   // 팀 과제 유형 — 열려 있는 동안 이어서 추가하는 과제에 그대로 쓴다
   const [type, setType] = useState<TaskType>("공통");
+  const [kind, setKind] = useState<AddKind>("task");
+  const exam = !personal && kind === "exam";
   const [last, setLast] = useState("");
   // 개인 목표는 낙관적 임시 행 없이 응답을 기다린다 — 그동안 입력에 aria-busy (스펙 §7). 연달아 보내면 마지막 응답까지
   const [pending, setPending] = useState(0);
@@ -71,7 +76,7 @@ export function QuickAdd({
     if (!t) return;
     setText("");
     setPending((c) => c + 1);
-    const ok = await onAdd(t, personal ? undefined : type);
+    const ok = await (personal ? onAdd(t) : onAdd(t, type, kind));
     setPending((c) => c - 1);
     if (ok) setLast(t);
     else setText((cur) => cur || t); // 실패하면 쓴 글자를 되살린다 (그새 새로 쓴 게 있으면 그대로)
@@ -85,9 +90,10 @@ export function QuickAdd({
       <span className={indentCls} style={{ "--d": indent } as React.CSSProperties} />
       {personal && <TypeBadge type="개인" />}
       {!personal && (
-        // 마우스로 유형을 눌러도 포커스는 입력에 둔다 — Safari·macOS Firefox 는 버튼에 포커스를 주지 않아
+        // 마우스로 종류·유형을 눌러도 포커스는 입력에 둔다 — Safari·macOS Firefox 는 버튼에 포커스를 주지 않아
         // 입력의 blur 가 relatedTarget=null 로 와서(줄 밖으로 나간 것처럼) 빈 입력이 닫혀 버렸다. 키보드(Tab·Space)는 그대로
-        <span className="shrink-0" onMouseDown={(e) => e.preventDefault()}>
+        <span className="flex shrink-0 gap-x-2" onMouseDown={(e) => e.preventDefault()}>
+          <Seg<AddKind> label="추가할 종류" value={kind} onChange={(v) => { setKind(v); input.current?.focus(); }} options={[["task", "과제"], ["exam", "시험"]]} />
           <Seg<TaskType> label="추가할 과제 유형" value={type} onChange={(v) => { setType(v); input.current?.focus(); }} options={[["공통", "공통"], ["지정", "지정"]]} />
         </span>
       )}
@@ -96,9 +102,9 @@ export function QuickAdd({
         type="text"
         value={text}
         maxLength={80}
-        aria-label={personal ? `${roundName(round)}에 추가할 내 목표 제목` : `${round.title}에 추가할 과제 제목`}
+        aria-label={personal ? `${roundName(round)}에 추가할 내 목표 제목` : `${round.title}에 추가할 ${exam ? "시험" : "과제"} 제목`}
         aria-busy={busy || undefined}
-        placeholder={personal ? "내 목표 제목을 쓰고 Enter · Esc 닫기" : "과제 제목을 쓰고 Enter · Esc 닫기"}
+        placeholder={personal ? "내 목표 제목을 쓰고 Enter · Esc 닫기" : exam ? "시험 제목을 쓰고 Enter · Esc 닫기" : "과제 제목을 쓰고 Enter · Esc 닫기"}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
@@ -110,15 +116,16 @@ export function QuickAdd({
           }
         }}
         onBlur={(e) => {
-          // 유형 버튼(같은 줄)으로 옮겨 간 포커스는 닫지 않는다
+          // 종류·유형 버튼(같은 줄)으로 옮겨 간 포커스는 닫지 않는다
           if (row.current?.contains(e.relatedTarget as Node | null)) return;
           if (!text.trim()) onClose();
         }}
-        className={`h-11 min-w-0 flex-1 rounded-[10px] border bg-surface px-3 text-[14px] text-ink ${personal ? "border-personal-line" : "border-line-3"}`}
+        className={`h-11 min-w-0 flex-1 rounded-[10px] border bg-surface px-3 text-[14px] text-ink ${personal ? "border-personal-line" : "border-line-3 max-sm:basis-full"}`}
       />
       {personal && (
         <span className="shrink-0 whitespace-nowrap text-[12px] text-muted max-sm:hidden">{last ? "다음 목표를 이어서 쓸 수 있어요" : `기간 = 회차 기간 ${md(round.s)} – ${md(round.e)}`}</span>
       )}
+      {exam && <span className="basis-full pb-1 text-[12px] text-muted">시험은 초안으로 만들어져요 · 문제를 쓰고 발행해야 팀원에게 열려요</span>}
       {!personal && type === "지정" && (
         <span className="basis-full pb-1 text-[12px] text-muted">
           지정 과제는 담당 미정으로 만들어져요 · 과제를 눌러 담당을 골라 주세요{designatedNote ? ` · ${designatedNote}` : ""}
