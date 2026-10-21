@@ -116,7 +116,7 @@ cases("comments 0041 · Comment JSON · validation · limits", db, [
   { name: "body: blank → VALIDATION_FAILED(body) · 2000 display chars ok (token = 1) · 2001 fails · >10 mentions fail", run: async (q) => {
     const node = await leaf(q);
     await as(q, "지은");
-    for (const b of ["", "   \n\t "]) assertEquals((await failHint(create(q, node, b), "VALIDATION_FAILED")).field, "body");
+    for (const b of ["", "   \n\t ", "\u00a0\u3000\r\n"]) assertEquals((await failHint(create(q, node, b), "VALIDATION_FAILED")).field, "body");
     await expectFail(rpc(q, "public.comment_create('aws', $1::bigint, null)", [node]), "VALIDATION_FAILED");
     assertEquals((await create(q, node, "가".repeat(2000))).comment.body.length, 2000);
     assertEquals(await failHint(create(q, node, "가".repeat(2001)), "VALIDATION_FAILED"), { field: "body", max: 2000 });
@@ -314,6 +314,24 @@ cases("comments 0041 · exam lock (D4)", db, [
     await setToday(q, "2026-10-22");
     assertEquals((await list(q, node)).locked, null);
   } },
+  { name: "review I1: ENDED / archived room doesn't unlock an unsubmitted assignee (lock checked apart from writeBlock)", run: async (q) => {
+    await as(q, "민수");
+    const bundle = (await one(q, "select parent_id::text as id from public.goal_nodes where id = $1::bigint", [await nodeId(q, "aws", "ALB vs NLB 실습")])).id;
+    await q("select public.node_create('aws', $1::bigint, '종료 방 시험', null, 'common', '2026-10-15', '2026-10-21')", [bundle]);
+    const node = await nodeId(q, "aws", "종료 방 시험");
+    await q("select public.exam_put('aws', $1::bigint, $2::jsonb)", [node, JSON.stringify({ reveal: "after_submit", questions: [{ type: "ox", prompt: "p", answer: true }] })]);
+    await q("select public.exam_publish('aws', $1::bigint)", [node]);
+    await setToday(q, "2026-10-16");
+    await create(q, node, "정답은 O");
+    await q("update public.rooms set status = 'ENDED' where slug = 'aws'");
+    await as(q, "지은");
+    const l = await list(q, node);
+    assertEquals([l.items, l.locked, l.canWrite, l.writeBlock, l.total], [[], { reason: "exam" }, false, "ended", 1]);
+    await q("update public.rooms set status = 'ACTIVE', archived_at = now() where slug = 'aws'");
+    assertEquals([(await list(q, node)).locked, (await list(q, node)).items], [{ reason: "exam" }, []]);
+    await as(q, "민수");   // 편집자는 그대로 열림
+    assertEquals((await list(q, node)).items.length, 1);
+  } },
 ]);
 
 cases("comments 0041 · mentions → MENTIONED notifications (D10~D15)", db, [
@@ -352,6 +370,28 @@ cases("comments 0041 · mentions → MENTIONED notifications (D10~D15)", db, [
     // list 의 people 도 같은 규칙
     const l = await list(q, node);
     assertEquals(Object.keys(l.people), [await uidOf(q, "철수")]);
+  } },
+  { name: "review M1: people map = leader · ACTIVE · INACTIVE only (PENDING member's nickname hidden)", run: async (q) => {
+    const node = await leaf(q);
+    const pend = await newUser(q);
+    await q("update public.profiles set nickname = '대기자' where id = $1::uuid", [pend]);
+    await q("insert into public.room_members (room_id, user_id, role, status) values ($1, $2::uuid, 'MEMBER', 'PENDING')", [await roomId(q, "aws"), pend]);
+    const [ds, ms] = await Promise.all([uidOf(q, "도윤"), uidOf(q, "민수")]);
+    await as(q, "지은");
+    const r = await create(q, node, `${tok(pend)} ${tok(ds)} ${tok(ms)}`);
+    assertEquals(Object.keys(r.people).sort(), [ds, ms].sort());
+    assertEquals((await mentions(q, "민수"))[0].body, "「VPC 실습」 · @알 수 없음 @도윤 @민수");
+  } },
+  { name: "review M4: edit drops removed people's unread notifications · re-renders remaining unread excerpts · read ones untouched", run: async (q) => {
+    const node = await leaf(q);
+    const [cs, hn, ms] = await Promise.all([uidOf(q, "철수"), uidOf(q, "하나"), uidOf(q, "민수")]);
+    await as(q, "지은");
+    const c = (await create(q, node, `${tok(cs)} ${tok(hn)} ${tok(ms)} 옛 욕설`)).comment;
+    await q("update public.notifications set read_at = now() where dedupe_key = $1", [`MENTIONED:${c.id}:${ms}`]);
+    await update(q, c.id, `${tok(hn)} ${tok(ms)} 고친 글`);
+    assertEquals(await mentions(q, "철수"), []);
+    assertEquals((await mentions(q, "하나")).map((n) => n.body), ["「VPC 실습」 · @하나 @민수 고친 글"]);
+    assertEquals((await mentions(q, "민수")).map((n) => n.body), ["「VPC 실습」 · @철수 @하나 @민수 옛 욕설"]);   // 이미 읽은 건 그대로
   } },
   { name: "recipients: duplicate tokens → 1 · self 0 · INACTIVE 0 · PENDING/outsider 0 · leader yes", run: async (q) => {
     const node = await leaf(q);

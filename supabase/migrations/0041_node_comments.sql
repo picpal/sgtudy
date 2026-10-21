@@ -7,7 +7,7 @@
 --  · D4 시험 잠금 — exam_view 가 정답·해설을 여는 식(v_edit or exam_reveal_ok(x, n, a))을 그대로 쓴다. 담당자에게 정답이 아직
 --    닫혀 있으면 댓글도 닫힌다(제출 뒤 after_deadline 시험은 마감까지 잠금 유지 — "허용 전엔 어떤 경로로도 못 읽는다").
 -- 재정의 원본: notify_publish ← 0008 · notification_kinds·notify_render·notify_link ← 0040. 시그니처 동일 → GRANT(없음) 유지.
--- notify_enabled(최신 0024)는 그대로 — 알 수 없는 kind 는 else true(방 설정으로 끌 수 없는 개인 알림).
+-- notify_enabled(최신 0025)는 그대로 — 알 수 없는 kind 는 else true(방 설정으로 끌 수 없는 개인 알림).
 -- 절: 1 스키마 · 2 알림 발행(링크 해시) · 3 내부 헬퍼 · 4 읽기 RPC · 5 쓰기 RPC · 6 GRANT · 7 알림 종류
 
 -- ───────── 1. 스키마 (스펙 §4) ─────────
@@ -180,13 +180,14 @@ language sql immutable set search_path = '' as $$
                          group by t.m[1]) s), '{}'::uuid[])
 $$;
 
--- 사람 맵 {uid: Person} — 그 방의 그룹장 또는 room_members 행이 있는 사람만(임의 uuid 로 닉네임을 캐지 못하게)
+-- 사람 맵 {uid: Person} — 그 방의 열람자 집합(D2: 그룹장 · ACTIVE · INACTIVE)만. 임의 uuid·승인 대기자의 닉네임을 캐지 못하게
 create or replace function public.comment_people(p_room bigint, p_ids uuid[]) returns jsonb
 language sql stable security definer set search_path = '' as $$
   select coalesce(jsonb_object_agg(p.id::text, public.person_json(p.id)), '{}'::jsonb)
   from public.profiles p join public.rooms r on r.id = p_room
   where p.id = any(coalesce(p_ids, '{}'))
-    and (r.leader_id = p.id or exists (select 1 from public.room_members m where m.room_id = r.id and m.user_id = p.id))
+    and (r.leader_id = p.id or exists (select 1 from public.room_members m
+                                       where m.room_id = r.id and m.user_id = p.id and m.status in ('ACTIVE', 'INACTIVE')))
 $$;
 
 -- 알림 발췌(D13): 토큰 → @닉네임(방과 무관한 uid 는 @알 수 없음), 공백 접기, ≤80자
@@ -217,14 +218,14 @@ language sql stable security definer set search_path = '' as $$
     'canDelete', p_can_write and ((c.author_id is not distinct from p_viewer and p_viewer is not null) or p_leader))
 $$;
 
--- 입력 검증(D7): 문자열 · 공백뿐 아님 · 표시 길이 ≤2000 · 저장 길이 ≤4000 · 멘션 ≤10. 반환 = (앞뒤 공백 정리한 본문, 멘션 uid)
+-- 입력 검증(D7): 문자열 · 공백뿐 아님(앞뒤 공백 = notice_trim 규칙 — 줄바꿈·탭·NBSP·전각 공백, 클라이언트 String.trim 과 같게) · 표시 길이 ≤2000 · 저장 길이 ≤4000 · 멘션 ≤10. 반환 = (앞뒤 공백 정리한 본문, 멘션 uid)
 create or replace function public.comment_validate(p_body text, out body text, out ids uuid[])
 language plpgsql immutable set search_path = '' as $$
 declare
   v_lim jsonb := public.comment_limits();
   v_len int;
 begin
-  body := btrim(coalesce(p_body, ''), E' \t\r\n');
+  body := public.notice_trim(coalesce(p_body, ''));
   if body = '' then
     perform public.fail('VALIDATION_FAILED', '댓글 내용을 입력해 주세요', '{"field":"body"}'::jsonb);
   end if;
@@ -263,22 +264,33 @@ begin
   end if;
 end $$;
 
+-- MENTIONED 알림 모델(D13): 시험 리프는 발췌 없음
+create or replace function public.comment_mention_model(c public.node_comments) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object('commentId', c.id::text,
+                            'excerpt', case when exists (select 1 from public.exams x where x.node_id = c.node_id) then null
+                                            else public.comment_excerpt(c.room_id, c.body) end)
+$$;
+
+-- 이 댓글이 p_uids 에게 보낸 MENTIONED 알림의 dedupe_key(unique 인덱스로 바로 찾는다 — like 전체 훑기 대신)
+create or replace function public.comment_mention_keys(p_comment bigint, p_uids uuid[]) returns text[]
+language sql immutable set search_path = '' as $$
+  select coalesce(array_agg('MENTIONED:' || p_comment || ':' || u), '{}') from unnest(coalesce(p_uids, '{}')) u
+$$;
+
 -- 멘션 알림(D11·D12·D13·D14·D15): 수신 = p_new ∩ (그룹장 ∪ ACTIVE). 작성자 본인은 notify_publish 가 뺀다.
 -- dedupe = MENTIONED:{commentId}:{uid} → 같은 댓글에서 같은 사람은 1건. 링크 = notify_link + #comment-{id}
 create or replace function public.comment_notify(c public.node_comments, p_actor uuid, p_new uuid[]) returns int
 language plpgsql security definer set search_path = '' as $$
 declare
   v_rcpt uuid[];
-  v_exam boolean := exists (select 1 from public.exams x where x.node_id = c.node_id);
 begin
   select coalesce(array_agg(u.id), '{}') into v_rcpt
   from unnest(coalesce(p_new, '{}')) as u(id) join public.rooms r on r.id = c.room_id
   where r.leader_id = u.id
      or exists (select 1 from public.room_members m where m.room_id = r.id and m.user_id = u.id and m.status = 'ACTIVE');
   return public.notify_publish('MENTIONED', c.room_id, c.node_id, p_actor, v_rcpt, 'MENTIONED:' || c.id,
-                               jsonb_build_object('commentId', c.id::text,
-                                                  'excerpt', case when v_exam then null else public.comment_excerpt(c.room_id, c.body) end),
-                               'comment-' || c.id);
+                               public.comment_mention_model(c), 'comment-' || c.id);
 end $$;
 
 -- 한 쪽(items) 응답: 사람 맵은 items 의 멘션 uid 만
@@ -317,9 +329,10 @@ begin
   v_why := public.comment_writable(r, n, v_uid);
   select count(*)::int into v_total from public.node_comments c where c.node_id = n.id and c.deleted_at is null;
 
-  if v_why = 'exam_locked' then
+  -- 시험 잠금은 쓰기 이유와 따로 본다 — 종료·보관 방(v_why = ended)이라도 정답이 닫혀 있으면 목록도 닫힌다(D4)
+  if public.comment_exam_locked(n, v_uid) then
     return jsonb_build_object('items', '[]'::jsonb, 'people', '{}'::jsonb, 'hasOlder', false, 'hasNewer', false, 'total', v_total,
-                              'canWrite', false, 'writeBlock', v_why, 'locked', '{"reason":"exam"}'::jsonb, 'target', null,
+                              'canWrite', false, 'writeBlock', coalesce(v_why, 'exam_locked'), 'locked', '{"reason":"exam"}'::jsonb, 'target', null,
                               'limits', v_lim);
   end if;
 
@@ -377,6 +390,7 @@ begin
   perform public.comment_assert_writable(r, n, v_uid);
   perform public.comment_rate_check(v_uid);
   select * into v_in from public.comment_validate(p_body);
+  perform pg_advisory_xact_lock(hashtextextended('sgtudy.comment_node:' || n.id::text, 0));   -- 노드당 상한을 여러 작성자가 동시에 넘지 않게
   if (select count(*) from public.node_comments x where x.node_id = n.id and x.deleted_at is null) >= (public.comment_limits() ->> 'perNode')::int then
     perform public.fail('COMMENT_LIMIT', '이 항목의 댓글이 가득 찼어요', jsonb_build_object('kind', 'perNode', 'max', (public.comment_limits() ->> 'perNode')::int));
   end if;
@@ -422,6 +436,13 @@ begin
     updated_at  = case when v_in.body is distinct from x.body then public.app_now() else x.updated_at end
   where x.id = c.id
   returning * into c;
+  -- 이미 보낸 안 읽은 알림 정리(D9 를 수정에도): 빠진 사람 것은 지우고, 남은 사람 것은 새 본문으로 발췌를 다시 그린다(제목·링크 그대로)
+  delete from public.notifications o
+  where o.dedupe_key = any(public.comment_mention_keys(c.id, array(select u from unnest(v_old) u where not (u = any(c.mention_ids)))))
+    and o.read_at is null;
+  update public.notifications o
+  set body = left(public.notify_render('MENTIONED', c.room_id, c.node_id, o.actor_user_id, public.comment_mention_model(c)) ->> 'body', 500)
+  where o.dedupe_key = any(public.comment_mention_keys(c.id, c.mention_ids)) and o.read_at is null;
   perform public.comment_notify(c, v_uid, array(select u from unnest(c.mention_ids) u where not (u = any(v_old))));
   return jsonb_build_object('comment', public.comment_json(c, v_uid, true, r.leader_id = v_uid),
                             'people', public.comment_people(r.id, c.mention_ids));
@@ -445,8 +466,8 @@ begin
   end if;
   perform public.comment_assert_writable(r, n, v_uid);
   update public.node_comments x set body = '', mention_ids = '{}', deleted_at = public.app_now(), deleted_by = v_uid where x.id = c.id;
-  delete from public.notifications o
-  where o.kind = 'MENTIONED' and o.dedupe_key like 'MENTIONED:' || c.id || ':%' and o.read_at is null;
+  delete from public.notifications o   -- 받은 사람 ⊆ 지우기 전 mention_ids
+  where o.dedupe_key = any(public.comment_mention_keys(c.id, c.mention_ids)) and o.read_at is null;
 end $$;
 
 -- ───────── 6. GRANT (공개 RPC 만 — comment_* 헬퍼·8인자 notify_publish 는 GRANT 없음) ─────────
