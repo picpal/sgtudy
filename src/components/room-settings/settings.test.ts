@@ -36,8 +36,8 @@ describe("lockedOf — 서버 room_update 의 상태별 잠금과 같다", () =>
     expect(lockedOf({ status: "draft", archived: false }).size).toBe(0);
     expect(lockedOf({ status: "recruit", archived: false }).size).toBe(0);
   });
-  it("진행중: 시작일·최소 인원·공개·참가 방식·그룹장 과제 수행", () => {
-    expect([...lockedOf({ status: "active", archived: false })].sort()).toEqual(["isPublic", "joinMode", "leaderDoesTasks", "minMembers", "startDate"]);
+  it("진행중: 시작일·최소 인원·참가 방식·그룹장 과제 수행 (공개 여부는 열림, 0039)", () => {
+    expect([...lockedOf({ status: "active", archived: false })].sort()).toEqual(["joinMode", "leaderDoesTasks", "minMembers", "startDate"]);
   });
   it("종료·보관: 전부", () => {
     expect(lockedOf({ status: "ended", archived: false }).size).toBe(11);

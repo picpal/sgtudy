@@ -3,9 +3,9 @@ import type { RoomDetail } from "@/lib/api/types";
 import { validateNewRoom, type NewRoomValues } from "@/components/room-new/validate";
 
 /**
- * 방 설정 (QA Q3-1·Q2-2) — 방 만들기 폼과 같은 값 모양(NewRoomValues). 서버 규칙(0018 room_update · 0004 room_delete/room_archive)을 그대로 비춘다:
+ * 방 설정 (QA Q3-1·Q2-2) — 방 만들기 폼과 같은 값 모양(NewRoomValues). 서버 규칙(0039 room_update · 0004 room_delete/room_archive)을 그대로 비춘다:
  * - 준비중·모집중: 모두 수정, 삭제 가능
- * - 진행중: 시작일·최소 인원·공개·참가 방식·그룹장 과제 수행은 잠김, 종료일은 오늘(과 마지막 과제 마감) 이후로만. 삭제 대신 보관
+ * - 진행중: 시작일·최소 인원·참가 방식·그룹장 과제 수행은 잠김(공개 여부는 바꿀 수 있음, 0039), 종료일은 오늘(과 마지막 과제 마감) 이후로만. 삭제 대신 보관
  * - 종료·보관: 수정 불가. 종료는 보관, 보관은 풀기만
  */
 type Src = Pick<RoomDetail, "title" | "intro" | "descriptionMd" | "rulesMd" | "startDate" | "endDate" | "maxMembers" | "minMembers" | "isPublic" | "joinMode" | "leaderDoesTasks">;
@@ -29,7 +29,7 @@ export function mergeServerFields(cur: NewRoomValues, next: Src, changed: readon
 }
 
 const ALL: Field[] = ["title", "intro", "descriptionMd", "rulesMd", "startDate", "endDate", "maxMembers", "minMembers", "isPublic", "joinMode", "leaderDoesTasks"];
-const ACTIVE_LOCKED: Field[] = ["startDate", "minMembers", "isPublic", "joinMode", "leaderDoesTasks"];
+const ACTIVE_LOCKED: Field[] = ["startDate", "minMembers", "joinMode", "leaderDoesTasks"];
 
 export function lockedOf(d: State): Set<Field> {
   if (d.archived || d.status === "ended") return new Set(ALL);

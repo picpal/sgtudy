@@ -289,7 +289,7 @@ export const ROOM_CASES: Case[] = [
     },
   },
   {
-    name: "room_update: 상태별 필드 잠금 (DRAFT/RECRUIT 전부 가능, ACTIVE 는 startDate 등 FIELD_LOCKED, ENDED 전부 잠금)",
+    name: "room_update: 상태별 필드 잠금 (DRAFT/RECRUIT 전부 가능, ACTIVE 는 startDate 등 FIELD_LOCKED·isPublic 은 가능(0039), ENDED 전부 잠금)",
     run: async (q) => {
       await setToday(q, TODAY);
       const d = await createRoom(q, USERS.서연, { startDate: "2026-10-13", endDate: "2026-10-31" });
@@ -325,9 +325,14 @@ export const ROOM_CASES: Case[] = [
       await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: 2 })], "CAPACITY_BELOW_CURRENT");
       // ACTIVE 단계
       await q(`select public.room_start($1)`, [d.slug]);
-      for (const k of ["startDate", "minMembers", "isPublic", "joinMode", "leaderDoesTasks"]) {
+      for (const k of ["startDate", "minMembers", "joinMode", "leaderDoesTasks"]) {
         await expectFailSql(q, upd, [d.slug, JSON.stringify({ [k]: k === "startDate" ? "2026-10-20" : k === "minMembers" ? 1 : k === "joinMode" ? "direct" : true })], "FIELD_LOCKED");
       }
+      // 0039: 진행중에도 공개/비공개 전환 가능
+      [{ r }] = await q(upd, [d.slug, JSON.stringify({ isPublic: false })]);
+      assertEquals([r.status, r.isPublic], ["active", false]);
+      [{ r }] = await q(upd, [d.slug, JSON.stringify({ isPublic: true })]);
+      assertEquals([r.status, r.isPublic], ["active", true]);
       [{ r }] = await q(upd, [d.slug, JSON.stringify({ title: "바뀐 제목", endDate: "2026-11-15", maxMembers: 5 })]);
       assertEquals([r.title, r.endDate, r.maxMembers], ["바뀐 제목", "2026-11-15", 5]);
       await expectFailSql(q, upd, [d.slug, JSON.stringify({ endDate: "2026-10-19" })], "INVALID_PERIOD");  // 노드 e(10/20) 보다 앞
@@ -336,6 +341,7 @@ export const ROOM_CASES: Case[] = [
       await setToday(q, "2026-11-16");
       await q(`select public.room_tick()`);
       await expectFailSql(q, upd, [d.slug, JSON.stringify({ title: "x" })], "FIELD_LOCKED");
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ isPublic: false })], "FIELD_LOCKED");
       // 보관: ROOM_NOT_EDITABLE
       await q(`select public.room_archive($1)`, [d.slug]);
       await expectFailSql(q, upd, [d.slug, JSON.stringify({ title: "x" })], "ROOM_NOT_EDITABLE");

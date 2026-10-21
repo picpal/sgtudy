@@ -79,6 +79,27 @@ describe("방 설정 — 진행중에 잠긴 칸도 지금 값을 보인다", ()
   });
 });
 
+describe("방 설정 — 진행중에도 공개 여부는 바꿀 수 있다 (0039)", () => {
+  const publicSwitch = (host: ParentNode) =>
+    [...host.querySelector("form")!.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find((s) => (s.getAttribute("aria-label") ?? s.textContent ?? "").includes("공개 방"))!;
+  it("진행중: 공개 스위치가 켜져 있고 눌러서 끌 수 있다 · 안내 문구도 잠김 사유가 아니다", () => {
+    const { host, root } = mount({ isPublic: true });
+    const sw = publicSwitch(host);
+    expect(sw.disabled).toBe(false);
+    expect(host.textContent).toContain("지금 참가자는 그대로예요");
+    expect(host.textContent).not.toContain("공개 여부·");
+    act(() => sw.click());
+    expect(publicSwitch(host).getAttribute("aria-checked")).toBe("false");
+    expect(host.textContent).toContain("바뀐 항목 1개");
+    act(() => root.unmount());
+  });
+  it("종료된 방은 여전히 잠김", () => {
+    const { host, root } = mount({ status: "ended" });
+    expect(publicSwitch(host).disabled).toBe(true);
+    act(() => root.unmount());
+  });
+});
+
 describe("방 설정 — 돌아가기 목적지", () => {
   it("back(검증된 from)이 있으면 옆 '이전 페이지' 만 그리로, 위쪽은 내 스터디", () => {
     const { host, root } = mount({}, "/rooms/aws");

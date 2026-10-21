@@ -164,7 +164,7 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
           </p>
           {reason && (
             <p role="note" className="mb-6 mt-0 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-3 text-[13px] font-medium leading-[1.5] text-[#6B4700]">
-              {d.status === "active" && !d.archived ? "진행중에는 시작일·최소 인원·공개 여부·참가 방식·그룹장 과제 수행을 바꿀 수 없어요" : reason}
+              {d.status === "active" && !d.archived ? "진행중에는 시작일·최소 인원·참가 방식·그룹장 과제 수행을 바꿀 수 없어요" : reason}
             </p>
           )}
 
@@ -197,7 +197,7 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
             </Section>
 
             <Section title="참가·공개">
-              <SwitchRow title="공개 방" desc={locked.has("isPublic") ? reason : "끄면 초대 링크로만 들어올 수 있어요"} on={v.isPublic} onChange={(x) => set("isPublic", x)} disabled={dis("isPublic")} />
+              <SwitchRow title="공개 방" desc={locked.has("isPublic") ? reason : d.status === "active" ? "끄면 목록에서 빠지고 초대 링크로만 들어올 수 있어요 · 지금 참가자는 그대로예요" : "끄면 초대 링크로만 들어올 수 있어요"} on={v.isPublic} onChange={(x) => set("isPublic", x)} disabled={dis("isPublic")} />
               <JoinModeRadio value={v.joinMode} onChange={(x) => set("joinMode", x)} disabled={dis("joinMode")} />
               <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
                 <Field label="최대 인원" required hint={`2~100명 · 지금 ${d.memberCount}명 참가 중`} error={errors.maxMembers}>
