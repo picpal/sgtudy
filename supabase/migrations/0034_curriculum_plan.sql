@@ -1,6 +1,6 @@
 -- 0034_curriculum_plan.sql — 2026-10-19 AI 연동(MCP) 1단계: 진행목표 계획서. 배포 후 수정 금지.
 -- 스펙 §5·§7·§8. 재정의: node_create ← 0024(본문을 node_create_core 로 옮김, 시그니처·GRANT 동일),
---                      notification_kinds ← 0032, notify_render ← 0032 (둘 다 MEMBER_JOINED 유지), notify_link ← 0028 (Task 5).
+--                      notification_kinds ← 0032, notify_render ← 0032 (둘 다 MEMBER_JOINED 유지), notify_link ← 0028 (§5 — CURRICULUM_BULK_UPDATED).
 
 -- ───────── 1. node_create_core (0024 node_create 본문 그대로 + 설명 인자, 잠금·권한·resync·json 은 호출자) ─────────
 -- 내부 헬퍼 — GRANT 없음(0002 기본 권한이 막는다). r 은 호출자가 node_assert_editable 로 잠근 방.
@@ -123,7 +123,7 @@ $$;
 create or replace function public.plan_date_try(p text) returns date
 language plpgsql immutable set search_path = '' as $$
 begin
-  if p is null or p !~ '^\d{4}-\d{2}-\d{2}$' then return null; end if;
+  if p is null or p !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then return null; end if;
   return p::date;
 exception when others then return null;
 end $$;
@@ -219,7 +219,7 @@ begin
         v_id := v_rounds -> 0 ->> 'id';
       end if;
     else
-      if v_txt ~ '^\d{1,18}$' then
+      if v_txt ~ '^[0-9]{1,18}$' then
         select e ->> 'id' into v_id from jsonb_array_elements(v_rounds) e where e ->> 'id' = (v_txt::bigint)::text;
       end if;
       if v_id is null and v_txt <> '' then
@@ -475,7 +475,7 @@ begin
         end if;
       end if;
       -- 숫자 id 는 정규형으로("00123" → "123") — shift 충돌 검사·실행이 같은 노드로 본다
-      if v_kind in ('update', 'move') and jsonb_typeof(v_op -> 'id') = 'string' and (v_op ->> 'id') ~ '^\d{1,18}$' then
+      if v_kind in ('update', 'move') and jsonb_typeof(v_op -> 'id') = 'string' and (v_op ->> 'id') ~ '^[0-9]{1,18}$' then
         v_op := v_op || jsonb_build_object('id', ((v_op ->> 'id')::bigint)::text);
         v_um := v_um || jsonb_build_array(jsonb_build_array(v_op ->> 'id', v_path, o.i, v_kind,
           v_kind = 'update' and jsonb_typeof(v_op -> 'set') = 'object'
@@ -516,10 +516,10 @@ end $$;
 create or replace function public.plan_map_paths(p_items jsonb, p_map jsonb) returns jsonb
 language sql immutable set search_path = '' as $$
   select coalesce(jsonb_agg(
-           case when jsonb_typeof(it) = 'object' and (it ->> 'path') ~ '^ops\[\d+\]'
-                     and p_map ? substring(it ->> 'path' from '^ops\[\d+\]')
+           case when jsonb_typeof(it) = 'object' and (it ->> 'path') ~ '^ops\[[0-9]+\]'
+                     and p_map ? substring(it ->> 'path' from '^ops\[[0-9]+\]')
                 then it || jsonb_build_object(
-                       'path', (p_map ->> substring(it ->> 'path' from '^ops\[\d+\]')) || substring(it ->> 'path' from '^ops\[\d+\](.*)$'),
+                       'path', (p_map ->> substring(it ->> 'path' from '^ops\[[0-9]+\]')) || substring(it ->> 'path' from '^ops\[[0-9]+\](.*)$'),
                        'rpath', it ->> 'path')
                 else it end
            order by n), '[]'::jsonb)
@@ -648,7 +648,7 @@ begin
         end if;
         v_pinfo := v_info -> (v_refs ->> substr(o ->> 'parent', 2));
         if v_pinfo is null then continue; end if;
-      elsif jsonb_typeof(o -> 'parent') = 'string' and (o ->> 'parent') ~ '^\d{1,18}$' then
+      elsif jsonb_typeof(o -> 'parent') = 'string' and (o ->> 'parent') ~ '^[0-9]{1,18}$' then
         select * into v_node from public.goal_nodes where id = (o ->> 'parent')::bigint and room_id = r.id;
         if not found then
           v_err := v_err || public.plan_err(f.path, 'NODE_NOT_FOUND', '항목을 찾을 수 없어요', 'parent'); continue;
@@ -759,7 +759,7 @@ begin
         v_err := v_err || public.plan_err(f.path, 'UNKNOWN_REF', '앞선 create 에 ref 「' || public.plan_clip(substr(o ->> 'id', 2)) || '」 가 없어요', 'id'); continue;
       end if;
       if not v_info ? (v_refs ->> substr(o ->> 'id', 2)) then continue; end if;
-    elsif jsonb_typeof(o -> 'id') = 'string' and (o ->> 'id') ~ '^\d{1,18}$' then
+    elsif jsonb_typeof(o -> 'id') = 'string' and (o ->> 'id') ~ '^[0-9]{1,18}$' then
       select * into v_node from public.goal_nodes where id = (o ->> 'id')::bigint and room_id = r.id;
       if not found then
         v_err := v_err || public.plan_err(f.path, 'NODE_NOT_FOUND', '항목을 찾을 수 없어요', 'id'); continue;
@@ -838,7 +838,7 @@ begin
         v_err := v_err || public.plan_err(f.path, 'UNKNOWN_REF', '앞선 create 에 ref 「' || public.plan_clip(substr(o ->> 'parent', 2)) || '」 가 없어요', 'parent'); continue;
       end if;
       if not v_info ? (v_refs ->> substr(o ->> 'parent', 2)) then continue; end if;
-    elsif jsonb_typeof(o -> 'parent') = 'string' and (o ->> 'parent') ~ '^\d{1,18}$' then
+    elsif jsonb_typeof(o -> 'parent') = 'string' and (o ->> 'parent') ~ '^[0-9]{1,18}$' then
       select * into v_node from public.goal_nodes where id = (o ->> 'parent')::bigint and room_id = r.id;
       if not found then
         v_err := v_err || public.plan_err(f.path, 'NODE_NOT_FOUND', '항목을 찾을 수 없어요', 'parent'); continue;
@@ -859,3 +859,582 @@ begin
   end loop;
   return jsonb_build_object('errors', v_err, 'warnings', v_warn, 'nodes', v_n);
 end $$;
+
+-- ───────── 4. curriculum_plan: 실행 plan_run · 초안 표 · 미리보기/적용 · 되돌리기 ─────────
+-- 〔UX 재검토 D11·D17〕 미리보기(초안 저장) → 적용(previewId). 내부 헬퍼(plan_*)는 GRANT 없음, 공개 2개만 authenticated.
+-- 잠금 순서: (api_invoke 의 사용자 잠금) → 방(node_assert_editable = room_lock) → 초안(for update). replay 판정은 잠금 뒤.
+
+create or replace function public.plan_kind(n public.goal_nodes) returns text
+language sql immutable set search_path = '' as $$
+  select case when n.task_type = 'PERSONAL' then 'personal' when n.depth = 2 then 'round'
+              when n.task_type is null then 'bundle' else 'task' end
+$$;
+
+-- 바뀐 필드만 [옛, 새]. 설명은 true 만(본문 비노출). 〔P4〕 담당은 여기서 내지 않는다 — plan_run 이 닉네임 [옛, 새] 로 붙인다(uuid 비노출)
+create or replace function public.plan_changes(b public.goal_nodes, a public.goal_nodes, p_set jsonb) returns jsonb
+language sql immutable set search_path = '' as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'title',     case when a.title is distinct from b.title then jsonb_build_array(b.title, a.title) end,
+    'label',     case when a.label is distinct from b.label then jsonb_build_array(b.label, a.label) end,
+    'startDate', case when a.start_date <> b.start_date then jsonb_build_array(to_char(b.start_date, 'YYYY-MM-DD'), to_char(a.start_date, 'YYYY-MM-DD')) end,
+    'endDate',   case when a.end_date <> b.end_date then jsonb_build_array(to_char(b.end_date, 'YYYY-MM-DD'), to_char(a.end_date, 'YYYY-MM-DD')) end,
+    'taskType',  case when a.task_type is distinct from b.task_type then jsonb_build_array(lower(b.task_type), lower(a.task_type)) end,
+    'descriptionMd', case when a.description_md is distinct from b.description_md then 'true'::jsonb end))
+$$;
+
+-- 〔P4〕 과제의 현재(미해제) 담당 닉네임, 닉네임 순
+create or replace function public.plan_nicks(p_node bigint) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(p.nickname order by p.nickname), '[]'::jsonb)
+  from public.task_assignments a join public.profiles p on p.id = a.user_id
+  where a.node_id = p_node and a.released_at is null
+$$;
+
+-- 실행 오류 → {path, code, message, …hint}. 업무 오류(P0001 + 코드)만 내용을 싣고 그 밖은 INTERNAL(원문 비노출).
+-- hint 의 userId 는 뺀다(응답에 uuid 없음 — 방 밖 사용자 존재 여부도 드러내지 않는다)
+create or replace function public.plan_runtime_err(p_path text, p_state text, p_code text, p_detail text, p_hint text) returns jsonb
+language plpgsql immutable set search_path = '' as $$
+declare v_h jsonb;
+begin
+  if p_state = 'P0001' and p_code ~ '^[A-Z][A-Z0-9_]*$' then
+    begin v_h := nullif(p_hint, '')::jsonb; exception when others then v_h := null; end;
+    if jsonb_typeof(v_h) is distinct from 'object' then v_h := '{}'::jsonb; end if;
+    return (v_h - 'path' - 'code' - 'message' - 'userId') || jsonb_build_object('path', p_path, 'code', p_code, 'message', coalesce(p_detail, p_code));
+  end if;
+  return jsonb_build_object('path', p_path, 'code', 'INTERNAL', 'message', '처리 중 오류가 났어요');   -- 원문 비노출
+end $$;
+
+-- 〔C#9〕 node_update 경고({code,nodeId})에 붙일 한국어 문구 (TS WARN_TEXT 와 같은 3개)
+create or replace function public.plan_warn_text(p_code text) returns text
+language sql immutable set search_path = '' as $$
+  select case p_code
+    when 'PERIOD_OUTSIDE_ROOM'   then '스터디 기간 밖이에요'
+    when 'PERIOD_OUTSIDE_PARENT' then '상위 항목 기간 밖이에요'
+    when 'UNASSIGNED_TASK'       then '담당자가 없는 지정 과제예요'
+    else p_code end
+$$;
+
+create table public.api_plan_drafts (
+  id             varchar(16) primary key,                 -- 'pv_' + 12 hex
+  user_id        uuid        not null references public.profiles(id) on delete cascade,
+  room_id        bigint      not null references public.rooms(id) on delete cascade,
+  plan           jsonb       not null,                    -- 원본(사용자가 보낸 것, undo 면 {"undoOf": id})
+  resolved       jsonb       not null,                    -- 정규(plan_resolve 결과, undo 면 {"restore": sched_changes})
+  path_map       jsonb       not null default '{}'::jsonb,
+  version        char(32)    not null,                    -- 미리보기 때 curriculum_version
+  preview        jsonb       not null,
+  created_at     timestamptz not null,
+  expires_at     timestamptz not null,
+  applied_at     timestamptz,
+  apply_response jsonb,
+  undo_of        varchar(16),
+  sched_changes  jsonb                                     -- 〔C#4·N1·N2〕 적용 때 실제로 날짜가 바뀐 기존 노드 {id:[옛시작,옛끝,새시작,새끝]}
+);
+create index ix_api_plan_drafts_user on public.api_plan_drafts (user_id, created_at desc);
+alter table public.api_plan_drafts enable row level security;   -- 정책 없음: RPC 전용
+
+-- 〔N1〕 기록된 노드가 지금도 '새 값' 그대로인가. 다르거나 없어진 id(≤20) — 빈 배열이면 통과. 예외 없음
+create or replace function public.plan_undo_check(p_changes jsonb) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(z.k), '[]'::jsonb) from (
+    select e.k from jsonb_each(case when jsonb_typeof(p_changes) = 'object' then p_changes else '{}'::jsonb end) e(k, v)
+    left join public.goal_nodes g on g.id = e.k::bigint
+    where g.id is null or jsonb_build_array(g.start_date, g.end_date) <> jsonb_build_array(e.v -> 2, e.v -> 3)
+    order by e.k::bigint limit 20) z
+$$;
+
+-- 정규 계획서 실행(원안 ⑥~⑧). 서브트랜잭션: dry 면 결과를 만든 뒤 되감는다(plpgsql 변수 v_out 은 남는다).
+-- 실행 오류: dry → {ok:false, errors:[…]}, 적용 → 재발생(호출자 전체 롤백).
+-- 반환 {ok, summary, diff, warnings, errors, notifications, ids{path→id}, refs{ref→id}, sched}. dry 면 diff 의 생성 id null, ids·refs 비움.
+-- 〔N2〕 sched = 이 실행에서 날짜가 실제로 바뀐 기존 노드 {id:[옛s,옛e,새s,새e]} — 이 계획이 만든 노드는 제외, 옛 값은 처음 것, 새 값은 최종 행.
+create or replace function public.plan_run(r public.rooms, p_uid uuid, p_plan jsonb, p_dry boolean, p_warn jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_slug     text := r.slug;
+  v_uid      uuid := p_uid;
+  v_dry      boolean := coalesce(p_dry, true);
+  v_after_id bigint;
+  f          record;
+  o          jsonb;
+  v_cur      text;
+  v_refs     jsonb := '{}'::jsonb;   -- ref → path
+  v_ids      jsonb := '{}'::jsonb;   -- path → id (create)
+  v_dm       jsonb := '{}'::jsonb;   -- path → diff 항목
+  v_diff     jsonb;
+  v_warn     jsonb := '[]'::jsonb;   -- 실행 중 경고(node_update)
+  v_notes    jsonb;
+  v_parent   bigint;
+  v_id       bigint;
+  v_res      jsonb;
+  v_chg      jsonb;
+  v_nb       jsonb;                  -- 〔P4〕 담당 닉네임(전)
+  v_na       jsonb;                  --        (후)
+  b          public.goal_nodes;
+  a          public.goal_nodes;
+  v_created  int := 0;
+  v_updated  int := 0;
+  v_moved    int := 0;
+  v_shift    int := 0;
+  v_sched    jsonb := '{}'::jsonb;   -- 〔N2〕 실제 날짜 변경 {id:[옛s,옛e,새s,새e]}
+  v_pre      jsonb;
+  v_out      jsonb;
+  v_state    text;
+  v_code     text;
+  v_msg      text;
+  v_hint     text;
+  v_e        jsonb;
+begin
+  select coalesce(max(id), 0) into v_after_id from public.notifications;      -- ⑥ (Task 5 알림 묶기 기준점)
+  begin                                                                       -- ⑦ 서브트랜잭션
+    for f in select * from public.plan_flatten(p_plan) loop
+      v_cur := f.path;
+      o := f.op;
+      if o ? 'ref' then v_refs := v_refs || jsonb_build_object(o ->> 'ref', f.path); end if;
+      case coalesce(o ->> 'op', 'create')
+        when 'create' then
+          v_parent := case
+            when f.parent_path is not null then (v_ids ->> f.parent_path)::bigint
+            when jsonb_typeof(o -> 'parent') = 'string' and left(o ->> 'parent', 1) = '@'
+              then (v_ids ->> (v_refs ->> substr(o ->> 'parent', 2)))::bigint
+            else (o ->> 'parent')::bigint end;
+          v_id := public.node_create_core(r, v_uid, v_parent, o ->> 'title', o ->> 'label', o ->> 'taskType',
+                    public.plan_date_try(o ->> 'startDate'), public.plan_date_try(o ->> 'endDate'),
+                    (o ->> 'index')::int, coalesce(o ->> 'descriptionMd', ''));
+          v_ids := v_ids || jsonb_build_object(f.path, v_id);
+          if o ? 'assigneeIds' then
+            perform public.node_update(v_slug, v_id, jsonb_build_object('assigneeIds', o -> 'assigneeIds'));
+          end if;
+        when 'update' then
+          v_id := (o ->> 'id')::bigint;                                       -- update 의 id 는 @ref 불가(plan_validate)
+          select * into b from public.goal_nodes where id = v_id;
+          v_nb := case when (o -> 'set') ? 'assigneeIds' then public.plan_nicks(v_id) end;
+          -- 〔N2〕 node_update 가 옮길 수 있는 범위(자기 + 하위, 개인 목표 포함)의 날짜를 앞뒤로 비교
+          select coalesce(jsonb_object_agg(g.id::text, jsonb_build_array(g.start_date, g.end_date)), '{}'::jsonb) into v_pre
+          from public.goal_nodes g where g.id in (select public.node_subtree(v_id));
+          v_res := public.node_update(v_slug, v_id, o -> 'set');
+          select v_sched || coalesce(jsonb_object_agg(g.id::text, jsonb_build_array(
+                   coalesce(v_sched -> g.id::text -> 0, v_pre -> g.id::text -> 0),    -- 옛 값은 처음 것
+                   coalesce(v_sched -> g.id::text -> 1, v_pre -> g.id::text -> 1),
+                   g.start_date, g.end_date)), '{}'::jsonb) into v_sched
+          from public.goal_nodes g
+          where g.id in (select public.node_subtree(v_id)) and v_pre ? g.id::text
+            and jsonb_build_array(g.start_date, g.end_date) <> v_pre -> g.id::text
+            and not exists (select 1 from jsonb_each_text(v_ids) c where c.value::bigint = g.id);   -- 이 계획이 만든 노드 제외
+          select * into a from public.goal_nodes where id = v_id;
+          v_shift := v_shift + coalesce((v_res #>> '{shifted,tasks}')::int, 0) + coalesce((v_res #>> '{shifted,groups}')::int, 0)
+                             + coalesce((v_res #>> '{shifted,personal}')::int, 0);
+          v_warn := v_warn || coalesce((select jsonb_agg(w || jsonb_build_object('path', f.path,      -- 〔C#9〕 message 보강
+                                          'message', coalesce(w ->> 'message', public.plan_warn_text(w ->> 'code'))))
+                                        from jsonb_array_elements(v_res -> 'warnings') w), '[]'::jsonb);
+          v_chg := public.plan_changes(b, a, o -> 'set');
+          if v_nb is not null then
+            v_na := public.plan_nicks(v_id);
+            if v_na <> v_nb then v_chg := v_chg || jsonb_build_object('assignees', jsonb_build_array(v_nb, v_na)); end if;
+          end if;
+          v_dm := v_dm || jsonb_build_object(f.path, jsonb_build_object('path', f.path, 'op', 'update', 'id', v_id::text,
+                    'kind', public.plan_kind(a), 'title', a.title, 'changes', v_chg));
+          v_updated := v_updated + 1;
+        when 'move' then
+          v_id := case when jsonb_typeof(o -> 'id') = 'string' and left(o ->> 'id', 1) = '@'          -- move 의 id 는 @ref 가능
+                         then (v_ids ->> (v_refs ->> substr(o ->> 'id', 2)))::bigint
+                       else (o ->> 'id')::bigint end;
+          v_parent := case when jsonb_typeof(o -> 'parent') = 'string' and left(o ->> 'parent', 1) = '@'
+                             then (v_ids ->> (v_refs ->> substr(o ->> 'parent', 2)))::bigint
+                           else (o ->> 'parent')::bigint end;
+          select * into b from public.goal_nodes where id = v_id;
+          perform public.node_move(v_slug, v_id, v_parent, (o ->> 'index')::int);
+          select * into a from public.goal_nodes where id = v_id;
+          v_dm := v_dm || jsonb_build_object(f.path, jsonb_build_object('path', f.path, 'op', 'move',
+                    'id', case when v_dry and left(o ->> 'id', 1) = '@' then null else v_id::text end,   -- 되감길 임시 id 비노출
+                    'ref', case when left(o ->> 'id', 1) = '@' then substr(o ->> 'id', 2) end,
+                    'kind', public.plan_kind(a), 'title', a.title, 'parent', o -> 'parent', 'index', (o ->> 'index')::int,
+                    'from', jsonb_build_object('parentId', case when v_dry and exists (select 1 from jsonb_each_text(v_ids) c where c.value::bigint = b.parent_id)
+                                                                then null else b.parent_id::text end, 'index', b.sort_order)));
+          v_moved := v_moved + 1;
+      end case;
+    end loop;
+    v_cur := null;
+    -- 〔N2〕 새 값을 최종 행으로 갱신하고, 계획 안에서 원위치된 항목은 뺀다
+    select coalesce(jsonb_object_agg(e.k, jsonb_build_array(e.v -> 0, e.v -> 1, g.start_date, g.end_date)), '{}'::jsonb) into v_sched
+    from jsonb_each(v_sched) e(k, v) join public.goal_nodes g on g.id = e.k::bigint
+    where jsonb_build_array(g.start_date, g.end_date) <> jsonb_build_array(e.v -> 0, e.v -> 1);
+    perform public.assignment_resync(r.id);
+    v_notes := '{"recipients":0,"perRecipient":[]}'::jsonb;   -- Task 5 에서 plan_collapse_notifications(r.id, v_uid, v_after_id, <v_ids 의 id 배열>) 로 교체
+    -- create diff: 최종 상태로(리프 → 묶음 전환 반영). dry-run 이면 id null(되감긴 임시 id 비노출), 새 부모는 parentPath. 〔P4〕 지정 과제는 담당 닉네임
+    for f in select * from public.plan_flatten(p_plan) x where coalesce(x.op ->> 'op', 'create') = 'create' loop
+      select * into a from public.goal_nodes where id = (v_ids ->> f.path)::bigint;
+      v_dm := v_dm || jsonb_build_object(f.path, jsonb_build_object('path', f.path, 'op', 'create', 'ref', f.op ->> 'ref',
+        'id', case when v_dry then null else a.id::text end, 'kind', public.plan_kind(a), 'title', a.title, 'label', a.label,
+        'taskType', lower(a.task_type), 'startDate', to_char(a.start_date, 'YYYY-MM-DD'), 'endDate', to_char(a.end_date, 'YYYY-MM-DD'),
+        'parent', case when f.parent_path is null and left(coalesce(f.op ->> 'parent', ''), 1) <> '@' then f.op ->> 'parent' end,
+        'parentPath', coalesce(f.parent_path, case when left(f.op ->> 'parent', 1) = '@' then v_refs ->> substr(f.op ->> 'parent', 2) end))
+        || case when a.task_type = 'DESIGNATED' then jsonb_build_object('assignees', public.plan_nicks(a.id)) else '{}'::jsonb end);
+      v_created := v_created + 1;
+    end loop;
+    select coalesce(jsonb_agg(v_dm -> x.path order by x.seq), '[]'::jsonb) into v_diff
+    from public.plan_flatten(p_plan) x where v_dm ? x.path;
+    v_out := jsonb_build_object('ok', true,
+      'summary', jsonb_build_object('created', v_created, 'updated', v_updated, 'moved', v_moved, 'restored', 0, 'shiftedDescendants', v_shift),
+      'diff', v_diff, 'warnings', coalesce(p_warn, '[]'::jsonb) || v_warn, 'errors', '[]'::jsonb, 'notifications', v_notes,
+      'ids', v_ids, 'sched', v_sched,
+      'refs', coalesce((select jsonb_object_agg(k, v_ids ->> (v_refs ->> k)) from jsonb_object_keys(v_refs) k), '{}'::jsonb));
+    if v_dry then raise exception using errcode = 'P0001', message = 'PLAN_DRY_RUN'; end if;
+  exception when others then                                                  -- ⑧
+    get stacked diagnostics v_state = returned_sqlstate, v_code = message_text, v_msg = pg_exception_detail, v_hint = pg_exception_hint;
+    if v_code = 'PLAN_DRY_RUN' and v_state = 'P0001' then
+      v_out := v_out || '{"ids": {}, "refs": {}}'::jsonb;                     -- 되감김 — 임시 id 비노출
+    elsif v_dry then
+      return jsonb_build_object('ok', false, 'diff', '[]'::jsonb, 'warnings', coalesce(p_warn, '[]'::jsonb),
+        'errors', jsonb_build_array(public.plan_runtime_err(v_cur, v_state, v_code, v_msg, v_hint)), 'notifications', null);
+    else
+      v_e := public.plan_runtime_err(v_cur, v_state, v_code, v_msg, v_hint);
+      raise exception using errcode = 'P0001', message = v_e ->> 'code', detail = v_e ->> 'message', hint = (v_e - 'code' - 'message')::text;
+    end if;
+  end;
+  return v_out;
+end $$;
+
+-- 〔C#4·N1·N2〕 되돌리기 = 기록된 날짜 복원. 역계획을 node_update(shiftDescendants)로 다시 돌리지 않는다 — 그건 *현재* 하위를 옮기므로
+-- 그 사이 옮겨 나간 자식은 놓치고 새로 생긴 자식은 끌고 간다. 기록된 id 만 옛 날짜로(개인 목표 포함, 새 노드·다른 노드 불변).
+-- 반환은 plan_run 과 같은 모양. sched = 복원의 역(undo 의 undo = 다시 적용). dry 면 되감는다.
+create or replace function public.plan_undo_run(r public.rooms, p_uid uuid, p_changes jsonb, p_dry boolean) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_diff  jsonb;
+  v_sched jsonb;
+  v_notes jsonb := '{"recipients":0,"perRecipient":[]}'::jsonb;
+  v_list  jsonb := '[]'::jsonb;
+  v_out   jsonb;
+  g       record;
+begin
+  begin                                                                        -- 서브트랜잭션(dry 면 되감기)
+    select coalesce(jsonb_agg(jsonb_build_object('path', 'undo', 'op', 'restore', 'id', n.id::text, 'kind', public.plan_kind(n), 'title', n.title,
+             'changes', jsonb_strip_nulls(jsonb_build_object(
+               'startDate', case when n.start_date <> (e.v ->> 0)::date then jsonb_build_array(to_char(n.start_date, 'YYYY-MM-DD'), e.v ->> 0) end,
+               'endDate',   case when n.end_date   <> (e.v ->> 1)::date then jsonb_build_array(to_char(n.end_date, 'YYYY-MM-DD'), e.v ->> 1) end)))
+             order by n.depth, n.id), '[]'::jsonb),
+           coalesce(jsonb_object_agg(n.id::text, jsonb_build_array(n.start_date, n.end_date, e.v -> 0, e.v -> 1)), '{}'::jsonb)
+      into v_diff, v_sched
+    from jsonb_each(p_changes) e(k, v) join public.goal_nodes n on n.id = e.k::bigint and n.room_id = r.id;
+    update public.goal_nodes n set start_date = (e.v ->> 0)::date, end_date = (e.v ->> 1)::date, updated_at = now()
+    from jsonb_each(p_changes) e(k, v) where n.id = e.k::bigint and n.room_id = r.id;
+    perform public.assignment_resync(r.id);
+    if r.status = 'ACTIVE' then                                                -- 〔P5〕 일정 알림은 진행중 방만. 수신자당 1건
+      for g in
+        select x.user_id, count(*)::int as c from (
+          select a.user_id from public.task_assignments a join public.goal_nodes n on n.id = a.node_id
+          where a.released_at is null and n.room_id = r.id and a.node_id in (select k::bigint from jsonb_object_keys(p_changes) k)
+          union all
+          select n.owner_id from public.goal_nodes n
+          where n.task_type = 'PERSONAL' and n.room_id = r.id and n.id in (select k::bigint from jsonb_object_keys(p_changes) k)) x
+        where x.user_id <> p_uid group by x.user_id order by x.user_id
+      loop
+        perform public.notify_publish('CURRICULUM_BULK_UPDATED', r.id, null, p_uid, array[g.user_id],
+          'CURRICULUM_BULK_UPDATED:' || r.id || ':' || txid_current(), jsonb_build_object('newTasks', 0, 'schedule', g.c, 'assign', 0));
+        v_list := v_list || jsonb_build_object('nickname', (select nickname from public.profiles where id = g.user_id),
+                                               'count', g.c, 'newTasks', 0, 'collapsed', true);
+      end loop;
+      v_notes := jsonb_build_object('recipients', jsonb_array_length(v_list), 'perRecipient', v_list);
+    end if;
+    v_out := jsonb_build_object('ok', true,
+      'summary', jsonb_build_object('created', 0, 'updated', 0, 'moved', 0, 'restored', jsonb_array_length(v_diff), 'shiftedDescendants', 0),
+      'diff', v_diff, 'warnings', '[]'::jsonb, 'errors', '[]'::jsonb, 'notifications', v_notes,
+      'ids', '{}'::jsonb, 'refs', '{}'::jsonb, 'sched', v_sched);
+    if coalesce(p_dry, true) then raise exception using errcode = 'P0001', message = 'PLAN_DRY_RUN'; end if;
+  exception when others then
+    if sqlstate <> 'P0001' or sqlerrm <> 'PLAN_DRY_RUN' then raise; end if;     -- 되감기만 삼킨다
+  end;
+  return v_out;
+end $$;
+
+-- 공개: 미리보기(초안 저장). 검증·실행 오류는 {ok:false, errors}(초안 없음). 스펙 §7.2 미리보기 응답.
+create or replace function public.curriculum_plan_preview(p_slug text, p_plan jsonb, p_undo_of text default null)
+returns jsonb language plpgsql security definer set search_path = '' set statement_timeout = '15s' as $$
+declare
+  r      public.rooms;
+  v_uid  uuid;
+  v_src  jsonb := p_plan;
+  v_shp  jsonb;
+  v_res  jsonb;
+  v_val  jsonb;
+  v_ver  text;
+  v_run  jsonb;
+  v_id   text;
+  u      public.api_plan_drafts;
+  v_bad  jsonb;
+begin
+  r := public.node_assert_editable(p_slug);                                    -- ① 방 잠금 먼저(잠금 순서)
+  v_uid := public.current_user_id();
+  if p_undo_of is not null then                                                -- ② undo 분기 〔C#4·N1·N2〕(p_plan 무시)
+    select * into u from public.api_plan_drafts x
+    where x.id = p_undo_of and x.user_id = v_uid and x.room_id = r.id and x.applied_at is not null;
+    if not found then perform public.fail('PREVIEW_NOT_FOUND', '되돌릴 적용 기록을 찾을 수 없어요'); end if;
+    if coalesce(u.sched_changes, '{}'::jsonb) = '{}'::jsonb then
+      perform public.fail('NOTHING_TO_UNDO', '되돌릴 수 있는 일정 변경이 없어요. 이동·새 항목·제목 변경은 웹에서 고쳐 주세요');
+    end if;
+    v_bad := public.plan_undo_check(u.sched_changes);
+    if jsonb_array_length(v_bad) > 0 then
+      perform public.fail('UNDO_STALE', '적용한 뒤에 그 일정이 다시 바뀌어서 되돌릴 수 없어요(이미 되돌렸거나 다른 수정). 웹에서 고쳐 주세요',
+        jsonb_build_object('nodeIds', v_bad));
+    end if;
+    v_run := public.plan_undo_run(r, v_uid, u.sched_changes, true);
+    v_ver := public.curriculum_version(r.id);
+    v_id := 'pv_' || left(replace(gen_random_uuid()::text, '-', ''), 12);
+    v_run := (v_run - 'ids' - 'refs' - 'sched') || jsonb_build_object('previewId', v_id, 'version', v_ver,
+               'expiresAt', public.iso(public.app_now() + interval '24 hours'),
+               'undoable', jsonb_build_object('ops', jsonb_array_length(v_run -> 'diff'),
+                             'notUndoable', '{"created":0,"moved":0,"otherChanges":0}'::jsonb),
+               'undoOf', p_undo_of);
+    insert into public.api_plan_drafts (id, user_id, room_id, plan, resolved, path_map, version, preview, created_at, expires_at, undo_of)
+    values (v_id, v_uid, r.id, jsonb_build_object('undoOf', p_undo_of), jsonb_build_object('restore', u.sched_changes), '{}'::jsonb,
+            v_ver, v_run, public.app_now(), public.app_now() + interval '24 hours', p_undo_of);
+    delete from public.api_plan_drafts x where x.id in (                         -- 〔P13〕 일반 분기와 같은 정리
+      select y.id from public.api_plan_drafts y where y.user_id = v_uid and y.applied_at is null order by y.created_at desc offset 50);
+    return v_run;
+  end if;
+  v_shp := public.plan_shape_check(v_src);                                     -- ③ 〔C#11〕 해석 전에 원본의 크기·깊이·형태 거부
+  if v_shp is not null then
+    return jsonb_build_object('ok', false, 'errors', jsonb_build_array(v_shp), 'warnings', '[]'::jsonb);
+  end if;
+  v_res := public.plan_resolve(r, v_src);                                      -- ④ 이름 해석·shift 펼치기(오류는 원래 경로)
+  if jsonb_array_length(v_res -> 'errors') > 0 then
+    return jsonb_build_object('ok', false, 'errors', v_res -> 'errors', 'warnings', '[]'::jsonb);
+  end if;
+  v_ver := public.curriculum_version(r.id);                                    -- ⑤
+  if jsonb_typeof(v_src) = 'object' and nullif(v_src ->> 'baseVersion', '') is not null and v_src ->> 'baseVersion' <> v_ver then
+    perform public.fail('STALE_VERSION', '그 사이 진행목표가 바뀌었어요. 다시 읽고 미리 봐 주세요', jsonb_build_object('current', v_ver));
+  end if;
+  v_val := public.plan_validate(r, v_res -> 'plan');                           -- ⑥ 정규 계획서 정적 검증 → 원래 경로로
+  if jsonb_array_length(v_val -> 'errors') > 0 then
+    return jsonb_build_object('ok', false, 'errors', public.plan_map_paths(v_val -> 'errors', v_res -> 'map'),
+                              'warnings', public.plan_map_paths(v_val -> 'warnings', v_res -> 'map'));
+  end if;
+  v_run := public.plan_run(r, v_uid, v_res -> 'plan', true, v_val -> 'warnings');   -- ⑦ dry-run(되감김)
+  if not (v_run ->> 'ok')::boolean then
+    return v_run || jsonb_build_object('errors', public.plan_map_paths(v_run -> 'errors', v_res -> 'map'),
+                                       'warnings', public.plan_map_paths(v_run -> 'warnings', v_res -> 'map'));
+  end if;
+  v_id := 'pv_' || left(replace(gen_random_uuid()::text, '-', ''), 12);         -- ⑧ 되감은 뒤 초안 저장
+  v_run := (v_run - 'ids' - 'refs' - 'sched') || jsonb_build_object('previewId', v_id, 'version', v_ver,
+             'expiresAt', public.iso(public.app_now() + interval '24 hours'),
+             'diff', public.plan_map_paths(v_run -> 'diff', v_res -> 'map'),
+             'warnings', public.plan_map_paths(v_run -> 'warnings', v_res -> 'map'),
+             'undoable', jsonb_build_object(                                   -- 〔C#4·N2〕 날짜가 실제로 바뀌는 기존 노드 수(하위·개인 목표 포함)
+               'ops', (select count(*) from jsonb_object_keys(coalesce(v_run -> 'sched', '{}'::jsonb))),
+               'notUndoable', jsonb_build_object(
+                 'created', (v_run #>> '{summary,created}')::int,
+                 'moved',   (v_run #>> '{summary,moved}')::int,
+                 'otherChanges', (select count(*) from jsonb_array_elements(v_run -> 'diff') e
+                                  where e ->> 'op' = 'update' and e -> 'changes' ?| array['title', 'label', 'taskType', 'descriptionMd', 'assignees']))),
+             'undoOf', null);
+  insert into public.api_plan_drafts (id, user_id, room_id, plan, resolved, path_map, version, preview, created_at, expires_at, undo_of)
+  values (v_id, v_uid, r.id, coalesce(v_src, '{}'::jsonb), v_res -> 'plan', coalesce(v_res -> 'map', '{}'::jsonb), v_ver, v_run,
+          public.app_now(), public.app_now() + interval '24 hours', null);
+  delete from public.api_plan_drafts x where x.id in (                           -- 내 미적용 초안 50개 초과분(오래된 것부터)
+    select y.id from public.api_plan_drafts y where y.user_id = v_uid and y.applied_at is null order by y.created_at desc offset 50);
+  return v_run;                                                                -- ⑨
+end $$;
+
+-- 공개: 적용(previewId). 잠금 순서 방 → 초안. 같은 previewId 재적용은 저장 응답 + replayed(재실행 없음).
+create or replace function public.curriculum_plan_apply(p_slug text, p_preview_id text)
+returns jsonb language plpgsql security definer set search_path = '' set statement_timeout = '15s' as $$
+declare
+  r     public.rooms;
+  v_uid uuid;
+  d     public.api_plan_drafts;
+  v_run jsonb;
+  v_out jsonb;
+  v_bad jsonb;
+begin
+  r := public.node_assert_editable(p_slug);                                    -- ① 방 잠금 먼저
+  v_uid := public.current_user_id();
+  select * into d from public.api_plan_drafts x
+  where x.id = p_preview_id and x.user_id = v_uid and x.room_id = r.id for update;   -- ② 초안 잠금(나·이 방)
+  if not found then perform public.fail('PREVIEW_NOT_FOUND', '미리보기를 찾을 수 없어요. preview_curriculum_plan 으로 다시 미리 봐 주세요'); end if;
+  if d.applied_at is not null then return d.apply_response || '{"replayed": true}'::jsonb; end if;   -- ③ 잠금 뒤 replay 판정
+  if d.expires_at <= public.app_now() then                                     -- ④
+    perform public.fail('PREVIEW_EXPIRED', '미리보기가 만료됐어요(24시간). 다시 미리 봐 주세요');
+  end if;
+  if d.undo_of is not null then                                                -- ⑤ 〔N1〕 undo: 방 잠금 안에서 기록 노드 재확인
+    v_bad := public.plan_undo_check(d.resolved -> 'restore');                  --    (개인 목표 변경은 버전에 안 잡힌다 — 정확 일치로 본다)
+    if jsonb_array_length(v_bad) > 0 then
+      perform public.fail('UNDO_STALE', '미리본 뒤에 그 일정이 바뀌어서 되돌릴 수 없어요. 다시 되돌리기 미리보기를 해 주세요',
+        jsonb_build_object('nodeIds', v_bad));
+    end if;
+    v_run := public.plan_undo_run(r, v_uid, d.resolved -> 'restore', false);    -- ⑥
+  else
+    if public.curriculum_version(r.id) <> d.version then                       -- ⑤
+      perform public.fail('STALE_VERSION', '미리본 뒤에 진행목표가 바뀌었어요. 같은 계획으로 다시 미리 봐 주세요',
+        jsonb_build_object('current', public.curriculum_version(r.id)));
+    end if;
+    v_run := public.plan_run(r, v_uid, d.resolved, false, '[]'::jsonb);        -- ⑥ 실패하면 예외 → 이 함수 전체(앞 op 포함) 롤백
+  end if;
+  v_out := jsonb_build_object('ok', true, 'applied', true, 'previewId', d.id, 'version', public.curriculum_version(r.id),
+    'summary', v_run -> 'summary', 'refs', v_run -> 'refs',
+    'createdIds', coalesce((select jsonb_agg(x.value order by x.value::bigint) from jsonb_each_text(v_run -> 'ids') x), '[]'::jsonb),   -- 〔P13〕 생성 순서
+    'notifications', v_run -> 'notifications', 'link', '/my-study/' || r.slug || '?tab=curriculum',
+    'undoable', d.preview -> 'undoable');                                      -- 〔C#9〕 formatApply 계약
+  update public.api_plan_drafts set applied_at = public.app_now(), apply_response = v_out,   -- ⑦
+         sched_changes = nullif(v_run -> 'sched', '{}'::jsonb)                  -- 〔N2〕 실제 적용에서 바뀐 날짜(미리보기 값 아님)
+  where id = d.id;
+  return v_out;
+end $$;
+
+grant execute on function public.curriculum_plan_preview(text, jsonb, text) to authenticated;
+grant execute on function public.curriculum_plan_apply(text, text)          to authenticated;
+
+-- ───────── 5. 알림 종류 CURRICULUM_BULK_UPDATED (plan_undo_run 이 발행 — Task 5 의 알림 묶기도 같은 종류) ─────────
+-- 재정의: notification_kinds ← 0032 · notify_render ← 0032 (MEMBER_JOINED 유지) · notify_link ← 0028. 시그니처 동일 → GRANT(없음) 유지.
+-- notify_enabled 는 그대로(else true).
+-- notification_kinds (0032 판 그대로 + CURRICULUM_BULK_UPDATED — MEMBER_JOINED 유지)
+create or replace function public.notification_kinds() returns text[]
+language sql immutable set search_path = '' as $$
+  select array['ROUND_STARTED', 'TASK_ALL_SUBMITTED', 'TASK_COMPLETION_DIGEST', 'JOIN_REQUESTED', 'JOIN_APPROVED', 'JOIN_REJECTED',
+               'JOIN_EXPIRED', 'DEADLINE_REMINDER', 'TASK_ASSIGNED', 'TASK_UNASSIGNED', 'SCHEDULE_CHANGED', 'ROOM_STARTED',
+               'ROOM_ENDED', 'ROOM_START_BLOCKED', 'MEMBER_DEACTIVATED',
+               'CURRICULUM_EDITOR_GRANTED', 'CURRICULUM_EDITOR_REVOKED', 'ROOM_PERIOD_CHANGED',
+               -- 0024
+               'ROUND_SCHEDULE_CHANGED', 'ROOM_ARCHIVED', 'PERSONAL_ARCHIVED', 'LEAVE_REQUESTED', 'LEAVE_REQUEST_DISMISSED', 'SUBMISSION_DIGEST'
+               -- 0032
+               , 'MEMBER_JOINED'
+               -- 0034
+               , 'CURRICULUM_BULK_UPDATED']
+$$;
+
+-- notify_render (0032 판 그대로 + CURRICULUM_BULK_UPDATED 제목·본문 — MEMBER_JOINED 유지)
+create or replace function public.notify_render(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p_model jsonb) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_room  text;
+  v_node  text;
+  v_label text;
+  v_actor text;
+  v_title text;
+  v_body  text;
+  v_today date := public.kst_today();   -- 0024: 표기 기준(알림 생성일). format.ts 의 today 와 같은 역할
+  v_os    date;   -- 0023 SCHEDULE_CHANGED·0024 ROUND_SCHEDULE_CHANGED: 옛 시작·마감, 새 시작·마감
+  v_oe    date;
+  v_ns    date;
+  v_ne    date;
+  v_diff  text;
+  v_tasks int;
+begin
+  select title into v_room from public.rooms where id = p_room;
+  select title, label into v_node, v_label from public.goal_nodes where id = p_node;
+  select coalesce(nickname, '') into v_actor from public.profiles where id = p_actor;
+  v_title := case p_kind
+    when 'ROUND_STARTED'          then format('%s의 %s가 시작됐어요', v_room, coalesce(v_label, v_node))
+    when 'TASK_ALL_SUBMITTED'     then format('"%s" 과제를 전원 제출했어요', v_node)
+    when 'TASK_COMPLETION_DIGEST' then format('어제 %s개 과제가 전원 제출됐어요', coalesce(p_model ->> 'count', '0'))
+    when 'JOIN_REQUESTED'         then format('%s님이 %s 참가를 신청했어요', v_actor, v_room)
+    when 'JOIN_APPROVED'          then format('%s 참가가 승인됐어요', v_room)
+    when 'JOIN_REJECTED'          then format('%s 참가 신청이 거절됐어요', v_room)
+    when 'JOIN_EXPIRED'           then format('%s 참가 신청이 만료됐어요', v_room)
+    when 'DEADLINE_REMINDER'      then format('"%s" 마감 %s일 전이에요', v_node, coalesce(p_model ->> 'days', '1'))
+    when 'TASK_ASSIGNED'          then format('"%s" 과제 담당자로 지정됐어요', v_node)
+    when 'TASK_UNASSIGNED'        then format('"%s" 과제 담당에서 제외됐어요', v_node)
+    when 'SCHEDULE_CHANGED'       then format('%s 일정이 변경됐어요', v_room)
+    when 'ROOM_STARTED'           then format('%s 스터디가 시작됐어요', v_room)
+    when 'ROOM_ENDED'             then format('%s 스터디가 종료됐어요', v_room)
+    when 'ROOM_START_BLOCKED'     then format('%s 시작일이 지났지만 말단 과제가 없어 시작하지 못했어요', v_room)
+    when 'MEMBER_DEACTIVATED'     then format('%s 스터디에서 이탈 처리됐어요', v_room)
+    when 'CURRICULUM_EDITOR_GRANTED' then '진행목표 편집 권한을 받았어요'
+    when 'CURRICULUM_EDITOR_REVOKED' then '진행목표 편집 권한이 회수됐어요'
+    when 'ROOM_PERIOD_CHANGED'    then format('%s 기간이 변경됐어요', v_room)
+    -- 0024
+    when 'ROUND_SCHEDULE_CHANGED' then format('%s 회차 일정이 변경됐어요', v_room)
+    when 'ROOM_ARCHIVED'          then format('%s 스터디가 보관됐어요', v_room)
+    when 'PERSONAL_ARCHIVED'      then format('그룹장이 "%s" 개인 목표를 보관했어요', v_node)
+    when 'LEAVE_REQUESTED'        then format('%s님이 %s 탈퇴를 요청했어요', v_actor, v_room)
+    when 'LEAVE_REQUEST_DISMISSED' then format('%s 탈퇴 요청이 반려됐어요', v_room)
+    when 'SUBMISSION_DIGEST'      then format('어제 제출 %s건이 들어왔어요', coalesce(p_model ->> 'count', '0'))
+    -- 0032
+    when 'MEMBER_JOINED'          then format('%s님이 %s에 합류했어요', v_actor, v_room)
+    -- 0034: 계획 적용·되돌리기 묶음(수신자당 1건). 방 제목은 따옴표 없이
+    when 'CURRICULUM_BULK_UPDATED' then format('%s 진행목표가 한꺼번에 바뀌었어요', v_room)
+  end;
+  -- 본문(0013): 방 제목은 프론트가 메타 줄에 따로 그리므로 본문에 넣지 않는다. 제목에 없는 정보만.
+  -- 일정 변경(0023)·회차 일정 변경(0024): 바뀐 쪽만 — 마감만 '마감 옛 → 새', 시작만 '시작 옛 → 새', 둘 다 '기간 옛 범위 → 새 범위'.
+  -- 날짜(0024): notify_date/notify_range — 0018·0023 의 'YY.MM.DD' 대신 format.ts 와 같은 규칙
+  if p_kind in ('SCHEDULE_CHANGED', 'ROUND_SCHEDULE_CHANGED') then
+    v_os := (p_model ->> 'oldStartDate')::date;
+    v_oe := (p_model ->> 'oldEndDate')::date;
+    v_ns := (p_model ->> 'startDate')::date;
+    v_ne := (p_model ->> 'endDate')::date;
+    v_diff := case
+      when v_os is null or v_oe is null then null
+      when v_os is not distinct from v_ns and v_oe is distinct from v_ne then '마감 ' || public.notify_date(v_oe, v_today) || ' → ' || public.notify_date(v_ne, v_today)
+      when v_oe is not distinct from v_ne and v_os is distinct from v_ns then '시작 ' || public.notify_date(v_os, v_today) || ' → ' || public.notify_date(v_ns, v_today)
+      else '기간 ' || public.notify_range(v_os, v_oe, v_today) || ' → ' || public.notify_range(v_ns, v_ne, v_today)
+    end;
+  end if;
+  v_tasks := coalesce((p_model ->> 'tasks')::int, 1);
+  v_body := case
+    -- 0034: 새 과제·일정·담당 건수 중 0 이 아닌 것만
+    when p_kind = 'CURRICULUM_BULK_UPDATED' then
+      nullif(concat_ws(' · ',
+        case when coalesce((p_model ->> 'newTasks')::int, 0) > 0 then '새 과제 ' || (p_model ->> 'newTasks') || '건' end,
+        case when coalesce((p_model ->> 'schedule')::int, 0) > 0 then '일정 ' || (p_model ->> 'schedule') || '건' end,
+        case when coalesce((p_model ->> 'assign')::int, 0) > 0 then '담당 ' || (p_model ->> 'assign') || '건' end), '')
+    when p_kind = 'MEMBER_JOINED' then
+      case p_model ->> 'via' when 'invite' then '초대로 바로 참가했어요' else '추가 모집으로 참가했어요' end
+      || ' · 지정 과제 담당이 필요하면 진행목표에서 정해 주세요'
+    when p_kind = 'ROOM_PERIOD_CHANGED' then
+      coalesce(public.notify_range((p_model ->> 'oldStartDate')::date, (p_model ->> 'oldEndDate')::date, v_today) || ' → ', '')
+      || public.notify_range((p_model ->> 'startDate')::date, (p_model ->> 'endDate')::date, v_today)
+    when p_kind = 'ROUND_STARTED' and v_label is not null and v_node is distinct from v_label then v_node
+    -- 0028: 묶음 이동 묶음 알림(과제 2개 이상). 묶음 시작만 바꿔도 하위 과제는 종료일까지 함께 옮겨지므로
+    -- 0023 의 '시작/마감만' 축약(v_diff) 대신 항상 '기간 옛 범위 → 새 범위' (리뷰 M1)
+    when p_kind = 'SCHEDULE_CHANGED' and p_node is not null and p_model ? 'bundle' then
+      format('"%s" 과제 %s개 일정이 %s일 %s 옮겨졌어요', v_node, v_tasks, abs((p_model ->> 'days')::int),
+             case when (p_model ->> 'days')::int < 0 then '앞으로' else '뒤로' end)
+      || coalesce(' · 기간 ' || public.notify_range(v_os, v_oe, v_today) || ' → ' || public.notify_range(v_ns, v_ne, v_today), '')
+    when p_kind = 'SCHEDULE_CHANGED' and p_node is not null and v_diff is not null then
+      format('"%s" %s', v_node, v_diff)
+    when p_kind = 'SCHEDULE_CHANGED' and p_node is not null then
+      format('"%s"', v_node)
+      || coalesce(' ' || public.notify_range((p_model ->> 'startDate')::date, (p_model ->> 'endDate')::date, v_today), '')
+    when p_kind = 'ROUND_SCHEDULE_CHANGED' and p_node is not null then
+      case when v_label is not null and v_label is distinct from v_node then format('%s "%s"', v_label, v_node) else coalesce(v_label, format('"%s"', v_node)) end
+      || coalesce(' ' || v_diff, '')
+      -- 0026: 과제와 개인 목표를 나눠 말한다(옛 모델 'moved' 만 있으면 0024 문구)
+      || case
+           when p_model ? 'movedTasks' then
+             case when coalesce((p_model ->> 'movedTasks')::int, 0) + coalesce((p_model ->> 'movedPersonal')::int, 0) = 0 then ''
+                  else ' · ' || concat_ws('·',
+                         case when (p_model ->> 'movedTasks')::int > 0 then format('과제 %s개', p_model ->> 'movedTasks') end,
+                         case when (p_model ->> 'movedPersonal')::int > 0 then format('개인 목표 %s개', p_model ->> 'movedPersonal') end)
+                       || '도 함께 옮겼어요' end
+           when coalesce((p_model ->> 'moved')::int, 0) > 0 then format(' · 과제 %s개도 함께 옮겼어요', p_model ->> 'moved')
+           else '' end
+    when p_kind = 'JOIN_REQUESTED'  then nullif(p_model ->> 'message', '')
+    when p_kind = 'LEAVE_REQUESTED' then nullif(p_model ->> 'reason', '')
+    when p_kind = 'ROOM_ARCHIVED'   then '내 스터디의 보관함에서 다시 볼 수 있어요'
+    when p_kind = 'SUBMISSION_DIGEST' and p_node is not null then
+      case when v_tasks <= 1 then format('"%s"', v_node) else format('"%s" 외 과제 %s개', v_node, v_tasks - 1) end
+  end;
+  return jsonb_build_object('title', left(v_title, 200), 'body', left(v_body, 500));
+end $$;
+
+-- notify_link (0028 판 그대로 + CURRICULUM_BULK_UPDATED → 진행목표 탭)
+create or replace function public.notify_link(p_kind text, p_room bigint, p_node bigint, p_user uuid) returns text
+language sql stable security definer set search_path = '' as $$
+  select case
+    when p_node is not null and p_kind in ('TASK_ALL_SUBMITTED', 'SUBMISSION_DIGEST')
+      then '/my-study/' || r.slug || '?task=' || p_node || '#submissions'
+    when p_node is not null and p_kind in ('DEADLINE_REMINDER', 'TASK_ASSIGNED', 'TASK_UNASSIGNED', 'PERSONAL_ARCHIVED')
+      then '/my-study/' || r.slug || '?task=' || p_node
+    -- 0028: 일정 변경 — 과제면 리프 포커스, 묶음(유형 없음)이면 진행목표 보기 상세
+    when p_node is not null and p_kind = 'SCHEDULE_CHANGED'
+      then '/my-study/' || r.slug || coalesce('?task=' || (select g.id from public.goal_nodes g where g.id = p_node and g.task_type is not null),
+                                              '?tab=curriculum&item=' || p_node)
+    when p_kind in ('CURRICULUM_EDITOR_GRANTED', 'CURRICULUM_EDITOR_REVOKED', 'ROUND_SCHEDULE_CHANGED', 'CURRICULUM_BULK_UPDATED')
+      then '/my-study/' || r.slug || '?tab=curriculum'
+    when r.leader_id = p_user and p_kind = 'JOIN_REQUESTED'  then '/my-study/' || r.slug || '#applications'
+    when r.leader_id = p_user and p_kind = 'LEAVE_REQUESTED' then '/my-study/' || r.slug || '#leave-requests'
+    when r.leader_id = p_user
+      or exists (select 1 from public.room_members m where m.room_id = r.id and m.user_id = p_user and m.status = 'ACTIVE')
+      then '/my-study/' || r.slug
+    else '/rooms/' || r.slug end
+  from public.rooms r where r.id = p_room
+$$;

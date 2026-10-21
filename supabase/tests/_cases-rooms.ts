@@ -844,6 +844,8 @@ export const ROOM_CASES: Case[] = [
         "invite_bypass_set(text,date,integer)", "invite_code_lookup(text)",
         // 0033: AI 연동 개인 액세스 토큰(내부 api_* 헬퍼는 GRANT 없음)
         "pat_create(text,text[],integer)", "pat_list()", "pat_revoke(uuid)",
+        // 0034: 진행목표 계획 미리보기·적용(내부 plan_* 는 GRANT 없음)
+        "curriculum_plan_preview(text,jsonb,text)", "curriculum_plan_apply(text,text)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

@@ -342,6 +342,8 @@ export const NOTIFICATION_KINDS = [
   "ROUND_SCHEDULE_CHANGED", "ROOM_ARCHIVED", "PERSONAL_ARCHIVED", "LEAVE_REQUESTED", "LEAVE_REQUEST_DISMISSED", "SUBMISSION_DIGEST",
   // 0032
   "MEMBER_JOINED",
+  // 0034
+  "CURRICULUM_BULK_UPDATED",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export type NotificationDto = {

@@ -1,6 +1,6 @@
 // 0034 — 진행목표 계획서(curriculum_plan) · node_create_core · curriculum_version · 알림 묶기
 import { assert, assertEquals, assertMatch, assertNotEquals } from "@std/assert";
-import { applySeed, asUser, newUser, openDb } from "./_harness.ts";
+import { applySeed, asUser, expectFail, newUser, openDb } from "./_harness.ts";
 import { cases, nodeId, one, roomId, uidOf, type Q, type Row } from "./_fixtures.ts";
 import { mkRoom, submit } from "./_curriculum-helpers.ts";
 
@@ -377,5 +377,351 @@ cases("curriculum plan 0034 · resolve", db, [
     assertEquals(m, [
       { path: "ops[1]#1", rpath: "ops[2]", code: "X" }, { path: "ops[2].children[1]", rpath: "ops[3].children[1]", code: "Y" },
       { path: "ops[0]", code: "Z" }, { path: "undo" }]);
+  } },
+]);
+
+const preview = async (q: Q, slug: string, p: string, undo: string | null = null) =>
+  (await one(q, "select public.curriculum_plan_preview($1, $2::jsonb, $3) as r", [slug, p, undo])).r as Row;
+const apply = async (q: Q, slug: string, id: string) =>
+  (await one(q, "select public.curriculum_plan_apply($1, $2) as r", [slug, id])).r as Row;
+const sample = (base?: string) => plan([
+  { op: "create", ref: "w1", title: "1주차 기초", children: [
+    { title: "읽기 과제", taskType: "common" },
+    { title: "실습 묶음", children: [{ title: "실습 1" }, { title: "실습 2" }] },
+  ] },
+  { op: "create", parent: "@w1", title: "추가 과제", taskType: "common", index: 0 },
+], base ? { baseVersion: base } : {});
+
+cases("curriculum plan 0034 · run", db, [
+  { name: "미리보기: 노드는 그대로 · 초안 1행 · previewId·요약·diff", run: async (q) => {
+    const { slug, id } = await mkRoom(q, "민수");
+    const before = await count(q, "select 1 from public.goal_nodes where room_id = $1::bigint", [id]);
+    const r = await preview(q, slug, sample());
+    assertEquals(r.ok, true);
+    assertMatch(r.previewId, /^pv_[0-9a-f]{12}$/);
+    assertEquals(r.summary.created, 6);
+    assertEquals(r.diff.filter((d: Row) => d.op === "create").every((d: Row) => d.id === null), true);
+    assertEquals(r.diff.find((d: Row) => d.title === "실습 묶음").kind, "bundle");
+    assertEquals(r.diff.find((d: Row) => d.title === "실습 1").parentPath, "ops[0].children[1]");
+    assertEquals(await count(q, "select 1 from public.goal_nodes where room_id = $1::bigint", [id]), before);
+    assertEquals(await count(q, "select 1 from public.api_plan_drafts where id = $1", [r.previewId]), 1);
+  } },
+  { name: "적용: previewId 만으로 원자 생성(depth·유형·refs) · 재적용은 replayed(노드 그대로)", run: async (q) => {
+    const { slug, id } = await mkRoom(q, "민수");
+    const pre = await preview(q, slug, sample());
+    const a = await apply(q, slug, pre.previewId);
+    assertEquals([a.ok, a.applied], [true, true]);
+    const rows = await q("select title, depth, task_type, parent_id::text as pid, sort_order from public.goal_nodes where room_id = $1::bigint order by id", [id]);
+    assertEquals(rows.map((x) => [x.title, x.depth, x.task_type]), [
+      ["1주차 기초", 2, null], ["읽기 과제", 3, "COMMON"], ["실습 묶음", 3, null], ["실습 1", 4, "COMMON"], ["실습 2", 4, "COMMON"], ["추가 과제", 3, "COMMON"],
+    ]);
+    assertEquals(rows.find((x) => x.title === "추가 과제")!.pid, a.refs.w1);
+    assertEquals(rows.find((x) => x.title === "추가 과제")!.sort_order, 0);
+    assertNotEquals(a.version, pre.version);
+    const b = await apply(q, slug, pre.previewId);
+    assertEquals([b.replayed, b.refs], [true, a.refs]);
+    assertEquals(await count(q, "select 1 from public.goal_nodes where room_id = $1::bigint", [id]), 6);
+  } },
+  { name: "없는 previewId → PREVIEW_NOT_FOUND · 만료 → PREVIEW_EXPIRED", run: async (q) => {
+    const { slug } = await mkRoom(q, "민수");
+    await expectFail(q("select public.curriculum_plan_apply($1, 'pv_000000000000')", [slug]), "PREVIEW_NOT_FOUND");
+    const pre = await preview(q, slug, sample());
+    await q("select set_config('app.now', (now() + interval '25 hours')::text, true)");
+    await expectFail(q("select public.curriculum_plan_apply($1, $2)", [slug, pre.previewId]), "PREVIEW_EXPIRED");
+  } },
+  { name: "〔C#13〕 남의 previewId: 같은 방의 다른 편집자(지은)가 민수의 초안을 적용·undo → PREVIEW_NOT_FOUND, 노드 그대로", run: async (q) => {
+    const aws = await roomId(q, "aws");
+    await q("update public.room_members set can_edit_curriculum = true where room_id = $1::bigint and user_id = $2::uuid", [aws, await uidOf(q, "지은")]);
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const pre = await preview(q, "aws", plan([{ op: "create", parent: r2, title: "민수 초안", taskType: "common" }]));
+    await as(q, "지은");   // 권한 검사(node_assert_editable)는 통과하는 사람 — 초안 소유 검사만 남는다
+    await expectFail(q("select public.curriculum_plan_apply('aws', $1)", [pre.previewId]), "PREVIEW_NOT_FOUND");
+    assertEquals(await count(q, "select 1 from public.goal_nodes where title = '민수 초안'"), 0);
+    await as(q, "민수");
+    await apply(q, "aws", pre.previewId);
+    await as(q, "지은");
+    await expectFail(q("select public.curriculum_plan_preview('aws', '{}'::jsonb, $1)", [pre.previewId]), "PREVIEW_NOT_FOUND");
+  } },
+  { name: "미리본 뒤 다른 변경 → 적용 STALE_VERSION · baseVersion 불일치 → 미리보기 STALE_VERSION", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const pre = await preview(q, "aws", plan([{ op: "create", parent: r2, title: "새 과제", taskType: "common" }]));
+    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");
+    await q("select public.node_update('aws', $1::bigint, '{\"title\":\"ALB vs NLB 비교\"}')", [alb]);
+    await expectFail(q("select public.curriculum_plan_apply('aws', $1)", [pre.previewId]), "STALE_VERSION");
+    await expectFail(q("select public.curriculum_plan_preview('aws', $1::jsonb)", [sample("0".repeat(32))]), "STALE_VERSION");
+  } },
+  { name: "〔C#3〕 빈 방에서 날짜 생략 회차를 미리본 뒤 방 시작일이 바뀌면 → 적용 STALE_VERSION(다른 날짜로 적용되지 않음)", run: async (q) => {
+    const { slug, id } = await mkRoom(q, "민수");
+    const pre = await preview(q, slug, plan([{ op: "create", title: "1회차" }]));
+    assertEquals(pre.diff[0].startDate, "2026-11-01");
+    await q("update public.rooms set start_date = '2026-11-08', end_date = '2026-12-05' where id = $1::bigint", [id]);
+    await expectFail(q("select public.curriculum_plan_apply($1, $2)", [slug, pre.previewId]), "STALE_VERSION");
+    assertEquals(await count(q, "select 1 from public.goal_nodes where room_id = $1::bigint", [id]), 0);
+  } },
+  { name: "〔C#13〕 적용 중간 실패 → 전체 롤백: 미리본 뒤 생긴 제출로 2번째 op 가 NODE_HAS_SUBMISSIONS — 1번째 op 의 노드도 없고 초안은 미적용", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const leaf = ((await one(q, "select public.node_create('aws', $1::bigint, '제출될 과제', null, 'common') as c", [r2])).c as Row)
+      .nodes.find((n: Row) => n.title === "제출될 과제").id as string;
+    const pre = await preview(q, "aws", plan([{ op: "create", parent: r2, title: "먼저 생길 과제", taskType: "common" },
+                                            { op: "create", parent: leaf, title: "하위" }]));   // 미리보기 땐 제출 없음 → 리프 → 묶음 전환 OK
+    assertEquals(pre.ok, true);
+    await submit(q, leaf, "지은");      // 제출은 curriculum_version 에 들어가지 않는다 → STALE 아님, 실행 중 실패
+    await expectFail(q("select public.curriculum_plan_apply('aws', $1)", [pre.previewId]), "NODE_HAS_SUBMISSIONS");
+    assertEquals(await count(q, "select 1 from public.goal_nodes where title in ('먼저 생길 과제', '하위')"), 0);
+    assertEquals((await one(q, "select applied_at from public.api_plan_drafts where id = $1", [pre.previewId])).applied_at, null);
+  } },
+  { name: "〔C#13〕 잠금 순서(정적): apply 는 방 잠금(node_assert_editable) 뒤 초안 for update · preview 도 방 잠금이 먼저", run: async (q) => {
+    // PGlite 단일 연결 — 동시 적용은 api-invoke-db.test.ts(실 PostgREST)에서. 여기선 순서만 고정
+    const src = async (fn: string) => (await one(q, "select prosrc from pg_proc p join pg_namespace s on s.oid = p.pronamespace where s.nspname = 'public' and p.proname = $1", [fn])).prosrc as string;
+    const a = await src("curriculum_plan_apply");
+    assert(a.indexOf("node_assert_editable") >= 0 && a.indexOf("node_assert_editable") < a.indexOf("for update"));
+    const p = await src("curriculum_plan_preview");
+    assert(p.indexOf("node_assert_editable") >= 0 && p.indexOf("node_assert_editable") < p.indexOf("insert into public.api_plan_drafts"));   // P2: 실제 쓰기 문장
+    assertEquals(p.split("offset 50").length - 1, 2);   // P13: 일반·undo 두 분기 모두 오래된 초안 정리
+  } },
+  { name: "〔C#9〕 실행 경고에도 한국어 message · 적용 응답에 undoable", run: async (q) => {
+    await as(q, "민수");
+    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");
+    const d = await preview(q, "aws", plan([{ op: "update", id: alb, set: { endDate: "2027-03-01" } }]));   // 방 종료 2026-12-31 밖
+    const w = d.warnings.find((x: Row) => x.code === "PERIOD_OUTSIDE_ROOM");
+    assertEquals([w.path, w.message], ["ops[0]", "스터디 기간 밖이에요"]);
+    assert(d.warnings.every((x: Row) => typeof x.message === "string" && x.message.length > 0));
+    const a = await apply(q, "aws", d.previewId);
+    assertEquals(a.undoable, d.undoable);
+    assertEquals(a.undoable.ops, 1);
+  } },
+  { name: "실행 중 오류(비참가자 담당) — 미리보기는 경로와 코드, 초안 없음", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const outsider = await uidOf(q, "가은");
+    const n0 = await count(q, "select 1 from public.api_plan_drafts");
+    const d = await preview(q, "aws", plan([{ op: "create", parent: r2, title: "정상", taskType: "common" },
+                                          { op: "create", parent: r2, title: "지정", taskType: "designated", assigneeIds: [outsider] }]));
+    assertEquals([d.ok, d.errors[0].path, d.errors[0].code], [false, "ops[1]", "ASSIGNEE_NOT_MEMBER"]);
+    assertEquals(await count(q, "select 1 from public.api_plan_drafts"), n0);
+  } },
+  { name: "권한은 기존 규칙: 비편집자·공개 방 외부인 NOT_CURRICULUM_EDITOR · DRAFT 방 외부인 ROOM_NOT_FOUND", run: async (q) => {
+    await as(q, "지은");
+    await expectFail(q("select public.curriculum_plan_preview('aws', $1::jsonb)", [sample()]), "NOT_CURRICULUM_EDITOR");
+    await as(q, "가은");   // aws 는 PUBLIC·ACTIVE → room_readable 참 → ROOM_NOT_FOUND 가 아니다
+    await expectFail(q("select public.curriculum_plan_preview('aws', $1::jsonb)", [sample()]), "NOT_CURRICULUM_EDITOR");
+    const { slug } = await mkRoom(q, "민수");   // DRAFT
+    await as(q, "가은");
+    await expectFail(q("select public.curriculum_plan_preview($1, $2::jsonb)", [slug, sample()]), "ROOM_NOT_FOUND");
+  } },
+  { name: "shift · move — diff.changes(원래 경로 ops[0]#0)와 summary.shiftedDescendants", run: async (q) => {
+    await as(q, "민수");
+    const grp = await nodeId(q, "aws", "로드밸런서 비교");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const d = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 },
+                                          { op: "move", id: grp, parent: r2, index: 0 }]));
+    assertEquals(d.diff[0].changes.startDate, ["2026-10-15", "2026-10-22"]);
+    assertEquals(d.diff[0].path, "ops[0]#0");
+    assert(d.summary.shiftedDescendants >= 1);
+    assertEquals(d.summary.moved, 1);
+  } },
+  { name: "되돌리기: shift 적용 → undo 미리보기는 기록된 노드의 옛 날짜(하위 포함) · 적용하면 원래 날짜 · 생성만 있던 계획은 NOTHING_TO_UNDO", run: async (q) => {
+    await as(q, "민수");
+    const grp = await nodeId(q, "aws", "로드밸런서 비교");   // 3주차 아래 묶음
+    const before = await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [grp]);
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 }]));
+    await apply(q, "aws", p.previewId);
+    const u = await preview(q, "aws", "{}", p.previewId);   // undo 가 있으면 plan 은 무시
+    assert(u.diff.every((d: Row) => d.op === "restore"));
+    assertEquals(u.diff.find((d: Row) => d.kind === "round").changes.startDate, ["2026-10-22", "2026-10-15"]);
+    assertEquals(u.undoable.ops, p.undoable.ops);           // 기록된 노드 수 그대로
+    await apply(q, "aws", u.previewId);
+    assertEquals((await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [grp])).s, before.s);
+    const { slug } = await mkRoom(q, "민수");
+    const c = await preview(q, slug, sample());
+    await apply(q, slug, c.previewId);
+    await expectFail(q("select public.curriculum_plan_preview($1, '{}'::jsonb, $2)", [slug, c.previewId]), "NOTHING_TO_UNDO");
+  } },
+  { name: "〔C#4〕 undo 는 일정만: shift + move + 제목 변경 + create 계획 → undo 는 restore 만, 나머지는 notUndoable", run: async (q) => {
+    await as(q, "민수");
+    const grp = await nodeId(q, "aws", "로드밸런서 비교");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "4주차", to: "4주차", days: 7 },
+                                          { op: "move", id: grp, parent: r2, index: 0 },
+                                          { op: "update", id: alb, set: { title: "ALB 실습" } },
+                                          { op: "create", parent: r2, title: "새 과제", taskType: "common" }]));
+    assert(p.undoable.ops >= 1);
+    assertEquals(p.undoable.notUndoable, { created: 1, moved: 1, otherChanges: 1 });
+    await apply(q, "aws", p.previewId);
+    const u = await preview(q, "aws", "{}", p.previewId);
+    assert(u.diff.length >= 1 && u.diff.every((d: Row) => d.op === "restore"));
+    assertEquals([u.summary.created, u.summary.moved, u.summary.updated], [0, 0, 0]);
+  } },
+  { name: "〔N2〕 shift 뒤 자식을 다른 회차로 move(같은 계획) → undo 는 옮겨 간 자식의 날짜도 복원(자리는 그대로)", run: async (q) => {
+    await as(q, "민수");
+    const grp = await nodeId(q, "aws", "로드밸런서 비교");   // 3주차 자식
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const b = await one(q, "select start_date::text as s, end_date::text as e from public.goal_nodes where id = $1::bigint", [grp]);
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 }, { op: "move", id: grp, parent: r2, index: 0 }]));
+    await apply(q, "aws", p.previewId);
+    const u = await preview(q, "aws", "{}", p.previewId);
+    await apply(q, "aws", u.previewId);
+    const a = await one(q, "select start_date::text as s, end_date::text as e, parent_id::text as pid from public.goal_nodes where id = $1::bigint", [grp]);
+    assertEquals([a.s, a.e, a.pid], [b.s, b.e, r2]);        // 날짜만 복원, 이동은 그대로(notUndoable)
+  } },
+  { name: "〔N2〕 shift 뒤 그 회차 아래 create(같은 계획) → 새 노드는 기록되지 않고 undo 가 건드리지 않는다", run: async (q) => {
+    await as(q, "민수");
+    const r3 = await nodeId(q, "aws", "로드밸런서 비교").then(async (g) =>
+      (await one(q, "select parent_id::text as p from public.goal_nodes where id = $1::bigint", [g])).p as string);   // 3주차
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 },
+                                          { op: "create", parent: r3, title: "밀린 뒤 새 과제", taskType: "common", startDate: "2026-10-23", endDate: "2026-10-24" }]));
+    const a = await apply(q, "aws", p.previewId);
+    const created = a.createdIds[0] as string;
+    const u = await preview(q, "aws", "{}", p.previewId);
+    assertEquals(u.diff.some((d: Row) => d.id === created), false);
+    await apply(q, "aws", u.previewId);
+    assertEquals((await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [created])).s, "2026-10-23");
+  } },
+  { name: "〔C#4·N1〕 낡은 undo 거부: 적용 뒤 기록된 하위 일정이 바뀌면 미리보기 UNDO_STALE · 이미 되돌린 것도 UNDO_STALE", run: async (q) => {
+    await as(q, "민수");
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 }]));
+    await apply(q, "aws", p.previewId);
+    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");   // 3주차 하위(기록됨)
+    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-30\"}')", [alb]);
+    await expectFail(q("select public.curriculum_plan_preview('aws', '{}'::jsonb, $1)", [p.previewId]), "UNDO_STALE");
+    const p2 = await preview(q, "aws", plan([{ op: "shift", from: "5주차", to: "5주차", days: 3 }]));
+    await apply(q, "aws", p2.previewId);
+    const u2 = await preview(q, "aws", "{}", p2.previewId);
+    await apply(q, "aws", u2.previewId);
+    await expectFail(q("select public.curriculum_plan_preview('aws', '{}'::jsonb, $1)", [p2.previewId]), "UNDO_STALE");
+  } },
+  { name: "〔N1〕 undo 미리보기 뒤 개인 목표 변경 → undo 적용 UNDO_STALE(버전 검사로는 못 잡는 경우) · 새 개인 목표 추가는 막지 않고 건드리지도 않음", run: async (q) => {
+    const grp = await nodeId(q, "aws", "로드밸런서 비교");
+    const r3 = (await one(q, "select parent_id::text as p from public.goal_nodes where id = $1::bigint", [grp])).p as string;
+    await as(q, "지은");
+    const goal = ((await one(q, "select public.personal_create('aws', $1::bigint, '지은 3주차 복습') as c", [r3])).c as Row).createdId as string;
+    await as(q, "민수");
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "3주차", days: 7 }]));   // 개인 목표도 함께 밀림 → 기록
+    await apply(q, "aws", p.previewId);
+    const u = await preview(q, "aws", "{}", p.previewId);
+    assert(u.diff.some((d: Row) => d.id === goal));
+    const v = (await one(q, "select public.curriculum_version(id) as v from public.rooms where slug = 'aws'")).v;
+    await as(q, "지은");
+    await q("select public.personal_update('aws', $1::bigint, '{\"endDate\":\"2026-10-29\"}')", [goal]);
+    assertEquals((await one(q, "select public.curriculum_version(id) as v from public.rooms where slug = 'aws'")).v, v);   // 버전은 그대로
+    await as(q, "민수");
+    await expectFail(q("select public.curriculum_plan_apply('aws', $1)", [u.previewId]), "UNDO_STALE");
+    // 되돌린 날짜를 원래대로 두고 새 개인 목표만 추가한 경우는 통과하고, 새 목표는 그대로
+    await as(q, "지은");
+    await q("select public.personal_update('aws', $1::bigint, $2::jsonb)", [goal, JSON.stringify({ endDate: u.diff.find((d: Row) => d.id === goal).changes.endDate[0] })]);
+    const extra = ((await one(q, "select public.personal_create('aws', $1::bigint, '나중 목표', '2026-10-25', '2026-10-26') as c", [r3])).c as Row).createdId as string;
+    await as(q, "민수");
+    await apply(q, "aws", u.previewId);
+    assertEquals((await one(q, "select start_date::text as s from public.goal_nodes where id = $1::bigint", [extra])).s, "2026-10-25");
+  } },
+  { name: "〔P11〕 미리보기 무부작용: goal_nodes·task_assignments·notifications 행 수 그대로, 초안만 1행", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const tables = ["goal_nodes", "task_assignments", "notifications", "api_plan_drafts"];
+    const snap = () => Promise.all(tables.map((t) => count(q, `select 1 from public.${t}`)));
+    const b = await snap();
+    const d = await preview(q, "aws", plan([
+      { op: "shift", from: "3주차", to: "4주차", days: 7 },                                     // ACTIVE 방: 적용이면 알림이 나간다
+      { op: "create", parent: r2, title: "지정 발표", taskType: "designated", assignees: ["지은"] },
+      { op: "create", parent: r2, title: "공통 과제", taskType: "common" },
+    ]));
+    assertEquals(d.ok, true);
+    const a = await snap();
+    assertEquals(a.slice(0, 3), b.slice(0, 3));
+    assertEquals(a[3], b[3] + 1);
+  } },
+  { name: "〔P4〕 미리보기 diff 의 담당은 닉네임(uuid 없음) — create 는 assignees, update 는 changes.assignees [옛, 새]", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const s3 = await nodeId(q, "aws", "S3 스토리지 클래스 발표자료");   // 시드 담당 = 하나
+    const d = await preview(q, "aws", plan([
+      { op: "create", parent: r2, title: "지정 발표", taskType: "designated", assignees: ["지은"] },
+      { op: "update", id: s3, set: { assignees: ["철수", "하나"] } },
+    ]));
+    assertEquals(d.ok, true);
+    assertEquals(d.diff[0].assignees, ["지은"]);
+    const ch = d.diff[1].changes.assignees as string[][];
+    assertEquals([ch[0], [...ch[1]].sort()], [["하나"], ["철수", "하나"].sort()]);
+    assertEquals(d.undoable.notUndoable.otherChanges, 1);
+    assertEquals(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(JSON.stringify(d)), false);
+  } },
+  { name: "실행 오류에 사용자 id 를 싣지 않는다(비참가자 담당 — hint 의 userId 제거)", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const outsider = await uidOf(q, "가은");
+    const d = await preview(q, "aws", plan([{ op: "create", parent: r2, title: "지정", taskType: "designated", assigneeIds: [outsider] }]));
+    assertEquals(d.errors[0].code, "ASSIGNEE_NOT_MEMBER");
+    assertEquals(JSON.stringify(d).includes(outsider), false);
+  } },
+  { name: "shift 결과가 스터디 기간 밖 → 미리보기 경고(원래 경로 ops[0]#n · 한국어 message)", run: async (q) => {
+    await as(q, "민수");
+    const d = await preview(q, "aws", plan([{ op: "shift", from: "5주차", days: 60 }]));   // 5주차 끝 11-04 + 60 > 12-31
+    assertEquals(d.ok, true);
+    const w = d.warnings.filter((x: Row) => x.code === "PERIOD_OUTSIDE_ROOM");
+    assert(w.length >= 1);
+    assert(w.every((x: Row) => /^ops\[0\]#0$/.test(x.path) && x.message === "스터디 기간 밖이에요" && x.rpath === "ops[0]"));
+  } },
+  { name: "move 의 id 가 @ref(같은 계획의 create) — 적용하면 새 노드가 옮겨지고 미리보기 diff id 는 null", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const r3 = (await one(q, "select parent_id::text as p from public.goal_nodes where id = $1::bigint", [await nodeId(q, "aws", "로드밸런서 비교")])).p as string;
+    const d = await preview(q, "aws", plan([{ op: "create", ref: "x", parent: r2, title: "옮길 과제", taskType: "common" },
+                                          { op: "move", id: "@x", parent: r3, index: 0 }]));
+    assertEquals(d.ok, true);
+    assertEquals([d.diff[1].op, d.diff[1].id], ["move", null]);
+    const a = await apply(q, "aws", d.previewId);
+    const n = await one(q, "select parent_id::text as p, sort_order from public.goal_nodes where id = $1::bigint", [a.refs.x]);
+    assertEquals([n.p, n.sort_order], [r3, 0]);
+  } },
+  { name: "〔P13〕 createdIds 는 생성 순서", run: async (q) => {
+    const { slug } = await mkRoom(q, "민수");
+    const ops = Array.from({ length: 12 }, (_, i) => ({ op: "create", title: `회차 ${i + 1}` }));
+    const a = await apply(q, slug, (await preview(q, slug, plan(ops))).previewId);
+    const titles = await Promise.all((a.createdIds as string[]).map(async (id) =>
+      (await one(q, "select title from public.goal_nodes where id = $1::bigint", [id])).title));
+    assertEquals(titles, ops.map((o) => o.title));
+  } },
+  { name: "되돌리기 알림: ACTIVE 방 undo 적용 → 복원된 과제 담당자에게 CURRICULUM_BULK_UPDATED 1건(행위자 제외) · 미리보기는 알림 없음", run: async (q) => {
+    await as(q, "민수");
+    const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "4주차", days: 7 }]));
+    await apply(q, "aws", p.previewId);
+    const bulk = async (nick: string) => q(`select title, body, link from public.notifications where user_id = $1::uuid and kind = 'CURRICULUM_BULK_UPDATED'`, [await uidOf(q, nick)]);
+    const u = await preview(q, "aws", "{}", p.previewId);
+    assertEquals((await bulk("지은")).length, 0);
+    assertEquals(u.notifications.perRecipient.find((x: Row) => x.nickname === "지은").count >= 2, true);
+    await apply(q, "aws", u.previewId);
+    const got = await bulk("지은");
+    assertEquals(got.length, 1);
+    assertMatch(got[0].body, /^일정 [0-9]+건$/);
+    assertEquals(got[0].link, "/my-study/aws?tab=curriculum");
+    assertEquals((await bulk("민수")).length, 0);
+  } },
+  { name: "CURRICULUM_BULK_UPDATED 종류·렌더·링크 등록(MEMBER_JOINED 유지)", run: async (q) => {
+    const k = (await one(q, "select public.notification_kinds() as k")).k as string[];
+    assertEquals([k.includes("CURRICULUM_BULK_UPDATED"), k.includes("MEMBER_JOINED"), k[k.length - 1]], [true, true, "CURRICULUM_BULK_UPDATED"]);
+    const aws = await roomId(q, "aws");
+    const t = (await one(q, "select public.notify_render('CURRICULUM_BULK_UPDATED', $1::bigint, null, null, '{\"newTasks\":2,\"schedule\":3,\"assign\":0}') as t", [aws])).t as Row;
+    assertEquals([t.title, t.body], ["AWS SAA 자격증 3개월 완주 진행목표가 한꺼번에 바뀌었어요", "새 과제 2건 · 일정 3건"]);
+    const j = (await one(q, "select public.notify_render('MEMBER_JOINED', $1::bigint, null, $2::uuid, '{\"via\":\"invite\"}') as t", [aws, await uidOf(q, "지은")])).t as Row;
+    assertEquals(j.title, "지은님이 AWS SAA 자격증 3개월 완주에 합류했어요");
+    assertEquals((await one(q, "select public.notify_link('CURRICULUM_BULK_UPDATED', $1::bigint, null, $2::uuid) as l", [aws, await uidOf(q, "지은")])).l,
+                 "/my-study/aws?tab=curriculum");
+  } },
+  { name: "GRANT: preview·apply 는 authenticated 만, plan_* 내부는 아무도", run: async (q) => {
+    const can = async (role: string, fn: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, fn])).v;
+    for (const fn of ["public.curriculum_plan_preview(text, jsonb, text)", "public.curriculum_plan_apply(text, text)"]) {
+      assertEquals([await can("anon", fn), await can("authenticated", fn)], [false, true], fn);
+    }
+    for (const fn of ["public.plan_validate(public.rooms, jsonb)", "public.plan_flatten(jsonb)", "public.curriculum_version(bigint)",
+                      "public.plan_resolve(public.rooms, jsonb)", "public.plan_run(public.rooms, uuid, jsonb, boolean, jsonb)",
+                      "public.plan_shape_check(jsonb)", "public.plan_warn_text(text)", "public.plan_undo_check(jsonb)",
+                      "public.plan_undo_run(public.rooms, uuid, jsonb, boolean)", "public.plan_nicks(bigint)",
+                      "public.node_create_core(public.rooms, uuid, bigint, text, text, text, date, date, integer, text)"]) {
+      assertEquals([await can("anon", fn), await can("authenticated", fn)], [false, false], fn);
+    }
   } },
 ]);
