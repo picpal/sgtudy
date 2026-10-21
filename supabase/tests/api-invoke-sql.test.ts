@@ -451,6 +451,7 @@ async function contractData(q: Q): Promise<Row> {
   const curriculum = (await call(q, jieun, "curriculum_get", { study: "aws" })).data;
   const plan = { schema: "sgtudy.plan/v1", ops: [
     { op: "create", parent: r4, title: "계약 새 과제", taskType: "designated", assignees: ["지은"] },
+    { op: "create", parent: r4, title: "계약 시험", kind: "exam" },                                        // 0038 → diff exam:true
     { op: "update", id: await nodeId(q, "aws", "Auto Scaling 정책 정리"), set: { endDate: "2026-10-30" } },   // 회차 밖 → 경고
     { op: "move", id: await nodeId(q, "aws", "DynamoDB 설계 퀴즈"), parent: r4, index: 0 },
     { op: "shift", from: "5주차", days: 7 },
@@ -564,6 +565,7 @@ function checkIntegrity(d: Row) {
   for (const k of ["node:round", "node:bundle", "node:common", "node:designated", "node:personal:mine=true", "node:personal:mine=false"]) assert(kinds.has(k), k);
   assertEquals(new Set((d.curriculum_plan_preview.diff as Row[]).map((x) => x.op)), new Set(["create", "update", "move"]));
   assertEquals(new Set((d.curriculum_plan_preview_undo.diff as Row[]).map((x) => x.op)), new Set(["restore"]));
+  assertEquals((d.curriculum_plan_preview.diff as Row[]).filter((x) => x.exam === true).map((x) => x.title), ["계약 시험"]);
   assert((d.curriculum_plan_preview.warnings as Row[]).length > 0 && (d.curriculum_plan_preview.warnings as Row[]).every((w) => typeof w.message === "string"));
   const created = new Set(d.curriculum_plan_apply.createdIds as string[]);
   assert(Object.values(d.curriculum_plan_apply.refs as Row).every((v) => created.has(v)), "refs ⊂ createdIds");

@@ -314,6 +314,8 @@ export type DiffItem = {
   // create
   ref?: string | null; label?: string | null; taskType?: "common" | "designated" | null; startDate?: string; endDate?: string;
   parent?: string | null; parentPath?: string | null; assignees?: string[];
+  /** 0038 시험 리프(create·update·move) */
+  exam?: true;
   // update · restore
   changes?: { title?: Pair<string>; label?: Pair<string | null>; startDate?: Pair<string>; endDate?: Pair<string>; taskType?: Pair<string | null>;
     descriptionMd?: true; assignees?: Pair<string[]> };
@@ -406,13 +408,15 @@ function diffLine(d: DiffItem, depthOf: Map<string, number>, opts: PreviewOpts, 
   if (d.op === "create") {
     const depth = d.parentPath ? (depthOf.get(d.parentPath) ?? 0) + 1 : 0;
     depthOf.set(d.path, depth);
+    const designated = d.taskType === "designated" ? `지정: ${d.assignees?.length ? d.assignees.join(", ") : "미정"}` : null;
     const tag = d.kind === "round" ? "[회차]" : d.kind === "bundle" ? "[묶음]"
-      : d.taskType === "designated" ? `[지정: ${d.assignees?.length ? d.assignees.join(", ") : "미정"}]` : "[공통]";
+      : d.exam ? `[시험${designated ? `·${designated}` : ""}]` : designated ? `[${designated}]` : "[공통]";
     const dates = d.startDate && d.endDate ? (d.startDate === d.endDate ? f(d.startDate) : `${f(d.startDate)}~${f(d.endDate)}`) : "";
     const parent = !d.parentPath && d.parent ? `(상위: ${where(d.parent)})` : "";
     return "  ".repeat(depth) + "+ " + join(tag, d.kind === "round" ? d.label : null, d.title, dates, parent);
   }
-  if (d.op === "update") return `~ ${KIND_TEXT[d.kind]} ${d.title}: ${changeText(d.changes ?? {}, f)}`;
+  const kind = d.exam ? "[시험]" : KIND_TEXT[d.kind];
+  if (d.op === "update") return `~ ${kind} ${d.title}: ${changeText(d.changes ?? {}, f)}`;
   if (d.op === "restore") {
     const ch = d.changes ?? {};
     const side = (i: 0 | 1) => (ch.startDate ? f(ch.startDate[i]) : "") + "~" + (ch.endDate ? f(ch.endDate[i]) : "");
@@ -420,8 +424,8 @@ function diffLine(d: DiffItem, depthOf: Map<string, number>, opts: PreviewOpts, 
   }
   const same = d.from && d.from.parentId === d.parent;
   return same
-    ? `↪ ${KIND_TEXT[d.kind]} ${d.title} 순서 ${(d.from?.index ?? 0) + 1}번째 → ${(d.index ?? 0) + 1}번째`
-    : `↪ ${KIND_TEXT[d.kind]} ${d.title} → 상위: ${where(d.parent)}, ${(d.index ?? 0) + 1}번째`;
+    ? `↪ ${kind} ${d.title} 순서 ${(d.from?.index ?? 0) + 1}번째 → ${(d.index ?? 0) + 1}번째`
+    : `↪ ${kind} ${d.title} → 상위: ${where(d.parent)}, ${(d.index ?? 0) + 1}번째`;
 }
 
 /** 미리보기 → 한국어 요약(diff 최대 40줄 + 외 N건) · 경고 · 알림 · 되돌리기 · previewId · 다음 행동 */

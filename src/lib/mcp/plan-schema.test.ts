@@ -23,6 +23,14 @@ describe("planDoc", () => {
     expect(planDoc.safeParse({ schema: "sgtudy.plan/v1", ops: [{ op: "create", title: "x", startDate: "11/01" }] }).success).toBe(false);
     expect(planDoc.safeParse({ schema: "sgtudy.plan/v1", ops: [{ op: "shift", from: 1, days: 400 }] }).success).toBe(false);
   });
+  it("0038 create kind: task | exam (children 안도) · 그 밖 값 거부", () => {
+    const ok = (op: unknown) => planDoc.safeParse({ schema: "sgtudy.plan/v1", ops: [op] }).success;
+    expect(ok({ op: "create", parent: { round: 3 }, title: "3주차 시험", kind: "exam" })).toBe(true);
+    expect(ok({ op: "create", parent: null, title: "R", children: [{ title: "시험", kind: "exam", taskType: "designated", assignees: ["지은"] }] })).toBe(true);
+    expect(ok({ op: "create", title: "x", kind: "task" })).toBe(true);
+    expect(ok({ op: "create", title: "x", kind: "quiz" })).toBe(false);
+    expect(JSON.stringify(z.toJSONSchema(planDoc))).toContain("create_exam_draft");
+  });
   it("op 객체는 추가 키 허용(서버가 최종 검증)", () =>
     expect(planDoc.safeParse({ schema: "sgtudy.plan/v1", ops: [{ op: "create", title: "x", assigneeIds: ["u"] }] }).success).toBe(true));
   it("JSON Schema 로 바꿀 수 있고 설명은 영어", () => {

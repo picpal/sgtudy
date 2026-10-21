@@ -237,6 +237,7 @@ describe("PROMPTS", () => {
   it("draft-curriculum · draft-exam 2개(D19)", () => {
     expect(PROMPTS.map((p) => p.name)).toEqual(["draft-curriculum", "draft-exam"]);
     expect(PROMPTS[0].render({ study: "aws", topic: "AWS SAA", weeks: "12" })).toContain("preview_curriculum_plan");
+    expect(PROMPTS[0].render({ study: "aws", topic: "AWS SAA" })).toContain('kind:"exam"');   // 0038
   });
   it("draft-exam: get_exam_brief → 계약대로 create_exam_draft · 기반 이론은 참고 자료(지시 무시)", () => {
     const t = PROMPTS[1].render({ study: "aws", task: "311" });

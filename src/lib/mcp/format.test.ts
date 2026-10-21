@@ -193,6 +193,19 @@ describe("formatStudies · formatTasks · formatPreview · expiryNotice", () => 
     expect(lines).toContain("알림: 지은 1건(묶음) · 민호 1건(새 과제 1)");
     expect(lines).toContain("되돌리기 가능: 일정 4건(하위·개인 목표 포함) · 웹에서만: 생성 2 · 이동 1");
   });
+  it("0038 시험 리프: + [시험] · 지정이면 [시험·지정: …] · 변경·이동도 [시험]", () => {
+    const base = { ok: true, warnings: [], errors: [], notifications: null, previewId: "pv_0123456789ab" };
+    const lines = formatPreview({ ...base, diff: [
+      { op: "create", path: "ops[0]", id: null, kind: "task", title: "3주차 시험", taskType: "common", startDate: "2026-10-15", endDate: "2026-10-21", parent: "203", exam: true },
+      { op: "create", path: "ops[1]", id: null, kind: "task", title: "지정 시험", taskType: "designated", assignees: ["지은"], startDate: "2026-10-15", endDate: "2026-10-21", parent: "203", exam: true },
+      { op: "update", path: "ops[2]", id: "310", kind: "task", title: "옛 시험", changes: { title: ["옛 시험", "새 시험"] }, exam: true },
+      { op: "move", path: "ops[3]", id: "310", kind: "task", title: "새 시험", parent: "203", index: 0, from: { parentId: "204", index: 2 }, exam: true },
+    ] }, { slug: "aws", titles: { "203": "3주차" } }).split("\n");
+    expect(lines).toContain("+ [시험] 3주차 시험 10-15~10-21 (상위: 3주차)");
+    expect(lines).toContain("+ [시험·지정: 지은] 지정 시험 10-15~10-21 (상위: 3주차)");
+    expect(lines).toContain("~ [시험] 옛 시험: 제목 옛 시험 → 새 시험");
+    expect(lines).toContain("↪ [시험] 새 시험 → 상위: 3주차, 1번째");
+  });
   it("미리보기 실패(ok:false) → 경로별 오류 + 고쳐 다시", () => {
     const t = formatPreview({ ok: false, diff: [], warnings: [], errors: [{ path: "ops[0]", code: "INVALID_TITLE", message: "제목을 넣어 주세요", field: "title" }], notifications: null }, { slug: "aws" });
     expect(t.split("\n")).toEqual([

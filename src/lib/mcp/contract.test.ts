@@ -50,6 +50,7 @@ describe("api-contract → formatters", () => {
     expect(lines[0]).toMatch(new RegExp(`^미리보기 · ${slug} \\(아직 적용 전\\)`));
     for (const mark of ["+ ", "~ ", "↪ "]) expect(lines.some((l) => l.trimStart().startsWith(mark))).toBe(true);
     expect(t).toContain("[지정: 지은]");
+    expect(t).toMatch(/^\+ \[시험\] 계약 시험 /m);                       // 0038 create kind:"exam"
     const warn = lines.filter((l) => l.startsWith("경고"));
     expect(warn.length).toBe(preview.warnings.length);
     for (const w of warn) expect(w).toMatch(/: .*[가-힣]/);

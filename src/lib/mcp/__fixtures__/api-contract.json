@@ -691,7 +691,8 @@
   "curriculum_plan_apply": {
     "applied": true,
     "createdIds": [
-      "n18"
+      "n18",
+      "n19"
     ],
     "link": "/my-study/aws?tab=curriculum",
     "notifications": {
@@ -721,7 +722,7 @@
     "previewId": "pv_000000000001",
     "refs": {},
     "summary": {
-      "created": 1,
+      "created": 2,
       "moved": 1,
       "restored": 0,
       "shiftedDescendants": 1,
@@ -729,7 +730,7 @@
     },
     "undoable": {
       "notUndoable": {
-        "created": 1,
+        "created": 2,
         "moved": 1,
         "otherChanges": 0
       },
@@ -757,6 +758,21 @@
         "title": "계약 새 과제"
       },
       {
+        "endDate": "2026-10-28",
+        "exam": true,
+        "id": null,
+        "kind": "task",
+        "label": null,
+        "op": "create",
+        "parent": "n13",
+        "parentPath": null,
+        "path": "ops[1]",
+        "ref": null,
+        "startDate": "2026-10-22",
+        "taskType": "common",
+        "title": "계약 시험"
+      },
+      {
         "changes": {
           "endDate": [
             "2026-10-28",
@@ -766,7 +782,7 @@
         "id": "n14",
         "kind": "task",
         "op": "update",
-        "path": "ops[1]",
+        "path": "ops[2]",
         "title": "Auto Scaling 정책 정리"
       },
       {
@@ -779,7 +795,7 @@
         "kind": "task",
         "op": "move",
         "parent": "n13",
-        "path": "ops[2]",
+        "path": "ops[3]",
         "ref": null,
         "title": "DynamoDB 설계 퀴즈"
       },
@@ -797,8 +813,8 @@
         "id": "n15",
         "kind": "round",
         "op": "update",
-        "path": "ops[3]#0",
-        "rpath": "ops[3]",
+        "path": "ops[4]#0",
+        "rpath": "ops[4]",
         "title": "데이터베이스"
       }
     ],
@@ -830,7 +846,7 @@
     "ok": true,
     "previewId": "pv_000000000001",
     "summary": {
-      "created": 1,
+      "created": 2,
       "moved": 1,
       "restored": 0,
       "shiftedDescendants": 1,
@@ -839,7 +855,7 @@
     "undoOf": null,
     "undoable": {
       "notUndoable": {
-        "created": 1,
+        "created": 2,
         "moved": 1,
         "otherChanges": 0
       },
@@ -851,7 +867,7 @@
         "code": "PERIOD_OUTSIDE_PARENT",
         "message": "상위 항목 기간 밖이에요",
         "nodeId": "n14",
-        "path": "ops[1]"
+        "path": "ops[2]"
       }
     ]
   },
@@ -1017,6 +1033,16 @@
         "title": "계약 새 과제"
       },
       {
+        "e": "2026-10-28",
+        "id": "n19",
+        "personal": false,
+        "round": "4주차",
+        "s": "2026-10-22",
+        "slug": "aws",
+        "st": "planned",
+        "title": "계약 시험"
+      },
+      {
         "e": "2026-10-30",
         "id": "n14",
         "personal": false,
@@ -1096,7 +1122,7 @@
   "personal_delete_many": {
     "deleted": 1,
     "skipped": [
-      "n19"
+      "n20"
     ]
   },
   "whoami": {

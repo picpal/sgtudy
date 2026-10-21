@@ -36,7 +36,8 @@ export const PROMPTS: PromptDef[] = [
       `1. Call get_curriculum(study:"${a.study}") (outline) to read the study period, members and existing rounds (회차).`,
       `2. Plan ${a.weeks ? `${a.weeks} ` : ""}weekly rounds: label "N주차", 7 days each, continuing after existing rounds. `
         + `Give each round ${a.perWeek ?? "2-5"} tasks (과제); group a large topic into a bundle (묶음) with child tasks.`,
-      "3. For a designated task (지정 과제) put member nicknames in assignees; otherwise leave it common (공통).",
+      "3. For a designated task (지정 과제) put member nicknames in assignees; otherwise leave it common (공통). "
+        + 'For a round exam (시험) add a leaf with kind:"exam" (an empty draft); after apply, write its questions with create_exam_draft.',
       "4. If any date falls outside the study period, tell the user and adjust before previewing.",
       "5. Call preview_curriculum_plan with the plan, show the returned Korean summary to the user verbatim, and wait for explicit approval.",
       "6. Only after approval call apply_curriculum_plan(previewId). If the user wants changes, edit the plan and preview again.",

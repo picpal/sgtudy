@@ -21,6 +21,7 @@ const nodeFields = {
   endDate: date.optional(),
   descriptionMd: z.string().optional(),
   taskType: z.enum(["common", "designated"]).optional().describe("leaf only"),
+  kind: z.enum(["task", "exam"]).optional().describe("exam: empty draft exam leaf, then create_exam_draft"),
   assignees: z.array(z.string()).max(100).optional().describe("designated only: nicknames or userIds"),
   children: z.array(z.looseObject({})).optional().describe("same shape, no op/parent"),
 };
