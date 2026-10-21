@@ -34,6 +34,428 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_audit: {
+        Row: {
+          created_at: string
+          dry_run: boolean | null
+          error_code: string | null
+          id: number
+          ok: boolean
+          op: string
+          preview_id: string | null
+          room_id: number | null
+          source: string
+          summary: Json
+          token_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          dry_run?: boolean | null
+          error_code?: string | null
+          id?: never
+          ok: boolean
+          op: string
+          preview_id?: string | null
+          room_id?: number | null
+          source: string
+          summary?: Json
+          token_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          dry_run?: boolean | null
+          error_code?: string | null
+          id?: never
+          ok?: boolean
+          op?: string
+          preview_id?: string | null
+          room_id?: number | null
+          source?: string
+          summary?: Json
+          token_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_audit_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_audit_token_id_fkey"
+            columns: ["token_id"]
+            isOneToOne: false
+            referencedRelation: "api_tokens"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_audit_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_audit_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_plan_drafts: {
+        Row: {
+          applied_at: string | null
+          apply_response: Json | null
+          created_at: string
+          expires_at: string
+          id: string
+          path_map: Json
+          plan: Json
+          preview: Json
+          resolved: Json
+          room_id: number
+          sched_changes: Json | null
+          undo_of: string | null
+          user_id: string
+          version: string
+        }
+        Insert: {
+          applied_at?: string | null
+          apply_response?: Json | null
+          created_at: string
+          expires_at: string
+          id: string
+          path_map?: Json
+          plan: Json
+          preview: Json
+          resolved: Json
+          room_id: number
+          sched_changes?: Json | null
+          undo_of?: string | null
+          user_id: string
+          version: string
+        }
+        Update: {
+          applied_at?: string | null
+          apply_response?: Json | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          path_map?: Json
+          plan?: Json
+          preview?: Json
+          resolved?: Json
+          room_id?: number
+          sched_changes?: Json | null
+          undo_of?: string | null
+          user_id?: string
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_plan_drafts_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_plan_drafts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_plan_drafts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          http_count: number
+          http_window: string | null
+          id: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          scopes: string[]
+          token_hash: string
+          token_prefix: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          http_count?: number
+          http_window?: string | null
+          id?: string
+          last_used_at?: string | null
+          name: string
+          revoked_at?: string | null
+          scopes: string[]
+          token_hash: string
+          token_prefix: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          http_count?: number
+          http_window?: string | null
+          id?: string
+          last_used_at?: string | null
+          name?: string
+          revoked_at?: string | null
+          scopes?: string[]
+          token_hash?: string
+          token_prefix?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_answers: {
+        Row: {
+          answer: Json
+          attempt_id: number
+          earned: number | null
+          is_correct: boolean | null
+          question_id: number
+          saved_at: string
+        }
+        Insert: {
+          answer: Json
+          attempt_id: number
+          earned?: number | null
+          is_correct?: boolean | null
+          question_id: number
+          saved_at?: string
+        }
+        Update: {
+          answer?: Json
+          attempt_id?: number
+          earned?: number | null
+          is_correct?: boolean | null
+          question_id?: number
+          saved_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_answers_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "exam_attempts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_answers_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "exam_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_attempts: {
+        Row: {
+          correct_count: number | null
+          id: number
+          max_score: number | null
+          node_id: number
+          score: number | null
+          started_at: string
+          status: string
+          submitted_at: string | null
+          user_id: string
+        }
+        Insert: {
+          correct_count?: number | null
+          id?: never
+          max_score?: number | null
+          node_id: number
+          score?: number | null
+          started_at?: string
+          status?: string
+          submitted_at?: string | null
+          user_id: string
+        }
+        Update: {
+          correct_count?: number | null
+          id?: never
+          max_score?: number | null
+          node_id?: number
+          score?: number | null
+          started_at?: string
+          status?: string
+          submitted_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_attempts_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
+            referencedColumns: ["node_id"]
+          },
+          {
+            foreignKeyName: "exam_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_attempts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_questions: {
+        Row: {
+          answer: Json
+          choices: Json | null
+          explanation_md: string
+          id: number
+          node_id: number
+          ord: number
+          points: number
+          prompt_md: string
+          qtype: string
+        }
+        Insert: {
+          answer: Json
+          choices?: Json | null
+          explanation_md?: string
+          id?: never
+          node_id: number
+          ord: number
+          points?: number
+          prompt_md: string
+          qtype: string
+        }
+        Update: {
+          answer?: Json
+          choices?: Json | null
+          explanation_md?: string
+          id?: never
+          node_id?: number
+          ord?: number
+          points?: number
+          prompt_md?: string
+          qtype?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_questions_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
+            referencedColumns: ["node_id"]
+          },
+        ]
+      }
+      exams: {
+        Row: {
+          brief: Json | null
+          created_by: string | null
+          node_id: number
+          published_at: string | null
+          question_count: number
+          reveal: string
+          room_id: number
+          source: string
+          status: string
+          total_points: number
+          updated_at: string
+        }
+        Insert: {
+          brief?: Json | null
+          created_by?: string | null
+          node_id: number
+          published_at?: string | null
+          question_count?: number
+          reveal?: string
+          room_id: number
+          source?: string
+          status?: string
+          total_points?: number
+          updated_at?: string
+        }
+        Update: {
+          brief?: Json | null
+          created_by?: string | null
+          node_id?: number
+          published_at?: string | null
+          question_count?: number
+          reveal?: string
+          room_id?: number
+          source?: string
+          status?: string
+          total_points?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exams_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exams_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exams_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: true
+            referencedRelation: "goal_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exams_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       files: {
         Row: {
           attached_at: string | null
@@ -233,6 +655,39 @@ export type Database = {
             columns: ["round_id"]
             isOneToOne: false
             referencedRelation: "goal_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invite_code_failures: {
+        Row: {
+          created_at: string
+          id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: never
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: never
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_code_failures_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invite_code_failures_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -449,6 +904,10 @@ export type Database = {
       }
       room_invites: {
         Row: {
+          bypass_max: number | null
+          bypass_until: string | null
+          bypass_used: number
+          code: string | null
           created_at: string
           created_by: string
           revoked_at: string | null
@@ -456,6 +915,10 @@ export type Database = {
           token: string
         }
         Insert: {
+          bypass_max?: number | null
+          bypass_until?: string | null
+          bypass_used?: number
+          code?: string | null
           created_at?: string
           created_by: string
           revoked_at?: string | null
@@ -463,6 +926,10 @@ export type Database = {
           token: string
         }
         Update: {
+          bypass_max?: number | null
+          bypass_until?: string | null
+          bypass_used?: number
+          code?: string | null
           created_at?: string
           created_by?: string
           revoked_at?: string | null
@@ -497,6 +964,7 @@ export type Database = {
         Row: {
           applied_at: string | null
           apply_message: string | null
+          assign_from: string | null
           can_edit_curriculum: boolean
           created_at: string
           decided_at: string | null
@@ -515,6 +983,7 @@ export type Database = {
         Insert: {
           applied_at?: string | null
           apply_message?: string | null
+          assign_from?: string | null
           can_edit_curriculum?: boolean
           created_at?: string
           decided_at?: string | null
@@ -533,6 +1002,7 @@ export type Database = {
         Update: {
           applied_at?: string | null
           apply_message?: string | null
+          assign_from?: string | null
           can_edit_curriculum?: boolean
           created_at?: string
           decided_at?: string | null
@@ -582,6 +1052,110 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_notice_reads: {
+        Row: {
+          notice_id: number
+          read_at: string
+          read_rev: number
+          user_id: string
+        }
+        Insert: {
+          notice_id: number
+          read_at?: string
+          read_rev: number
+          user_id: string
+        }
+        Update: {
+          notice_id?: number
+          read_at?: string
+          read_rev?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_notice_reads_notice_id_fkey"
+            columns: ["notice_id"]
+            isOneToOne: false
+            referencedRelation: "room_notices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_notice_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_notice_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      room_notices: {
+        Row: {
+          author_id: string | null
+          body_md: string
+          created_at: string
+          id: number
+          pinned: boolean
+          popup: boolean
+          popup_rev: number
+          room_id: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_id?: string | null
+          body_md: string
+          created_at?: string
+          id?: never
+          pinned?: boolean
+          popup?: boolean
+          popup_rev?: number
+          room_id: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string | null
+          body_md?: string
+          created_at?: string
+          id?: never
+          pinned?: boolean
+          popup?: boolean
+          popup_rev?: number
+          room_id?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_notices_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_notices_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "room_notices_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
             referencedColumns: ["id"]
           },
         ]
@@ -712,6 +1286,7 @@ export type Database = {
           max_members: number
           member_count: number
           min_members: number | null
+          recruit_until: string | null
           rules_md: string
           slug: string
           start_date: string
@@ -736,6 +1311,7 @@ export type Database = {
           max_members: number
           member_count?: number
           min_members?: number | null
+          recruit_until?: string | null
           rules_md?: string
           slug: string
           start_date: string
@@ -760,6 +1336,7 @@ export type Database = {
           max_members?: number
           member_count?: number
           min_members?: number | null
+          recruit_until?: string | null
           rules_md?: string
           slug?: string
           start_date?: string
@@ -973,6 +1550,69 @@ export type Database = {
     }
     Functions: {
       allowed_mime_types: { Args: never; Returns: string[] }
+      api_authenticate: {
+        Args: { p_op: string; p_token: string }
+        Returns: {
+          created_at: string
+          expires_at: string
+          http_count: number
+          http_window: string | null
+          id: string
+          last_used_at: string | null
+          name: string
+          revoked_at: string | null
+          scopes: string[]
+          token_hash: string
+          token_prefix: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "api_tokens"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      api_curriculum_view: { Args: { p_c: Json; p_uid: string }; Returns: Json }
+      api_error_json: {
+        Args: {
+          p_code: string
+          p_detail: string
+          p_hint: string
+          p_state: string
+        }
+        Returns: Json
+      }
+      api_invoke: {
+        Args: { p_args?: Json; p_op: string; p_token: string }
+        Returns: Json
+      }
+      api_limits: { Args: never; Returns: Json }
+      api_node_file_counts: { Args: { p_room: number }; Returns: Json }
+      api_rate_check: {
+        Args: {
+          p_dry: boolean
+          p_op: string
+          p_replay?: boolean
+          p_token: string
+          p_user: string
+        }
+        Returns: undefined
+      }
+      api_resolve_study: {
+        Args: { p_text: string; p_uid: string }
+        Returns: string
+      }
+      api_scope_of: { Args: { p_op: string }; Returns: string }
+      api_studies: {
+        Args: { p_include_ended: boolean; p_uid: string }
+        Returns: Json
+      }
+      api_token_json: {
+        Args: { t: Database["public"]["Tables"]["api_tokens"]["Row"] }
+        Returns: Json
+      }
+      api_user_lock: { Args: { p_user: string }; Returns: undefined }
       app_now: { Args: never; Returns: string }
       assignment_resync: { Args: { p_room: number }; Returns: undefined }
       can_edit_curriculum: {
@@ -994,6 +1634,15 @@ export type Database = {
         Args: { p_include_archived: boolean; p_room: number; p_uid: string }
         Returns: Json
       }
+      curriculum_plan_apply: {
+        Args: { p_preview_id: string; p_slug: string }
+        Returns: Json
+      }
+      curriculum_plan_preview: {
+        Args: { p_plan: Json; p_slug: string; p_undo_of?: string }
+        Returns: Json
+      }
+      curriculum_version: { Args: { p_room: number }; Returns: string }
       deactivate_check: {
         Args: { p_lock: boolean; p_slug: string; p_user: string }
         Returns: {
@@ -1011,6 +1660,7 @@ export type Database = {
           max_members: number
           member_count: number
           min_members: number | null
+          recruit_until: string | null
           rules_md: string
           slug: string
           start_date: string
@@ -1036,6 +1686,131 @@ export type Database = {
           title: string
         }[]
       }
+      exam_answer_canon: {
+        Args: {
+          p_answer: Json
+          q: Database["public"]["Tables"]["exam_questions"]["Row"]
+        }
+        Returns: Json
+      }
+      exam_answer_save: {
+        Args: { p_answer: Json; p_node: number; p_question: number }
+        Returns: Json
+      }
+      exam_answer_shape_ok: {
+        Args: {
+          p_answer: Json
+          q: Database["public"]["Tables"]["exam_questions"]["Row"]
+        }
+        Returns: boolean
+      }
+      exam_assert_creatable: { Args: { p_node: number }; Returns: undefined }
+      exam_assert_unlocked: {
+        Args: { p_node: number; p_what: string }
+        Returns: undefined
+      }
+      exam_attempt_get: {
+        Args: { p_node: number; p_slug: string; p_user: string }
+        Returns: Json
+      }
+      exam_brief_put: {
+        Args: { p_brief: Json; p_node: number; p_slug: string }
+        Returns: Json
+      }
+      exam_brief_text: {
+        Args: { p_node: number; p_slug: string }
+        Returns: Json
+      }
+      exam_closed: {
+        Args: {
+          n: Database["public"]["Tables"]["goal_nodes"]["Row"]
+          x: Database["public"]["Tables"]["exams"]["Row"]
+        }
+        Returns: boolean
+      }
+      exam_contract_text: { Args: never; Returns: string }
+      exam_draft_put: {
+        Args: { p_exam: Json; p_node: number; p_slug: string }
+        Returns: Json
+      }
+      exam_editable_leaf: {
+        Args: { p_node: number; p_slug: string }
+        Returns: Record<string, unknown>
+      }
+      exam_get: { Args: { p_node: number; p_slug: string }; Returns: Json }
+      exam_grade: {
+        Args: {
+          p_answer: Json
+          q: Database["public"]["Tables"]["exam_questions"]["Row"]
+        }
+        Returns: Record<string, unknown>
+      }
+      exam_is_answered: { Args: { p_answer: Json }; Returns: boolean }
+      exam_norm: { Args: { p: string }; Returns: string }
+      exam_publish: { Args: { p_node: number; p_slug: string }; Returns: Json }
+      exam_put: {
+        Args: { p_exam: Json; p_node: number; p_slug: string }
+        Returns: Json
+      }
+      exam_questions_jsonb: { Args: { p_node: number }; Returns: Json }
+      exam_replace_questions: {
+        Args: { p_node: number; p_qs: Json; p_source: string }
+        Returns: undefined
+      }
+      exam_results: { Args: { p_node: number; p_slug: string }; Returns: Json }
+      exam_reveal_ok: {
+        Args: {
+          a: Database["public"]["Tables"]["exam_attempts"]["Row"]
+          n: Database["public"]["Tables"]["goal_nodes"]["Row"]
+          x: Database["public"]["Tables"]["exams"]["Row"]
+        }
+        Returns: boolean
+      }
+      exam_struct_key: { Args: { p_qs: Json }; Returns: string }
+      exam_submit: { Args: { p_node: number }; Returns: Json }
+      exam_submitted_count: { Args: { p_node: number }; Returns: number }
+      exam_summary: { Args: { p_node: number; p_uid: string }; Returns: Json }
+      exam_target: {
+        Args: { p_node: number; p_uid: string }
+        Returns: {
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          depth: number
+          description_md: string
+          end_date: string
+          id: number
+          label: string | null
+          owner_id: string | null
+          parent_id: number | null
+          room_id: number
+          round_id: number | null
+          sort_order: number
+          start_date: string
+          task_type: string | null
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "goal_nodes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      exam_unpublish: {
+        Args: { p_node: number; p_slug: string }
+        Returns: Json
+      }
+      exam_validate: { Args: { p_exam: Json }; Returns: Json }
+      exam_view: {
+        Args: { p_for: string; p_node: number; p_uid: string }
+        Returns: Json
+      }
+      exam_viewer_member: {
+        Args: { p_uid: string; r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: boolean
+      }
       fail: {
         Args: { p_code: string; p_detail: string; p_hint?: Json }
         Returns: undefined
@@ -1045,6 +1820,14 @@ export type Database = {
         Args: { p_file: Database["public"]["Tables"]["files"]["Row"] }
         Returns: Json
       }
+      file_orphan_candidates: {
+        Args: { p_limit: number }
+        Returns: {
+          bucket_id: string
+          object_path: string
+        }[]
+      }
+      file_orphan_grace: { Args: never; Returns: string }
       file_purge_candidates: {
         Args: { p_limit: number }
         Returns: {
@@ -1064,14 +1847,35 @@ export type Database = {
         }
         Returns: Json
       }
+      invite_bypass_ok: {
+        Args: {
+          i: Database["public"]["Tables"]["room_invites"]["Row"]
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: boolean
+      }
+      invite_bypass_set: {
+        Args: { p_max?: number; p_slug: string; p_until: string }
+        Returns: Json
+      }
       invite_check: {
         Args: { p_room: number; p_token: string }
         Returns: boolean
       }
+      invite_code_lookup: { Args: { p_code: string }; Returns: Json }
+      invite_code_new: { Args: never; Returns: string }
+      invite_code_norm: { Args: { p: string }; Returns: string }
       invite_ensure: { Args: { p_by: string; p_room: number }; Returns: string }
       invite_get: { Args: { p_slug: string }; Returns: Json }
       invite_join: {
         Args: { p_message?: string; p_token: string }
+        Returns: Json
+      }
+      invite_json: {
+        Args: {
+          i: Database["public"]["Tables"]["room_invites"]["Row"]
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
         Returns: Json
       }
       invite_preview: { Args: { p_token: string }; Returns: Json }
@@ -1092,6 +1896,7 @@ export type Database = {
           max_members: number
           member_count: number
           min_members: number | null
+          recruit_until: string | null
           rules_md: string
           slug: string
           start_date: string
@@ -1143,6 +1948,7 @@ export type Database = {
           max_members: number
           member_count: number
           min_members: number | null
+          recruit_until: string | null
           rules_md: string
           slug: string
           start_date: string
@@ -1261,6 +2067,7 @@ export type Database = {
           max_members: number
           member_count: number
           min_members: number | null
+          recruit_until: string | null
           rules_md: string
           slug: string
           start_date: string
@@ -1289,6 +2096,21 @@ export type Database = {
           p_title?: string
         }
         Returns: Json
+      }
+      node_create_core: {
+        Args: {
+          p_description_md: string
+          p_end_date: string
+          p_index: number
+          p_label: string
+          p_parent_id: number
+          p_start_date: string
+          p_task_type: string
+          p_title: string
+          p_uid: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: number
       }
       node_delete: {
         Args: { p_node_id: number; p_slug: string }
@@ -1418,6 +2240,87 @@ export type Database = {
         Args: { p_node_id: number; p_patch: Json; p_slug: string }
         Returns: Json
       }
+      notice_assert_editable: {
+        Args: { r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: undefined
+      }
+      notice_assert_limit: {
+        Args: { p_except?: number; p_kind: string; p_room: number }
+        Returns: undefined
+      }
+      notice_create: { Args: { p_input: Json; p_slug: string }; Returns: Json }
+      notice_delete: {
+        Args: { p_id: number; p_slug: string }
+        Returns: undefined
+      }
+      notice_inbox: { Args: { p_slug: string }; Returns: Json }
+      notice_json: {
+        Args: {
+          n: Database["public"]["Tables"]["room_notices"]["Row"]
+          p_viewer: string
+        }
+        Returns: Json
+      }
+      notice_limits: { Args: never; Returns: Json }
+      notice_list: { Args: { p_slug: string }; Returns: Json }
+      notice_mark_read: {
+        Args: { p_notice: number; p_user: string }
+        Returns: undefined
+      }
+      notice_notify: {
+        Args: {
+          n: Database["public"]["Tables"]["room_notices"]["Row"]
+          p_actor: string
+        }
+        Returns: number
+      }
+      notice_read: { Args: { p_ids: number[]; p_slug: string }; Returns: Json }
+      notice_reader_room: {
+        Args: { p_slug: string }
+        Returns: {
+          archived_at: string | null
+          cover_file_id: string | null
+          created_at: string
+          description_md: string
+          end_date: string
+          ended_at: string | null
+          id: number
+          intro: string
+          join_mode: string
+          leader_does_tasks: boolean
+          leader_id: string
+          max_members: number
+          member_count: number
+          min_members: number | null
+          recruit_until: string | null
+          rules_md: string
+          slug: string
+          start_date: string
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+          visibility: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rooms"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notice_unread: {
+        Args: { p_room: number; p_viewer: string }
+        Returns: boolean
+      }
+      notice_update: {
+        Args: { p_id: number; p_patch: Json; p_slug: string }
+        Returns: Json
+      }
+      notice_validate: {
+        Args: { p_in: Json; p_keys: string[]; p_partial: boolean }
+        Returns: undefined
+      }
       notification_json: {
         Args: { p_n: Database["public"]["Tables"]["notifications"]["Row"] }
         Returns: Json
@@ -1465,6 +2368,12 @@ export type Database = {
         }
         Returns: Json
       }
+      pat_create: {
+        Args: { p_days?: number; p_name: string; p_scopes: string[] }
+        Returns: Json
+      }
+      pat_list: { Args: never; Returns: Json }
+      pat_revoke: { Args: { p_id: string }; Returns: Json }
       patch_bool: { Args: { p_key: string; p_patch: Json }; Returns: boolean }
       patch_date: { Args: { p_key: string; p_patch: Json }; Returns: string }
       patch_int: { Args: { p_key: string; p_patch: Json }; Returns: number }
@@ -1502,8 +2411,16 @@ export type Database = {
         }
         Returns: Json
       }
+      personal_create_many: {
+        Args: { p_goals: Json; p_round: Json; p_slug: string }
+        Returns: Json
+      }
       personal_delete: {
         Args: { p_node_id: number; p_slug: string }
+        Returns: Json
+      }
+      personal_delete_many: {
+        Args: { p_ids: Json; p_slug: string }
         Returns: Json
       }
       personal_eligible: {
@@ -1556,6 +2473,7 @@ export type Database = {
           max_members: number
           member_count: number
           min_members: number | null
+          recruit_until: string | null
           rules_md: string
           slug: string
           start_date: string
@@ -1608,6 +2526,106 @@ export type Database = {
         Args: { p_room: number; p_uid: string }
         Returns: boolean
       }
+      plan_assignees: { Args: { p_members: Json; p_val: Json }; Returns: Json }
+      plan_changes: {
+        Args: {
+          a: Database["public"]["Tables"]["goal_nodes"]["Row"]
+          b: Database["public"]["Tables"]["goal_nodes"]["Row"]
+          p_set: Json
+        }
+        Returns: Json
+      }
+      plan_clip: { Args: { p: string }; Returns: string }
+      plan_collapse_notifications: {
+        Args: {
+          p_actor: string
+          p_after_id: number
+          p_created: number[]
+          p_room: number
+        }
+        Returns: Json
+      }
+      plan_date_try: { Args: { p: string }; Returns: string }
+      plan_err: {
+        Args: {
+          p_code: string
+          p_field?: string
+          p_message: string
+          p_path: string
+        }
+        Returns: Json
+      }
+      plan_flatten: {
+        Args: { p_plan: Json }
+        Returns: {
+          has_children: boolean
+          op: Json
+          parent_path: string
+          path: string
+          seq: number
+        }[]
+      }
+      plan_jsonb_union: { Args: { a: Json; b: Json }; Returns: Json }
+      plan_kind: {
+        Args: { n: Database["public"]["Tables"]["goal_nodes"]["Row"] }
+        Returns: string
+      }
+      plan_map_paths: { Args: { p_items: Json; p_map: Json }; Returns: Json }
+      plan_nicks: { Args: { p_node: number }; Returns: Json }
+      plan_resolve: {
+        Args: { p_plan: Json; r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: Json
+      }
+      plan_resolve_node: {
+        Args: {
+          p_depth: number
+          p_members: Json
+          p_node: Json
+          p_path: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: Json
+      }
+      plan_round_pick: {
+        Args: { p_sel: Json; r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: Json
+      }
+      plan_run: {
+        Args: {
+          p_dry: boolean
+          p_plan: Json
+          p_uid: string
+          p_warn: Json
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: Json
+      }
+      plan_runtime_err: {
+        Args: {
+          p_code: string
+          p_detail: string
+          p_hint: string
+          p_path: string
+          p_state: string
+        }
+        Returns: Json
+      }
+      plan_shape_check: { Args: { p_plan: Json }; Returns: Json }
+      plan_undo_check: { Args: { p_changes: Json }; Returns: Json }
+      plan_undo_run: {
+        Args: {
+          p_changes: Json
+          p_dry: boolean
+          p_uid: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: Json
+      }
+      plan_validate: {
+        Args: { p_plan: Json; r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: Json
+      }
+      plan_warn_text: { Args: { p_code: string }; Returns: string }
       require_curriculum_editor: {
         Args: { p_uid: string; r: Database["public"]["Tables"]["rooms"]["Row"] }
         Returns: undefined
@@ -1660,6 +2678,7 @@ export type Database = {
         Returns: {
           applied_at: string | null
           apply_message: string | null
+          assign_from: string | null
           can_edit_curriculum: boolean
           created_at: string
           decided_at: string | null
@@ -1687,6 +2706,24 @@ export type Database = {
         Args: { p_room: number; p_uid: string }
         Returns: Json
       }
+      room_extra_recruit_auto_expire: {
+        Args: { p_room: number }
+        Returns: boolean
+      }
+      room_extra_recruit_close: { Args: { p_slug: string }; Returns: Json }
+      room_extra_recruit_expire: {
+        Args: { p_actor: string; p_room: number }
+        Returns: undefined
+      }
+      room_extra_recruit_open: {
+        Args: {
+          p_join_mode?: string
+          p_max_members?: number
+          p_slug: string
+          p_until: string
+        }
+        Returns: Json
+      }
       room_get: {
         Args: { p_invite_token?: string; p_slug: string }
         Returns: Json
@@ -1707,6 +2744,10 @@ export type Database = {
         Args: { p_invite_token?: string; p_slug: string }
         Returns: Json
       }
+      room_join_by_invite: {
+        Args: { p_slug: string; p_token: string }
+        Returns: Json
+      }
       room_join_precheck: {
         Args: {
           p_mode: string
@@ -1717,6 +2758,7 @@ export type Database = {
         Returns: {
           applied_at: string | null
           apply_message: string | null
+          assign_from: string | null
           can_edit_curriculum: boolean
           created_at: string
           decided_at: string | null
@@ -1773,6 +2815,7 @@ export type Database = {
           max_members: number
           member_count: number
           min_members: number | null
+          recruit_until: string | null
           rules_md: string
           slug: string
           start_date: string
@@ -1799,6 +2842,14 @@ export type Database = {
         Returns: boolean
       }
       room_me_json: { Args: { p_room: number; p_uid: string }; Returns: Json }
+      room_member_activate: {
+        Args: {
+          p_uid: string
+          p_via: string
+          r: Database["public"]["Tables"]["rooms"]["Row"]
+        }
+        Returns: undefined
+      }
       room_members_get: { Args: { p_slug: string }; Returns: Json }
       room_members_json: {
         Args: { p_room: number; p_uid: string }
@@ -1821,6 +2872,14 @@ export type Database = {
       room_readable: {
         Args: { p_room: number; p_token?: string; p_uid: string }
         Returns: boolean
+      }
+      room_recruit_open: {
+        Args: { r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: boolean
+      }
+      room_recruit_until: {
+        Args: { r: Database["public"]["Tables"]["rooms"]["Row"] }
+        Returns: string
       }
       room_reject: { Args: { p_slug: string; p_user: string }; Returns: Json }
       room_release_seat: { Args: { p_room: number }; Returns: undefined }

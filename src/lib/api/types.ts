@@ -349,6 +349,8 @@ export const NOTIFICATION_KINDS = [
   "CURRICULUM_BULK_UPDATED",
   // 0037
   "EXAM_PUBLISHED",
+  // 0040
+  "NOTICE_POSTED",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export type NotificationDto = {
@@ -433,3 +435,27 @@ export type ExamResults = {
   questions: { id: string; ord: number; type: ExamQType; points: number; correctRate: number | null }[];
   members: (Person & { status: TaskStatus; score: number | null; submittedAt: string | null; isLate: boolean | null })[];
 };
+
+/* ---------- 공지 (0040_room_notices.sql) ---------- */
+/** read = 보는 사람이 현재 리비전을 확인했는지("다시 알리기" 뒤엔 false). edited = 제목·본문이 작성 1분 뒤 바뀜(고정·팝업 토글 제외) */
+export type Notice = {
+  id: string;
+  title: string;
+  bodyMd: string;
+  popup: boolean;
+  pinned: boolean;
+  /** 탈퇴 등으로 프로필이 지워지면 null */
+  author: Person | null;
+  createdAt: string;
+  updatedAt: string;
+  edited: boolean;
+  read: boolean;
+};
+export type NoticeCounts = { total: number; pinned: number; popup: number };
+/** notice_list — items 는 고정 → 최신순. canWrite = 그룹장 ∧ 준비·모집·진행중 ∧ 비보관 */
+export type NoticeList = { items: Notice[]; canWrite: boolean; limits: NoticeCounts; counts: NoticeCounts };
+/** notice_inbox — popups 는 고정 → 오래된 순 최대 5개(ACTIVE 멤버·종료/보관 아닌 방만, 그룹장은 항상 []) */
+export type NoticeInbox = { unread: boolean; popups: Notice[] };
+export type NoticeInput = { title: string; bodyMd: string; popup?: boolean; pinned?: boolean };
+/** renotify=true → 팝업을 켜고 멤버에게 다시 띄움 + 벨 재발행 */
+export type NoticePatch = Partial<NoticeInput> & { renotify?: boolean };
