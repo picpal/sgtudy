@@ -7,6 +7,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // 정적 자원·이미지·파비콘 제외, 나머지 전부(세션 갱신은 모든 페이지에서 필요)
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
+  // 정적 자원·이미지·파비콘 제외, 나머지 전부(세션 갱신은 모든 페이지에서 필요).
+  // api/mcp 는 쿠키 세션을 쓰지 않는다(PAT) — 매 호출 getClaims 왕복 제거
+  matcher: ["/((?!api/mcp|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
 };
