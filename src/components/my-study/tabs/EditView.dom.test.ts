@@ -135,6 +135,41 @@ describe("EditView 첨부 파일", () => {
     expect(went).toEqual([{ sel: null }]);
   });
 
+  // 주소창 이동·새로고침·탭 닫기는 앱 안 확인을 거치지 않는다 — 브라우저 확인(beforeunload)이 첨부 미저장도 덮어야 한다
+  const unloadBlocked = () => {
+    const e = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(e);
+    return e.defaultPrevented;
+  };
+
+  it("beforeunload — 고친 것이 없으면 묻지 않는다", async () => {
+    await mount(leaf);
+    expect(unloadBlocked()).toBe(false);
+  });
+
+  it("beforeunload — 올리는 중인 첨부가 있으면 묻는다", async () => {
+    m.upload.mockReturnValue(new Promise(() => {}));
+    await mount(leaf);
+    await pick("a.pdf");
+    expect(unloadBlocked()).toBe(true);
+  });
+
+  it("beforeunload — 올렸지만 저장하지 않은 첨부가 있으면 묻는다", async () => {
+    m.upload.mockResolvedValue(undefined);
+    m.register.mockResolvedValue(meta("new1"));
+    await mount(leaf);
+    await pick("new1.pdf");
+    expect(live.S.uploading).toBeNull();
+    expect(unloadBlocked()).toBe(true);
+  });
+
+  it("beforeunload — 붙은 첨부를 빼고 저장하지 않았으면 묻는다", async () => {
+    await mount(leaf);
+    act(() => button("빼기").click());
+    expect(live.S.ov.files["21"]).toEqual([]);
+    expect(unloadBlocked()).toBe(true);
+  });
+
   it("저장 — api.save 에 onFiles 를 넘긴다", async () => {
     m.upload.mockResolvedValue(undefined);
     m.register.mockResolvedValue(meta("new1"));
