@@ -20,21 +20,24 @@ describe("roomMoreItems — 방 상세 더보기 (링크 복사는 옆 공유 �
 });
 
 describe("studyMoreItems — 내 스터디 더보기", () => {
-  it("방 정보 보기 없음 — 그룹장은 방 설정, 모집 기간 참가자는 참가 취소, 승인 대기는 신청 취소, 그 밖엔 메뉴 없음", () => {
-    expect(studyMoreItems("owner")).toEqual(["settings"]);
-    expect(studyMoreItems("joined")).toEqual([]);
-    expect(studyMoreItems("closed")).toEqual([]);
-    expect(studyMoreItems("leave")).toEqual(["leave"]);
-    expect(studyMoreItems("pending")).toEqual(["cancel"]);
+  it("맨 앞은 늘 방 정보 — 그룹장은 방 설정, 모집 기간 참가자는 참가 취소, 승인 대기는 신청 취소", () => {
+    expect(studyMoreItems("owner")).toEqual(["roomInfo", "settings"]);
+    expect(studyMoreItems("joined")).toEqual(["roomInfo"]);
+    expect(studyMoreItems("closed")).toEqual(["roomInfo"]);
+    expect(studyMoreItems("leave")).toEqual(["roomInfo", "leave"]);
+    expect(studyMoreItems("pending")).toEqual(["roomInfo", "cancel"]);
+  });
+  it("방 정보는 공개 방 화면 링크", () => {
+    expect(menuItemsOf(["roomInfo"], "aws", () => {})).toEqual([{ key: "roomInfo", label: "방 정보", href: "/rooms/aws" }]);
   });
 });
 
 // 시나리오 QA D3 (#4 — 은지가 더보기에서 나가기를 찾았다): 진행 중 참가자는 더보기에서도 탈퇴 요청·요청 취소
 describe("studyMoreItems — 진행 중 탈퇴 요청", () => {
   it("참가 중이면 탈퇴 요청, 요청 중이면 요청 취소", () => {
-    expect(studyMoreItems("joined", { canRequestLeave: true })).toEqual(["leaveRequest"]);
-    expect(studyMoreItems("joined", { canRequestLeave: true, leaveRequested: true })).toEqual(["leaveRequestCancel"]);
-    expect(studyMoreItems("closed", { canRequestLeave: false })).toEqual([]);
+    expect(studyMoreItems("joined", { canRequestLeave: true })).toEqual(["roomInfo", "leaveRequest"]);
+    expect(studyMoreItems("joined", { canRequestLeave: true, leaveRequested: true })).toEqual(["roomInfo", "leaveRequestCancel"]);
+    expect(studyMoreItems("closed", { canRequestLeave: false })).toEqual(["roomInfo"]);
   });
   it("메뉴 항목 — 탈퇴 요청은 위험 동작, 요청 취소는 일반", () => {
     const picked: string[] = [];
