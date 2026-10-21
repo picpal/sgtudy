@@ -75,12 +75,18 @@ describe("NoticePopup", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
-  it("Esc·X·[나중에 보기] — 읽음 처리 없이 남은 큐를 이번 세션만 숨긴다", () => {
+  it("Esc·X·[나중에 보기] — 읽음 처리 없이 지금 장만 이번 세션 숨기고 다음 장으로, 남은 게 없으면 닫는다", () => {
     for (const how of ["esc", "x", "later"] as const) {
-      const { render } = mount([N("1"), N("2")]);
-      if (how === "esc") key("Escape");
-      else act(() => btn(how === "x" ? "닫기" : "나중에 보기").click());
+      const defer = () => (how === "esc" ? key("Escape") : act(() => btn(how === "x" ? "닫기" : "나중에 보기").click()));
+      const { render, opener } = mount([N("1"), N("2")]);
+      defer();
+      expect(dialog()?.textContent, how).toContain("규칙 2");
+      expect(dialog()!.textContent).toContain("2/2");
+      expect(document.activeElement?.textContent).toBe("규칙 2");
+      expect(JSON.parse(window.sessionStorage.getItem(laterKey("aws"))!)).toEqual(["1:1"]);
+      defer();
       expect(dialog(), how).toBeNull();
+      expect(document.activeElement).toBe(opener);
       expect(api.markNoticesRead).not.toHaveBeenCalled();
       expect(JSON.parse(window.sessionStorage.getItem(laterKey("aws"))!)).toEqual(["1:1", "2:1"]);
       // 같은 세션에서 다시 들어와도(새 inbox) 그 공지는 뜨지 않고, 새 공지만
@@ -91,6 +97,19 @@ describe("NoticePopup", () => {
       document.body.innerHTML = "";
       window.sessionStorage.clear();
     }
+  });
+
+  it("[나중에] 로 넘긴 장 뒤에 [확인] — 확인한 것만 읽음, 넘긴 것은 세션 숨김으로 남는다", async () => {
+    api.markNoticesRead.mockResolvedValue({ unread: true });
+    const { render } = mount([N("1"), N("2"), N("3")]);
+    act(() => btn("나중에 보기").click());
+    expect(dialog()!.textContent).toContain("2/3");
+    await act(async () => btn("확인").click());
+    expect(api.markNoticesRead).toHaveBeenLastCalledWith("aws", ["2"], [1]);
+    expect(dialog()!.textContent).toContain("3/3");
+    render([N("1"), N("3")], false);   // 새 inbox — 넘긴 1 은 이번 세션에 다시 뜨지 않는다
+    expect(dialog()?.textContent).toContain("규칙 3");
+    expect(dialog()!.textContent).not.toMatch(/\d\/\d/);
   });
 
   it("본 리비전을 보낸다 · 나중에 넘긴 공지도 다시 알리기(rev+1)면 다시 뜬다", async () => {

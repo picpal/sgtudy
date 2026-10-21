@@ -37,10 +37,10 @@ type Props = {
 
 /**
  * 방 진입 공지 팝업 (스펙 §6.4) — 흐린 배경 위 대화상자(모바일은 아래 시트), 여러 개면 1/N 순서대로.
- * [확인] = 읽음(notice_read, 다시 안 뜸) · Esc·X·[나중에] = 이번 세션만 숨김 · 배경 클릭은 무반응.
+ * [확인] = 읽음(notice_read, 다시 안 뜸) · Esc·X·[나중에] = 지금 장만 이번 세션 숨기고 다음 장 · 배경 클릭은 무반응.
  */
 export function NoticePopup({ slug, popups, hold, onAck }: Props) {
-  // 처음 받은 큐에서 이번 세션에 넘긴 것은 뺀다. 확인한 것은 앞에서 하나씩 지운다
+  // 처음 받은 큐에서 이번 세션에 넘긴 것은 뺀다. 확인·나중에 한 것은 앞에서 하나씩 지운다
   const [queue, setQueue] = useState<Notice[]>([]);
   const [total, setTotal] = useState(0);
   const [seen, setSeen] = useState<Notice[] | null>(null);
@@ -82,10 +82,11 @@ export function NoticePopup({ slug, popups, hold, onAck }: Props) {
     if (cur) titleRef.current?.focus({ preventScroll: true });
   }, [cur]);
 
+  // 지금 장만 넘기고 다음 장으로 — 남은 게 없으면 닫힌다
   const later = () => {
-    if (busy) return;
-    writeLater(slug, queue.map(laterId));
-    setQueue([]);
+    if (busy || !cur) return;
+    writeLater(slug, [laterId(cur)]);
+    setQueue((q) => q.filter((n) => n.id !== cur.id));
     setErr(false);
   };
   useEffect(() => {

@@ -137,7 +137,7 @@ revoke all on public.room_notices, public.room_notice_reads from anon, authentic
 - 구조: 오버레이 `fixed inset-0 z-50 bg-[rgba(27,34,48,.45)] backdrop-blur-sm` + 박스 `role="dialog" aria-modal="true" aria-labelledby aria-describedby`, 최대 폭 560, 본문 `max-h-[60vh] overflow-y-auto`.
 - 헤더: "공지" 라벨 · `1/3` · 제목 · 작성자·날짜. 본문 `MarkdownView`. 하단 `[나중에 보기]`(보조) `[확인]`(주).
 - [확인] → `notice_read([id])` → 다음 장 / 마지막이면 닫기. 실패 시 Toast "확인 처리에 실패했어요. 다시 시도해 주세요" + 닫지 않음.
-- Esc·X·[나중에 보기] → 남은 큐 전부 이번 세션 숨김(D7). 배경 클릭 무반응.
+- Esc·X·[나중에 보기] → 지금 장만 이번 세션 숨기고 다음 장으로, 남은 게 없으면 닫힘(D7, `id:rev` — 2026-10-21 후속에서 큐 전부 → 한 장씩으로 바꿈). 배경 클릭 무반응.
 - 접근성: 열릴 때 포커스 = 제목(`tabIndex=-1`) — 긴 본문을 스크린리더가 처음부터 읽게. 포커스 트랩은 `ConfirmDialog` 의 `onTrapKey` 를 `useFocusTrap` 훅으로 추출해 공용(링크·버튼 포함 선택자). 열린 동안 `document.body` 스크롤 잠금 + 배경 `inert`. 닫히면 진입 전 포커스로 반환. 등장 애니메이션은 `motion-safe:` 접두로만(`prefers-reduced-motion` 존중).
 
 ### 6.5 모바일
