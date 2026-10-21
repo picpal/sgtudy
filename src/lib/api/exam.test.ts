@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "./errors";
 import {
-  fetchExam, fetchExamAttempt, fetchExamResults, parseExamJson, publishExam, putExam, putExamBrief, saveExamAnswer, submitExam, toContract, toDraft, validateDraft,
+  examNorm, fetchExam, fetchExamAttempt, fetchExamResults, parseExamJson, publishExam, putExam, putExamBrief, saveExamAnswer, submitExam, toContract, toDraft, validateDraft,
   type ExamDraft, type ExamDraftQuestion,
 } from "./exam";
 import type { ExamView } from "./types";
@@ -56,7 +56,16 @@ describe("toContract", () => {
     expect(c.questions[0]).toEqual({ type: "single", prompt: "IAM?", choices: ["a", "b", "c"], answer: 1, explanation: "", points: 1 });
     expect(c.questions[1]).toMatchObject({ choices: ["a", "b"], answer: [0, 1] });
     expect(c.questions[2]).not.toHaveProperty("choices");
-    expect(c.questions[3]).toEqual({ type: "short", prompt: "s", answer: ["IGW"], explanation: "", points: 1 });
+    expect(c.questions[3]).toEqual({ type: "short", prompt: "s", answer: ["  IGW "], explanation: "", points: 1 });
+  });
+  it("round-trips a loaded exam byte-identically (잠금 뒤 같은 구조 재저장 = exam_struct_key 동일)", () => {
+    const qs = [
+      { id: "1", ord: 0, type: "short" as const, prompt: "p", choices: null, points: 1, answer: [" IGW ", "Internet Gateway"], explanation: "e" },
+      { id: "2", ord: 1, type: "single" as const, prompt: "q", choices: [" a ", "b"], points: 2, answer: 1, explanation: "" },
+    ];
+    const v = { exam: { status: "published", reveal: "after_submit", publishedAt: null, closed: false }, questions: qs } as unknown as ExamView;
+    const key = (xs: unknown[]) => JSON.stringify(xs.map((q) => { const o = q as Record<string, unknown>; return [o.type, o.choices ?? null, o.answer, o.points]; }));
+    expect(key(toContract(toDraft(v)).questions)).toBe(key(qs));
   });
 });
 
@@ -79,6 +88,15 @@ describe("toDraft", () => {
   it("no answer key (not editor) → empty draft", () => {
     expect(toDraft(view([{ id: "1", ord: 0, type: "single", prompt: "s", choices: ["a", "b"], points: 1 }])).questions).toEqual([]);
     expect(toDraft(view(null)).questions).toEqual([]);
+  });
+});
+
+describe("examNorm ≈ SQL exam_norm", () => {
+  it("strips ASCII and Unicode punctuation/symbols, collapses spaces", () => {
+    expect(examNorm("  IGW . ")).toBe("igw");
+    expect(examNorm("인터넷·게이트웨이")).toBe("인터넷게이트웨이");
+    expect(examNorm("“Internet”  Gateway…")).toBe("internet gateway");
+    expect(examNorm("₩1,000 + 2")).toBe("1000 2");
   });
 });
 

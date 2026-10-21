@@ -144,6 +144,7 @@ describe("misc", () => {
     expect(examErrorAction({ code: "EXAM_CLOSED", message: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요" })).toEqual({ kind: "refetch", text: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요" });
     expect(examErrorAction({ code: "VALIDATION_FAILED", message: "보기는 2~8개예요", details: { field: "choices", index: 2 as unknown as string } })).toEqual({ kind: "field", field: "choices", index: 2, text: "보기는 2~8개예요" });
     expect(examErrorAction({ code: "EXAM_EMPTY", message: "EXAM_EMPTY" })).toEqual({ kind: "toast", text: "문항을 하나 이상 넣어야 발행할 수 있어요" });
+    expect(examErrorAction({ code: "NOT_FOUND", message: "문항을 찾을 수 없어요" }).kind).toBe("refetch");
     expect(examErrorAction({ code: "UNKNOWN", message: "fetch failed" }).kind).toBe("toast");
     expect(examErrorAction({ code: "AUTH_REQUIRED", message: "로그인" }).kind).toBe("login");
   });

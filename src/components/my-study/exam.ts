@@ -195,9 +195,9 @@ export type ExamErrorAction =
   | { kind: "login"; text: string }
   | { kind: "toast"; text: string };
 
-/** 상태가 바뀌어 화면을 다시 불러와야 하는 코드(발행 취소·마감·제출됨·담당 해제·보관 등) */
+/** 상태가 바뀌어 화면을 다시 불러와야 하는 코드(발행 취소·마감·제출됨·담당 해제·보관·문항 교체 NOT_FOUND 등) */
 const EXAM_REFETCH = new Set([
-  "EXAM_NOT_FOUND", "EXAM_NOT_PUBLISHED", "EXAM_CLOSED", "EXAM_ALREADY_SUBMITTED", "EXAM_LOCKED", "EXAM_PUBLISHED",
+  "EXAM_NOT_FOUND", "NOT_FOUND", "EXAM_NOT_PUBLISHED", "EXAM_CLOSED", "EXAM_ALREADY_SUBMITTED", "EXAM_LOCKED", "EXAM_PUBLISHED",
   "TASK_NOT_ASSIGNED", "TASK_ARCHIVED", "PARENT_ARCHIVED", "ROOM_NOT_ACTIVE", "TASK_NOT_STARTED", "NODE_NOT_FOUND",
 ]);
 

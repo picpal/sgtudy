@@ -47,21 +47,25 @@ export function toDraft(v: ExamView): ExamDraft {
   };
 }
 
-/** 초안 → sgtudy.exam/v1 (서버 exam_validate 입력). single/multi 만 choices, short 허용 답은 trim·빈 값 제거 */
+/** 초안 → sgtudy.exam/v1 (서버 exam_validate 입력). single/multi 만 choices, short 허용 답은 빈 칸만 제거(원문 유지) */
 export function toContract(d: ExamDraft): { reveal: ExamReveal; questions: unknown[] } {
   return {
     reveal: d.reveal,
     questions: d.questions.map((q) => {
-      const answer = q.type === "short" && Array.isArray(q.answer) ? (q.answer as string[]).map((a) => a.trim()).filter((a) => a !== "") : q.answer;
+      // 서버는 허용 답을 그대로 저장하고 잠금 비교(exam_struct_key)도 원문이다 → 다듬지 않고 빈 칸(편집 자리)만 뺀다
+      const answer = q.type === "short" && Array.isArray(q.answer) ? (q.answer as string[]).filter((a) => a.trim() !== "") : q.answer;
       const base = { type: q.type, prompt: q.prompt, answer, explanation: q.explanation, points: q.points };
       return hasChoices(q.type) ? { ...base, choices: q.choices } : base;
     }),
   };
 }
 
-/** 서버 exam_norm 근사: NFC·소문자·앞뒤 공백·구두점 제거·연속 공백 1칸 (클라이언트 사전 검사용) */
+/**
+ * 서버 exam_norm 근사: NFC·소문자·앞뒤 공백·구두점 제거·연속 공백 1칸 (클라이언트 사전 검사용).
+ * PG 의 UTF-8 [[:punct:]] = iswpunct(그래픽 ∧ 영숫자 아님) → 유니코드 구두점(P)·기호(S) 전부("·" "₩" "+" 포함)
+ */
 export const examNorm = (s: string) =>
-  s.normalize("NFC").trim().toLowerCase().replace(/[!-/:-@[-`{-~]/g, "").replace(/\s+/g, " ").trim();
+  s.normalize("NFC").trim().toLowerCase().replace(/[\p{P}\p{S}]/gu, "").replace(/\s+/g, " ").trim();
 
 const isInt = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x);
 
@@ -91,7 +95,7 @@ export function validateDraft(d: ExamDraft): { index: number; field: string; mes
     } else {
       const xs = Array.isArray(a) ? a.filter((x) => typeof x !== "string" || x.trim() !== "") : null;
       if (!xs || xs.length < 1 || xs.length > EXAM_LIMITS.shortAnswers) return bad("answer", "단답 정답은 허용 답 1~10개예요");
-      if (xs.some((x) => typeof x !== "string" || examNorm(x).length < 1 || x.trim().length > EXAM_LIMITS.shortAnswer)) return bad("answer", "허용 답은 1~200자예요");
+      if (xs.some((x) => typeof x !== "string" || examNorm(x).length < 1 || x.length > EXAM_LIMITS.shortAnswer)) return bad("answer", "허용 답은 1~200자예요");
     }
   }
   return null;
