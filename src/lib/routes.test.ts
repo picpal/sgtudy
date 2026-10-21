@@ -64,6 +64,8 @@ describe("roomSettings from · settingsBackOf", () => {
     expect(routes.roomSettings("aws", "/my-study/aws?tab=board")).toBe("/rooms/aws/settings?from=%2Fmy-study%2Faws%3Ftab%3Dboard");
     expect(routes.myStudyTab("aws", "overview")).toBe("/my-study/aws");
     expect(routes.myStudyTab("aws", "board")).toBe("/my-study/aws?tab=board");
+    expect(routes.myStudyTab("aws", "notice")).toBe("/my-study/aws?tab=notice");
+    expect(MY_STUDY_TABS.slice(0, 2)).toEqual(["overview", "notice"]);
   });
   it("같은 사이트 경로(방 보기·내 스터디)는 그대로 돌려준다", () => {
     expect(settingsBackOf("/rooms/aws", "aws")).toBe("/rooms/aws");

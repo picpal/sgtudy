@@ -47,6 +47,12 @@ export type ScreenState = {
   examDirty: string | null;
   /** 개인 목표 편집 폼에 저장하지 않은 수정·올리는 중인 파일이 있는 목표 id — 보기 모드라 ov 에 없다. 탭·뒤로 가기 전에 묻는다 (DetailView 가 맞춘다) */
   personalUnsaved: string | null;
+  /** 공지 탭에 펼친 공지 id (아코디언, D14) */
+  noticeOpen: string | null;
+  /** 공지 탭 인라인 작성 폼 — "new" = 새 공지, 그 밖은 고치는 공지 id (D18) */
+  noticeEdit: { id: string } | null;
+  /** 공지 작성 폼에 저장하지 않은 글이 있다 — 탭·헤더 메뉴로 떠나기 전에 묻는다 (NoticeTab 이 맞춘다) */
+  noticeUnsaved: boolean;
   saved: string;
   ov: Overrides;
   bMode: BoardMode;
@@ -79,6 +85,9 @@ export const INITIAL_STATE: ScreenState = {
   uploading: null,
   examDirty: null,
   personalUnsaved: null,
+  noticeOpen: null,
+  noticeEdit: null,
+  noticeUnsaved: false,
   saved: "",
   ov: EMPTY_OVERRIDES,
   bMode: "mine",
@@ -130,11 +139,15 @@ export const toggleOthersPatch = (p: ScreenState): Partial<ScreenState> => ({ ot
 export const editUnsaved = (S: Pick<ScreenState, "ov" | "uploading" | "examDirty">, id: string | null): boolean =>
   isDirty(S.ov, id) || (!!id && (S.uploading === id || S.examDirty === id));
 
-/** 진행목표 편집 화면에 저장하지 않은 수정이 열려 있다 — 탭·헤더 메뉴·뒤로 가기로 떠나기 전에 묻는다 (Q2-1) */
+/** 진행목표 편집 화면(·공지 작성 폼)에 저장하지 않은 수정이 열려 있다 — 탭·헤더 메뉴·뒤로 가기로 떠나기 전에 묻는다 (Q2-1) */
 export const blocksLeave = (S: ScreenState, canEdit: boolean): boolean =>
-  S.tab === "curriculum" && (S.personalUnsaved !== null || (canEdit && S.curMode === "edit" && editUnsaved(S, S.editSel)));
+  (S.tab === "notice" && S.noticeUnsaved) ||
+  (S.tab === "curriculum" && (S.personalUnsaved !== null || (canEdit && S.curMode === "edit" && editUnsaved(S, S.editSel))));
 
 /** 방 탭 누름 — 미저장 수정이 있으면 탭은 그대로 두고 목적지를 보류(편집 화면의 "저장하지 않은 수정이 있어요" 확인).
  *  진행목표로 돌아와 남아 있던 상세가 다시 열리면 그 기록은 지금 탭 위에 쌓인다 → 연 곳도 지금 탭 */
+/*  공지 탭을 떠나면 작성 폼은 닫는다(글은 폼에만 있다 — 깨끗할 때만 여기 온다) */
 export const tabPatch = (S: ScreenState, tab: TabId, canEdit: boolean): Partial<ScreenState> =>
-  tab !== S.tab && blocksLeave(S, canEdit) ? { leave: { tab }, confirm: false } : { tab, calPick: null, ...(tab === "curriculum" && tab !== S.tab ? { viewFrom: S.tab } : {}) };
+  tab !== S.tab && blocksLeave(S, canEdit)
+    ? { leave: { tab }, confirm: false }
+    : { tab, calPick: null, ...(tab === "curriculum" && tab !== S.tab ? { viewFrom: S.tab } : {}), ...(S.tab === "notice" && tab !== "notice" ? { noticeEdit: null, noticeUnsaved: false } : {}) };

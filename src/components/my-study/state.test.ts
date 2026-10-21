@@ -123,3 +123,19 @@ describe("개인 목표 편집 폼 미저장 (personalUnsaved) — 보기 모드
   });
   it("tabPatch — 목적지를 보류", () => expect(tabPatch(S, "board", false)).toEqual({ leave: { tab: "board" }, confirm: false }));
 });
+
+// 공지 탭(0040) — 인라인 작성 폼에 저장하지 않은 글이 있으면 다른 탭·헤더 메뉴로 떠나기 전에 묻는다 (스펙 §6.2 D18)
+describe("공지 작성 폼 미저장 (noticeUnsaved)", () => {
+  const S = { ...INITIAL_STATE, tab: "notice" as const, noticeEdit: { id: "new" }, noticeUnsaved: true };
+  it("blocksLeave — 공지 탭에서만, 권한과 무관", () => {
+    expect(INITIAL_STATE.noticeUnsaved).toBe(false);
+    expect(blocksLeave(S, false)).toBe(true);
+    expect(blocksLeave({ ...S, noticeUnsaved: false }, false)).toBe(false);
+    expect(blocksLeave({ ...S, tab: "board" }, false)).toBe(false);
+  });
+  it("tabPatch — 목적지를 보류, 깨끗하면 옮기며 작성 폼을 닫는다(펼친 공지는 그대로)", () => {
+    expect(tabPatch(S, "board", false)).toEqual({ leave: { tab: "board" }, confirm: false });
+    expect(tabPatch({ ...S, noticeUnsaved: false }, "board", false)).toEqual({ tab: "board", calPick: null, noticeEdit: null, noticeUnsaved: false });
+    expect(tabPatch(S, "notice", false)).toEqual({ tab: "notice", calPick: null });
+  });
+});

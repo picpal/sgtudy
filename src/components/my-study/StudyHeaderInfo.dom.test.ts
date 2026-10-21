@@ -90,3 +90,25 @@ describe("StudyHeaderInfo 방 정보 접기", () => {
     act(() => root.unmount());
   });
 });
+
+// 공지 탭(0040) — 개요 바로 다음. 안 읽은 공지가 있으면 탭 라벨 옆 점(D9) — 숫자 대신 점, 이름으로 읽힌다
+describe("StudyHeaderInfo 공지 탭", () => {
+  const tabs = (host: HTMLElement) => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  it("탭 순서: 개요 · 공지 · 진행목표 …", () => {
+    const { host } = mount();
+    expect(tabs(host).map((b) => b.textContent)).toEqual(["개요", "공지", "진행목표", "보드", "캘린더", "간트"]);
+  });
+  it("안 읽은 공지 → 점 + aria-label, 없으면 점 없음", () => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    const render = (noticeUnread: boolean) => act(() => root.render(createElement(StudyHeaderInfo, { room, tab: "overview", onTab: () => {}, onShare: () => {}, more: [], noticeUnread })));
+    render(true);
+    const t = tabs(host)[1];
+    expect(t.getAttribute("aria-label")).toBe("공지, 안 읽은 공지 있음");
+    expect(t.querySelector("[data-unread-dot]")).not.toBeNull();
+    render(false);
+    expect(tabs(host)[1].getAttribute("aria-label")).toBeNull();
+    expect(tabs(host)[1].querySelector("[data-unread-dot]")).toBeNull();
+    act(() => root.unmount());
+  });
+});

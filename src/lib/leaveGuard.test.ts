@@ -62,6 +62,8 @@ describe("samePage — 내 스터디 화면 key(page.tsx: id·task·tab) 와 같
   it("screenKeyOf 는 page.tsx 규칙 — 모르는 탭은 overview, 숫자 아닌 task 는 빈 값", () => {
     expect(screenKeyOf(new URLSearchParams("tab=gantt&task=7"))).toEqual({ tab: "gantt", task: "" + 7 });
     expect(screenKeyOf({ tab: "x", task: "1a" })).toEqual({ tab: "overview", task: "" });
+    // 공지 알림 링크(?tab=notice) — 탭 목록은 routes.MY_STUDY_TABS 하나
+    expect(screenKeyOf(new URLSearchParams("tab=notice"))).toEqual({ tab: "notice", task: "" });
   });
 });
 

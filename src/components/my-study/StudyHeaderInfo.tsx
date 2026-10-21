@@ -15,6 +15,7 @@ import { RoundIconButton, toneOfName } from "./bits";
 export type TabId = MyStudyTab;
 export const TABS: [TabId, string][] = [
   ["overview", "개요"],
+  ["notice", "공지"],
   ["curriculum", "진행목표"],
   ["board", "보드"],
   ["calendar", "캘린더"],
@@ -86,8 +87,8 @@ const writeMeta = (open: boolean) => {
   window.dispatchEvent(new Event(META_EVENT));
 };
 
-/** onShare: 공개 방 주소 복사 · more: 더보기 메뉴 */
-export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: StudyRoom; tab: TabId; onTab: (t: TabId) => void; onShare: () => void; more: MoreMenuItem[] }) {
+/** onShare: 공개 방 주소 복사 · more: 더보기 메뉴 · noticeUnread: 안 읽은 공지가 있다(공지 탭 점, D9) */
+export function StudyHeaderInfo({ room, tab, onTab, onShare, more, noticeUnread = false }: { room: StudyRoom; tab: TabId; onTab: (t: TabId) => void; onShare: () => void; more: MoreMenuItem[]; noticeUnread?: boolean }) {
   const metaOpen = useSyncExternalStore(subscribeMeta, readMeta, () => false);
   return (
     <>
@@ -188,16 +189,19 @@ export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: Stu
       <div id="my-study-tabs" role="tablist" aria-label="방 상세 탭" className="mt-[26px] scroll-mt-4 max-sm:mt-5 flex gap-1 overflow-x-auto border-y border-line-2 py-[5px]">
         {TABS.map(([id, label]) => {
           const on = tab === id;
+          const dot = id === "notice" && noticeUnread;
           return (
             <button
               key={id}
               type="button"
               role="tab"
               aria-selected={on}
+              aria-label={dot ? `${label}, 안 읽은 공지 있음` : undefined}
               onClick={() => onTab(id)}
-              className={`h-11 shrink-0 rounded-[10px] px-[14px] text-[14px] ${on ? "bg-bg font-semibold text-ink" : "bg-transparent font-medium text-ink-3"}`}
+              className={`relative h-11 shrink-0 rounded-[10px] px-[14px] text-[14px] ${on ? "bg-bg font-semibold text-ink" : "bg-transparent font-medium text-ink-3"}`}
             >
               {label}
+              {dot && <span data-unread-dot aria-hidden="true" className="absolute right-[6px] top-[11px] size-[6px] rounded-full bg-warn" />}
             </button>
           );
         })}

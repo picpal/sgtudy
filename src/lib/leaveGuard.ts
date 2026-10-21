@@ -1,3 +1,5 @@
+import { MY_STUDY_TABS as SCREEN_TABS } from "./routes";
+
 /**
  * 앱 안 링크 이동 가드 (Q2-1) — 진행목표 편집 화면에 저장하지 않은 수정이 있으면 헤더 메뉴·로고·옆 목록 링크의 이동을 보류하고
  * 편집 화면의 "저장하지 않은 수정이 있어요" 확인을 띄운다. 앱 안 링크는 GuardedLink(src/components/ui/GuardedLink)를 쓰고, 그 안에서 guardNavigate 로 묻는다
@@ -20,8 +22,6 @@ export function guardNavigate(href: string, e: { preventDefault: () => void }): 
   if (guard?.(href)) e.preventDefault();
 }
 
-/** 내 스터디 화면 key 의 탭 — app/my-study/[id]/page.tsx 와 같은 목록 */
-const SCREEN_TABS = ["overview", "curriculum", "board", "calendar", "gantt"] as const;
 
 export type ScreenKey = { tab: string; task: string };
 
