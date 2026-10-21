@@ -21,6 +21,7 @@ const round = (id: string, n: number, title: string, s: string, e: string): Node
 const leaf = (id: string, parentId: string, roundId: string, depth: number, order: number, title: string, type: "common" | "designated" | "personal", s: string, e: string, people: [string, TaskStatus][]): NodeDto => ({
   ...base(id, parentId, roundId, depth, order, title, s, e),
   task: { type, people: people.map(([uid, status]) => ({ userId: uid, nickname: byId[uid].nickname, tone: byId[uid].tone, status })), assigned: people.length, submitted: people.filter(([, st]) => st === "done" || st === "late").length, state: "progress" },
+  exam: null,
 });
 /** 개인 목표 — people = [소유자], ownerId (서버 0014 curriculum_get 과 같은 모양) */
 const mine = (id: string, roundId: string, order: number, title: string, owner: string, st: TaskStatus, s: string, e: string): NodeDto =>

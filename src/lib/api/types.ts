@@ -237,6 +237,8 @@ export type NodeDto = {
   assigned: number;
   submitted: number;
   pct: number | null;
+  /** 0037 — 시험 리프 요약(정답·점수 없음). 시험 아님·비멤버 → null. 초안을 편집자 아닌 멤버가 보면 {status} 만 */
+  exam?: ExamSummary | null;
 };
 export type Curriculum = {
   today: string;
@@ -244,7 +246,8 @@ export type Curriculum = {
   members: CurriculumMember[];
   nodes: NodeDto[];
   stats: { overallPct: number | null; leafCount: number; unassignedCount: number };
-  warnings?: { code: string; nodeId?: string }[];
+  /** 편집자 전용(0037 EXAM_NOT_PUBLISHED 등). curriculum_get 에서만 믿는다 — 변경 RPC 응답은 자기 경고로 덮는다 */
+  warnings?: { code: string; nodeId?: string; message?: string }[];
   myPermissions: MyPermissions;
   /** 0014 — 개인 목표 추가 가능 여부·회차당 한도 */
   personal?: { canAdd: boolean; perRound: number };
@@ -344,6 +347,8 @@ export const NOTIFICATION_KINDS = [
   "MEMBER_JOINED",
   // 0034
   "CURRICULUM_BULK_UPDATED",
+  // 0037
+  "EXAM_PUBLISHED",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 export type NotificationDto = {
@@ -373,4 +378,58 @@ export type TaskDetail = {
   allSubmitted: boolean;
   /** can_read_submissions 일 때만 채워진다 — 담당 해제된 사람의 제출도 섞여 온다 */
   submissions: (Submission & { author: Person })[];
+};
+
+/* ---------- 회차 시험 (0037_round_exam.sql · 스펙 2026-10-21-round-exam-design §5) ---------- */
+export type ExamQType = "single" | "multi" | "ox" | "short";
+export type ExamReveal = "after_submit" | "after_deadline";
+/** 트리·상세 요약(exam_summary). 편집자 아닌 멤버가 초안을 보면 status 만 온다 → 나머지는 선택 */
+export type ExamSummary = { status: "draft" | "published"; questionCount?: number; totalPoints?: number; reveal?: ExamReveal };
+/** answer·explanation 은 공개 조건(§3.4)일 때만 키가 있다. ord 는 0부터. ox·short 의 choices 는 null */
+export type ExamQuestion = { id: string; ord: number; type: ExamQType; prompt: string; choices: string[] | null; points: number; answer?: unknown; explanation?: string };
+export type ExamDifficulty = "easy" | "normal" | "hard";
+export type ExamBrief = { topic: string; theory?: string; count: number; types: ExamQType[]; difficulty: ExamDifficulty; note?: string };
+export type ExamAttempt = {
+  status: "in_progress" | "submitted";
+  /** 문항 id → 저장된 답. 제출 뒤 미답 문항은 null */
+  answers: Record<string, unknown>;
+  score: number | null;
+  maxScore: number | null;
+  correctCount: number | null;
+  submittedAt: string | null;
+  isLate: boolean | null;
+  /** 공개 조건 + 제출 뒤에만(after_deadline 마감 전 = null, 점수만) */
+  results: Record<string, { correct: boolean; earned: number }> | null;
+};
+/** exam_view v_reason 우선순위 순. closed = after_deadline 마감 뒤(정답 공개 → 응시 불가) */
+export type ExamViewerReason = "submitted" | "room_not_active" | "archived" | "not_assignee" | "not_published" | "not_started" | "closed";
+export type ExamView = {
+  today: string;
+  node: { id: string; title: string; startDate: string; endDate: string; archived: boolean };
+  /** 편집자 아닌 사람이 초안을 보면 {status:"draft", publishedAt:null, closed:false} 만. source·locked·submittedCount·brief 는 편집자 전용 */
+  exam: ExamSummary & {
+    publishedAt: string | null;
+    closed: boolean;
+    source?: "manual" | "ai";
+    /** 응시 행 1건~(진행 중 포함) — 구조 잠금 */
+    locked?: boolean;
+    submittedCount?: number;
+    brief?: ExamBrief | null;
+  };
+  /** exam_attempt_get 에서는 대상 사람 기준(canTake 는 본인일 때만 참) */
+  viewer: { canEdit: boolean; isAssignee: boolean; canTake: boolean; reason: ExamViewerReason | null };
+  /** 담당 아님 · 초안 · 시작 전(담당자) → null. 편집자는 항상 */
+  questions: ExamQuestion[] | null;
+  attempt: ExamAttempt | null;
+};
+export type ExamAnswerSaved = { savedAt: string; answered: number; total: number };
+/** exam_results(편집자). 집계는 현재 담당자만(submitted ≤ assigned). correctRate 는 pct(0~100) · 제출 0 → null */
+export type ExamResults = {
+  submitted: number;
+  assigned: number;
+  maxScore: number;
+  avg: number | null;
+  max: number | null;
+  questions: { id: string; ord: number; type: ExamQType; points: number; correctRate: number | null }[];
+  members: (Person & { status: TaskStatus; score: number | null; submittedAt: string | null; isLate: boolean | null })[];
 };
