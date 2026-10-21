@@ -940,6 +940,215 @@ language sql stable security definer set search_path = '' as $$
   where n.id = p_node and n.task_type is not null
 $$;
 
+-- ───────── 8. AI 통로 (api_invoke op 2개, 스펙 §3.5) ─────────
+-- exam_get_brief → exam_brief_text · exam_draft_put → exam_draft_put. 두 함수는 api_invoke 전용(GRANT 없음) — 웹은 exam_brief_put·exam_put.
+-- 레이트리밋: api_rate_check 재정의 금지 → 공용 분당 60 한도만 받는다(시간당 묶음 한도는 2단계 api_limits 확장 때 함께).
+create or replace function public.exam_contract_text() returns text
+language sql immutable set search_path = '' as $$
+  select $t$sgtudy.exam/v1 — create_exam_draft 의 exam 인자 모양:
+{"questions":[
+ {"type":"single","prompt":"문제(마크다운, ≤2000자)","choices":["보기1","보기2","보기3","보기4"],"answer":0,"explanation":"해설(≤4000자)","points":1},
+ {"type":"multi","prompt":"…","choices":["…","…","…"],"answer":[0,2],"explanation":"…","points":2},
+ {"type":"ox","prompt":"…","answer":true,"explanation":"…"},
+ {"type":"short","prompt":"…","answer":["허용 답1","허용 답2"],"explanation":"…"}]}
+규칙: 문항 1~50 · choices 2~8개(각 ≤200자) · answer 는 0부터 세는 보기 번호 · multi 는 전부 맞아야 정답 · short 는 정규화(소문자·공백·구두점 제거) 뒤 정확 일치라 허용 답을 여러 개 · points 1~10(기본 1) · 한국어로 · 해설에는 왜 정답인지와 오답 보기가 틀린 이유를 짧게.
+초안으로 저장되며 편집자가 웹에서 검토·발행한다. 발행된 시험은 덮어쓸 수 없다.$t$
+$$;
+
+-- 브리프 읽기(편집자만). 브리프가 없으면 brief: null — contract 는 그대로 줘서 AI 가 주제를 사용자에게 묻게 한다
+create or replace function public.exam_brief_text(p_slug text, p_node bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; n public.goal_nodes; x public.exams;
+begin
+  select * into r from public.rooms where slug = p_slug;
+  if not found or not public.room_readable(r.id, v_uid) then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
+  perform public.require_curriculum_editor(r, v_uid);
+  n := public.node_get(r.id, p_node);        -- NODE_NOT_FOUND(다른 방 포함) · PERSONAL_NODE
+  if n.task_type is null then perform public.fail('NODE_NOT_LEAF', '시험은 말단 과제에만 둘 수 있어요', jsonb_build_object('nodeId', n.id::text)); end if;
+  select * into x from public.exams where node_id = n.id;
+  return jsonb_build_object(
+    'study', jsonb_build_object('slug', r.slug, 'title', r.title),
+    'task', jsonb_build_object('id', n.id::text, 'title', n.title, 'startDate', to_char(n.start_date, 'YYYY-MM-DD'), 'endDate', to_char(n.end_date, 'YYYY-MM-DD')),
+    'exam', case when x.node_id is null then jsonb_build_object('status', 'none', 'questionCount', 0)
+                 else jsonb_build_object('status', lower(x.status), 'questionCount', x.question_count) end,
+    'brief', x.brief,
+    'contract', public.exam_contract_text(),
+    'constraints', jsonb_build_object('maxQuestions', 50, 'types', '["single","multi","ox","short"]'::jsonb, 'pointsRange', '[1,10]'::jsonb));
+end $$;
+
+-- AI 초안 저장. 발행된 시험(EXAM_PUBLISHED)·응시 행이 있는 시험(EXAM_LOCKED)은 거부 — 구조 동일 예외 없이 통째로.
+-- source = AI, reveal 은 바꾸지 않는다(새 시험은 기본값). 브리프와 어긋나면 저장은 하고 warnings 로 알린다
+create or replace function public.exam_draft_put(p_slug text, p_node bigint, p_exam jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v      record;
+  r      public.rooms;
+  n      public.goal_nodes;
+  x      public.exams;
+  v_uid  uuid := public.current_user_id();
+  v_qs   jsonb;
+  v_warn jsonb := '[]'::jsonb;
+  v_types jsonb;
+begin
+  select * into v from public.exam_editable_leaf(p_slug, p_node);   -- 방 잠금·편집자·리프·보관 아님
+  r := v.r;
+  n := v.n;
+  perform public.exam_assert_creatable(n.id);                       -- 제출물 있는 일반 과제 → NODE_HAS_SUBMISSIONS
+  select * into x from public.exams where node_id = n.id;
+  if x.status = 'PUBLISHED' then
+    perform public.fail('EXAM_PUBLISHED', '발행된 시험은 AI 초안으로 덮어쓸 수 없어요 · 웹에서 초안으로 되돌리거나 새 과제를 만들어 주세요',
+                        jsonb_build_object('nodeId', n.id::text));
+  end if;
+  perform public.exam_assert_unlocked(n.id, 'AI 초안으로 덮어쓸 수 없어요');
+  v_qs := public.exam_validate(p_exam);
+  if jsonb_array_length(v_qs) < 1 then perform public.fail('VALIDATION_FAILED', '문항을 하나 이상 넣어 주세요', '{"field":"questions"}'::jsonb); end if;
+  insert into public.exams (node_id, room_id, created_by) values (n.id, r.id, v_uid) on conflict (node_id) do nothing;
+  perform public.exam_replace_questions(n.id, v_qs, 'AI');
+  if x.brief is not null then
+    if (x.brief ->> 'count')::int <> jsonb_array_length(v_qs) then
+      v_warn := v_warn || jsonb_build_array(jsonb_build_object('code', 'COUNT_MISMATCH',
+                  'message', format('브리프는 %s문항인데 %s문항이 왔어요', x.brief ->> 'count', jsonb_array_length(v_qs))));
+    end if;
+    v_types := coalesce(x.brief -> 'types', '[]'::jsonb);
+    if jsonb_array_length(v_types) > 0 and exists (select 1 from jsonb_array_elements(v_qs) q where not v_types ? lower(q ->> 'type')) then
+      v_warn := v_warn || jsonb_build_array(jsonb_build_object('code', 'TYPE_NOT_IN_BRIEF', 'message', '브리프에 없는 문항 유형이 섞여 있어요'));
+    end if;
+  end if;
+  return jsonb_build_object('questionCount', jsonb_array_length(v_qs),
+                            'totalPoints', coalesce((select sum((q ->> 'points')::int) from jsonb_array_elements(v_qs) q), 0),
+                            'warnings', v_warn);
+end $$;
+
+-- 재정의: api_scope_of ← 0033(+ exam_get_brief read · exam_draft_put curriculum:write)
+create or replace function public.api_scope_of(p_op text) returns text
+language sql immutable set search_path = '' as $$
+  select case p_op
+    when 'whoami'               then 'any'
+    when 'me_studies'           then 'read'
+    when 'me_schedule'          then 'read'              -- 〔UX 재검토 T2〕 me_tasks 대신(기간 창)
+    when 'curriculum_get'       then 'read'
+    when 'curriculum_plan_preview' then 'curriculum:write'
+    when 'curriculum_plan_apply'   then 'curriculum:write'
+    when 'personal_create_many' then 'personal:write'
+    when 'personal_delete_many' then 'personal:write'   -- 〔UX 재검토 D16〕
+    when 'exam_get_brief'       then 'read'              -- 0037 시험 브리프(편집자만 — 함수가 막는다)
+    when 'exam_draft_put'       then 'curriculum:write'  -- 0037 시험 AI 초안
+  end
+$$;
+
+-- 재정의: api_invoke ← 0035(커밋 d786c54 반영 판) — ① study 해석 목록 +2 op ② 디스패치 +2 ③ 감사 summary(exam_draft_put: task·questionCount 만)
+create or replace function public.api_invoke(p_token text, p_op text, p_args jsonb default '{}'::jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  t        public.api_tokens;
+  v_args   jsonb := coalesce(p_args, '{}'::jsonb);
+  v_uid    uuid;
+  v_source text;
+  v_dry    boolean;
+  v_room   bigint;
+  v_data   jsonb;
+  v_out    jsonb;
+  v_state  text;
+  v_code   text;
+  v_msg    text;
+  v_hint   text;
+  v_ok     boolean;
+  v_err    text;
+  v_slug   text;
+  v_replay boolean := false;
+begin
+  if octet_length(v_args::text) > 307200 then                                  -- 〔C#11〕 해석·인증 전에 크기부터(라우트 우회 대비)
+    perform public.fail('PAYLOAD_TOO_LARGE', '요청이 너무 커요(300KB 까지). 계획을 나눠 주세요');
+  end if;
+  if jsonb_typeof(v_args) <> 'object' then perform public.fail('VALIDATION_FAILED', '인자가 올바르지 않아요'); end if;
+  if p_token is not null then
+    if auth.uid() is not null then perform public.fail('API_AUTH_CONFLICT', '토큰과 로그인 세션을 함께 쓸 수 없어요'); end if;
+    t := public.api_authenticate(p_token, p_op);
+    v_uid := t.user_id;
+    v_source := 'PAT';
+  else
+    v_uid := auth.uid();
+    if v_uid is null then perform public.fail('AUTH_REQUIRED', '로그인이 필요해요'); end if;
+    if public.api_scope_of(p_op) is null then perform public.fail('API_UNKNOWN_OP', '지원하지 않는 작업이에요', jsonb_build_object('op', left(p_op, 40))); end if;
+    v_source := case when nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'client_id' is not null then 'OAUTH' else 'SESSION' end;
+  end if;
+  v_dry := case p_op when 'curriculum_plan_preview' then true when 'curriculum_plan_apply' then false end;
+  if p_op = 'curriculum_plan_apply' then                                       -- 〔C#7·N3〕 소유권 확인된 재생은 적용 한도 제외
+    perform public.api_user_lock(v_uid);                                       -- ① 사용자(rate check 가 다시 잡아도 즉시)
+    select x.slug into v_slug from public.api_plan_drafts d join public.rooms x on x.id = d.room_id
+    where d.id = v_args ->> 'previewId' and d.user_id = v_uid;
+    if v_slug is not null then perform public.room_lock(v_slug); end if;       -- ② 방(웹 직접 apply 와도 직렬화)
+    v_replay := exists (select 1 from public.api_plan_drafts d                 -- ③ 잠금 뒤에 읽는다
+                        where d.id = v_args ->> 'previewId' and d.user_id = v_uid and d.applied_at is not null);
+    v_slug := null;                                                            --    (아래 디스패치가 다시 정한다)
+  end if;
+  -- ④ 사용자 잠금 → 집계(그 안). whoami 는 잠금 없이 분당 한도만 — 라우트가 HTTP 요청마다 부른다(〔C#6〕)
+  perform public.api_rate_check(t.id, v_uid, p_op, v_dry, v_replay);
+
+  begin
+    -- 〔D14〕 스터디 해석: study|slug → slug (apply 는 초안의 방). 해석 오류도 디스패치 오류로 감사된다
+    if p_op = 'curriculum_plan_apply' then
+      select x.slug, x.id into v_slug, v_room from public.api_plan_drafts d join public.rooms x on x.id = d.room_id
+      where d.id = v_args ->> 'previewId' and d.user_id = v_uid;
+      if v_slug is null then perform public.fail('PREVIEW_NOT_FOUND', '미리보기를 찾을 수 없어요. 다시 미리 봐 주세요'); end if;
+    elsif p_op in ('curriculum_get', 'curriculum_plan_preview', 'personal_create_many', 'personal_delete_many', 'exam_get_brief', 'exam_draft_put') then
+      v_slug := public.api_resolve_study(v_uid, coalesce(v_args ->> 'study', v_args ->> 'slug'));
+      select id into v_room from public.rooms where slug = v_slug;
+    end if;
+    v_data := case p_op
+      when 'whoami' then jsonb_build_object('userId', v_uid::text, 'nickname', (select nickname from public.profiles where id = v_uid),
+                           'source', lower(v_source), 'tokenName', t.name,
+                           'scopes', to_jsonb(coalesce(t.scopes, array['curriculum:write', 'personal:write', 'read'])),
+                           'expiresAt', public.iso(t.expires_at))
+      when 'me_studies' then public.api_studies(v_uid, coalesce((v_args ->> 'includeEnded')::boolean, false))
+      when 'me_schedule' then public.me_schedule((v_args ->> 'from')::date, (v_args ->> 'to')::date)
+      when 'curriculum_get' then public.api_curriculum_view(public.curriculum_get(v_slug, coalesce((v_args ->> 'includeArchived')::boolean, false)), v_uid)
+        || jsonb_build_object('version', public.curriculum_version(v_room),
+             'viewer', jsonb_build_object('nickname', (select nickname from public.profiles where id = v_uid)),
+             'currentRoundId', public.room_current_round_id(v_room, public.kst_today())::text,
+             'fileCounts', coalesce(public.api_node_file_counts(v_room), '{}'::jsonb),
+             'study', (select jsonb_build_object('slug', x.slug, 'title', x.title, 'status', lower(x.status),
+                      'startDate', to_char(x.start_date, 'YYYY-MM-DD'), 'endDate', to_char(x.end_date, 'YYYY-MM-DD'))
+             from public.rooms x where x.id = v_room))
+      when 'curriculum_plan_preview' then public.curriculum_plan_preview(v_slug, v_args -> 'plan', v_args ->> 'undo')
+      when 'curriculum_plan_apply' then public.curriculum_plan_apply(v_slug, v_args ->> 'previewId')
+      when 'personal_create_many' then public.personal_create_many(v_slug, v_args -> 'round', v_args -> 'goals')
+      when 'personal_delete_many' then public.personal_delete_many(v_slug, v_args -> 'ids')
+      when 'exam_get_brief' then public.exam_brief_text(v_slug, (v_args ->> 'task')::bigint)
+      when 'exam_draft_put' then public.exam_draft_put(v_slug, (v_args ->> 'task')::bigint, v_args -> 'exam')
+    end;
+    v_out := jsonb_build_object('ok', true, 'data', v_data);
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate, v_code = message_text, v_msg = pg_exception_detail, v_hint = pg_exception_hint;
+    v_data := null;
+    v_out := jsonb_build_object('ok', false, 'error', public.api_error_json(v_state, v_code, v_msg, v_hint));
+  end;
+  v_out := v_out || jsonb_build_object('meta', jsonb_strip_nulls(jsonb_build_object('expiresAt', public.iso(t.expires_at))));   -- 〔T4〕
+
+  if p_op <> 'whoami' then
+    v_ok := (v_out ->> 'ok')::boolean and coalesce((v_data ->> 'ok')::boolean, true);
+    v_err := coalesce(v_out #>> '{error,code}', v_data #>> '{errors,0,code}');
+    insert into public.api_audit (token_id, user_id, source, op, room_id, dry_run, ok, error_code, preview_id, summary, created_at)
+    values (t.id, v_uid, v_source, p_op, v_room, v_dry, v_ok, case when not v_ok then left(v_err, 40) end,
+            case when p_op like 'curriculum_plan_%' then (select x from (select coalesce(v_data ->> 'previewId', v_args ->> 'previewId') as x) z
+                                                           where x ~ '^pv_[0-9a-f]{12}$') end,   -- 입력 그대로 싣지 않는다(형식 맞는 것만)
+            case when p_op like 'curriculum_plan_%' then jsonb_strip_nulls(jsonb_build_object('summary', v_data -> 'summary', 'createdIds', v_data -> 'createdIds',   -- refs(사용자 라벨) 대신 id
+                                                           'replayed', v_data -> 'replayed', 'undoOf', v_data -> 'undoOf'))
+                 when p_op = 'personal_create_many' then jsonb_strip_nulls(jsonb_build_object('createdIds', v_data -> 'createdIds'))
+                 when p_op = 'personal_delete_many' then jsonb_strip_nulls(jsonb_build_object(   -- 사용자 입력은 숫자 id 모양만(제목·자유 문자열 없음)
+                   'ids', (select jsonb_agg(e) from jsonb_array_elements(case when jsonb_typeof(v_args -> 'ids') = 'array' then v_args -> 'ids' end) e
+                           where e #>> '{}' ~ '^[0-9]{1,19}$'),
+                   'deleted', v_data -> 'deleted'))
+                 when p_op = 'exam_draft_put' then jsonb_strip_nulls(jsonb_build_object(   -- 문항 본문은 싣지 않는다(task id 모양 · 문항 수만)
+                   'task', (select x from (select v_args ->> 'task' as x) z where x ~ '^[0-9]{1,19}$'),
+                   'questionCount', v_data -> 'questionCount'))
+                 else '{}'::jsonb end,
+            public.app_now());
+  end if;
+  return v_out;
+end $$;
+
+
 -- ───────── 9. 알림 종류 EXAM_PUBLISHED (exam_publish 가 발행, 스펙 D11·§4.6) ─────────
 -- 재정의: notification_kinds·notify_render·notify_link ← 0034(0035·0036 재정의 없음). 시그니처 동일 → GRANT(없음) 유지.
 -- notify_enabled(최신 0025)는 그대로 — 알 수 없는 kind 는 else true.

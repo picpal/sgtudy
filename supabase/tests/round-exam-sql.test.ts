@@ -629,3 +629,89 @@ cases("round exam 0037 · results & tree", db, [
     assertEquals((await rpc(q, "public.curriculum_get('aws', true)")).warnings, []);
   } },
 ]);
+
+// ── Task 4: AI 통로(api_invoke op 2개). 세션 경로 — PGlite 스텁 auth.uid() = app.uid 라 as(q, …) 만으로 api_invoke(null, …) 가 그 사용자로 돈다
+const invoke = (q: Q, op: string, args: unknown) => rpc(q, "public.api_invoke(null, $1, $2::jsonb)", [op, JSON.stringify(args)]);
+const draftPut = (q: Q, node: string, exam: unknown) => invoke(q, "exam_draft_put", { study: "aws", task: node, exam });
+
+cases("round exam 0037 · api ops", db, [
+  { name: "api_invoke exam_get_brief (session): brief + contract · exam_draft_put writes DRAFT source ai with warnings · audit has no question text", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await rpc(q, "public.exam_brief_put('aws', $1::bigint, $2::jsonb)", [node, JSON.stringify({ topic: "IAM", theory: "정책 평가 …", count: 2, types: ["single", "ox"] })]);
+    const b = await invoke(q, "exam_get_brief", { study: "aws", task: node });
+    assertEquals(b.ok, true);
+    assertEquals(b.data.brief.topic, "IAM");
+    assert((b.data.contract as string).includes("sgtudy.exam/v1"));
+    assertEquals([b.data.study.slug, b.data.task.id, b.data.task.startDate, b.data.task.endDate], ["aws", node, "2026-10-15", "2026-10-21"]);
+    assertEquals(b.data.exam, { status: "draft", questionCount: 0 });
+    assertEquals(b.data.constraints, { maxQuestions: 50, types: ["single", "multi", "ox", "short"], pointsRange: [1, 10] });
+    const d = await draftPut(q, node, { questions: [Q4.questions[0], Q4.questions[1], Q4.questions[2]] });
+    assertEquals(d.ok, true);
+    assertEquals([d.data.questionCount, d.data.totalPoints], [3, 4]);
+    assertEquals((d.data.warnings as Row[]).map((w) => w.code).sort(), ["COUNT_MISMATCH", "TYPE_NOT_IN_BRIEF"]);
+    const x = await one(q, "select source, status, reveal from public.exams where node_id = $1::bigint", [node]);
+    assertEquals([x.source, x.status, x.reveal], ["AI", "DRAFT", "AFTER_SUBMIT"]);
+    const audit = await one(q, "select summary::text as s, room_id::text as room, ok from public.api_audit where op = 'exam_draft_put' order by id desc limit 1");
+    assertEquals((audit.s as string).includes("IAM 정책 평가"), false);
+    assertEquals(JSON.parse(audit.s as string), { task: node, questionCount: 3 });
+    assertEquals([audit.room, audit.ok], [await roomId(q, "aws"), true]);
+    // 브리프와 맞으면 경고 없음 · 다시 넣으면 통째로 교체
+    const ok = await draftPut(q, node, { questions: [Q4.questions[0], Q4.questions[2]] });
+    assertEquals([ok.data.questionCount, ok.data.warnings], [2, []]);
+    assertEquals((await one(q, "select count(*)::int as c from public.exam_questions where node_id = $1::bigint", [node])).c, 2);
+  } },
+  { name: "exam_get_brief: no brief → brief null + contract · no exam → status none · non-editor NOT_CURRICULUM_EDITOR · group node NODE_NOT_LEAF", run: async (q) => {
+    const node = await newExamLeaf(q);
+    const b = await invoke(q, "exam_get_brief", { study: "aws", task: node });
+    assertEquals([b.data.brief, b.data.exam], [null, { status: "none", questionCount: 0 }]);
+    assert((b.data.contract as string).includes("sgtudy.exam/v1"));
+    const bundle = (await one(q, "select parent_id::text as id from public.goal_nodes where id = $1::bigint", [node])).id;
+    assertEquals((await invoke(q, "exam_get_brief", { study: "aws", task: bundle })).error.code, "NODE_NOT_LEAF");
+    await as(q, "지은");
+    assertEquals((await invoke(q, "exam_get_brief", { study: "aws", task: node })).error.code, "NOT_CURRICULUM_EDITOR");
+    assertEquals((await draftPut(q, node, Q4)).error.code, "NOT_CURRICULUM_EDITOR");
+  } },
+  { name: "exam_draft_put: new exam (no brief) keeps default reveal · existing reveal untouched · empty → VALIDATION_FAILED · plain leaf with submissions → NODE_HAS_SUBMISSIONS", run: async (q) => {
+    const node = await newExamLeaf(q);
+    const d = await draftPut(q, node, { reveal: "after_deadline", questions: Q4.questions });
+    assertEquals([d.ok, d.data.questionCount, d.data.totalPoints, d.data.warnings], [true, 4, 5, []]);
+    assertEquals((await one(q, "select reveal from public.exams where node_id = $1::bigint", [node])).reveal, "AFTER_SUBMIT");
+    await put(q, node, { ...Q4, reveal: "after_deadline" });
+    await draftPut(q, node, { questions: Q4.questions.slice(0, 1) });
+    const x = await one(q, "select reveal, source, question_count from public.exams where node_id = $1::bigint", [node]);
+    assertEquals([x.reveal, x.source, x.question_count], ["AFTER_DEADLINE", "AI", 1]);
+    const empty = await draftPut(q, node, { questions: [] });
+    assertEquals([empty.error.code, empty.error.details.field], ["VALIDATION_FAILED", "questions"]);
+    assertEquals((await draftPut(q, node, { questions: [{ ...Q4.questions[0], answer: 9 }] })).error.code, "VALIDATION_FAILED");
+    const iam = await nodeId(q, "aws", "IAM 정책 이해");       // 시드 DLDM — 제출 있음
+    assertEquals((await draftPut(q, iam, Q4)).error.code, "NODE_HAS_SUBMISSIONS");
+    assertEquals((await one(q, "select count(*)::int as c from public.exams where node_id = $1::bigint", [iam])).c, 0);
+  } },
+  { name: "exam_draft_put refused on PUBLISHED (EXAM_PUBLISHED) · on a draft with an attempt row (EXAM_LOCKED, even same structure)", run: async (q) => {
+    const node = await published(q);
+    await as(q, "민수");
+    const d = await draftPut(q, node, Q4);
+    assertEquals(d.ok, false);
+    assertEquals(d.error.code, "EXAM_PUBLISHED");
+    assertEquals((await one(q, "select source from public.exams where node_id = $1::bigint", [node])).source, "MANUAL");
+    // 잠금(방어): 응시 행이 남은 초안 — unpublish 가 막으므로 직접 만든다. 구조가 같은 덮어쓰기도 거부
+    const draft = await newExamLeaf(q, "잠긴 초안");
+    await put(q, draft, Q4);
+    await q("insert into public.exam_attempts (node_id, user_id) values ($1::bigint, $2::uuid)", [draft, await uidOf(q, "지은")]);
+    const l = await draftPut(q, draft, Q4);
+    assertEquals(l.error.code, "EXAM_LOCKED");
+    assertEquals((await one(q, "select source from public.exams where node_id = $1::bigint", [draft])).source, "MANUAL");
+  } },
+  { name: "scopes: exam_get_brief read · exam_draft_put curriculum:write · read PAT can get brief but not put (API_SCOPE_DENIED)", run: async (q) => {
+    assertEquals((await one(q, "select public.api_scope_of('exam_get_brief') as v")).v, "read");
+    assertEquals((await one(q, "select public.api_scope_of('exam_draft_put') as v")).v, "curriculum:write");
+    const node = await newExamLeaf(q);
+    const t = ((await one(q, "select public.pat_create('test', '{read}'::text[], 90) as t")).t as Row).token as string;
+    await asAnon(q);
+    const pat = (op: string) => rpc(q, "public.api_invoke($1, $2, $3::jsonb)", [t, op, JSON.stringify({ study: "aws", task: node, exam: Q4 })]);
+    const b = await pat("exam_get_brief");
+    assertEquals([b.ok, b.data.task.id], [true, node]);
+    await failCode(pat("exam_draft_put"), "API_SCOPE_DENIED");
+    assertEquals((await one(q, "select count(*)::int as c from public.exams where node_id = $1::bigint", [node])).c, 0);
+  } },
+]);
