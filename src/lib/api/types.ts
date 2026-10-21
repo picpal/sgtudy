@@ -486,7 +486,7 @@ export type CommentDto = {
 export type CommentPeople = Record<string, Person>;
 export type CommentWriteBlock = "ended" | "inactive" | "archived_node" | "exam_locked";
 export type CommentLimits = { bodyMax: number; mentionsMax: number; perNode: number; perMinute: number; perHour: number; page: number; fromMax: number };
-/** comment_list — items 는 오래된 → 최신. total = 살아 있는 댓글 수(시험 잠금이어도 센다) */
+/** comment_list — items 는 오래된 → 최신. total = 살아 있는 댓글 수(시험 잠금이면 null — 0043) */
 export type CommentPage = {
   items: CommentDto[];
   people: CommentPeople;
@@ -494,7 +494,7 @@ export type CommentPage = {
   hasOlder: boolean;
   /** from 딥링크가 200개를 넘겨 최신 쪽이 잘렸다 → 기본 쪽(최신 50)을 다시 부르면 된다 */
   hasNewer: boolean;
-  total: number;
+  total: number | null;
   canWrite: boolean;
   writeBlock: CommentWriteBlock | null;
   /** 시험 잠금(D4) — items·people 은 비어 온다 */

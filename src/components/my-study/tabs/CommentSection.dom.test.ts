@@ -113,7 +113,13 @@ describe("CommentSection — 목록", () => {
     await mount();
     expect(host.textContent).toContain("시험을 제출하면 댓글을 볼 수 있어요");
     expect(host.querySelector("ol, textarea")).toBeNull();
-    expect(host.querySelector("h3")!.textContent).toBe("댓글5");
+    expect(host.querySelector("h3")!.textContent).toBe("댓글");   // 잠금이면 개수도 안 보인다(0043 전 서버가 숫자를 보내도)
+  });
+  it("시험 잠금 — 0043 서버는 total 을 null 로 준다: 머리글은 「댓글」만", async () => {
+    api.fetchComments.mockResolvedValue(P([], { locked: { reason: "exam" }, canWrite: false, writeBlock: "exam_locked", total: null }));
+    await mount();
+    expect(host.querySelector("h3")!.textContent).toBe("댓글");
+    expect(host.textContent).toContain("시험을 제출하면 댓글을 볼 수 있어요");
   });
   it.each([
     ["ended", "종료된 스터디는 댓글을 쓸 수 없어요"],

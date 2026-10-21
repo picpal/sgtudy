@@ -189,7 +189,7 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
       if (page?.hasNewer) refresh(); // 딥링크 창 — 최신 쪽이 잘려 있어 그냥 붙이면 사이가 빈다
       else
         setPage((prev) =>
-          prev && { ...prev, items: [...prev.items.filter((c) => c.id !== r.comment.id), r.comment].sort(byId), people: { ...prev.people, ...r.people }, total: prev.total + 1 },
+          prev && { ...prev, items: [...prev.items.filter((c) => c.id !== r.comment.id), r.comment].sort(byId), people: { ...prev.people, ...r.people }, total: (prev.total ?? 0) + 1 },
         );
       lastAt.current = Date.now();
       return true;
@@ -214,7 +214,7 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
     setAsking(null);
     try {
       await deleteComment(slug, id);
-      setPage((prev) => prev && { ...prev, items: prev.items.filter((c) => c.id !== id), total: Math.max(0, prev.total - 1) });
+      setPage((prev) => prev && { ...prev, items: prev.items.filter((c) => c.id !== id), total: Math.max(0, (prev.total ?? 0) - 1) });
       toast({ text: "댓글을 지웠어요", tone: "ok" });
       document.getElementById("comments")?.focus({ preventScroll: true });
     } catch (e) {
@@ -233,7 +233,8 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
 
   const heading = (
     <h3 id={`${ids}-h`} className="m-0 text-[16px] font-bold text-ink">
-      댓글{page && <span className="ml-[6px] font-semibold text-ink-3">{page.total}</span>}
+      {/* 시험 잠금이면 개수도 숨긴다(D4 — 0043 서버는 total 을 null 로 준다) */}
+      댓글{page && !page.locked && page.total != null && <span className="ml-[6px] font-semibold text-ink-3">{page.total}</span>}
     </h3>
   );
   const note = (text: string) => (
@@ -264,7 +265,7 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
           {page.hasOlder && (
             <button type="button" onClick={() => void loadOlder()} disabled={olderBusy} aria-busy={olderBusy || undefined} className="h-11 self-start rounded-[22px] border border-line-3 bg-surface px-4 text-[13px] font-semibold text-ink-2 disabled:opacity-60">
               {/* 딥링크 창(hasNewer)은 잘린 최신 쪽까지 세게 되므로 숫자 없이 */}
-              {!page.hasNewer && page.total > page.items.length ? `이전 댓글 ${page.total - page.items.length}개 더 보기` : "이전 댓글 더 보기"}
+              {!page.hasNewer && page.total != null && page.total > page.items.length ? `이전 댓글 ${page.total - page.items.length}개 더 보기` : "이전 댓글 더 보기"}
             </button>
           )}
           {page.items.length === 0 ? (
