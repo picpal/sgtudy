@@ -177,3 +177,16 @@
 .thin-scroll::-webkit-scrollbar-track {
   margin: 14px 0;
 }
+
+/* 공지 팝업 등장 — motion-safe: 로만 쓴다(움직임 줄이기 설정이면 그냥 나타난다) */
+@keyframes notice-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+@keyframes notice-sheet {
+  from {
+    transform: translateY(100%);
+  }
+}
