@@ -16,6 +16,8 @@ vi.mock("@/lib/api/nodeFiles", async (orig) => ({ ...(await orig<object>()), fet
 vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }));
 const notices = vi.hoisted(() => ({ fetchNoticeInbox: vi.fn(), fetchNotices: vi.fn(), markNoticesRead: vi.fn() }));
 vi.mock("@/lib/api/notices", async (orig) => ({ ...(await orig<object>()), ...notices }));
+const comments = vi.hoisted(() => ({ fetchComments: vi.fn() }));
+vi.mock("@/lib/api/comments", async (orig) => ({ ...(await orig<object>()), ...comments }));
 
 const { MeProvider } = await import("@/lib/me");
 const { announceItem } = await import("@/lib/hashTarget");
@@ -57,6 +59,7 @@ const buttonByText = (el: Element, text: string) => [...el.querySelectorAll("but
 const detailTitle = (host: HTMLElement) => host.querySelector("#detail-title")?.textContent ?? null;
 
 beforeEach(() => {
+  comments.fetchComments.mockResolvedValue({ items: [], people: {}, hasOlder: false, hasNewer: false, total: 0, canWrite: true, writeBlock: null, locked: null, target: null, limits: {} });
   notices.fetchNoticeInbox.mockResolvedValue({ unread: false, popups: [] });
   notices.fetchNotices.mockResolvedValue({ items: [], canWrite: false, limits: { total: 100, pinned: 3, popup: 5 }, counts: { total: 0, pinned: 0, popup: 0 } });
 });
@@ -624,5 +627,47 @@ describe("MyStudyScreen — 공지", () => {
     await act(async () => announceTab("/my-study/aws?tab=notice"));
     expect(tabBtn(host, "공지").getAttribute("aria-selected")).toBe("true");
     expect(notices.fetchNotices).toHaveBeenCalledTimes(2);
+  });
+});
+
+// 댓글 스펙 D15·D16: 멘션 알림 링크 ?task={id}#comment-{cid} · ?tab=curriculum&item={id}#comment-{cid}
+describe("MyStudyScreen — 댓글 딥링크", () => {
+  const tabBtn = (host: HTMLElement, name: string) => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((b) => b.textContent?.includes(name))!;
+  it("?task=#comment- 로 열면 그 과제 상세 + 댓글을 from 으로 불러온다", async () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=311#comment-5");
+    const { host } = mount({ initialLeaf: "311", initialTab: "overview", key: "aws:311:overview" } as Partial<Props>);
+    await act(async () => {});
+    expect(detailTitle(host)).toContain(title("311"));
+    expect(comments.fetchComments).toHaveBeenCalledWith("aws", "311", { from: "5" });
+    expect(host.querySelector("#comments")).not.toBeNull();
+  });
+  it("같은 과제 화면(같은 key)에서 다른 탭을 보다 멘션 알림을 누르면 — 주소가 그 ?task= 가 된 뒤 과제 상세를 연다", async () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=311");
+    const { host, render } = mount({ initialLeaf: "311", initialTab: "overview", key: "aws:311:overview" } as Partial<Props>);
+    await act(async () => {});
+    act(() => tabBtn(host, "보드").click());
+    expect(detailTitle(host)).toBeNull();
+    const { announceHash, announceTask } = await import("@/lib/hashTarget");
+    const link = "/my-study/aws?task=311#comment-7";
+    act(() => {
+      announceHash(link);
+      announceTask(link);
+    });
+    expect(detailTitle(host)).toBeNull(); // 주소가 바뀌기 전에는 그대로
+    window.history.pushState(null, "", link); // 벨의 router.push — key 가 같아 다시 마운트되지 않는다
+    render({ initialLeaf: "311", initialTab: "overview", key: "aws:311:overview" } as Partial<Props>);
+    await act(async () => {});
+    expect(detailTitle(host)).toContain(title("311"));
+    expect(comments.fetchComments).toHaveBeenLastCalledWith("aws", "311", { from: "7" });
+  });
+  it("다른 과제의 알림은 받지 않는다(그 과제 화면이 새로 마운트된다)", async () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=311");
+    const { host } = mount({ initialLeaf: "311", initialTab: "overview", key: "aws:311:overview" } as Partial<Props>);
+    act(() => tabBtn(host, "보드").click());
+    const { announceTask } = await import("@/lib/hashTarget");
+    act(() => announceTask("/my-study/aws?task=21#comment-7"));
+    window.history.pushState(null, "", "/my-study/aws?task=21#comment-7");
+    await act(async () => {});
+    expect(detailTitle(host)).toBeNull();
   });
 });

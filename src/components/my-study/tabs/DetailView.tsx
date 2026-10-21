@@ -19,6 +19,8 @@ import { archiveOthersText, cardSync, isDone, ownerCode, ownerOf, personalAction
 import type { RoomStatus } from "../submission";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { ChildList } from "./ChildList";
+import { CommentSection } from "./CommentSection";
+import type { MentionMember } from "./CommentComposer";
 import { InlineConfirm } from "./InlineConfirm";
 import { LeafBody } from "./LeafBody";
 import { NodeAttachments } from "./NodeAttachments";
@@ -53,6 +55,8 @@ type Props = {
   onUnsavedChange?: (id: string | null) => void;
   /** 탭·뒤로 가기가 보류한 이동 — 폼에 미저장이 있으면 아래 확인으로 묻는다 */
   pendingLeave?: { go: () => void; cancel: () => void } | null;
+  /** 댓글 멘션 후보 — 그룹장 + ACTIVE 멤버(Tree.members). 없으면 후보 없이 쓴다 */
+  members?: MentionMember[];
 };
 
 const NOT_ACTIVE = "스터디가 진행 중일 때 완료할 수 있어요";
@@ -136,7 +140,7 @@ function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActio
 }
 
 /** 보기 모드 상세 — 목록 자리를 쓰는 읽기 전용 화면 (?tab=curriculum&item=). 회차는 기간·진척·설명·과제 목록, 과제는 설명·담당자별 상태 */
-export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진행목표", onEdit, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, isLeader, quietNotAssigned, roots, period, personal, api, onUnsavedChange, pendingLeave }: Props) {
+export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진행목표", onEdit, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, isLeader, quietNotAssigned, roots, period, personal, api, onUnsavedChange, pendingLeave, members = [] }: Props) {
   const today = useToday();
   const meId = useMe()?.id ?? null;
   // 위 고정 막대 높이 → 제출·개인 목표 편집기 툴바가 그 밑에 붙는다 (Q1-10)
@@ -248,6 +252,10 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
   // 첨부 빼기(그룹장 모더레이션) — 남의 개인 목표 ∧ 보관 아님 ∧ 방 모집·진행 중 (보관은 acts 가 이미 방 상태를 본다)
   const canRemoveFiles = !!pn && !isOwner && isLeader && !pn.archived && !!acts?.archive;
   const owner = pn && !isOwner ? ownerOf(pn) : null;
+  // 댓글(0041 D1) — 회차 · 팀 과제 리프(시험 포함). 개인 목표·묶음·아직 저장 안 된 노드는 없음
+  const comments = !pn && (n.leaf || n.d === 0) && /^\d+$/.test(n.id) && (
+    <CommentSection key={n.id} slug={slug} nodeId={n.id} members={members} meId={meId} viewerPending={viewerPending} toast={toast} />
+  );
   return (
     <section ref={sectionRef} aria-labelledby={pn && editing ? `pf-${pn.id}` : "detail-title"} onKeyDown={onKey} className="flex flex-col">
       <div ref={stickyBar} className="sticky top-0 z-[2] -mx-1 flex flex-wrap items-center gap-2 border-b border-line-2 bg-surface px-1 py-3">
@@ -468,6 +476,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
               {n.d === 0 && <PersonalSection round={n} meId={meId} isLeader={isLeader} roomStatus={roomStatus} personal={personal} api={api} onOpen={(id) => guard(() => onOpen(id))} />}
             </>
           )}
+          {comments}
         </div>
       )}
     </section>

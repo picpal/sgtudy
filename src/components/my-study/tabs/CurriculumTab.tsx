@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { Chip, PillButton, Seg } from "../bits";
 import { addDays } from "@/lib/date";
@@ -86,6 +86,8 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
   const warn = canEdit ? unassignedCount(tree.leaves) : 0;
   const selNode = isEdit ? findNode(tree.nodes, S.editSel) : null;
   const viewNode = !isEdit ? findNode(tree.nodes, S.viewSel) : null;
+  // 댓글 멘션 후보(D11) — 그룹장 + ACTIVE. Tree.members 가 이미 그 집합이다
+  const mentionMembers = useMemo(() => tree.members.map((m) => ({ userId: m.userId, nickname: m.name, tone: m.tone })), [tree.members]);
   const parentNode = selNode ? findNode(tree.nodes, selNode.parentId) : null;
   const lastRoot = tree.roots[tree.roots.length - 1];
   // 다음 회차는 마지막 회차 다음 날부터 7일 — 방 종료일을 넘기면 미리 알려 준다 (E4, Q2-21)
@@ -285,6 +287,7 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
           api={api}
           onUnsavedChange={setPersonalUnsaved}
           pendingLeave={S.leave && S.personalUnsaved ? { go: () => go(S.leave!), cancel: () => update({ leave: null }) } : null}
+          members={mentionMembers}
         />
       </div>
     );

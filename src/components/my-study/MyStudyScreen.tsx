@@ -19,14 +19,14 @@ import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { setScreenKey } from "@/lib/leaveGuard";
 import { clearTaskOrigin, taskOriginOf } from "@/lib/taskOrigin";
-import { OVERVIEW_ANCHORS, useHashAnnounce, useItemAnnounce, useTabAnnounce } from "@/lib/hashTarget";
+import { COMMENT_HASH_PREFIX, OVERVIEW_ANCHORS, peekHashPrefix, useHashAnnounce, useItemAnnounce, useTabAnnounce, useTaskAnnounce } from "@/lib/hashTarget";
 import { fetchNoticeInbox } from "@/lib/api/notices";
 import { useRefetchOnFocus } from "@/lib/useRefetchOnFocus";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
 import { EMPTY_OVERRIDES, buildTree, findNode, isPersonal, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId, roundsOutsidePeriod } from "./rounds";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, viewBackPatch, type CurMode, type Patch, type ScreenState } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, viewBackPatch, type CurMode, type Patch, type ScreenState } from "./state";
 import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
 import { OverviewTab } from "./tabs/OverviewTab";
@@ -91,8 +91,13 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     bRound: currentRoundId(buildTree(curriculum, EMPTY_OVERRIDES, curriculum.today).roots, curriculum.today),
     curMode: canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) ? initialMode : "view",
     // 내 과제·내 일정의 과제 링크로 들어왔으면 상세의 [← 내 과제] 가 그 화면으로 — 그 링크가 이 화면 기록을 출발지 기록 바로 위에 쌓았다.
-    // 기억은 클라이언트 이동에만 있다(전체 불러오기는 서버·브라우저 모두 null 이라 하이드레이션이 어긋나지 않는다)
-    ...(focusLeaf ? goLeafPatch(focusLeaf, typeof window === "undefined" ? null : taskOriginOf(routes.myStudy(detail.slug), focusLeaf)) : {}),
+    // 기억은 클라이언트 이동에만 있다(전체 불러오기는 서버·브라우저 모두 null 이라 하이드레이션이 어긋나지 않는다).
+    // 댓글 딥링크(#comment-{id})면 제출 영역으로 끌어가지 않는다(D16①) — viewFocus 는 effect 에서만 쓰여 마크업이 서버와 같다
+    ...(focusLeaf
+      ? typeof window === "undefined"
+        ? goLeafPatch(focusLeaf)
+        : goLeafPatch(focusLeaf, taskOriginOf(routes.myStudy(detail.slug), focusLeaf), peekHashPrefix(COMMENT_HASH_PREFIX))
+      : {}),
     ...itemInit,
   });
   const [toast, setToast] = useState<ToastMsg>(null);
@@ -331,6 +336,26 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         ? { tab: "curriculum", curMode: "edit", editSel: id, editFrom: "list", viewSel: null, viewFrom: from, confirm: false, leave: null, saved: "" }
         : { tab: "curriculum", curMode: "view", viewSel: id, viewFrom: from, editSel: null, confirm: false, leave: null, saved: "" },
     );
+  });
+
+  // 같은 과제 화면(key 의 task 가 같다)에서 그 과제 알림(댓글 멘션 등)을 다시 누르면 다시 마운트되지 않는다 — 다른 탭·항목을 보고 있었으면
+  // 주소가 그 ?task= 가 된 렌더에서 그 과제 상세를 연다(?item=·공지 탭 알림과 같은 길). 다른 과제는 key 가 바뀌어 새로 마운트된다.
+  // 저장하지 않은 수정이 있으면 덮지 않는다
+  const askedTask = useRef<string | null>(null);
+  const onTaskAnnounce = useCallback(
+    (t: string) => {
+      if (t === initialLeaf) askedTask.current = t;
+    },
+    [initialLeaf],
+  );
+  useTaskAnnounce(onTaskAnnounce);
+  useEffect(() => {
+    const t = askedTask.current;
+    if (!t || new URLSearchParams(window.location.search).get("task") !== t) return;
+    askedTask.current = null;
+    const { S: s, tree: tr, openItem: open, canEdit: ce } = live.current;
+    if (open === t || !findNode(tr.nodes, t) || blocksLeave(s, ce)) return;
+    update(goLeafPatch(t, null, peekHashPrefix(COMMENT_HASH_PREFIX)));
   });
 
   // 새로고침·링크로 바로 열린 편집 화면은 아래 기록이 목록이 아니다 — 수정을 시작하면 지금 기록을 목록으로 바꾸고 편집 기록을 쌓아,
