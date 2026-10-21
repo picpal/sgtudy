@@ -85,6 +85,8 @@ export function questionResult(q: ExamQuestion, a: ExamAttempt | null): { mine: 
 /** 편집 화면 잠금 문구 — 서버 locked(응시 행 1건~). 제출 0명이면 응시 중 문구 */
 export const lockText = (n: number) => `${n}명이 제출해 문항은 잠겼어요 · 문제 글·해설·공개 시점만 고칠 수 있어요`;
 export const lockTextStarted = "응시가 시작돼 문항은 잠겼어요 · 문제 글·해설·공개 시점만 고칠 수 있어요";
+/** [초안으로] 비활성 이유 — 잠금 문구와 같은 주어(제출 n명 / 응시 시작) */
+export const unpublishLockText = (n: number) => `${n > 0 ? `${n}명이 제출해` : "응시가 시작돼"} 초안으로 되돌릴 수 없어요`;
 
 /** AI 탭 지시문(스펙 §4.2) — 사용자가 Claude Code 등에 붙여 넣는다. 도구 이름은 서버 계약 문구(create_exam_draft)와 같다 */
 export function aiInstruction(slug: string, nodeId: string, title: string, brief: ExamBrief | null): string {

@@ -19,8 +19,8 @@ const TAG: Record<ListboxTone, string> = {
   muted: "bg-line-2 text-muted",
 };
 
-function Tag({ tag }: { tag: NonNullable<ListboxOption["tag"]> }) {
-  return <span className={`shrink-0 whitespace-nowrap rounded-[6px] px-[7px] py-[2px] text-[11px] font-bold ${TAG[tag.tone]}`}>{tag.text}</span>;
+function Tag({ tag, className = "" }: { tag: NonNullable<ListboxOption["tag"]>; className?: string }) {
+  return <span className={`shrink-0 whitespace-nowrap rounded-[6px] px-[7px] py-[2px] text-[11px] font-bold ${TAG[tag.tone]} ${className}`}>{tag.text}</span>;
 }
 
 /**
@@ -210,7 +210,8 @@ export function Listbox({
                       <span className={`truncate text-[14px] ${on ? "font-bold" : "font-semibold"}`}>{o.label}</span>
                       {o.sub && <span className="text-[12px] font-medium text-muted">{o.sub}</span>}
                     </span>
-                    {o.tag && <Tag tag={o.tag} />}
+                    {/* 목록의 꼬리표는 같은 폭(가운데 글자) — 「종료」처럼 짧은 꼬리표가 「이번 회차」와 어긋나 보이지 않게 (E2E I-8) */}
+                    {o.tag && <Tag tag={o.tag} className="min-w-[60px] text-center" />}
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`shrink-0 text-mint ${on ? "" : "invisible"}`}>
                       <path d="m5 12.5 4.5 4.5L19 7.5" />
                     </svg>

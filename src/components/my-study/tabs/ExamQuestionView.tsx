@@ -12,6 +12,8 @@ type Props = {
   mine: unknown;
   /** 한 화면에 같은 문항이 여러 번 그려질 때(편집자 결과의 멤버 답안) id 가 겹치지 않게 */
   idScope?: string;
+  /** 답 라벨 — 편집자가 남의 답안을 볼 땐 "답"(기본 "내 답") */
+  mineLabel?: string;
 } & (
   | { mode: "take"; onChange: (answer: unknown) => void; disabled?: boolean }
   /** 결과: 정오·배점은 서버 results 가 있을 때만(after_deadline 마감 뒤 미제출이면 null) */
@@ -25,7 +27,7 @@ const row = "flex min-h-11 scroll-mb-20 items-center gap-3 rounded-[10px] border
 
 /** 시험 문항 1개 — 응시(라디오·체크·O/X 두 버튼·단답 칸) 또는 결과(내 답·정답·정오·해설). 서버가 보낸 키만 그린다 */
 export function ExamQuestionView(p: Props) {
-  const { q, no, mine, idScope } = p;
+  const { q, no, mine, idScope, mineLabel = "내 답" } = p;
   const headId = `exam-q-${idScope ? `${idScope}-` : ""}${q.id}`;
   const kind = q.type === "single" ? null : QTYPE_KO[q.type];
   const hasKey = "answer" in q;
@@ -49,7 +51,7 @@ export function ExamQuestionView(p: Props) {
       {p.mode === "take" ? (
         <TakeInput q={q} mine={mine} onChange={p.onChange} disabled={!!p.disabled} />
       ) : (
-        <ResultBody q={q} mine={mine} hasKey={hasKey} answerKey={key} />
+        <ResultBody q={q} mine={mine} mineLabel={mineLabel} hasKey={hasKey} answerKey={key} />
       )}
 
       {res && "explanation" in q && (q.explanation ?? "").trim() !== "" && (
@@ -121,7 +123,7 @@ function TakeInput({ q, mine, onChange, disabled }: { q: ExamQuestion; mine: unk
 }
 
 /** 결과 — 내 답과(서버가 보냈으면) 정답. 정답 키가 없으면 내 답만 */
-function ResultBody({ q, mine, hasKey, answerKey }: { q: ExamQuestion; mine: unknown; hasKey: boolean; answerKey: unknown }) {
+function ResultBody({ q, mine, mineLabel, hasKey, answerKey }: { q: ExamQuestion; mine: unknown; mineLabel: string; hasKey: boolean; answerKey: unknown }) {
   const tag = "shrink-0 rounded-[6px] px-[6px] py-[1px] text-[11px] font-bold";
   if (q.type === "single" || q.type === "multi") {
     const picked = q.type === "single" ? (typeof mine === "number" ? [mine] : []) : nums(mine);
@@ -137,7 +139,7 @@ function ResultBody({ q, mine, hasKey, answerKey }: { q: ExamQuestion; mine: unk
                 {me ? (q.type === "single" ? "●" : "✓") : ""}
               </span>
               <span className={`min-w-0 flex-1 [overflow-wrap:anywhere] ${me ? "font-semibold text-ink" : ""}`}>{c}</span>
-              {me && <span className={`${tag} bg-slate-soft text-ink-3`}>내 답</span>}
+              {me && <span className={`${tag} bg-slate-soft text-ink-3`}>{mineLabel}</span>}
               {ok && <span className={`${tag} bg-[#BFE6D4] text-[#1A7F55]`}>정답</span>}
             </li>
           );
@@ -149,7 +151,7 @@ function ResultBody({ q, mine, hasKey, answerKey }: { q: ExamQuestion; mine: unk
   const mineText = show(mine);
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[14px]">
-      <dt className="text-ink-3">내 답</dt>
+      <dt className="text-ink-3">{mineLabel}</dt>
       <dd className="m-0 font-semibold text-ink [overflow-wrap:anywhere]">{mineText || <span className="font-normal text-muted">답하지 않았어요</span>}</dd>
       {hasKey && (
         <>

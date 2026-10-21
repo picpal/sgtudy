@@ -12,9 +12,9 @@ describe("tokens", () => {
   it("claude mcp add 명령", () =>
     expect(mcpAddCommand("https://sgtudy.app", "sgt_pat_x")).toBe(
       'claude mcp add --scope user --transport http sgtudy https://sgtudy.app/api/mcp --header "Authorization: Bearer sgt_pat_x"'));
-  it("허용 목록 조각: 읽기 3 + 미리보기만(적용·삭제는 묻기)", () => {
+  it("허용 목록 조각: 읽기 4(get_exam_brief 포함) + 미리보기만(적용·삭제·초안 저장은 묻기)", () => {
     const allow = JSON.parse(MCP_ALLOW_SNIPPET).permissions.allow as string[];
-    expect(allow).toEqual(["mcp__sgtudy__list_my_studies", "mcp__sgtudy__get_curriculum", "mcp__sgtudy__list_my_tasks", "mcp__sgtudy__preview_curriculum_plan"]);
+    expect(allow).toEqual(["mcp__sgtudy__list_my_studies", "mcp__sgtudy__get_curriculum", "mcp__sgtudy__list_my_tasks", "mcp__sgtudy__get_exam_brief", "mcp__sgtudy__preview_curriculum_plan"]);
   });
   it("스코프 라벨", () => expect(SCOPE_LABEL).toEqual({ read: "읽기", "curriculum:write": "진행목표 편집", "personal:write": "개인 목표 추가" }));
   it("mcpUrl: 끝 슬래시를 떼고 /api/mcp", () => {

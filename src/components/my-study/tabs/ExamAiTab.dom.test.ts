@@ -94,6 +94,9 @@ describe("ExamAiTab — 브리프", () => {
     mount({ view: view({ brief: null }) });
     expect(briefForm(null)).toEqual({ topic: "", theory: "", count: 10, types: ["single", "multi", "ox"], difficulty: "normal", note: "" });
     expect(host.querySelector('[aria-label^="문항 수:"]')!.getAttribute("aria-label")).toBe("문항 수: 10문항");
+    // 아무것도 저장하지 않았으면 「저장됨」이 아니라 [브리프 저장](E2E I-5)
+    expect(button("브리프 저장됨")).toBeUndefined();
+    expect(button("브리프 저장")!.disabled).toBe(false);
     type(fieldOf("참고"), "슬라이드 3장");
     await act(async () => button("브리프 저장")!.click());
     expect(m.brief).not.toHaveBeenCalled();

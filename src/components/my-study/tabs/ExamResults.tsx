@@ -163,7 +163,7 @@ function AttemptView({ v, name, scope }: { v: ExamView; name: string; scope: str
         <ol className="m-0 flex list-none flex-col gap-6 p-0">
           {qs.map((q, i) => {
             const r = questionResult(q, v.attempt);
-            return <ExamQuestionView key={q.id} mode="result" q={q} no={i + 1} mine={r.mine} correct={r.correct} earned={r.earned} idScope={scope} />;
+            return <ExamQuestionView key={q.id} mode="result" q={q} no={i + 1} mine={r.mine} correct={r.correct} earned={r.earned} idScope={scope} mineLabel="답" />;
           })}
         </ol>
       )}

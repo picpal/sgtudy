@@ -150,14 +150,18 @@ describe("ExamEditor — 잠김(응시 1건~)", () => {
     // 정답 라디오를 눌러도 바뀌지 않는다
     act(() => host.querySelectorAll<HTMLInputElement>('input[name="exam-q-0-answer"]')[1].click());
     expect(onDirty).toHaveBeenLastCalledWith(false);
-    // 초안으로 되돌리기도 막힌다
-    expect(button("초안으로")!.disabled).toBe(true);
+    // 초안으로 되돌리기도 막힌다 — 이유를 버튼에 이어 보인다(E2E I-7)
+    const unpub = button("초안으로")!;
+    expect(unpub.disabled).toBe(true);
+    const why = host.querySelector(`#${unpub.getAttribute("aria-describedby")}`);
+    expect(why?.textContent).toBe("3명이 제출해 초안으로 되돌릴 수 없어요");
   });
 
   it("제출 0명·응시 중 — '응시가 시작돼' 문구 (0명이 제출해 아님)", async () => {
     await mount(view({ status: "published", locked: true, submittedCount: 0 }), { ...SUMMARY, status: "published" });
     expect(host.textContent).toContain("응시가 시작돼 문항은 잠겼어요");
     expect(host.textContent).not.toContain("0명이 제출해");
+    expect(host.textContent).toContain("응시가 시작돼 초안으로 되돌릴 수 없어요");
   });
 });
 

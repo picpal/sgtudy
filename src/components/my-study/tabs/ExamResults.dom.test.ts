@@ -146,6 +146,8 @@ describe("ExamResults", () => {
     expect(region.textContent).toContain("1/3점 (33%) · 1/2 문항 정답");
     expect(region.textContent).toContain("✓ 정답");
     expect(region.textContent).toContain("✗ 오답");
+    expect(region.textContent).not.toContain("내 답");   // 남의 답안 — 중립 라벨 「답」(E2E I-3)
+    expect([...region.querySelectorAll("span, dt")].some((e) => e.textContent === "답")).toBe(true);
     expect(region.querySelector("input")).toBeNull();
     expect(region.querySelectorAll("details").length).toBe(1);
     expect(host.querySelector("[aria-expanded=true]")?.textContent).toBe("답안 ▾");

@@ -339,6 +339,13 @@ describe("EditView 시험 리프 — 「문제」 섹션 · 미저장 가드 (Re
     await mount(leaf);
     expect(host.querySelector("[data-exam-editor]")).toBeNull();
     expect(ex.fetch).not.toHaveBeenCalled();
+    expect(host.querySelector("#edit-view-title")?.textContent).toContain("항목 편집 · 과제");
+  });
+
+  it("시험 리프 — 머리·경로는 「시험」(상세와 같게, E2E I-4)", async () => {
+    await mount(examLeaf);
+    expect(host.querySelector("#edit-view-title")?.textContent).toContain("항목 편집 · 시험");
+    expect(host.textContent).not.toMatch(/› ?과제/);
   });
 
   it("시험 리프 — 담당자 아래 「문제」 섹션", async () => {

@@ -27,9 +27,9 @@ export function mcpAddCommand(origin: string, token: string): string {
   return `claude mcp add --scope user --transport http sgtudy ${mcpUrl(origin)} --header "Authorization: Bearer ${token}"`;
 }
 
-/** 〔D21〕 ~/.claude/settings.json 조각 — 읽기 3개 + 미리보기만 자동 허용(적용·개인 목표 추가·삭제는 계속 묻는다) */
+/** 〔D21〕 ~/.claude/settings.json 조각 — 읽기 4개 + 미리보기만 자동 허용(적용·개인 목표 추가·삭제·시험 초안 저장은 계속 묻는다) */
 export const MCP_ALLOW_SNIPPET = JSON.stringify(
-  { permissions: { allow: ["mcp__sgtudy__list_my_studies", "mcp__sgtudy__get_curriculum", "mcp__sgtudy__list_my_tasks", "mcp__sgtudy__preview_curriculum_plan"] } },
+  { permissions: { allow: ["mcp__sgtudy__list_my_studies", "mcp__sgtudy__get_curriculum", "mcp__sgtudy__list_my_tasks", "mcp__sgtudy__get_exam_brief", "mcp__sgtudy__preview_curriculum_plan"] } },
   null,
   2,
 );

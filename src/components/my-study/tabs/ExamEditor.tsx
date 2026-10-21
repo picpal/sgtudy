@@ -5,7 +5,7 @@ import type { ToastMsg } from "@/components/ui/Toast";
 import { EXAM_LIMITS } from "@/lib/api/exam";
 import type { ExamQType, ExamReveal, ExamSummary } from "@/lib/api/types";
 import { Seg } from "../bits";
-import { QTYPE_KO, REVEAL_KO, draftTotals, examHead, isExamDraft } from "../exam";
+import { QTYPE_KO, REVEAL_KO, draftTotals, examHead, isExamDraft, unpublishLockText } from "../exam";
 import { useExamEditor, type ExamEditorApi } from "../useExamEditor";
 import { ExamQuestionForm } from "./ExamQuestionForm";
 import { InlineConfirm } from "./InlineConfirm";
@@ -119,7 +119,7 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
               발행
             </button>
           ) : (
-            <button type="button" disabled={!view || unpublishLocked || busy || !!ask} aria-describedby={unpublishLocked ? lockId : undefined} onClick={() => setAsk("unpublish")} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50">
+            <button type="button" disabled={!view || unpublishLocked || busy || !!ask} aria-describedby={unpublishLocked ? `exam-unpub-${nodeId}` : undefined} onClick={() => setAsk("unpublish")} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50">
               초안으로
             </button>
           )}
@@ -128,6 +128,12 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
       {draftState && view && !canPublish && (
         <p id={`exam-empty-${nodeId}`} className="m-0 -mt-1 text-[12px] font-medium text-muted">
           {EMPTY_NOTE}
+        </p>
+      )}
+      {/* 발행된 시험이 잠기면 [초안으로] 가 비활성 — 이유를 버튼 아래에(E2E I-7). AI 탭에선 잠금 안내문이 숨어서 따로 둔다 */}
+      {!draftState && unpublishLocked && (
+        <p id={`exam-unpub-${nodeId}`} className="m-0 -mt-1 text-[12px] font-medium text-muted">
+          {unpublishLockText(view?.exam.submittedCount ?? 0)}
         </p>
       )}
       {ask === "publish" && (

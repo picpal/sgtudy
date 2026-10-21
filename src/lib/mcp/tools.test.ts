@@ -213,7 +213,7 @@ describe("시험 도구(Task 11)", () => {
     expect(t).toMatch(/^오류 VALIDATION_FAILED: exam\.questions\[2\]\.answer — 정답은/);
     expect(t).toContain("→ 다음: 표시한 값을 고쳐 같은 도구를 다시 부르세요");
   });
-  it("exam 스키마: §3.2 상한(문항 1~50 · 배점 1~10 · 허용 답 ≤200자) · 모르는 키(reveal 등) 거부 · 답은 다듬지 않음", () => {
+  it("exam 스키마: §3.2 상한(문항 1~50 · 배점 1~10 · 허용 답 ≤200자) · 모르는 키 거부 · reveal(계약 값)은 받는다 · 답은 다듬지 않음", () => {
     const s = z.object(tool("create_exam_draft").inputSchema);
     const q = { type: "single", prompt: "p", choices: ["a", "b"], answer: 1, points: 10 };
     expect(s.safeParse({ task: "1", exam: { questions: [q] } }).success).toBe(true);
@@ -222,7 +222,10 @@ describe("시험 도구(Task 11)", () => {
     expect(s.safeParse({ task: "1", exam: { questions: [] } }).success).toBe(false);
     expect(s.safeParse({ task: "1", exam: { questions: Array(51).fill(q) } }).success).toBe(false);
     expect(s.safeParse({ task: "1", exam: { questions: [{ ...q, points: 11 }] } }).success).toBe(false);
-    expect(s.safeParse({ task: "1", exam: { questions: [q], reveal: "after_deadline" } }).success).toBe(false);
+    expect(s.safeParse({ task: "1", exam: { questions: [q], reveal: "after_deadline" } }).success).toBe(true);
+    expect(s.safeParse({ task: "1", exam: { questions: [q], reveal: "after_submit" } }).success).toBe(true);
+    expect(s.safeParse({ task: "1", exam: { questions: [q], reveal: "AFTER_DEADLINE" } }).success).toBe(false);
+    expect(s.safeParse({ task: "1", exam: { questions: [q], shuffle: true } }).success).toBe(false);
     expect(s.safeParse({ task: "1", exam: { questions: [{ ...q, hint: "x" }] } }).success).toBe(false);
     expect(s.safeParse({ task: "1", exam: { questions: [{ type: "short", prompt: "p", answer: ["x".repeat(201)] }] } }).success).toBe(false);
     const ok = s.parse({ task: "1", exam: { questions: [{ type: "short", prompt: "p", answer: [" IGW "] }] } });

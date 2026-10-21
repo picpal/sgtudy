@@ -193,8 +193,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   const locks = n.leaf ? leafLocks(n) : null;
   const removeLabel = n.archived ? "보관 해제" : hasSub ? "보관" : "삭제";
   const plan = removePlan(n);
-  // 내부 depth("2단계")는 보여 주지 않는다 (Q1-17) — "1주차 · 회차", "1주차 IAM·VPC › 과제". 조상은 누르면 그 편집 화면으로
-  const kind = n.leaf ? "과제" : n.d === 0 ? "회차" : "묶음";
+  // 내부 depth("2단계")는 보여 주지 않는다 (Q1-17) — "1주차 · 회차", "1주차 IAM·VPC › 과제"(시험 리프는 "› 시험" — 상세와 같게). 조상은 누르면 그 편집 화면으로
+  const kind = n.leaf ? (n.exam ? "시험" : "과제") : n.d === 0 ? "회차" : "묶음";
   const ancestors: TreeNode[] = [];
   for (let p = nodes.find((x) => x.id === n.parentId); p; p = nodes.find((x) => x.id === p!.parentId)) ancestors.unshift(p);
   const path = (cls: string) => (

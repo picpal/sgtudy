@@ -144,6 +144,8 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast, onBrief }: Props & { 
     setForm((f) => ({ ...f, ...patch }));
   };
   const briefDirty = !sameBrief(form, saved);
+  // 브리프가 아직 없으면 기본값 그대로여도 [브리프 저장] — 「저장됨」은 저장된 브리프와 같을 때만
+  const canSaveBrief = briefDirty || !view.exam.brief;
   const theoryOver = form.theory.length > BRIEF_LIMITS.theory;
   // 서버 exam_draft_put 은 발행·잠긴 시험을 거부한다 — 가져오기(수동 초안 교체)도 같은 때 막는다
   const blocked = ed.locked ? "응시가 시작된 시험이라 문항을 AI 초안으로 바꿀 수 없어요" : view.exam.status === "published" ? "발행된 시험은 AI 초안으로 바꿀 수 없어요 · 초안으로 되돌린 뒤 해 주세요" : null;
@@ -302,8 +304,8 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast, onBrief }: Props & { 
             {briefErr}
           </p>
         )}
-        <button type="button" disabled={savingBrief || !briefDirty} aria-busy={savingBrief || undefined} onClick={() => void saveBrief()} className={`${primary} w-full`}>
-          {savingBrief ? "저장하는 중…" : briefDirty ? "브리프 저장" : "브리프 저장됨"}
+        <button type="button" disabled={savingBrief || !canSaveBrief} aria-busy={savingBrief || undefined} onClick={() => void saveBrief()} className={`${primary} w-full`}>
+          {savingBrief ? "저장하는 중…" : canSaveBrief ? "브리프 저장" : "브리프 저장됨"}
         </button>
       </div>
 
@@ -326,7 +328,7 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast, onBrief }: Props & { 
           <li>② 아래 지시문을 복사해 AI 에게 붙여 넣어요 — AI 가 get_exam_brief 로 브리프를 읽고 create_exam_draft 로 초안을 저장해요(프롬프트 draft-exam 도 같아요)</li>
           <li>③ AI 가 저장했다고 하면 [초안 새로 불러오기]를 눌러 검토해요</li>
         </ol>
-        {briefDirty && <p className="m-0 text-[12px] font-medium text-muted">저장하지 않은 브리프는 AI 가 읽지 못해요 · 먼저 [브리프 저장]을 눌러 주세요</p>}
+        {canSaveBrief && <p className="m-0 text-[12px] font-medium text-muted">저장하지 않은 브리프는 AI 가 읽지 못해요 · 먼저 [브리프 저장]을 눌러 주세요</p>}
         <pre aria-label="AI 지시문" className="m-0 whitespace-pre-wrap break-words rounded-[10px] bg-surface-2 px-3 py-[10px] font-sans text-[13px] leading-[1.6] text-ink">
           {instruction}
         </pre>

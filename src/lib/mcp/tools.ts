@@ -67,7 +67,8 @@ const previewRun = call("curriculum_plan_preview", (a) => ({ study: a.study, pla
 /** 숫자 id 또는 제목 정확 일치(TS 측 해석 — DB op 는 id 만 받는다) */
 const task = z.union([z.string(), z.number().int().nonnegative()]).describe("task id or exact title");
 /** sgtudy.exam/v1(스펙 §3.2) — 서버 exam_validate 와 같은 상한. 유형별 answer 모양(보기 번호·OX·허용 답)은 계약 문구와 서버가 맡는다:
-    유형별 discriminatedUnion 은 tools/list 예산(8,000자)을 넘긴다. 답은 다듬지 않는다(단답 비교는 서버 exam_norm). reveal 은 웹에서만 */
+    유형별 discriminatedUnion 은 tools/list 예산(8,000자)을 넘긴다. 답은 다듬지 않는다(단답 비교는 서버 exam_norm).
+    reveal 은 계약·웹 JSON 과 같게 받되 exam_draft_put 이 무시한다(공개 시점은 웹에서만) */
 const examDoc = z.strictObject({
   questions: z.array(z.strictObject({
     type: z.enum(["single", "multi", "ox", "short"]),
@@ -77,6 +78,7 @@ const examDoc = z.strictObject({
     explanation: z.string().max(4000).optional(),
     points: z.number().int().min(1).max(10).optional(),
   })).min(1).max(50),
+  reveal: z.enum(["after_submit", "after_deadline"]).optional(),
 });
 
 const FIX_TASK = 'get_curriculum(detail:"full") 로 말단 과제의 id 를 확인해 task 에 넣고 다시 부르세요';
