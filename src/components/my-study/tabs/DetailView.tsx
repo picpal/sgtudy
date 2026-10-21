@@ -12,7 +12,8 @@ import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { useStickyOffset } from "@/lib/useStickyOffset";
 import { MarkdownView } from "../MarkdownView";
-import { ArchivedBadge, TypeBadge } from "../bits";
+import { ArchivedBadge, ExamBadge, TypeBadge } from "../bits";
+import { isExamDraft } from "../exam";
 import { roundStatus, type LeafNode, type ParentNode, type TreeNode } from "../model";
 import { archiveOthersText, cardSync, isDone, ownerCode, ownerOf, personalActions, removeText, roundWarning, statusColor, statusText, type CardSkip, type PersonalActions } from "../personal";
 import type { RoomStatus } from "../submission";
@@ -193,13 +194,16 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
   // 경로 조각: 회차(·묶음) — 누르면 그 상세로
   const ancestors: TreeNode[] = [];
   for (let p = nodes.find((x) => x.id === n.parentId); p; p = nodes.find((x) => x.id === p!.parentId)) ancestors.unshift(p);
-  const kind = pn ? "개인 목표" : n.leaf ? "과제" : n.d === 0 ? "회차" : "묶음";
+  const exam = n.leaf ? (n.exam ?? null) : null;
+  const kind = pn ? "개인 목표" : exam ? "시험" : n.leaf ? "과제" : n.d === 0 ? "회차" : "묶음";
   // 파일을 올리는 중이면 나가기 전에 묻는다 (스펙 §2.8) — 탭 전환·브라우저 뒤로 가기는 막지 않는다
   const [uploading, setUploading] = useState(false);
+  // 시험 답 저장이 실패한 채로 나가면 그 답은 사라진다 — 올리는 중 파일과 같은 확인으로 묻는다
+  const [examUnsaved, setExamUnsaved] = useState(false);
   const [leave, setLeave] = useState<(() => void) | null>(null);
   const guard = (go: () => void) => {
     if (editing && formUnsaved) setUnsaved(() => go);
-    else if (uploading) setLeave(() => go);
+    else if (uploading || examUnsaved) setLeave(() => go);
     else go();
   };
   const onKey = (e: KeyboardEvent<HTMLElement>) => {
@@ -308,7 +312,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
       {leave && (
         <div className="pt-3">
           <InlineConfirm
-            text="파일을 올리는 중이에요 · 나가면 올리기가 취소돼요"
+            text={uploading ? "파일을 올리는 중이에요 · 나가면 올리기가 취소돼요" : "저장하지 못한 답이 있어요 · 지금 나가면 그 답은 저장되지 않을 수 있어요"}
             cancelLabel="머무르기"
             onCancel={() => setLeave(null)}
             actions={[
@@ -384,6 +388,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
           <div className="flex flex-wrap items-center gap-2">
             {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[7px] bg-navy px-2 py-[3px] text-[12px] font-bold text-white">{n.label}</span>}
             {n.leaf && <TypeBadge type={n.type} />}
+            {exam && <ExamBadge draft={isExamDraft(exam)} />}
             <h2 id="detail-title" ref={heading} tabIndex={-1} className="m-0 min-w-0 text-[20px] font-bold text-ink outline-none [overflow-wrap:anywhere]">
               {n.title}
             </h2>
@@ -407,6 +412,8 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
               ) : (
                 roundStatus(n, today)
               )}
+              {/* 시험: "· 4문항 5점" — 초안을 편집자가 아닌 사람이 보면 요약에 수가 없다 */}
+              {exam?.questionCount != null && ` · ${exam.questionCount}문항 ${exam.totalPoints ?? 0}점`}
             </span>
             {n.by && !pn && (
               <>
@@ -440,6 +447,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, onEdit, slug, ro
               toast={toast}
               viewerPending={viewerPending}
               onUploadingChange={setUploading}
+              onExamUnsavedChange={setExamUnsaved}
               isLeader={isLeader}
               quietNotAssigned={quietNotAssigned}
               canRemoveFiles={canRemoveFiles}

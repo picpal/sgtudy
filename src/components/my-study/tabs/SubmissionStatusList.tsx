@@ -18,10 +18,12 @@ type Props = {
   personal?: boolean;
   headingRef?: Ref<HTMLHeadingElement>;
   onOpenFile: (f: FileMeta) => void;
+  /** false = 펼침 없음(시험 — 제출 행에 볼 내용이 없고 점수는 본인·편집자만, 스펙 D7) */
+  expandable?: boolean;
 };
 
 /** 담당자별 제출 현황 (스펙 §2.4). 펼침은 task_get.submissions 에 있는 줄만 — 트리 people 로 제출물을 추측하지 않는다 */
-export function SubmissionStatusList({ rows, sub, asg, note, archived = false, personal = false, headingRef, onOpenFile }: Props) {
+export function SubmissionStatusList({ rows, sub, asg, note, archived = false, personal = false, headingRef, onOpenFile, expandable = true }: Props) {
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) =>
     setOpen((p) => {
@@ -43,7 +45,7 @@ export function SubmissionStatusList({ rows, sub, asg, note, archived = false, p
         <ul className="m-0 flex list-none flex-col overflow-hidden rounded-[12px] border border-line p-0">
           {rows.map((r) => {
             // 내 줄은 위 카드에 있어 펼치지 않는다
-            const canOpen = !!r.submission && !r.me;
+            const canOpen = expandable && !!r.submission && !r.me;
             const isOpen = canOpen && open.has(r.userId);
             const label = rowStatusText(r.status, personal, archived);
             const line = (

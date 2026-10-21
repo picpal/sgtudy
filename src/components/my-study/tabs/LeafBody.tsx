@@ -2,18 +2,19 @@
 
 import { MarkdownView } from "../MarkdownView";
 import { emptyDescText } from "../submission";
+import { ExamSection } from "./ExamSection";
 import { NodeAttachments } from "./NodeAttachments";
 import { SubmissionSection, type SubmissionSectionProps } from "./SubmissionSection";
 
-/** 보기 상세 화면의 과제 본문 — 설명 + 제출(내 제출 카드 · 담당자별 제출 현황) */
-export function LeafBody(p: SubmissionSectionProps & { canRemoveFiles?: boolean }) {
-  const { canRemoveFiles = false, ...sub } = p;
+/** 보기 상세 화면의 과제 본문 — 설명 + 제출(내 제출 카드 · 담당자별 제출 현황). 시험 리프면 제출 대신 응시·결과(ExamSection) */
+export function LeafBody(p: SubmissionSectionProps & { canRemoveFiles?: boolean; onExamUnsavedChange?: (unsaved: boolean) => void }) {
+  const { canRemoveFiles = false, onExamUnsavedChange, ...sub } = p;
   const { n } = sub;
   return (
     <div className="flex flex-col gap-5">
       {n.desc.trim() ? <MarkdownView src={n.desc} className="text-[14px] leading-[1.75]" /> : <p className="m-0 text-[13px] text-muted">{emptyDescText(n.personal)}</p>}
       <NodeAttachments nodeId={n.id} canRemove={canRemoveFiles} toast={p.toast} />
-      <SubmissionSection {...sub} />
+      {n.exam ? <ExamSection {...sub} onUnsavedChange={onExamUnsavedChange} /> : <SubmissionSection {...sub} />}
     </div>
   );
 }

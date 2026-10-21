@@ -1,0 +1,287 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { ApiException } from "@/lib/api/errors";
+import type { ExamAttempt, ExamQuestion, ExamView, ExamViewerReason } from "@/lib/api/types";
+import { MeProvider } from "@/lib/me";
+import { EMPTY_OVERRIDES, buildTree, type LeafNode } from "../model";
+import { AWS, REF_DAY } from "../fixtures";
+import { ExamSection } from "./ExamSection";
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const m = vi.hoisted(() => ({ fetch: vi.fn(), save: vi.fn(), submit: vi.fn(), task: vi.fn() }));
+vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: m.fetch, saveExamAnswer: m.save, submitExam: m.submit }));
+vi.mock("@/lib/api/submission", async (orig) => ({ ...(await orig<object>()), fetchTask: m.task }));
+
+const BASE: ExamQuestion[] = [
+  { id: "1", ord: 0, type: "single", prompt: "IAM 정책 평가 순서로 옳은 것은?", choices: ["명시적 Deny → Allow → 암묵 Deny", "Allow → Deny"], points: 1 },
+  { id: "2", ord: 1, type: "multi", prompt: "VPC 구성 요소를 모두 고르세요", choices: ["서브넷", "IGW", "S3"], points: 2 },
+  { id: "3", ord: 2, type: "ox", prompt: "S3 는 리전 서비스다.", choices: null, points: 1 },
+  { id: "4", ord: 3, type: "short", prompt: "VPC 를 인터넷에 잇는 것은?", choices: null, points: 1 },
+];
+const KEYS: Record<string, { answer: unknown; explanation: string }> = {
+  "1": { answer: 0, explanation: "명시적 Deny 가 이긴다" },
+  "2": { answer: [0, 1], explanation: "S3 는 VPC 밖" },
+  "3": { answer: true, explanation: "" },
+  "4": { answer: ["인터넷 게이트웨이", "IGW"], explanation: "IGW" },
+};
+const revealed = BASE.map((q) => ({ ...q, ...KEYS[q.id] }));
+
+type O = { reason?: ExamViewerReason | null; canTake?: boolean; questions?: ExamQuestion[] | null; attempt?: ExamAttempt | null; reveal?: "after_submit" | "after_deadline"; closed?: boolean };
+const view = (o: O = {}): ExamView => ({
+  today: "2026-10-16",
+  node: { id: "311", title: "ALB vs NLB 실습", startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
+  exam: { status: "published", questionCount: 4, totalPoints: 5, reveal: o.reveal ?? "after_submit", publishedAt: "2026-10-14T00:00:00Z", closed: o.closed ?? false },
+  viewer: { canEdit: false, isAssignee: true, canTake: o.canTake ?? o.reason == null, reason: o.reason ?? null },
+  questions: o.questions === undefined ? BASE : o.questions,
+  attempt: o.attempt ?? null,
+});
+const submitted = (results: ExamAttempt["results"]): ExamAttempt => ({
+  status: "submitted",
+  answers: { "1": 0, "2": [0, 2], "3": true, "4": "igw" },
+  score: 4,
+  maxScore: 5,
+  correctCount: 3,
+  submittedAt: "2026-10-18T12:03:00Z",
+  isLate: false,
+  results,
+});
+const RESULTS = { "1": { correct: true, earned: 1 }, "2": { correct: false, earned: 0 }, "3": { correct: true, earned: 1 }, "4": { correct: true, earned: 1 } };
+
+const leaf = { ...buildTree(AWS, EMPTY_OVERRIDES, REF_DAY).leaves.find((l) => l.title === "ALB vs NLB 실습")!, exam: { status: "published", questionCount: 4, totalPoints: 5, reveal: "after_submit" } } as LeafNode;
+
+let root: Root | null = null;
+let host: HTMLElement;
+const toast = vi.fn();
+const onSubmitted = vi.fn();
+const onUnsaved = vi.fn();
+
+const flush = () =>
+  act(async () => {
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+  });
+const mount = async (v: ExamView, quiet = false) => {
+  m.fetch.mockResolvedValue(v);
+  host = document.body.appendChild(document.createElement("div"));
+  root = createRoot(host);
+  const body = createElement(ExamSection, { n: leaf, slug: "aws", roomStatus: "active", focus: null, onFocused: () => {}, onSubmitted, toast, viewerPending: false, quietNotAssigned: quiet, onUnsavedChange: onUnsaved });
+  act(() => root!.render(createElement(MeProvider, { me: null } as Parameters<typeof MeProvider>[0], body)));
+  await flush();
+};
+const button = (text: string) => Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.trim() === text);
+const typeInto = (el: HTMLInputElement, value: string) => {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+};
+const tickSave = async () => {
+  await act(async () => {
+    vi.advanceTimersByTime(400);
+  });
+  await flush();
+};
+const bar = () => host.querySelector(".sticky")!.textContent ?? "";
+
+beforeEach(() => {
+  Element.prototype.scrollIntoView = () => {};
+  vi.useFakeTimers();
+  for (const f of Object.values(m)) f.mockReset();
+  m.task.mockReturnValue(new Promise(() => {}));
+  toast.mockReset();
+  onSubmitted.mockReset();
+});
+afterEach(() => {
+  act(() => root?.unmount());
+  root = null;
+  host?.remove();
+  vi.useRealTimers();
+});
+
+describe("ExamSection — 상태 안내", () => {
+  it.each([
+    ["not_published", "아직 발행되지 않은 시험이에요"],
+    ["not_started", "10.15 부터 풀 수 있어요"],
+    ["archived", "보관된 시험이에요"],
+    ["room_not_active", "스터디가 진행 중일 때 풀 수 있어요"],
+    ["not_assignee", "담당 과제가 아니에요"],
+  ] as const)("%s → 안내만, 문항·제출 없음", async (reason, text) => {
+    await mount(view({ reason, questions: reason === "not_started" || reason === "not_published" ? null : BASE }));
+    expect(host.querySelector("[role=note]")?.textContent).toContain(text);
+    expect(host.querySelector("input")).toBeNull();
+    expect(button("제출하기")).toBeUndefined();
+    expect(host.textContent).toContain("제출 현황");
+  });
+  it("그룹장(담당 아님 문구 숨김) → 안내 없음", async () => {
+    await mount(view({ reason: "not_assignee", questions: null }), true);
+    expect(host.querySelector("[role=note]")).toBeNull();
+  });
+  it("closed(마감 뒤 정답 공개) → 안내 + 정답·해설, 제출 없음", async () => {
+    await mount(view({ reason: "closed", reveal: "after_deadline", closed: true, questions: revealed }));
+    expect(host.querySelector("[role=note]")?.textContent).toContain("마감이 지나 해설이 공개된 시험은 제출할 수 없어요");
+    expect(button("제출하기")).toBeUndefined();
+    expect(host.querySelectorAll("details").length).toBe(3);
+    expect(host.textContent).toContain("인터넷 게이트웨이 / IGW");
+    expect(host.textContent).toContain("답하지 않았어요");
+  });
+  it("불러오기 실패 → 다시 시도", async () => {
+    m.fetch.mockRejectedValue(new ApiException({ code: "UNKNOWN", message: "x" }));
+    host = document.body.appendChild(document.createElement("div"));
+    root = createRoot(host);
+    act(() => root!.render(createElement(MeProvider, { me: null } as Parameters<typeof MeProvider>[0], createElement(ExamSection, { n: leaf, slug: "aws", roomStatus: "active", focus: null, onFocused: () => {}, onSubmitted, toast, viewerPending: false }))));
+    await flush();
+    expect(host.querySelector("[role=alert]")?.textContent).toContain("시험을 불러오지 못했어요");
+    m.fetch.mockResolvedValue(view());
+    act(() => button("다시 시도")!.click());
+    await flush();
+    expect(host.querySelectorAll("input[type=radio]").length).toBe(2);
+  });
+});
+
+describe("ExamSection — 응시", () => {
+  it("4유형 입력 · 정답 키가 와도(편집자 겸 담당자) 응시 화면엔 정답·해설이 없다", async () => {
+    await mount(view({ questions: revealed }));
+    expect(host.querySelectorAll("input[type=radio]").length).toBe(2);
+    expect(host.querySelectorAll("input[type=checkbox]").length).toBe(3);
+    const ox = Array.from(host.querySelectorAll("button[aria-pressed]"));
+    expect(ox.map((b) => b.textContent)).toEqual(["O", "X"]);
+    expect(ox.every((b) => b.getAttribute("aria-pressed") === "false")).toBe(true);
+    const short = host.querySelector<HTMLInputElement>("input[type=text]")!;
+    expect(short.maxLength).toBe(200);
+    expect(host.querySelector("details")).toBeNull();
+    expect(host.textContent).not.toContain("명시적 Deny 가 이긴다");
+    expect(bar()).toContain("0/4 답함");
+    expect(button("제출하기")?.className).toContain("h-11");
+  });
+  it("저장된 답을 복원하고 n/총 은 서버 규칙(빈 칸·빈 배열은 답 아님)", async () => {
+    await mount(view({ attempt: { status: "in_progress", answers: { "1": 1, "2": [], "4": "" }, score: null, maxScore: null, correctCount: null, submittedAt: null, isLate: null, results: null } }));
+    expect(host.querySelectorAll<HTMLInputElement>("input[type=radio]")[1].checked).toBe(true);
+    expect(bar()).toContain("1/4 답함");
+  });
+  it("400ms 디바운스 저장 — 고른 값 그대로, 단답은 다듬지 않는다 · 저장 중… → 저장됨", async () => {
+    m.save.mockResolvedValue({ savedAt: "x", answered: 2, total: 4 });
+    await mount(view());
+    act(() => host.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[2].click());
+    act(() => typeInto(host.querySelector<HTMLInputElement>("input[type=text]")!, "  IGW "));
+    expect(bar()).toContain("저장 중…");
+    expect(bar()).toContain("2/4 답함");
+    await act(async () => {
+      vi.advanceTimersByTime(399);
+    });
+    expect(m.save).not.toHaveBeenCalled();
+    await tickSave();
+    expect(m.save.mock.calls.map((c) => [c[1], c[2]])).toEqual([
+      ["2", [2]],
+      ["4", "  IGW "],
+    ]);
+    expect(bar()).toContain("저장됨");
+    expect(m.fetch).toHaveBeenCalledTimes(1);
+  });
+  it("O/X 는 aria-pressed 로 고른다", async () => {
+    m.save.mockResolvedValue({ savedAt: "x", answered: 1, total: 4 });
+    await mount(view());
+    act(() => button("X")!.click());
+    expect(button("X")!.getAttribute("aria-pressed")).toBe("true");
+    await tickSave();
+    expect(m.save).toHaveBeenCalledWith("311", "3", false);
+  });
+  it("서버 answered 가 화면 수와 다르면 다시 받는다", async () => {
+    m.save.mockResolvedValue({ savedAt: "x", answered: 3, total: 4 });
+    await mount(view());
+    act(() => host.querySelectorAll<HTMLInputElement>("input[type=radio]")[0].click());
+    await tickSave();
+    expect(m.fetch).toHaveBeenCalledTimes(2);
+  });
+  it("저장 실패 → 토스트 · 저장 실패 [다시 시도] · 나가기 확인 신호", async () => {
+    m.save.mockRejectedValueOnce(new ApiException({ code: "UNKNOWN", message: "fetch failed" }));
+    await mount(view());
+    act(() => host.querySelectorAll<HTMLInputElement>("input[type=radio]")[0].click());
+    await tickSave();
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ tone: "bad" }));
+    expect(bar()).toContain("저장 실패");
+    expect(onUnsaved).toHaveBeenLastCalledWith(true);
+    m.save.mockResolvedValue({ savedAt: "x", answered: 1, total: 4 });
+    act(() => button("다시 시도")!.click());
+    await flush();
+    expect(m.save).toHaveBeenCalledTimes(2);
+    expect(m.save).toHaveBeenLastCalledWith("311", "1", 0);
+    expect(bar()).toContain("저장됨");
+    expect(onUnsaved).toHaveBeenLastCalledWith(false);
+  });
+  it("EXAM_CLOSED 저장 실패 → 서버 문구 토스트 + 다시 불러오기", async () => {
+    m.save.mockRejectedValue(new ApiException({ code: "EXAM_CLOSED", message: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요" }));
+    await mount(view());
+    m.fetch.mockResolvedValue(view({ reason: "closed", closed: true, reveal: "after_deadline", questions: revealed }));
+    act(() => host.querySelectorAll<HTMLInputElement>("input[type=radio]")[0].click());
+    await tickSave();
+    expect(toast).toHaveBeenCalledWith({ text: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요", tone: "bad" });
+    expect(m.fetch).toHaveBeenCalledTimes(2);
+    expect(button("제출하기")).toBeUndefined();
+  });
+  it("나가면(언마운트) 기다리던 답을 바로 보낸다", async () => {
+    m.save.mockResolvedValue({ savedAt: "x", answered: 1, total: 4 });
+    await mount(view());
+    act(() => host.querySelectorAll<HTMLInputElement>("input[type=radio]")[1].click());
+    act(() => root!.unmount());
+    root = null;
+    expect(m.save).toHaveBeenCalledWith("311", "1", 1);
+  });
+  it("미답 2 → 확인 문구 · 제출은 한 번만 · 결과로 바뀌고 onSubmitted", async () => {
+    m.save.mockResolvedValue({ savedAt: "x", answered: 2, total: 4 });
+    await mount(view());
+    act(() => host.querySelectorAll<HTMLInputElement>("input[type=radio]")[0].click());
+    act(() => button("O")!.click());
+    act(() => button("제출하기")!.click());
+    expect(host.querySelector("[role=alertdialog]")?.textContent).toContain("답하지 않은 2문항이 있어요 · 제출하면 다시 풀 수 없어요");
+    let done!: (v: ExamView) => void;
+    m.submit.mockReturnValue(new Promise<ExamView>((r) => (done = r)));
+    act(() => button("제출")!.click());
+    await flush();
+    // 남은 답을 먼저 저장한 뒤 제출
+    expect(m.save).toHaveBeenCalledTimes(2);
+    act(() => button("제출 중…")?.click());
+    expect(m.submit).toHaveBeenCalledTimes(1);
+    await act(async () => done(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) })));
+    await flush();
+    expect(m.submit).toHaveBeenCalledTimes(1);
+    expect(onSubmitted).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("4/5점 (80%) · 3/4 문항 정답");
+  });
+  it("제출 실패 EXAM_ALREADY_SUBMITTED → 토스트 + 다시 불러오기, onSubmitted 없음", async () => {
+    m.submit.mockRejectedValue(new ApiException({ code: "EXAM_ALREADY_SUBMITTED", message: "이미 제출한 시험이에요" }));
+    await mount(view());
+    act(() => button("제출하기")!.click());
+    expect(host.querySelector("[role=alertdialog]")?.textContent).toContain("답하지 않은 4문항이 있어요");
+    await act(async () => button("제출")!.click());
+    await flush();
+    expect(toast).toHaveBeenCalledWith({ text: "이미 제출한 시험이에요", tone: "bad" });
+    expect(m.fetch).toHaveBeenCalledTimes(2);
+    expect(onSubmitted).not.toHaveBeenCalled();
+  });
+});
+
+describe("ExamSection — 결과", () => {
+  it("공개(after_submit) → 점수 카드 · 정오 · 내 답/정답 · 해설 <details>", async () => {
+    await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
+    expect(host.querySelector("h3")?.textContent).toContain("4/5점 (80%) · 3/4 문항 정답");
+    expect(host.textContent).toContain("제출 · 기한 내");
+    expect(host.textContent).toContain("✓ 정답");
+    expect(host.textContent).toContain("✗ 오답");
+    expect(host.textContent).toContain("(0/2점)");
+    expect(host.querySelectorAll("details").length).toBe(3);
+    expect(host.querySelector("details summary")?.textContent).toBe("해설");
+    expect(host.textContent).toContain("내 답");
+    expect(host.textContent).toContain("인터넷 게이트웨이 / IGW");
+    expect(host.querySelector("input")).toBeNull();
+    expect(button("제출하기")).toBeUndefined();
+  });
+  it("after_deadline 마감 전 → 점수만 + 'MM.DD 마감 뒤에 열려요', 해설·정오 없음", async () => {
+    await mount(view({ reason: "submitted", canTake: false, reveal: "after_deadline", attempt: submitted(null) }));
+    expect(host.textContent).toContain("4/5점 (80%)");
+    expect(host.textContent).not.toContain("문항 정답");
+    expect(host.textContent).toContain("정답·해설은 10.21 마감 뒤에 열려요");
+    expect(host.querySelector("details")).toBeNull();
+    expect(host.textContent).not.toContain("✓ 정답");
+    expect(host.textContent).not.toContain("IAM 정책 평가 순서로");
+  });
+});

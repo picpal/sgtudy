@@ -95,3 +95,24 @@ describe("개인 목표 편집 폼 — 저장 안 한 수정이면 앱 안 링�
     host.remove();
   });
 });
+
+// 회차 시험 Task 9: 시험 리프 머리 — 경로 끝 "시험" · 시험 배지 · 메타 줄 "· n문항 m점" · 본문은 응시 영역(제출 카드 대신)
+describe("DetailView 시험 리프 머리", () => {
+  const exam = (e: LeafNode["exam"]) => ({ ...leaf("311"), exam: e }) as LeafNode;
+  it("발행된 시험: 시험 · 4문항 5점", () => {
+    const root = render(exam({ status: "published", questionCount: 4, totalPoints: 5, reveal: "after_submit" }), CHULSU, false);
+    expect(root.querySelector("nav[aria-label=경로]")?.textContent).toMatch(/시험$/);
+    expect(root.querySelector("[data-exam-badge]")?.textContent).toBe("시험");
+    expect(root.textContent).toContain("· 4문항 5점");
+    expect(root.querySelector('[aria-label="시험 불러오는 중"]')).not.toBeNull();
+    expect(root.querySelector('[aria-label="내 제출 불러오는 중"]')).toBeNull();
+  });
+  it("편집자 아닌 사람의 초안 요약(상태만): 수 없음 · 초안 배지", () => {
+    const root = render(exam({ status: "draft" }), CHULSU, false);
+    expect(root.querySelector("[data-exam-badge]")?.textContent).toBe("시험초안");
+    expect(root.textContent).not.toContain("문항");
+  });
+  it("일반 과제는 그대로 '과제'", () => {
+    expect(render(leaf("311"), CHULSU, false).querySelector("nav[aria-label=경로]")?.textContent).toMatch(/과제$/);
+  });
+});
