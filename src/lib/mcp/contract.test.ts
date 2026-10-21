@@ -24,17 +24,17 @@ function clean(text: string) {
 
 describe("api-contract → formatters", () => {
   it("curriculum_get 개요 · mine = isMine 인 지은 목표만", () => {
-    const outline = formatCurriculum(cur, { detail: "outline", personal: "mine" });
+    const outline = formatCurriculum(cur, { detail: "outline", personal: "mine" }).text;
     clean(outline);
     expect(outline.split("\n")[0]).toMatch(new RegExp(`^${slug} \\| `));
     expect(outline).toContain("← 현재");
-    const full = formatCurriculum(cur, { detail: "full", rounds: "current", personal: "mine" });
+    const full = formatCurriculum(cur, { detail: "full", rounds: "current", personal: "mine" }).text;
     clean(full);
     expect(full).toContain("[내 목표] n8 지은 목표 · n9 지은 목표 2");
     expect(full).not.toContain("철수 목표");
   });
   it("detail full 트리: 묶음 아래 과제가 들여쓰기로 이어진다(부모 참조 보존) · all 은 남의 목표를 닉네임으로", () => {
-    const full = formatCurriculum(cur, { detail: "full", rounds: `1-${cur.nodes.filter((n) => n.depth === 2).length}`, personal: "all" });
+    const full = formatCurriculum(cur, { detail: "full", rounds: `1-${cur.nodes.filter((n) => n.depth === 2).length}`, personal: "all" }).text;
     clean(full);
     const lines = full.split("\n");
     const bundle = lines.findIndex((l) => /^ {2}\S+ \[묶음\] /.test(l));

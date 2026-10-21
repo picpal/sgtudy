@@ -26,7 +26,7 @@ describe("weekWindow", () => {
 });
 describe("formatCurriculum", () => {
   it("개요: 머리 줄 · 회차 1줄씩(id 앞) · 현재 표시 · uuid 없음", () => {
-    const text = formatCurriculum(fixtureCurriculum(), { detail: "outline", personal: "mine" });
+    const text = formatCurriculum(fixtureCurriculum(), { detail: "outline", personal: "mine" }).text;
     const lines = text.split("\n");
     expect(lines[0]).toMatch(/^aws \| .* \| 오늘 2026-10-19\(월\) \| v [0-9a-f]{8}$/);
     expect(lines[1]).toBe("나: 편집 가능 · 개인 목표 회차당 20 | 멤버: 민수(그룹장) 지은 민호");
@@ -37,7 +37,7 @@ describe("formatCurriculum", () => {
     expect(text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
   });
   it("상세: 현재 회차 하위 · [묶음]/[공통]/[지정: 닉네임] · 내 목표 한 줄 · 남의 목표 없음", () => {
-    const text = formatCurriculum(fixtureCurriculum(), { detail: "full", rounds: "current", personal: "mine" });
+    const text = formatCurriculum(fixtureCurriculum(), { detail: "full", rounds: "current", personal: "mine" }).text;
     expect(text).toContain("[지정: 지은]");
     expect(text).toContain("[내 목표]");
     expect(text).not.toContain("민호의 목표");
@@ -51,41 +51,106 @@ describe("formatCurriculum", () => {
     ]);
   });
   it("personal all → 닉네임별 줄 · none → 없음 · isMine 없는 노드는 mine 에서 빠진다(〔C#5〕)", () => {
-    const all = formatCurriculum(fixtureCurriculum(), { detail: "full", rounds: 3, personal: "all" });
+    const all = formatCurriculum(fixtureCurriculum(), { detail: "full", rounds: 3, personal: "all" }).text;
     expect(all).toContain("  [민호의 목표] 306 퀴즈 오답");
     expect(all).toContain("  [내 목표] 305 복습 노트 ✓");
-    expect(formatCurriculum(fixtureCurriculum(), { detail: "full", personal: "none" })).not.toContain("목표]");
+    expect(formatCurriculum(fixtureCurriculum(), { detail: "full", personal: "none" }).text).not.toContain("목표]");
     const c = fixtureCurriculum();
     c.nodes = c.nodes.map((n) => { const { isMine: _x, ...rest } = n; void _x; return rest; });
-    expect(formatCurriculum(c, { detail: "full", personal: "mine" })).toContain("[내 목표] 없음");
+    expect(formatCurriculum(c, { detail: "full", personal: "mine" }).text).toContain("[내 목표] 없음");
   });
-  it("회차 선택자: 서수 · 라벨 · id · 범위 · 없는 것 → ROUND_NOT_FOUND", () => {
-    const first = (sel: string | number) => formatCurriculum(fixtureCurriculum(), { detail: "full", rounds: sel, personal: "none" }).split("\n")[2];
-    expect(first(1)).toMatch(/^201 1주차/);
-    expect(first("2주차")).toMatch(/^202 2주차/);
-    expect(first("203")).toMatch(/^203 3주차/);
-    expect(formatCurriculum(fixtureCurriculum(), { detail: "outline", rounds: "2-3", personal: "none" }).split("\n").slice(3).map((l) => l.split(" ")[0])).toEqual(["202", "203"]);
-    const err = formatCurriculum(fixtureCurriculum(), { detail: "full", rounds: "9주차", personal: "none" });
-    expect(err).toMatch(/^오류 ROUND_NOT_FOUND: /);
-    expect(err).toContain("후보: 1주차, 2주차, 3주차");
+  describe("회차 선택자 — plan_round_pick(0034) 규칙", () => {
+    const pick = (sel: string | number, c = fixtureCurriculum()) => formatCurriculum(c, { detail: "full", rounds: sel, personal: "none" });
+    const first = (sel: string | number, c?: GatewayCurriculum) => pick(sel, c).text.split("\n")[2];
+    const withRounds = (extra: Partial<N>[]) => {
+      const c = fixtureCurriculum();
+      c.nodes.push(...extra.map((o, i) => node({ id: String(900 + i), title: `추가 ${i}`, sortOrder: 10 + i, ...o })));
+      return c;
+    };
+    it("수 = 서수(정수 ≥ 1만, 보관 제외)", () => {
+      expect(first(1)).toMatch(/^201 1주차/);
+      expect(first(3)).toMatch(/^203 3주차/);
+      for (const bad of [0, -1, 1.5, 4]) expect(pick(bad).isError).toBe(true);
+      const c = fixtureCurriculum();
+      c.nodes = c.nodes.map((n) => (n.id === "201" ? { ...n, archived: true } : n));
+      expect(formatCurriculum(c, { detail: "full", rounds: 1, personal: "none", includeArchived: true }).text.split("\n")[2]).toMatch(/^202 2주차/);
+    });
+    it("\"current\" 대소문자·공백 무시 · 현재 회차 없으면 첫 회차", () => {
+      expect(first(" Current ")).toMatch(/^203 3주차/);
+      expect(first("CURRENT")).toMatch(/^203 3주차/);
+      const r = pick("current", { ...fixtureCurriculum(), currentRoundId: null });
+      expect(r.isError).toBe(false);
+      expect(r.text.split("\n").slice(2, 4)).toEqual(["(현재 회차가 없어 첫 회차를 보여요)", "201 1주차 IAM·VPC 10-01~10-07 · 과제 1 · 3/4"]);
+    });
+    it("숫자 문자열 = id(앞 0 무시) · id 에 없으면 라벨로", () => {
+      expect(first("203")).toMatch(/^203 3주차/);
+      expect(first("00203")).toMatch(/^203 3주차/);
+      expect(first("2026", withRounds([{ label: "2026" }]))).toMatch(/^900 2026 추가 0/);
+      expect(pick("1234567890123456789").isError).toBe(true);           // 19자리는 id 로 보지 않는다(라벨도 없음)
+    });
+    it("라벨은 앞뒤 공백 무시 정확 일치(대소문자 구분) · 보관 회차 제외", () => {
+      expect(first("  2주차 ")).toMatch(/^202 2주차/);
+      expect(first("A반", withRounds([{ label: " A반 " }]))).toMatch(/^900  A반 /);
+      expect(pick("a반", withRounds([{ label: "A반" }])).isError).toBe(true);
+      expect(pick("X", withRounds([{ label: "X", archived: true }])).isError).toBe(true);
+    });
+    it("라벨 겹침 → ROUND_AMBIGUOUS(후보 \"n번째 · 라벨 · 제목\" ≤ 20)", () => {
+      const r = pick("1주차", withRounds(Array.from({ length: 25 }, () => ({ label: "1주차" }))));
+      expect(r.isError).toBe(true);
+      expect(r.text).toMatch(/^오류 ROUND_AMBIGUOUS: 같은 라벨의 회차가 여러 개예요/);
+      const cand = r.text.split("\n").find((l) => l.startsWith("후보: "))!.slice(4).split(", ");
+      expect(cand).toHaveLength(20);
+      expect(cand[0]).toBe("1번째 · 1주차 · IAM·VPC");
+      expect(cand[1]).toBe("4번째 · 1주차 · 추가 0");
+    });
+    it("못 찾음 → ROUND_NOT_FOUND(후보 라벨|제목 ≤ 20) · 빈 문자열도", () => {
+      const r = pick("9주차");
+      expect(r).toMatchObject({ isError: true });
+      expect(r.text).toMatch(/^오류 ROUND_NOT_FOUND: 회차를 찾을 수 없어요/);
+      expect(r.text).toContain("후보: 1주차, 2주차, 3주차");
+      expect(pick("  ").isError).toBe(true);
+      const many = pick("없음", withRounds(Array.from({ length: 30 }, () => ({}))));
+      expect(many.text.split("\n").find((l) => l.startsWith("후보: "))!.split(", ")).toHaveLength(20);
+      expect(many.text).toContain("추가 0");                              // 라벨 없는 회차는 제목
+    });
+    it("포맷터 확장: \"a-b\" 서수 범위(라벨이 먼저)", () => {
+      expect(formatCurriculum(fixtureCurriculum(), { detail: "outline", rounds: "2-3", personal: "none" }).text.split("\n").slice(3).map((l) => l.split(" ")[0])).toEqual(["202", "203"]);
+      expect(first("1-2", withRounds([{ label: "1-2" }]))).toMatch(/^900 1-2/);
+      expect(pick("3-1").isError).toBe(true);
+    });
   });
   it("설명 포함 · 보관 표시", () => {
     const c = fixtureCurriculum();
     c.nodes = c.nodes.map((n) => (n.id === "302" ? { ...n, descriptionMd: "줄1\n줄2" } : n));
     c.nodes.push({ ...c.nodes.find((n) => n.id === "303")!, id: "309", title: "옛 과제", archived: true });
-    const text = formatCurriculum(c, { detail: "full", personal: "none", includeDescriptions: true, includeArchived: true });
+    const text = formatCurriculum(c, { detail: "full", personal: "none", includeDescriptions: true, includeArchived: true }).text;
     expect(text).toContain("      > 줄1\n      > 줄2");
     expect(text).toContain("  309 [보관] [지정: 지은] 옛 과제");
   });
   it("상한 8,000자 초과 → 절단 안내", () => {
-    const text = formatCurriculum(fixtureCurriculum({ rounds: 400 }), { detail: "outline", personal: "none" });
+    const text = formatCurriculum(fixtureCurriculum({ rounds: 400 }), { detail: "outline", personal: "none" }).text;
     expect(text.length).toBeLessThanOrEqual(MAX_TEXT);
     expect(text).toMatch(/외 \d+줄 — rounds:/);
   });
   it("12주 대표 방 개요 ≤ 1,500자(Review Focus 9)", () =>
-    expect(formatCurriculum(fixtureCurriculum({ rounds: 12 }), { detail: "outline", personal: "mine" }).length).toBeLessThanOrEqual(1500));
+    expect(formatCurriculum(fixtureCurriculum({ rounds: 12 }), { detail: "outline", personal: "mine" }).text.length).toBeLessThanOrEqual(1500));
+  it("isError 는 선택자 오류에서만", () => {
+    expect(formatCurriculum(fixtureCurriculum(), { detail: "outline", personal: "mine" }).isError).toBe(false);
+    expect(formatCurriculum(fixtureCurriculum(), { detail: "full", rounds: "없는 회차", personal: "mine" }).isError).toBe(true);
+  });
+  it("한 줄이 상한을 넘으면 그 줄을 잘라서라도 남긴다", () => {
+    const c = fixtureCurriculum();
+    c.study = { ...c.study, title: "가".repeat(9000) };
+    const t = formatCurriculum(c, { detail: "outline", personal: "none" }).text;
+    expect(t.length).toBeLessThanOrEqual(MAX_TEXT);
+    expect(t.startsWith("aws | 가가가")).toBe(true);
+    expect(t).toMatch(/…\n… 외 \d+줄/);
+    const one = formatPersonalResult({ count: 1, createdIds: ["1"], remaining: 1, round: { id: "1", label: null, title: "R" }, skipped: ["나".repeat(9000)], warnings: [] });
+    expect(one.length).toBe(MAX_TEXT);
+    expect(one.startsWith("1개 추가(R, 남은 자리 1)")).toBe(true);
+  });
   it("빈 진행목표", () =>
-    expect(formatCurriculum({ ...fixtureCurriculum(), nodes: [], currentRoundId: null }, { detail: "full", personal: "mine" }).split("\n")[2]).toBe("회차 0 — 진행목표가 비어 있어요"));
+    expect(formatCurriculum({ ...fixtureCurriculum(), nodes: [], currentRoundId: null }, { detail: "full", personal: "mine" }).text.split("\n")[2]).toBe("회차 0 — 진행목표가 비어 있어요"));
 });
 describe("formatStudies · formatTasks · formatPreview · expiryNotice", () => {
   it("스터디 1줄씩: slug | 제목 | 역할·편집 | 기간 | 현재 회차", () => {
@@ -135,6 +200,14 @@ describe("formatStudies · formatTasks · formatPreview · expiryNotice", () => 
       "- ops[0] title INVALID_TITLE: 제목을 넣어 주세요",
       "→ 다음: 표시한 경로를 고쳐 preview_curriculum_plan 을 다시 부르세요",
     ]);
+  });
+  it("previewId 가 없으면 undefined 를 찍지 않고 다시 미리보기 안내", () => {
+    const t = formatPreview({ ...fixturePreview(), previewId: undefined }, { slug: "aws" });
+    expect(t).not.toContain("undefined");
+    expect(t).not.toContain("apply_curriculum_plan");
+    expect(t.split("\n").at(-1)).toMatch(/^→ 다음: previewId 가 없어/);
+    const a = formatApply({ ...fixtureApply(), previewId: undefined as never }, { slug: "aws", origin: "https://sgtudy.app" });
+    expect(a).not.toContain("undefined");
   });
   it("되돌리기 미리보기 → ↩ 줄", () => {
     const t = formatPreview({ ...fixturePreview(), undoOf: "pv_aaaaaaaaaaaa", summary: { created: 0, updated: 0, moved: 0, restored: 1, shiftedDescendants: 0 },

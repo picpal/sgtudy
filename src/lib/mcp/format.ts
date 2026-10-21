@@ -49,6 +49,11 @@ function capLines(lines: string[], footer: (rest: number, firstCut: number) => s
     if (next + footer(lines.length - k - 1, k + 1).length > MAX_TEXT) break;
     len = next;
   }
+  if (lines.length === 1) return `${lines[0].slice(0, MAX_TEXT - 1)}…`;
+  if (k === 0) {                                    // 첫 줄부터 상한을 넘으면 그 줄을 잘라서라도 남긴다
+    const tail = footer(lines.length - 1, 1);
+    return `${lines[0].slice(0, Math.max(MAX_TEXT - tail.length - 2, 0))}…\n${tail}`;
+  }
   return [...lines.slice(0, k), footer(lines.length - k, k)].join("\n");
 }
 
@@ -64,32 +69,43 @@ export type CurriculumOpts = {
 };
 
 type Picked = { rounds: TreeNode[]; note?: string } | { error: string };
+const MAX_CANDIDATES = 20;
+/** 회차 선택자 해석 — 서버 plan_round_pick(0034)과 같은 규칙:
+    대상 = 보관 안 된 회차(입력 순서 = sort_order·id). 수 = 서수(1부터, 정수만) · 문자열은 trim 후
+    "current"(대소문자 무시) = 현재 회차, 없으면 첫 회차 · 숫자 1~18자리 = id(앞 0 무시), 없으면 라벨로 · 그 밖 = 라벨(trim) 정확 일치.
+    라벨이 겹치면 ROUND_AMBIGUOUS(후보 "n번째 · 라벨 · 제목" ≤ 20), 못 찾으면 ROUND_NOT_FOUND(후보 라벨|제목 ≤ 20).
+    포맷터 전용 확장: 라벨에도 id 에도 안 맞는 "a-b" = 서수 범위 */
 function pickRounds(all: TreeNode[], sel: number | string | undefined): Picked {
   if (sel === undefined) return { rounds: all };
   const live = all.filter((r) => !r.archived);
-  const candidates = () => all.map((r) => r.label || r.title).join(", ");
-  const notFound = (): Picked => ({ error: toolErrorText({ code: "ROUND_NOT_FOUND", message: `회차 「${sel}」 를 찾지 못했어요`,
-    details: all.length ? { candidates: [candidates()] } : undefined }) });
-  if (typeof sel === "number") return live[sel - 1] ? { rounds: [live[sel - 1]] } : notFound();
+  const notFound = (): Picked => ({ error: toolErrorText({ code: "ROUND_NOT_FOUND", message: "회차를 찾을 수 없어요",
+    details: { candidates: live.slice(0, MAX_CANDIDATES).map((r) => r.label ?? r.title) } }) });
+  if (typeof sel === "number") return Number.isInteger(sel) && sel >= 1 && live[sel - 1] ? { rounds: [live[sel - 1]] } : notFound();
   const s = sel.trim();
-  if (s === "current") {
-    const cur = all.find((r) => r.current);
+  if (s.toLowerCase() === "current") {
+    const cur = live.find((r) => r.current);
     if (cur) return { rounds: [cur] };
-    return live.length ? { rounds: [live[0]], note: "(현재 회차가 없어 첫 회차를 보여요)" } : { rounds: [] };
+    return live.length ? { rounds: [live[0]], note: "(현재 회차가 없어 첫 회차를 보여요)" } : notFound();
+  }
+  if (/^[0-9]{1,18}$/.test(s)) {
+    const id = BigInt(s).toString();
+    const byId = live.find((r) => r.id === id);
+    if (byId) return { rounds: [byId] };
+  }
+  if (s === "") return notFound();
+  const byLabel = live.filter((r) => (r.label ?? "").trim() === s);
+  if (byLabel.length === 1) return { rounds: byLabel };
+  if (byLabel.length > 1) {
+    const ord = (r: TreeNode) => live.indexOf(r) + 1;
+    return { error: toolErrorText({ code: "ROUND_AMBIGUOUS", message: "같은 라벨의 회차가 여러 개예요. 몇 번째 회차인지(숫자)나 id 로 골라 주세요",
+      details: { candidates: byLabel.slice(0, MAX_CANDIDATES).map((r) => `${ord(r)}번째 · ${r.label ?? ""} · ${r.title}`) } }) };
   }
   const range = /^(\d+)\s*-\s*(\d+)$/.exec(s);
   if (range) {
     const [a, b] = [Number(range[1]), Number(range[2])];
     const out = live.slice(Math.max(a, 1) - 1, b);
-    return out.length && a <= b ? { rounds: out } : notFound();
+    if (out.length && a <= b) return { rounds: out };
   }
-  if (/^\d+$/.test(s)) {
-    const byId = all.find((r) => r.id === s);
-    return byId ? { rounds: [byId] } : notFound();
-  }
-  const byLabel = all.filter((r) => r.label === s);
-  if (byLabel.length === 1) return { rounds: byLabel };
-  if (byLabel.length > 1) return { error: toolErrorText({ code: "ROUND_AMBIGUOUS", message: `「${s}」 라벨이 둘 이상이에요`, details: { candidates: byLabel.map((r) => `${r.id} ${r.title}`) } }) };
   return notFound();
 }
 
@@ -168,13 +184,15 @@ function nodeLines(t: CurriculumTree, n: TreeNode, parent: TreeNode, depth: numb
 }
 
 /** curriculum_get → 줄 형식(스펙 §7.1). 개요 = 회차 1줄씩, 상세 = 고른 회차의 하위 트리 */
-export function formatCurriculum(c: GatewayCurriculum, opts: CurriculumOpts): string {
+export function formatCurriculum(c: GatewayCurriculum, opts: CurriculumOpts): { text: string; isError: boolean } {
+  const text = curriculumText(c, opts);
+  return typeof text === "string" ? { text, isError: false } : { text: text.error, isError: true };
+}
+
+function curriculumText(c: GatewayCurriculum, opts: CurriculumOpts): string | { error: string } {
   const t = toCurriculumTree(c, { includeDescriptions: opts.includeDescriptions ?? false, includeArchived: opts.includeArchived });
   const personal = opts.personal ?? "mine";
   const sel = opts.rounds ?? (opts.detail === "full" ? "current" : undefined);
-  const picked = pickRounds(t.rounds, sel);
-  if ("error" in picked) return picked.error;
-
   const s = t.study;
   const head = [
     `${s.slug} | ${s.title} | ${STATUS_TEXT[s.status] ?? s.status} | ${s.startDate}~${s.endDate} | 오늘 ${t.today}(${dowOf(t.today)}) | v ${t.version.slice(0, 8)}`,
@@ -182,6 +200,8 @@ export function formatCurriculum(c: GatewayCurriculum, opts: CurriculumOpts): st
       + t.members.filter((m) => m.status === "active").map((m) => m.nickname + (m.role === "leader" ? "(그룹장)" : m.canEditCurriculum ? "(편집)" : "")).join(" "),
   ];
   if (t.rounds.length === 0) return [...head, "회차 0 — 진행목표가 비어 있어요"].join("\n");
+  const picked = pickRounds(t.rounds, sel);
+  if ("error" in picked) return picked;
 
   const body: { line: string; ord: number }[] = [];
   const ordOf = new Map(t.rounds.filter((r) => !r.archived).map((r, i) => [r.id, i + 1]));
@@ -431,8 +451,9 @@ export function formatPreview(p: PreviewData, opts: PreviewOpts): string {
   lines.push(notificationText(p.notifications));
   const undo = p.undoOf ? null : undoableText(p.undoable);
   if (undo) lines.push(undo);
-  lines.push(`previewId ${p.previewId}${p.expiresAt ? ` (${kst(p.expiresAt)} KST 까지)` : ""}`);
-  const next = `→ 다음: 사용자 승인 후 apply_curriculum_plan(previewId:"${p.previewId}")`;
+  if (p.previewId) lines.push(`previewId ${p.previewId}${p.expiresAt ? ` (${kst(p.expiresAt)} KST 까지)` : ""}`);
+  const next = p.previewId ? `→ 다음: 사용자 승인 후 apply_curriculum_plan(previewId:"${p.previewId}")`
+    : "→ 다음: previewId 가 없어 적용할 수 없어요 — 같은 계획으로 preview_curriculum_plan 을 다시 부르세요";
   const body = capLines(lines, (rest) => `… 외 ${rest}줄`);
   return `${body.length + next.length + 1 > MAX_TEXT ? body.slice(0, MAX_TEXT - next.length - 1) : body}\n${next}`;
 }
@@ -445,7 +466,7 @@ export function formatApply(a: ApplyData, opts: { slug: string; origin: string }
   const refs = Object.entries(a.refs ?? {});
   if (refs.length) lines.push(`ref: ${refs.map(([k, v]) => `${k}=${v}`).join(" · ")}`);
   else if (a.createdIds?.length) lines.push(`새 id: ${a.createdIds.join(", ")}`);
-  if (a.undoable && a.undoable.ops > 0) {
+  if (a.undoable && a.undoable.ops > 0 && a.previewId) {
     lines.push(`되돌리려면 preview_curriculum_plan(study:"${opts.slug}", undo:"${a.previewId}") — 일정만, 그 뒤 일정이 바뀌면 거부`);
   }
   const nu = a.undoable?.notUndoable;
