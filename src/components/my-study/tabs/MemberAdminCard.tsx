@@ -62,12 +62,9 @@ export function MemberAdminCard({ slug, members, meId, toast, tree, roundId, onS
 
   return (
     <section aria-labelledby="member-admin-title" className="flex flex-col gap-3 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
-      <div>
-        <h3 id="member-admin-title" className="m-0 text-[14px] font-bold">
-          멤버 관리
-        </h3>
-        <p className="m-0 mt-1 text-[12px] text-muted">진행목표 편집은 기본으로 그룹장만 할 수 있어요 · 켜 두면 그 팀원도 회차·과제를 추가하고 고칠 수 있어요 · “개인 목표”는 이번 회차 완료/전체예요(팀 수치와 따로)</p>
-      </div>
+      <h3 id="member-admin-title" className="m-0 text-[14px] font-bold">
+        멤버 관리
+      </h3>
       <ul className="m-0 flex list-none flex-col p-0">
         {rows.map((r) => {
           const st = statOf(r.userId);
