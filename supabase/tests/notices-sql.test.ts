@@ -269,9 +269,9 @@ cases("notices 0040 · popup inbox & reads", db, [
 ]);
 
 cases("notices 0040 · NOTICE_POSTED notification (D8)", db, [
-  { name: "kind registered last · render · link ?tab=notice", run: async (q) => {
+  { name: "kind registered after EXAM_PUBLISHED · render · link ?tab=notice", run: async (q) => {
     const k = (await one(q, "select public.notification_kinds() as k")).k as string[];
-    assertEquals([k[k.length - 2], k[k.length - 1]], ["EXAM_PUBLISHED", "NOTICE_POSTED"]);
+    assertEquals(k.slice(k.indexOf("EXAM_PUBLISHED"), k.indexOf("EXAM_PUBLISHED") + 2), ["EXAM_PUBLISHED", "NOTICE_POSTED"]);   // 0041 이 MENTIONED 를 뒤에 더했다
     const aws = await roomId(q, "aws");
     const t = (await one(q, `select public.notify_render('NOTICE_POSTED', $1::bigint, null, null, '{"title":"규칙"}') as t`, [aws])).t as Row;
     assertEquals([t.title, t.body], ["AWS SAA 자격증 3개월 완주 새 공지: 규칙", null]);
