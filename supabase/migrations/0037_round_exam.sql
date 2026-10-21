@@ -61,6 +61,7 @@ create table public.exam_answers (
   saved_at     timestamptz not null default now(),
   primary key (attempt_id, question_id)
 );
+create index ix_exam_answers_question on public.exam_answers (question_id);  -- 문항 삭제 cascade·문항별 정답률
 
 alter table public.exams          enable row level security;
 alter table public.exam_questions enable row level security;
