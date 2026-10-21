@@ -1,3 +1,4 @@
+import { commentIdOfHash } from "@/lib/hashTarget";
 import type { TaskOrigin } from "@/lib/taskOrigin";
 import { TABS, type TabId } from "./StudyHeaderInfo";
 import { EMPTY_OVERRIDES, isDirty, type CalMode, type Overrides } from "./model";
@@ -102,8 +103,11 @@ export const INITIAL_STATE: ScreenState = {
 export type Patch = Partial<ScreenState> | ((prev: ScreenState) => Partial<ScreenState>);
 export type Update = (patch: Patch) => void;
 
-/** 보드 카드·캘린더 팝오버·간트 리프·개요 카드·알림 → 그 과제의 보기 상세. from = 누른 곳(지금 탭), 알림 진입은 null */
-export const goLeafPatch = (id: string, from: ViewFrom | null = null): Partial<ScreenState> => ({ tab: "curriculum", curMode: "view", viewSel: id, viewFocus: "submission", viewFrom: from, editSel: null, closed: {}, calPick: null });
+/** 댓글 딥링크(#comment-{id})로 들어온 과제 상세는 제출 영역으로 끌어가지 않는다 — 댓글로 가야 한다(댓글 스펙 D16①) */
+export const leafFocusForHash = (hash: string | null | undefined): ScreenState["viewFocus"] => (hash && commentIdOfHash(hash) ? null : "submission");
+
+/** 보드 카드·캘린더 팝오버·간트 리프·개요 카드·알림 → 그 과제의 보기 상세. from = 누른 곳(지금 탭), 알림 진입은 null. hash = 알림 링크의 해시(# 없이) */
+export const goLeafPatch = (id: string, from: ViewFrom | null = null, hash?: string | null): Partial<ScreenState> => ({ tab: "curriculum", curMode: "view", viewSel: id, viewFocus: leafFocusForHash(hash), viewFrom: from, editSel: null, closed: {}, calPick: null });
 
 const FROM_LABEL: Record<TaskOrigin, string> = { tasks: "내 과제", schedule: "내 일정" };
 /** 상세 [← …] 단추 글 — 연 곳의 이름. 모르면 진행목표 */

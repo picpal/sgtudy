@@ -26,10 +26,13 @@ const pathOf = (href: string): string => new URL(href, "http://x").pathname;
 // 다른 화면으로 넘어갈 때는 새 화면이 마운트되는 시점에 주소 해시가 아직 없을 수 있다 → 링크 경로와 함께 잠깐 기억해 둔다.
 // 경로가 다른 화면(다른 방)은 가로채지 않는다 (최종 리뷰 Minor 1)
 let pending: (Announce & { at: number }) | null = null;
-const takePending = (id: string): boolean => {
-  if (!pending || pending.hash !== id || pending.path !== window.location.pathname || Date.now() - pending.at > 8000) return false;
-  pending = null;
-  return true;
+const livePending = (match: (hash: string) => boolean): string | null =>
+  !pending || !match(pending.hash) || pending.path !== window.location.pathname || Date.now() - pending.at > 8000 ? null : pending.hash;
+/** 맞는 pending 해시를 꺼낸다(꺼내면 지운다) */
+const takePending = (match: (hash: string) => boolean): string | null => {
+  const h = livePending(match);
+  if (h !== null) pending = null;
+  return h;
 };
 
 /** 알림 벨이 이동할 링크를 알린다 — 같은 화면의 앵커는 바로, 새로 열리는 화면의 앵커는 마운트될 때 찾아간다 */
@@ -112,7 +115,7 @@ export function useHashTarget(id: string, ready: boolean): boolean {
     // 해시와 pending 을 둘 다 본다(단락 평가로 pending 이 남지 않게) — 남으면 늦은 재확인·재마운트가 다시 찾아간다 (재리뷰 Minor A)
     const first = () => {
       const byHash = hashOf(window.location.hash) === id;
-      const byPending = takePending(id);
+      const byPending = takePending((h) => h === id) !== null;
       if (byHash || byPending) setHit((p) => (p.on ? p : { on: true, seq: p.seq + 1 }));
     };
     first();
@@ -144,4 +147,72 @@ export function useHashTarget(id: string, ready: boolean): boolean {
     setHit((p) => ({ on: false, seq: p.seq }));
   }, [hit, ready, id]);
   return hit.on;
+}
+
+/* ---------- 접두사 앵커 (댓글 #comment-{id}, 0041 스펙 D15·D16) ---------- */
+export const COMMENT_HASH_PREFIX = "comment-";
+/** "comment-12" → "12". 댓글 해시가 아니면 null */
+export const commentIdOfHash = (hash: string): string | null => {
+  const m = /^comment-(\d+)$/.exec(hash);
+  return m ? m[1] : null;
+};
+const prefixMatch = (prefix: string) => (h: string) => h.length > prefix.length && h.startsWith(prefix);
+
+/**
+ * 지금 주소 해시 또는 이 화면 경로로 알린(아직 아무도 받지 않은) 해시 중 접두사가 맞는 것 — 꺼내지 않고 보기만 한다.
+ * 화면 첫 상태를 정할 때 쓴다(댓글 딥링크로 들어온 과제 상세는 제출 영역으로 끌어가지 않는다 — state.ts leafFocusForHash)
+ */
+export function peekHashPrefix(prefix: string): string | null {
+  if (typeof window === "undefined") return null;
+  const h = hashOf(window.location.hash);
+  return prefixMatch(prefix)(h) ? h : livePending(prefixMatch(prefix));
+}
+
+/**
+ * useHashTarget 의 접두사판 — 고정 id 대신 `{prefix}…` 해시를 받아 **찾은 해시(id)** 를 돌려준다(찾아가기 전까지, 아니면 null).
+ * pending·announce·해시 제거 규칙은 같다. 화면은 돌려받은 id 로 데이터를 불러오고(댓글 from=…), ready 가 되면 이 훅이
+ * 그 id 의 요소(없으면 fallbackId — 지워진·없는 댓글은 섹션)로 가운데 스크롤 + 포커스하고 해시를 지운 뒤 null 로 돌아간다
+ */
+export function useHashPrefixTarget(prefix: string, ready: boolean, opts: { fallbackId?: string } = {}): string | null {
+  const [hit, setHit] = useState<{ id: string | null; seq: number }>({ id: null, seq: 0 });
+  const { fallbackId } = opts;
+  useEffect(() => {
+    const match = prefixMatch(prefix);
+    const first = () => {
+      const byHash = hashOf(window.location.hash);
+      const byPending = takePending(match);
+      const id = match(byHash) ? byHash : byPending;
+      if (id) setHit((p) => (p.id === id ? p : { id, seq: p.seq + 1 }));
+    };
+    first();
+    const late = window.setTimeout(first, 120);
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<Announce>).detail;
+      if (!match(d.hash) || d.path !== window.location.pathname) return;
+      pending = null; // 이 화면이 받았다
+      setHit((p) => ({ id: d.hash, seq: p.seq + 1 }));
+    };
+    const onHash = () => {
+      const h = hashOf(window.location.hash);
+      if (match(h)) setHit((p) => ({ id: h, seq: p.seq + 1 }));
+    };
+    window.addEventListener(EVENT, on);
+    window.addEventListener("hashchange", onHash);
+    return () => {
+      window.clearTimeout(late);
+      window.removeEventListener(EVENT, on);
+      window.removeEventListener("hashchange", onHash);
+    };
+  }, [prefix]);
+  useEffect(() => {
+    if (!hit.id || !ready) return;
+    const el = document.getElementById(hit.id) ?? (fallbackId ? document.getElementById(fallbackId) : null);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.focus({ preventScroll: true });
+    if (hashOf(window.location.hash) === hit.id) dropHash();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHit((p) => ({ id: null, seq: p.seq }));
+  }, [hit, ready, fallbackId]);
+  return hit.id;
 }

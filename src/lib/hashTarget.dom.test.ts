@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { announceHash, hashOf, useHashTarget } from "./hashTarget";
+import { announceHash, commentIdOfHash, hashOf, peekHashPrefix, useHashPrefixTarget, useHashTarget } from "./hashTarget";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -142,5 +142,92 @@ describe("useHashTarget — 해시로 hit 되면 pending 도 비운다", () => {
     expect(scrolled).toEqual(["leave-requests"]);
     act(() => again.root.unmount());
     vi.useRealTimers();
+  });
+});
+
+// 댓글 스펙 D15·D16: #comment-{id} — 고정 id 가 아니라 접두사로 받아 찾은 id 를 돌려준다(화면이 from=id 로 불러온 뒤 ready)
+let scrolledBlock: (string | undefined)[] = [];
+function PrefixProbe({ ready, ids }: { ready: boolean; ids: string[] }) {
+  const hit = useHashPrefixTarget("comment-", ready, { fallbackId: "comments" });
+  return createElement("section", { id: "comments", tabIndex: -1, "data-hit": hit ?? "" },
+    ids.map((id) => createElement("li", { key: id, id, tabIndex: -1 }, id)));
+}
+const mountPrefix = (ids: string[]) => {
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  const render = (ready: boolean) => root.render(createElement(PrefixProbe, { ready, ids }));
+  act(() => render(false));
+  return { host, root, ready: () => act(() => render(true)), hit: () => host.querySelector("section")!.dataset.hit };
+};
+
+describe("useHashPrefixTarget — 댓글 앵커", () => {
+  beforeEach(() => {
+    scrolledBlock = [];
+    Element.prototype.scrollIntoView = function (this: Element, o?: ScrollIntoViewOptions | boolean) {
+      scrolled.push(this.id);
+      scrolledBlock.push(typeof o === "object" ? o.block : undefined);
+    } as never;
+  });
+  it("주소 해시 comment-{id} → 찾은 id 를 돌려주고, ready 뒤 그 댓글로 가운데 스크롤·포커스, 해시 제거, null", () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=3#comment-12");
+    const p = mountPrefix(["comment-11", "comment-12"]);
+    expect(p.hit()).toBe("comment-12");
+    expect(scrolled).toEqual([]);
+    p.ready();
+    expect([scrolled, scrolledBlock]).toEqual([["comment-12"], ["center"]]);
+    expect(document.activeElement?.id).toBe("comment-12");
+    expect(window.location.hash).toBe("");
+    expect(window.location.search).toBe("?task=3");
+    expect(p.hit()).toBe("");
+    act(() => p.root.unmount());
+  });
+  it("그 댓글이 없으면(지워짐·없음) fallbackId 섹션으로", () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=3#comment-99");
+    const p = mountPrefix(["comment-11"]);
+    p.ready();
+    expect(scrolled).toEqual(["comments"]);
+    expect(document.activeElement?.id).toBe("comments");
+    act(() => p.root.unmount());
+  });
+  it("같은 화면 재클릭(announceHash)도 다시 찾아간다 · 다른 접두사·다른 경로는 무시", () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=3");
+    const p = mountPrefix(["comment-11", "comment-12"]);
+    p.ready();
+    expect(scrolled).toEqual([]);
+    act(() => announceHash("/my-study/aws?task=3#submissions"));
+    act(() => announceHash("/my-study/other?task=3#comment-11"));
+    expect([scrolled, p.hit()]).toEqual([[], ""]);
+    act(() => announceHash("/my-study/aws?task=3#comment-11"));
+    expect(scrolled).toEqual(["comment-11"]);
+    act(() => announceHash("/my-study/aws?task=3#comment-11"));
+    expect(scrolled).toEqual(["comment-11", "comment-11"]);
+    act(() => p.root.unmount());
+  });
+  it("다른 화면으로 넘어올 때: pending 해시를 마운트 때 한 번만 쓴다 · 'comment-' 만은 아님", () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=board");
+    announceHash("/my-study/aws?task=5#comment-");
+    const none = mountPrefix([]);
+    expect(none.hit()).toBe("");
+    act(() => none.root.unmount());
+    announceHash("/my-study/aws?task=5#comment-7");
+    expect(peekHashPrefix("comment-")).toBe("comment-7");   // 보기만 — 꺼내지 않는다
+    const p = mountPrefix(["comment-7"]);
+    expect(p.hit()).toBe("comment-7");
+    expect(peekHashPrefix("comment-")).toBeNull();
+    p.ready();
+    expect(scrolled).toEqual(["comment-7"]);
+    act(() => p.root.unmount());
+    const again = mountPrefix(["comment-7"]);
+    again.ready();
+    expect(scrolled).toEqual(["comment-7"]);
+    act(() => again.root.unmount());
+  });
+  it("peekHashPrefix · commentIdOfHash", () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=3#comment-31");
+    expect(peekHashPrefix("comment-")).toBe("comment-31");
+    expect(peekHashPrefix("x-")).toBeNull();
+    expect(commentIdOfHash("comment-31")).toBe("31");
+    expect(commentIdOfHash("comment-")).toBeNull();
+    expect(commentIdOfHash("submissions")).toBeNull();
   });
 });

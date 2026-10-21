@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editReturn, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, toggleMinePatch, toggleOthersPatch, viewBackLabel, viewBackPatch } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editReturn, editUnsaved, goLeafPatch, leafFocusForHash, modeSwitchPatch, tabPatch, toggleMinePatch, toggleOthersPatch, viewBackLabel, viewBackPatch } from "./state";
 
 describe("goLeafPatch", () => {
   it("opens the task detail view instead of an inline row", () =>
     expect(goLeafPatch("21")).toEqual({ tab: "curriculum", curMode: "view", viewSel: "21", viewFocus: "submission", viewFrom: null, editSel: null, closed: {}, calPick: null }));
   it("연 곳(지금 탭)을 적는다", () => expect(goLeafPatch("21", "board").viewFrom).toBe("board"));
+  // 댓글 스펙 D16①: 댓글 알림(#comment-{id})으로 온 과제 상세는 제출 영역으로 끌어가지 않는다
+  it("댓글 해시면 viewFocus 없음 · 다른 해시·없음은 제출 영역", () => {
+    expect(goLeafPatch("21", null, "comment-31").viewFocus).toBeNull();
+    expect(goLeafPatch("21", null, "submissions").viewFocus).toBe("submission");
+    expect(leafFocusForHash("comment-")).toBe("submission");
+    expect(leafFocusForHash("comment-x")).toBe("submission");
+    expect(leafFocusForHash(null)).toBe("submission");
+  });
 });
 
 // 상세 [← …] — 연 곳의 이름과 돌아갈 탭. 모르면 진행목표 목록
