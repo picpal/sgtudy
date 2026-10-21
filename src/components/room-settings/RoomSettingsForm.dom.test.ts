@@ -134,3 +134,27 @@ describe("방 설정 — 추가 모집 결과가 폼과 맞물린다", () => {
     act(() => root.unmount());
   });
 });
+
+describe("방 설정 — 기간 두 날짜 칸이 서로 겹치지 않는다(iOS Safari)", () => {
+  // iOS Safari 는 기본 모양(appearance:auto) date input 에 border-box 를 적용하지 않아 칸보다 34px 넓게 그린다 → 시작일이 종료일을 덮음
+  const dateSafe = (el: HTMLInputElement) => {
+    const cls = el.className.split(/\s+/);
+    expect(cls).toContain("appearance-none");
+    expect(cls).toContain("w-full");
+    expect(cls).toContain("min-w-0");
+    expect(cls).toContain("h-12");
+  };
+  it.each([
+    ["모집중(수정 가능)", { status: "recruit" }],
+    ["진행중(시작일 잠김)", { status: "active" }],
+  ] as const)("%s — 시작일·종료일 모두 기본 모양을 끈 날짜 칸, 같은 minmax 그리드 안", (_, d) => {
+    const { input } = mount(d as Partial<RoomDetail>);
+    const start = input("startDate");
+    const end = input("endDate");
+    dateSafe(start);
+    dateSafe(end);
+    const grid = start.closest("label")!.parentElement!;
+    expect(end.closest("label")!.parentElement).toBe(grid);
+    expect(grid.className.split(/\s+/)).toEqual(expect.arrayContaining(["grid", "grid-cols-2", "max-sm:grid-cols-1"]));
+  });
+});

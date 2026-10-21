@@ -17,6 +17,13 @@ export const RULE_TOOLS = ["bold", "italic", "strike", "code", "link", "bullet"]
 export const FIELD_CLASS =
   "h-12 w-full min-w-0 rounded-[12px] border border-line-3 bg-surface px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE] disabled:bg-surface-2 disabled:text-muted";
 
+/**
+ * 날짜 칸 — iOS Safari 는 기본 모양(appearance:auto)의 date input 에 border-box 를 적용하지 않아
+ * 칸 너비 + 좌우 패딩·테두리(34px)만큼 넓게(330→364px, 높이 50px) 그린다. 두 칸이 나란하면 시작일이 종료일을 덮는다.
+ * 기본 모양을 끄면 border-box 로 칸 안에 맞는다. 값은 왼쪽 정렬(iOS 기본은 가운데).
+ */
+export const DATE_FIELD_CLASS = `${FIELD_CLASS} appearance-none [&::-webkit-date-and-time-value]:text-left`;
+
 /** 필수 표시 — 글자로(색만으로 구분하지 않는다) */
 const Required = () => <span className="ml-1 text-[11px] font-semibold text-warn">필수</span>;
 

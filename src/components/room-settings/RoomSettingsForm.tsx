@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { EditorField, FIELD_CLASS, Field, JoinModeRadio, RULE_TOOLS, SwitchRow, TagPicker } from "@/components/room-new/fields";
+import { DATE_FIELD_CLASS, EditorField, FIELD_CLASS, Field, JoinModeRadio, RULE_TOOLS, SwitchRow, TagPicker } from "@/components/room-new/fields";
 import { fromDto, putRoomTags, sameTags, type TagItem } from "@/components/room-new/tags";
 import { clampCp, firstErrorKey, maxEndDate, revalidateOnChange, serverFieldError, type NewRoomValues } from "@/components/room-new/validate";
 import { StatusBadge } from "@/components/my-study/StudyHeaderInfo";
@@ -228,10 +228,10 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
             >
               <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
                 <Field label="시작일" required hint={locked.has("startDate") && !d.archived && d.status !== "ended" ? reason : undefined} error={errors.startDate}>
-                  <input name="startDate" type="date" className={FIELD_CLASS} min={v.startDate === base.startDate ? undefined : today} value={v.startDate} disabled={dis("startDate")} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} aria-invalid={!!errors.startDate} />
+                  <input name="startDate" type="date" className={DATE_FIELD_CLASS} min={v.startDate === base.startDate ? undefined : today} value={v.startDate} disabled={dis("startDate")} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} aria-invalid={!!errors.startDate} />
                 </Field>
                 <Field label="종료일" required error={errors.endDate}>
-                  <input name="endDate" type="date" className={FIELD_CLASS} min={d.status === "active" ? today : v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} disabled={dis("endDate")} onChange={(e) => set("endDate", e.target.value)} onBlur={() => recheck("endDate")} aria-invalid={!!errors.endDate} />
+                  <input name="endDate" type="date" className={DATE_FIELD_CLASS} min={d.status === "active" ? today : v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} disabled={dis("endDate")} onChange={(e) => set("endDate", e.target.value)} onBlur={() => recheck("endDate")} aria-invalid={!!errors.endDate} />
                 </Field>
               </div>
             </Section>

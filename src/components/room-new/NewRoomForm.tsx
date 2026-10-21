@@ -11,7 +11,7 @@ import { rpc, toApiError } from "@/lib/api/errors";
 import type { RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
-import { EditorField, FIELD_CLASS as field, Field, JoinModeRadio, RULE_TOOLS, SwitchRow, TagPicker } from "./fields";
+import { DATE_FIELD_CLASS, EditorField, FIELD_CLASS as field, Field, JoinModeRadio, RULE_TOOLS, SwitchRow, TagPicker } from "./fields";
 import { putRoomTags, toPutArgs, type TagItem } from "./tags";
 import { EMPTY_VALUES, clampCp, firstErrorKey, maxEndDate, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
@@ -89,8 +89,8 @@ export function NewRoomForm() {
             <Field label="제목 (= 최상위 목표)" required error={errors.title}><input name="title" className={field} value={v.title} onChange={(e) => set("title", clampCp(e.target.value, 60))} placeholder="예) AWS SAA 자격증 3개월 완주" autoFocus aria-required aria-invalid={!!errors.title} /></Field>
             <Field label="한 줄 소개" required hint="방 목록 카드에 제목과 함께 보여요 · 100자까지" error={errors.intro}><input name="intro" className={field} value={v.intro} onChange={(e) => set("intro", clampCp(e.target.value, 100))} placeholder="예) 매주 한 챕터씩 읽고 기출 20문제를 풀어요" aria-required aria-invalid={!!errors.intro} /></Field>
             <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-              <Field label="시작일" required hint="오늘 이후" error={errors.startDate}><input name="startDate" aria-required aria-invalid={!!errors.startDate} type="date" className={field} min={today} value={v.startDate} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} /></Field>
-              <Field label="종료일" required hint="시작일부터 최대 1년" error={errors.endDate}><input name="endDate" aria-required aria-invalid={!!errors.endDate} type="date" className={field} min={v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} onChange={(e) => set("endDate", e.target.value)} onBlur={() => recheck("endDate")} /></Field>
+              <Field label="시작일" required hint="오늘 이후" error={errors.startDate}><input name="startDate" aria-required aria-invalid={!!errors.startDate} type="date" className={DATE_FIELD_CLASS} min={today} value={v.startDate} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} /></Field>
+              <Field label="종료일" required hint="시작일부터 최대 1년" error={errors.endDate}><input name="endDate" aria-required aria-invalid={!!errors.endDate} type="date" className={DATE_FIELD_CLASS} min={v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} onChange={(e) => set("endDate", e.target.value)} onBlur={() => recheck("endDate")} /></Field>
             </div>
             <Field label="최대 인원" required hint="2~100명 · 그룹장 포함" error={errors.maxMembers}><input name="maxMembers" aria-invalid={!!errors.maxMembers} type="number" inputMode="numeric" min={2} max={100} className={field} value={v.maxMembers} onChange={(e) => set("maxMembers", e.target.value)} /></Field>
             <SwitchRow title="공개 방" desc="끄면 초대 링크로만 들어올 수 있어요" on={v.isPublic} onChange={(x) => set("isPublic", x)} />

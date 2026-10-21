@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { FIELD_CLASS } from "@/components/room-new/fields";
+import { DATE_FIELD_CLASS, FIELD_CLASS } from "@/components/room-new/fields";
 import type { NewRoomValues } from "@/components/room-new/validate";
 import { ChoiceList } from "@/components/ui/ChoiceList";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -176,7 +176,7 @@ function ExtraRecruitCard({ d, toast, onDetail }: { d: RoomDetail; toast: Props[
       {showForm && (
         <div className="flex flex-col gap-3">
           <Row id={ids.until} label="마감일" error={errs.until} hint={`오늘~${mmdd(maxDate)} 중 (최대 30일)`}>
-            <input id={ids.until} name="recruitUntil" type="date" className={FIELD_CLASS} min={d.today} max={maxDate} value={form.until} disabled={busy} onChange={(e) => setForm((f) => ({ ...f, until: e.target.value }))} aria-invalid={!!errs.until} />
+            <input id={ids.until} name="recruitUntil" type="date" className={DATE_FIELD_CLASS} min={d.today} max={maxDate} value={form.until} disabled={busy} onChange={(e) => setForm((f) => ({ ...f, until: e.target.value }))} aria-invalid={!!errs.until} />
           </Row>
           <Row id={ids.max} label="정원" error={errs.max} hint={`지금 ${d.memberCount}명 · 최대 100명`}>
             <input id={ids.max} name="recruitMax" type="number" inputMode="numeric" className={FIELD_CLASS} min={d.memberCount + 1} max={100} value={form.max} disabled={busy} onChange={(e) => setForm((f) => ({ ...f, max: e.target.value }))} aria-invalid={!!errs.max} />
@@ -369,7 +369,7 @@ function InviteCard({ d, toast }: { d: RoomDetail; toast: Props["toast"] }) {
         {on && (
           <>
             <Row id={ids.until} label="기한" error={errs.until} hint={`오늘~${mmdd(maxDate)} 중`}>
-              <input id={ids.until} name="bypassUntil" type="date" className={FIELD_CLASS} min={d.today} max={maxDate} value={bf.until} disabled={busy} onChange={(e) => setBf((f) => ({ ...f, until: e.target.value }))} aria-invalid={!!errs.until} />
+              <input id={ids.until} name="bypassUntil" type="date" className={DATE_FIELD_CLASS} min={d.today} max={maxDate} value={bf.until} disabled={busy} onChange={(e) => setBf((f) => ({ ...f, until: e.target.value }))} aria-invalid={!!errs.until} />
             </Row>
             <Row id={ids.max} label="인원" error={errs.max} hint="명까지 · 비우면 정원까지">
               <input id={ids.max} name="bypassMax" type="number" inputMode="numeric" className={FIELD_CLASS} min={1} max={100} placeholder="정원까지" value={bf.max} disabled={busy} onChange={(e) => setBf((f) => ({ ...f, max: e.target.value }))} aria-invalid={!!errs.max} />
