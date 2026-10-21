@@ -1189,7 +1189,7 @@ begin
     values (v_id, v_uid, r.id, jsonb_build_object('undoOf', p_undo_of), jsonb_build_object('restore', u.sched_changes), '{}'::jsonb,
             v_ver, v_run, public.app_now(), public.app_now() + interval '24 hours', p_undo_of);
     delete from public.api_plan_drafts x where x.id in (                         -- 〔P13〕 일반 분기와 같은 정리
-      select y.id from public.api_plan_drafts y where y.user_id = v_uid and y.applied_at is null order by y.created_at desc offset 50);
+      select y.id from public.api_plan_drafts y where y.user_id = v_uid and y.applied_at is null order by y.created_at desc offset 50) and x.applied_at is null;
     return v_run;
   end if;
   v_shp := public.plan_shape_check(v_src);                                     -- ③ 〔C#11〕 해석 전에 원본의 크기·깊이·형태 거부
@@ -1231,7 +1231,7 @@ begin
   values (v_id, v_uid, r.id, coalesce(v_src, '{}'::jsonb), v_res -> 'plan', coalesce(v_res -> 'map', '{}'::jsonb), v_ver, v_run,
           public.app_now(), public.app_now() + interval '24 hours', null);
   delete from public.api_plan_drafts x where x.id in (                           -- 내 미적용 초안 50개 초과분(오래된 것부터)
-    select y.id from public.api_plan_drafts y where y.user_id = v_uid and y.applied_at is null order by y.created_at desc offset 50);
+    select y.id from public.api_plan_drafts y where y.user_id = v_uid and y.applied_at is null order by y.created_at desc offset 50) and x.applied_at is null;
   return v_run;                                                                -- ⑨
 end $$;
 

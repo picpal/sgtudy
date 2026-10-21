@@ -711,6 +711,23 @@ cases("curriculum plan 0034 · run", db, [
     assertEquals((await one(q, "select public.notify_link('CURRICULUM_BULK_UPDATED', $1::bigint, null, $2::uuid) as l", [aws, await uidOf(q, "지은")])).l,
                  "/my-study/aws?tab=curriculum");
   } },
+  { name: "적용된 초안은 정리(50개 초과 삭제)에서 제외 — 바깥 DELETE 에도 applied_at is null(다른 탭 동시 적용 대비)", run: async (q) => {
+    const { slug, id } = await mkRoom(q, "민수");
+    const uid = await uidOf(q, "민수");
+    await asUser(q, uid);
+    const old = await preview(q, slug, plan([{ op: "create", title: "가장 오래된 적용" }]));
+    await q("update public.api_plan_drafts set created_at = now() - interval '2 days' where id = $1", [old.previewId]);
+    await apply(q, slug, old.previewId);
+    await q(`insert into public.api_plan_drafts (id, user_id, room_id, plan, resolved, version, preview, created_at, expires_at)
+             select 'pv_t' || lpad(g::text, 8, '0'), $1::uuid, $2::bigint, '{}', '{}', repeat('0', 32), '{}', now() - interval '1 day' + g * interval '1 second', now()
+             from generate_series(1, 55) g`, [uid, id]);
+    await preview(q, slug, plan([{ op: "create", title: "정리 유발" }]));
+    assertEquals(await count(q, "select 1 from public.api_plan_drafts where user_id = $1::uuid and applied_at is null", [uid]), 50);
+    const b = await apply(q, slug, old.previewId);
+    assertEquals(b.replayed, true);                         // 적용 기록은 남아 replay·undo 가 된다
+    const src = (await one(q, "select prosrc from pg_proc where proname = 'curriculum_plan_preview'")).prosrc as string;
+    assertEquals(src.split("offset 50) and x.applied_at is null").length - 1, 2);   // 두 분기 모두 바깥 조건
+  } },
   { name: "GRANT: preview·apply 는 authenticated 만, plan_* 내부는 아무도", run: async (q) => {
     const can = async (role: string, fn: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, fn])).v;
     for (const fn of ["public.curriculum_plan_preview(text, jsonb, text)", "public.curriculum_plan_apply(text, text)"]) {
