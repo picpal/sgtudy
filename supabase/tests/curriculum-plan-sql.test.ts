@@ -690,11 +690,12 @@ cases("curriculum plan 0034 · run", db, [
     const p = await preview(q, "aws", plan([{ op: "shift", from: "3주차", to: "4주차", days: 7 }]));
     await apply(q, "aws", p.previewId);
     const bulk = async (nick: string) => q(`select title, body, link from public.notifications where user_id = $1::uuid and kind = 'CURRICULUM_BULK_UPDATED'`, [await uidOf(q, nick)]);
+    const before = (await bulk("지은")).length;                 // Task 5: 원 적용도 묶음 1건을 남긴다
     const u = await preview(q, "aws", "{}", p.previewId);
-    assertEquals((await bulk("지은")).length, 0);
+    assertEquals((await bulk("지은")).length, before);
     assertEquals(u.notifications.perRecipient.find((x: Row) => x.nickname === "지은").count >= 2, true);
     await apply(q, "aws", u.previewId);
-    const got = await bulk("지은");
+    const got = (await bulk("지은")).slice(before);
     assertEquals(got.length, 1);
     assertMatch(got[0].body, /^일정 [0-9]+건$/);
     assertEquals(got[0].link, "/my-study/aws?tab=curriculum");
@@ -737,8 +738,138 @@ cases("curriculum plan 0034 · run", db, [
                       "public.plan_resolve(public.rooms, jsonb)", "public.plan_run(public.rooms, uuid, jsonb, boolean, jsonb)",
                       "public.plan_shape_check(jsonb)", "public.plan_warn_text(text)", "public.plan_undo_check(jsonb)",
                       "public.plan_undo_run(public.rooms, uuid, jsonb, boolean)", "public.plan_nicks(bigint)",
+                      "public.plan_collapse_notifications(bigint, uuid, bigint, bigint[])",
                       "public.node_create_core(public.rooms, uuid, bigint, text, text, text, date, date, integer, text)"]) {
       assertEquals([await can("anon", fn), await can("authenticated", fn)], [false, false], fn);
     }
+  } },
+]);
+
+const notes = (q: Q, nick: string, kinds: string[]) => uidOf(q, nick).then((u) =>
+  q(`select kind, title, body, link from public.notifications where user_id = $1::uuid and kind = any($2::text[]) and created_at >= now() order by id`,
+    [u, `{${kinds.join(",")}}`]));
+const K = ["TASK_ASSIGNED", "SCHEDULE_CHANGED", "ROUND_SCHEDULE_CHANGED", "TASK_UNASSIGNED", "CURRICULUM_BULK_UPDATED"];
+
+// 종류·렌더·링크 등록 사례는 Task 4(P1)가 "run" 그룹에 이미 둔다.
+cases("curriculum plan 0034 · notify", db, [
+  { name: "지은에게 지정 과제 2개 → 묶음 알림 1건(일정 0·담당 2) · 원래 TASK_ASSIGNED 는 없음", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const jieun = await uidOf(q, "지은");
+    const p = plan([{ op: "create", parent: r2, title: "발표 A", taskType: "designated", startDate: "2026-10-12", endDate: "2026-10-14", assigneeIds: [jieun] },
+                    { op: "create", parent: r2, title: "발표 B", taskType: "designated", startDate: "2026-10-12", endDate: "2026-10-14", assigneeIds: [jieun] }]);
+    const d = await preview(q, "aws", p);
+    assertEquals(d.notifications.perRecipient.map((x: Row) => [x.nickname, x.count, x.newTasks, x.collapsed]), [["지은", 2, 0, true]]);
+    assertEquals(await notes(q, "지은", K), []);                      // dry-run 은 남기지 않는다
+    const a = await apply(q, "aws", d.previewId);
+    assertEquals(a.notifications.perRecipient.map((x: Row) => [x.nickname, x.count, x.newTasks, x.collapsed]), [["지은", 2, 0, true]]);
+    const got = await notes(q, "지은", K);
+    assertEquals(got.map((n) => n.kind), ["CURRICULUM_BULK_UPDATED"]);
+    assertEquals(got[0].body, "담당 2건");
+    assertEquals(got[0].link, "/my-study/aws?tab=curriculum");
+  } },
+  { name: "1건뿐이면 원래 알림 그대로(TASK_ASSIGNED)", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const jieun = await uidOf(q, "지은");
+    const p = plan([{ op: "create", parent: r2, title: "발표 C", taskType: "designated", assigneeIds: [jieun] }]);
+    const d = await preview(q, "aws", p);
+    assertEquals(d.notifications.perRecipient.map((x: Row) => [x.nickname, x.count, x.collapsed]), [["지은", 1, false]]);
+    await apply(q, "aws", d.previewId);
+    assertEquals((await notes(q, "지은", K)).map((n) => n.kind), ["TASK_ASSIGNED"]);
+  } },
+  { name: "이 계획 밖의 알림(먼저 있던 SCHEDULE_CHANGED)은 건드리지 않는다", run: async (q) => {
+    await as(q, "민수");
+    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");
+    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-20\"}')", [alb]);
+    const pre = (await notes(q, "지은", ["SCHEDULE_CHANGED"])).length;
+    assert(pre >= 1);
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const jieun = await uidOf(q, "지은");
+    const p = plan([{ op: "create", parent: r2, title: "발표 D", taskType: "designated", assigneeIds: [jieun] },
+                    { op: "create", parent: r2, title: "발표 E", taskType: "designated", assigneeIds: [jieun] }]);
+    const d = await preview(q, "aws", p);
+    await apply(q, "aws", d.previewId);
+    assertEquals((await notes(q, "지은", ["SCHEDULE_CHANGED"])).length, pre);
+  } },
+  { name: "〔D18〕 ACTIVE 방에 공통 과제 2개 → 과제 하는 팀원마다 묶음 1건 '새 과제 2건' · 행위자 본인은 없음", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const p = plan([{ op: "create", parent: r2, title: "공통 C", taskType: "common" }, { op: "create", parent: r2, title: "공통 D", taskType: "common" }]);
+    const d = await preview(q, "aws", p);
+    assert(d.notifications.perRecipient.length >= 1);
+    assert(d.notifications.perRecipient.every((x: Row) => x.newTasks === 2 && x.collapsed));
+    assert(!d.notifications.perRecipient.some((x: Row) => x.nickname === "민수"));
+    await apply(q, "aws", d.previewId);
+    const got = await notes(q, "지은", K);
+    assertEquals([got.map((n) => n.kind), got[0].body], [["CURRICULUM_BULK_UPDATED"], "새 과제 2건"]);
+    assertEquals((await notes(q, "민수", K)).length, 0);
+  } },
+  { name: "〔D18〕 공통 과제 1개만이어도 묶음 1건 '새 과제 1건'(원래 알림이 없으므로)", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const d = await preview(q, "aws", plan([{ op: "create", parent: r2, title: "공통 E", taskType: "common" }]));
+    await apply(q, "aws", d.previewId);
+    assertEquals((await notes(q, "지은", K)).map((n) => n.body), ["새 과제 1건"]);
+  } },
+  { name: "일정 + 지정 + 공통 섞여도 수신자당 정확히 1건(본문 '새 과제 · 일정 · 담당')", run: async (q) => {
+    await as(q, "민수");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const jieun = await uidOf(q, "지은");
+    const d = await preview(q, "aws", plan([
+      { op: "shift", from: "3주차", to: "4주차", days: 7 },
+      { op: "create", parent: r2, title: "지정 F", taskType: "designated", assigneeIds: [jieun] },
+      { op: "create", parent: r2, title: "공통 F", taskType: "common" },
+    ]));
+    assertEquals(d.ok, true);
+    await apply(q, "aws", d.previewId);
+    const uids = (await q(`select distinct m.user_id::text as u from public.room_members m join public.rooms r on r.id = m.room_id
+                           where r.slug = 'aws' and m.status = 'ACTIVE'`)).map((x) => x.u as string);
+    for (const u of uids) {
+      const n = await count(q, `select 1 from public.notifications where user_id = $1::uuid and kind = any($2::text[]) and created_at >= now()`, [u, `{${K.join(",")}}`]);
+      assert(n <= 1, `수신자 ${u}: ${n}건`);
+    }
+    const got = await notes(q, "지은", K);
+    assertEquals(got.map((n) => n.kind), ["CURRICULUM_BULK_UPDATED"]);
+    assertMatch(got[0].body, /^새 과제 1건 · 일정 [0-9]+건 · 담당 1건$/);
+  } },
+  { name: "〔P5〕 진행중이 아닌 방(RECRUIT)은 공통 과제 알림 없음 — newTasks 0", run: async (q) => {
+    await as(q, "민수");
+    await q("update public.rooms set status = 'RECRUIT' where slug = 'aws'");
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const d = await preview(q, "aws", plan([{ op: "create", parent: r2, title: "공통 G", taskType: "common" }, { op: "create", parent: r2, title: "공통 H", taskType: "common" }]));
+    assertEquals(d.ok, true);
+    assert(d.notifications.perRecipient.every((x: Row) => x.newTasks === 0));
+    await apply(q, "aws", d.previewId);
+    assertEquals(await notes(q, "지은", ["CURRICULUM_BULK_UPDATED"]), []);
+  } },
+  { name: "알림 설정(담당 알림 끔)을 따른다 — 원래 알림이 없으면 묶음도 없다", run: async (q) => {
+    await as(q, "민수");
+    await q("update public.room_notification_settings set task_assigned = false where room_id = $1::bigint", [await roomId(q, "aws")]);
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const jieun = await uidOf(q, "지은");
+    const d = await preview(q, "aws", plan([{ op: "create", parent: r2, title: "발표 I", taskType: "designated", assigneeIds: [jieun] },
+                                          { op: "create", parent: r2, title: "발표 J", taskType: "designated", assigneeIds: [jieun] }]));
+    assertEquals(d.notifications.perRecipient, []);
+    await apply(q, "aws", d.previewId);
+    assertEquals(await notes(q, "지은", K), []);
+  } },
+  { name: "다른 행위자의 같은 방 알림은 묶지 않는다(행위자 필터)", run: async (q) => {
+    const aws = await roomId(q, "aws");
+    const jieun = await uidOf(q, "지은");
+    const other = await uidOf(q, "하나");
+    const after = Number((await one(q, "select coalesce(max(id), 0) as m from public.notifications")).m);
+    await q(`insert into public.notifications (user_id, kind, title, body, room_id, actor_user_id, link)
+             values ($1::uuid, 'SCHEDULE_CHANGED', 't', 'b', $2::bigint, $3::uuid, '/x'), ($1::uuid, 'SCHEDULE_CHANGED', 't', 'b', $2::bigint, $3::uuid, '/x')`,
+            [jieun, aws, other]);
+    const r = (await one(q, "select public.plan_collapse_notifications($1::bigint, $2::uuid, $3::bigint, '{}') as r",
+                         [aws, await uidOf(q, "민수"), after])).r as Row;
+    assertEquals(r, { recipients: 0, perRecipient: [] });
+    assertEquals(await count(q, "select 1 from public.notifications where id > $1::bigint and user_id = $2::uuid", [after, jieun]), 2);
+  } },
+  { name: "적용이 실패하면 묶음 알림도 롤백(같은 트랜잭션) — plan_run 안에서 부른다", run: async (q) => {
+    const src = (await one(q, "select prosrc from pg_proc where proname = 'plan_run'")).prosrc as string;
+    assert(src.includes("public.plan_collapse_notifications(r.id, v_uid, v_after_id"));
+    assert(src.indexOf("plan_collapse_notifications") < src.indexOf("PLAN_DRY_RUN"));   // 서브트랜잭션 안(dry 되감기·실패 롤백)
   } },
 ]);

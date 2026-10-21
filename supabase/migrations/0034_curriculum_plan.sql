@@ -943,6 +943,55 @@ language sql stable security definer set search_path = '' as $$
     order by e.k::bigint limit 20) z
 $$;
 
+-- 〔§5.4·D18〕 알림 묶기 — plan_run 안(적용 트랜잭션·서브트랜잭션 안)에서 부른다. 실패하면 함께 롤백된다.
+-- 이 계획이 만든 알림만 대상: id > p_after_id(실행 직전 max) · 같은 방 · 같은 행위자 · 일정/담당 종류(방 잠금이 같은 방 편집을 직렬화).
+-- 원래 알림은 notify_publish 가 이미 설정(notify_enabled)·행위자 제외를 거쳤으므로 그 건수만 센다.
+-- newTasks = 이 계획이 만든 노드(p_created)의 공통 배정(source <> 'DESIGNATED', 미해제, 행위자 제외) — 지정은 TASK_ASSIGNED 로 이미 셈.
+-- 〔P5〕 진행중(ACTIVE) 방만 newTasks. 수신자별 원래 1건 + 새 과제 0 이면 원래 알림 그대로, 아니면 그 수신자 것을 지우고 묶음 1건.
+-- 반환 {recipients, perRecipient:[{nickname, count, newTasks, collapsed}]} — userId 없음(D12).
+create or replace function public.plan_collapse_notifications(p_room bigint, p_actor uuid, p_after_id bigint, p_created bigint[]) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  g        record;
+  v_list   jsonb := '[]'::jsonb;
+  v_kinds  text[] := array['SCHEDULE_CHANGED', 'ROUND_SCHEDULE_CHANGED', 'TASK_ASSIGNED', 'TASK_UNASSIGNED'];
+  v_active boolean := coalesce((select status = 'ACTIVE' from public.rooms where id = p_room), false);
+  v_coll   boolean;
+begin
+  for g in
+    with ev as (
+      select n.user_id, count(*)::int as k,
+             count(*) filter (where n.kind in ('SCHEDULE_CHANGED', 'ROUND_SCHEDULE_CHANGED'))::int as sched,
+             count(*) filter (where n.kind in ('TASK_ASSIGNED', 'TASK_UNASSIGNED'))::int as asg
+      from public.notifications n
+      where n.id > p_after_id and n.room_id = p_room and n.actor_user_id = p_actor and n.kind = any(v_kinds)
+      group by n.user_id),
+    nt as (
+      select a.user_id, count(*)::int as c
+      from public.task_assignments a
+      where v_active and a.node_id = any(coalesce(p_created, '{}'::bigint[])) and a.released_at is null
+        and a.source <> 'DESIGNATED' and a.user_id <> p_actor
+      group by a.user_id)
+    select coalesce(ev.user_id, nt.user_id) as user_id, coalesce(ev.k, 0) as k, coalesce(ev.sched, 0) as sched,
+           coalesce(ev.asg, 0) as asg, coalesce(nt.c, 0) as newt
+    from ev full join nt on nt.user_id = ev.user_id
+    order by 1
+  loop
+    v_coll := g.k + g.newt >= 2 or g.newt >= 1;
+    if v_coll then
+      delete from public.notifications n
+      where n.id > p_after_id and n.room_id = p_room and n.actor_user_id = p_actor and n.user_id = g.user_id and n.kind = any(v_kinds);
+      -- 키에 p_after_id: 같은 트랜잭션의 다른 적용(되돌리기 포함)과 dedupe 충돌하지 않게
+      perform public.notify_publish('CURRICULUM_BULK_UPDATED', p_room, null, p_actor, array[g.user_id],
+        'CURRICULUM_BULK_UPDATED:' || p_room || ':' || txid_current() || ':' || p_after_id,
+        jsonb_build_object('newTasks', g.newt, 'schedule', g.sched, 'assign', g.asg));
+    end if;
+    v_list := v_list || jsonb_build_object('nickname', (select nickname from public.profiles where id = g.user_id),
+                                           'count', g.k + g.newt, 'newTasks', g.newt, 'collapsed', v_coll);
+  end loop;
+  return jsonb_build_object('recipients', jsonb_array_length(v_list), 'perRecipient', v_list);
+end $$;
+
 -- 정규 계획서 실행(원안 ⑥~⑧). 서브트랜잭션: dry 면 결과를 만든 뒤 되감는다(plpgsql 변수 v_out 은 남는다).
 -- 실행 오류: dry → {ok:false, errors:[…]}, 적용 → 재발생(호출자 전체 롤백).
 -- 반환 {ok, summary, diff, warnings, errors, notifications, ids{path→id}, refs{ref→id}, sched}. dry 면 diff 의 생성 id null, ids·refs 비움.
@@ -984,7 +1033,7 @@ declare
   v_hint     text;
   v_e        jsonb;
 begin
-  select coalesce(max(id), 0) into v_after_id from public.notifications;      -- ⑥ (Task 5 알림 묶기 기준점)
+  select coalesce(max(id), 0) into v_after_id from public.notifications;      -- ⑥ 알림 묶기 기준점
   begin                                                                       -- ⑦ 서브트랜잭션
     for f in select * from public.plan_flatten(p_plan) loop
       v_cur := f.path;
@@ -1059,7 +1108,8 @@ begin
     from jsonb_each(v_sched) e(k, v) join public.goal_nodes g on g.id = e.k::bigint
     where jsonb_build_array(g.start_date, g.end_date) <> jsonb_build_array(e.v -> 0, e.v -> 1);
     perform public.assignment_resync(r.id);
-    v_notes := '{"recipients":0,"perRecipient":[]}'::jsonb;   -- Task 5 에서 plan_collapse_notifications(r.id, v_uid, v_after_id, <v_ids 의 id 배열>) 로 교체
+    v_notes := public.plan_collapse_notifications(r.id, v_uid, v_after_id,     -- 〔§5.4〕 수신자당 ≤ 1건(dry 면 함께 되감긴다)
+                 (select coalesce(array_agg(value::bigint), '{}'::bigint[]) from jsonb_each_text(v_ids)));
     -- create diff: 최종 상태로(리프 → 묶음 전환 반영). dry-run 이면 id null(되감긴 임시 id 비노출), 새 부모는 parentPath. 〔P4〕 지정 과제는 담당 닉네임
     for f in select * from public.plan_flatten(p_plan) x where coalesce(x.op ->> 'op', 'create') = 'create' loop
       select * into a from public.goal_nodes where id = (v_ids ->> f.path)::bigint;
