@@ -116,13 +116,13 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, onOpenTask, p
                   <li
                     key={t.id ?? t.title}
                     onClick={open}
-                    className={`flex flex-wrap items-center gap-[14px] rounded-[12px] bg-surface-2 px-[14px] py-3${open ? " cursor-pointer transition-shadow duration-150 hover:shadow-[0_6px_16px_rgba(27,34,48,.08)] has-[button:focus-visible]:outline-2 has-[button:focus-visible]:outline-offset-2 has-[button:focus-visible]:outline-mint" : ""}`}
+                    className={`flex flex-wrap items-center gap-[14px] rounded-[12px] bg-surface-2 px-[14px] py-3${open ? " cursor-pointer transition-shadow duration-150 hover:shadow-[0_6px_16px_rgba(27,34,48,.08)] has-[button[data-card-open]:focus-visible]:outline-2 has-[button[data-card-open]:focus-visible]:outline-offset-2 has-[button[data-card-open]:focus-visible]:outline-mint" : ""}`}
                   >
                     <div className="min-w-0 flex-[1_1_200px]">
                       <div className="flex flex-wrap items-center gap-2">
                         <TypeBadge type={t.type} />
                         {open ? (
-                          <button type="button" className="text-left text-[14px] font-semibold text-ink focus-visible:outline-none">
+                          <button type="button" data-card-open className="text-left text-[14px] font-semibold text-ink focus-visible:outline-none">
                             {t.title}
                           </button>
                         ) : (

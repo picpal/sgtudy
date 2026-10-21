@@ -102,8 +102,10 @@ describe("OverviewTab 이번 회차 과제 카드 누름", () => {
     expect(document.activeElement).toBe(btn);
     act(() => btn.click()); // 브라우저는 버튼에서 Enter 를 click 으로 바꾼다 — jsdom 은 이 기본 동작을 흉내 내지 않는다
     expect(opened).toEqual(["21"]);
-    // 포커스 링은 카드(li) 전체에 — 버튼 자기 외곽선은 끈다
-    expect(card("EC2").className).toContain("has-[button:focus-visible]:outline-2");
+    // 포커스 링은 카드(li) 전체에 — 제목 버튼(data-card-open) 포커스일 때만, 버튼 자기 외곽선은 끈다
+    expect(btn.hasAttribute("data-card-open")).toBe(true);
+    expect(card("EC2").className).toContain("has-[button[data-card-open]:focus-visible]:outline-2");
+    expect(card("EC2").className).not.toContain("has-[button:focus-visible]");
     expect(btn.className).toContain("focus-visible:outline-none");
   });
   it("5명 이상이면 3명 + '+N' 펼치기 버튼 — 눌러도 과제를 열지 않는다", () => {
@@ -119,6 +121,8 @@ describe("OverviewTab 이번 회차 과제 카드 누름", () => {
     click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(opened).toEqual([]);
+    // 펼치기 버튼 포커스는 카드 외곽선 대상이 아니다 — 카드 링은 제목 버튼(data-card-open)에만
+    expect(toggle.hasAttribute("data-card-open")).toBe(false);
   });
   it("카드 밖 '진행목표 전체 보기' 는 과제를 열지 않는다", () => {
     const { host, opened, goCur } = mount();
