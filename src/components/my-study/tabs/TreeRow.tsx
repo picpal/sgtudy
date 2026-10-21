@@ -51,6 +51,9 @@ const Plus = () => (
 );
 
 
+/** 행 클릭을 행 동작으로 넘기지 않는 것 — 자기 동작이 있는 컨트롤·메뉴·끌기 손잡이 (행 본문 버튼은 자기 onClick 으로 연다) */
+const ROW_OWN = "button, a, input, select, textarea, [role=menu], [data-drag]";
+
 export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, onClick, onAddChild, onRemove, removeOff, asking = false, dragHandle, dropHint = null, dragging = false, below, moves, onMoveRow, moveBusy = false }: Props) {
   const personal = n.leaf && n.personal;
   // 개인 목표는 편집 모드에 그리지 않는다 — 혹시 그려져도 끌기·삭제 대상이 아니다
@@ -74,13 +77,22 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
       data-personal={personal || undefined}
       style={{ background: n.d === 0 ? "#FAFCFB" : personal ? "var(--personal-bg)" : "#FFFFFF" }}
     >
-      {/* 보이는 행(52px) — treeitem 은 이 행과 아래 확인 상자를 함께 감싼다 */}
-      <div className={`flex min-h-[52px] items-center gap-2 py-1 pl-2 pr-3 ${dragging ? "opacity-50" : ""}`} style={{ opacity: n.archived ? 0.55 : undefined }}>
+      {/* 보이는 행(52px) — treeitem 은 이 행과 아래 확인 상자를 함께 감싼다.
+          행 본문 버튼 밖의 배지·칸(개인 목표 상태, 담당 아바타·제출 수, 회차 진척률)을 눌러도 행 동작이 되게 클릭을 받는다.
+          키보드는 행 본문 버튼이 맡는다(같은 동작) — 행의 다른 버튼·메뉴·끌기 손잡이는 자기 동작만 */}
+      <div
+        onClick={(e) => {
+          if (!(e.target as Element).closest(ROW_OWN)) onClick();
+        }}
+        className={`flex min-h-[52px] cursor-pointer items-center gap-2 py-1 pl-2 pr-3 ${dragging ? "opacity-50" : ""}`}
+        style={{ opacity: n.archived ? 0.55 : undefined }}
+      >
         {/* 390 폭에서도 제목·기간이 보이게: 들여쓰기 축소, 드래그 핸들·진척 막대·아바타는 숨기고 제목은 줄바꿈 (Q3-03) */}
         <span className="w-[calc(var(--d)*22px)] shrink-0 max-sm:w-[calc(var(--d)*10px)]" style={{ "--d": n.d } as React.CSSProperties} />
         {isEdit && (
           // 회차 행은 끌 수 없다 — 자리만 남겨 제목 세로줄을 맞춘다
           <span
+            data-drag
             {...(n.d === 0 ? { "aria-hidden": true } : { ...dragHandle, title: "드래그해서 순서 변경·회차 이동" })}
             className={`flex shrink-0 text-ghost max-sm:hidden ${n.d === 0 ? "invisible" : "cursor-grab touch-none"}`}
           >
