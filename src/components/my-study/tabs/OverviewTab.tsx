@@ -166,21 +166,26 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, onOpenTask, p
         {meRow?.userId && roundId && <MyPersonalLine tree={tree} userId={meRow.userId} roundId={roundId} slug={room.id} today={today} />}
       </div>
 
-      <H3 mt={30} icon={<><path d="M12 11v6" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.4" fill="#FFFFFF" /></>}>스터디 소개</H3>
-      {room.about.trim() ? <MarkdownView src={room.about} /> : <Empty text="아직 스터디 소개가 없어요" href={settings} cta="방 설정에서 쓰기 →" />}
+      {/* 소개·규칙이 비어 있으면 모바일에선 섹션째 숨긴다 — 좁은 화면에 빈 안내 두 칸이 회차 정보를 밀어내지 않게 (넓은 화면은 쓰기 안내 유지) */}
+      <section data-overview-about className={room.about.trim() ? undefined : "max-sm:hidden"}>
+        <H3 mt={30} icon={<><path d="M12 11v6" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.4" fill="#FFFFFF" /></>}>스터디 소개</H3>
+        {room.about.trim() ? <MarkdownView src={room.about} /> : <Empty text="아직 스터디 소개가 없어요" href={settings} cta="방 설정에서 쓰기 →" />}
+      </section>
 
-      <H3 mt={26} icon={<path d="m8 12.2 2.8 2.8L16.5 9" stroke="#FFFFFF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />}>운영 규칙</H3>
-      {room.rules.length ? (
-        <ul className="m-0 pl-5 text-[14px] leading-[1.75] text-ink-2">
-          {room.rules.map((r) => (
-            <li key={r}>
-              <Inline text={r} />
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <Empty text="아직 운영 규칙이 없어요" href={settings} cta="방 설정에서 쓰기 →" />
-      )}
+      <section data-overview-rules className={room.rules.length ? undefined : "max-sm:hidden"}>
+        <H3 mt={26} icon={<path d="m8 12.2 2.8 2.8L16.5 9" stroke="#FFFFFF" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />}>운영 규칙</H3>
+        {room.rules.length ? (
+          <ul className="m-0 pl-5 text-[14px] leading-[1.75] text-ink-2">
+            {room.rules.map((r) => (
+              <li key={r}>
+                <Inline text={r} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <Empty text="아직 운영 규칙이 없어요" href={settings} cta="방 설정에서 쓰기 →" />
+        )}
+      </section>
 
       <h3 className="mb-3 mt-[26px] flex items-center gap-2 text-[15px] font-bold">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="#1B2230" aria-hidden="true">

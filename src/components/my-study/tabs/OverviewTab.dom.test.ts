@@ -53,6 +53,14 @@ describe("OverviewTab 빈 상태 (Q2-11)", () => {
     expect(doc.textContent).toContain("그룹장이 진행목표를 준비하고 있어요");
     expect(doc.querySelector('a[href^="/rooms/new-room/settings"]')).toBeNull();
   });
+  it("비어 있는 소개·규칙은 모바일에서 섹션째 숨김(max-sm:hidden), 채워지면 늘 보임", () => {
+    const empty = renderOverview(emptyRoom);
+    expect(empty.querySelector("[data-overview-about]")?.className).toContain("max-sm:hidden");
+    expect(empty.querySelector("[data-overview-rules]")?.className).toContain("max-sm:hidden");
+    const filled = renderOverview({ ...emptyRoom, about: "소개 글", rules: ["규칙 하나"] } as StudyRoom);
+    expect(filled.querySelector("[data-overview-about]")?.className ?? "").not.toContain("max-sm:hidden");
+    expect(filled.querySelector("[data-overview-rules]")?.className ?? "").not.toContain("max-sm:hidden");
+  });
   it("운영 규칙은 마크다운으로 — 굵게·링크", () => {
     const doc = renderOverview({ ...emptyRoom, rules: ["**굵게** 와 [문서](https://example.com)"] } as StudyRoom);
     expect(doc.querySelector("li strong")?.textContent).toBe("굵게");
