@@ -77,6 +77,8 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
   const lastAt = useRef(0);
   // 늦게 온 응답이 새 응답을 덮지 않게 — 마지막으로 보낸 목록 요청만 반영한다
   const seq = useRef(0);
+  const deep = useRef(0);
+  const deepBusy = useRef(false);
   const composer = useRef<ComposerHandle>(null);
 
   // ---- 딥링크 ----
@@ -104,20 +106,27 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
   useEffect(() => {
     if (viewerPending) return;
     const my = ++seq.current;
+    // 딥링크 조회 중이면 그 응답(그 댓글을 꼭 담은 목록)이 이긴다 — 최신 쪽 응답은 버린다
     fetchComments(slug, nodeId)
-      .then((p) => my === seq.current && apply(p, true))
-      .catch((e) => my === seq.current && setLoadErr(commentErrorText(toApiError(e))));
+      .then((p) => my === seq.current && !deepBusy.current && apply(p, true))
+      .catch((e) => my === seq.current && !deepBusy.current && setLoadErr(commentErrorText(toApiError(e))));
   }, [slug, nodeId, viewerPending, tick, apply]);
 
   // 딥링크 — 그 댓글부터(from). 없거나 지워졌으면 서버가 최신 쪽을 주고 target 으로 알린다
   useEffect(() => {
     if (!want || viewerPending) return;
-    const my = ++seq.current;
+    // 딥링크는 자기 번호로만 버린다(더 새 딥링크가 왔을 때) — [새로 고침]·창 복귀 조회가 끼어도 반드시 끝을 맺어(done) 훅이 찾아가고 해시를 지운다 (리뷰 M7)
+    const myDeep = ++deep.current;
+    deepBusy.current = true;
     const from = commentIdOfHash(want);
-    const done = () => setLoadedFor(want);
+    const done = () => {
+      deepBusy.current = false;
+      setLoadedFor(want);
+    };
     fetchComments(slug, nodeId, from ? { from } : {})
       .then((p) => {
-        if (my !== seq.current) return;
+        if (myDeep !== deep.current) return;
+        seq.current++; // 그 전에 출발한 최신 쪽·이전 더 보기 응답은 버린다
         apply(p, false);
         if (p.locked) {
           // 잠금 안내가 곧 답이다 — 섹션으로만
@@ -127,7 +136,8 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
         done();
       })
       .catch((e) => {
-        if (my !== seq.current) return;
+        if (myDeep !== deep.current) return;
+        seq.current++;
         setLoadErr(commentErrorText(toApiError(e)));
         done();
       });
@@ -253,7 +263,8 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
         <>
           {page.hasOlder && (
             <button type="button" onClick={() => void loadOlder()} disabled={olderBusy} aria-busy={olderBusy || undefined} className="h-11 self-start rounded-[22px] border border-line-3 bg-surface px-4 text-[13px] font-semibold text-ink-2 disabled:opacity-60">
-              {page.total > page.items.length ? `이전 댓글 ${page.total - page.items.length}개 더 보기` : "이전 댓글 더 보기"}
+              {/* 딥링크 창(hasNewer)은 잘린 최신 쪽까지 세게 되므로 숫자 없이 */}
+              {!page.hasNewer && page.total > page.items.length ? `이전 댓글 ${page.total - page.items.length}개 더 보기` : "이전 댓글 더 보기"}
             </button>
           )}
           {page.items.length === 0 ? (
