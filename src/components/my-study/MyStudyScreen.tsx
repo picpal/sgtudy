@@ -350,16 +350,16 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     }
   };
 
-  // 공유: 공개 방 주소를 복사한다 (내 스터디 주소는 참가자만 열 수 있다)
+  // 공유: 공개 방 주소를 복사한다 (내 스터디 주소는 참가자만 열 수 있다 — 지금 주소 창의 주소를 대신 안내하지 않는다)
   const share = async () => {
     try {
       await navigator.clipboard.writeText(new URL(routes.room(detail.slug), window.location.origin).href);
       setToast({ text: "링크를 복사했어요", tone: "ok" });
     } catch {
-      setToast({ text: "링크를 복사하지 못했어요 · 방 정보 화면의 주소를 복사해 주세요", tone: "bad" });
+      setToast({ text: "링크를 복사하지 못했어요 · 홈에서 방 카드를 눌러 방 화면의 주소를 복사해 주세요", tone: "bad" });
     }
   };
-  // 더보기: 방 정보(공개 방 화면) · 방 설정(그룹장) · 참가/신청 취소 (참가 카드와 같은 확인 대화상자)
+  // 더보기: 방 설정(그룹장) · 참가/신청 취소 · 탈퇴 요청/요청 취소 (참가 카드와 같은 확인 대화상자)
   const more: MoreMenuItem[] = menuItemsOf(studyMoreItems(room.action, { canRequestLeave: room.action === "joined", leaveRequested: !!room.leaveRequest }), detail.slug, setConfirm, routes.myStudyTab(detail.slug, S.tab));
 
   // "내 과제 보기" → 보드 탭으로 바꾼 뒤 탭 목록이 보이게 (Q3-18)

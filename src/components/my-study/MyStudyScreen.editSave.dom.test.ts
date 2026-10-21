@@ -184,6 +184,22 @@ describe("편집 화면 [저장] → 들어오기 전 화면으로", () => {
     expect(btn(editView(host)!, "임시저장").disabled).toBe(true);
   });
 
+  it("저장하는 사이 고친 제목은 저장이 끝나도 남고 계속 미저장이다", async () => {
+    let done!: (c: Curriculum) => void;
+    m.update.mockReturnValue(new Promise<Curriculum>((r) => (done = r)));
+    const { host } = await openFromDetail();
+    typeTitle(host, "보낸 제목");
+    await flush();
+    await act(async () => btn(editView(host)!, "임시저장").click());
+    await flush();
+    typeTitle(host, "또 고친 제목");
+    await flush();
+    await act(async () => done({ ...CUR, nodes: CUR.nodes.map((n) => (n.id === "21" ? { ...n, title: "보낸 제목" } : n)) }));
+    await flush();
+    expect(editView(host)!.querySelector<HTMLInputElement>("input[type=text]")!.value).toBe("또 고친 제목");
+    expect(btn(editView(host)!, "임시저장").disabled).toBe(false); // 미저장 — 다시 저장할 수 있다
+  });
+
   it("[저장] 실패 — 편집 화면에 머문다", async () => {
     m.update.mockRejectedValue(new Error("boom"));
     const { host } = await openFromDetail();

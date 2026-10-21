@@ -60,7 +60,7 @@ export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: Stu
     <>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          {/* 긴 제목은 두 줄에서 줄인다(전체는 title·방 정보 화면) — 좁은 폭에서 헤더가 화면을 덮지 않게 (Q3-14) */}
+          {/* 긴 제목은 두 줄에서 줄인다(전체는 title·방 화면) — 좁은 폭에서 헤더가 화면을 덮지 않게 (Q3-14) */}
           <h1 title={room.title} className="m-0 line-clamp-2 break-words text-[30px] font-bold leading-[1.3] tracking-[-0.02em] max-sm:text-[22px]">
             {room.title}
           </h1>

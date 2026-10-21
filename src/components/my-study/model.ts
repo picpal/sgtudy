@@ -66,6 +66,19 @@ export function dropFieldOv(ov: Overrides, id: string): Overrides {
   return out;
 }
 
+/** 저장에 보낸 값(sent)과 지금 값이 같은 필드만 버린다 — 저장하는 사이 또 고친 필드는 남아 계속 "미저장" 이다.
+ *  오버라이드 값은 고칠 때마다 새 값(문자열·새 객체/배열)이라 === 로 견준다 */
+export function dropSentFieldOv(ov: Overrides, sent: Overrides, id: string): Overrides {
+  const out = { ...ov };
+  FIELD_KEYS.forEach((k) => {
+    const cur = ov[k] as Record<string, unknown>;
+    if (!(id in cur) || cur[id] !== (sent[k] as Record<string, unknown>)[id]) return;
+    const { [id]: _omit, ...rest } = cur; // eslint-disable-line @typescript-eslint/no-unused-vars
+    (out as Record<string, unknown>)[k] = rest;
+  });
+  return out;
+}
+
 /** 구조 오버라이드만 남긴다 — 커리큘럼 편집 패널 밖(개요·보드·캘린더·간트)에는 저장된 값만 보인다 */
 export const stripFieldOv = (ov: Overrides): Overrides => ({ ...ov, titles: {}, descs: {}, dates: {}, typeOv: {}, assignOv: {}, files: {} });
 

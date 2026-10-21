@@ -9,7 +9,7 @@ import { setNodeFiles } from "@/lib/api/nodeFiles";
 import type { Curriculum, FileMeta, MeState, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
-import { EMPTY_OVERRIDES, dropFieldOv, tempId, type Overrides, type TreeNode } from "./model";
+import { EMPTY_OVERRIDES, dropSentFieldOv, tempId, type Overrides, type TreeNode } from "./model";
 import { saveSteps } from "./nodeFiles";
 import { personalErrorText } from "./personal";
 import { shiftedText, type DatePlan } from "./rounds";
@@ -162,14 +162,13 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       const files = opts.skipFiles ? undefined : ov.files[n.id];
       // 저장하는 사이 업로드가 끝나 선택이 바뀌었으면 그 새 선택은 남긴다 (보낸 목록과 같을 때만 지운다)
       const dropSent = (o: Overrides): Overrides => (o.files[n.id] === files ? { ...o, files: dropKey(o.files, n.id) } : o);
-      const dropFields = (o: Overrides): Overrides => {
-        const next = dropFieldOv(o, n.id);
-        return n.id in o.files && o.files[n.id] !== files ? { ...next, files: { ...next.files, [n.id]: o.files[n.id] } } : next;
-      };
+      // 저장 뒤엔 보낸 값만 지운다 — 저장하는 사이 또 고친 제목·설명·첨부 선택 등은 남긴다(화면도 계속 "미저장"). 첨부를 빼고 보냈으면 첨부 선택은 남긴다
+      const sentOv: Overrides = opts.skipFiles ? { ...ov, files: dropKey(ov.files, n.id) } : ov;
+      const dropFields = (o: Overrides): Overrides => dropSentFieldOv(o, sentOv, n.id);
       const steps = saveSteps(Object.keys(patch).length === 0, files);
       if (steps.length === 0) {
         // 고쳤다가 원래 값으로 되돌린 오버라이드도 지운다 — 남으면 계속 "미저장"(회차 선택 비활성·이동 확인)
-        update((p) => ({ ov: dropFieldOv(p.ov, n.id), saved: "바뀐 내용이 없어요" }));
+        update((p) => ({ ov: dropFields(p.ov), saved: "바뀐 내용이 없어요" }));
         return true;
       }
       if (steps[0] === "files") {

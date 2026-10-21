@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, leafLocks, codeLabel, descendantCount, dropFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope, type LeafNode } from "./model";
+import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, leafLocks, codeLabel, descendantCount, dropFieldOv, dropSentFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope, type LeafNode } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -366,5 +366,23 @@ describe("late joiner (assignFrom) — preview equals server assignment_resync",
   it("moving a past 공통 leaf's end past assignFrom adds the late joiner (server resync does too)", () => {
     expect(ids(buildTree(cur, EMPTY_OVERRIDES, REF_DAY), "11")).not.toContain("u6");
     expect(ids(buildTree(cur, { ...EMPTY_OVERRIDES, dates: { "11": { e: "2026-10-20" } } }, REF_DAY), "11")).toContain("u6");
+  });
+});
+
+describe("dropSentFieldOv — 저장에 보낸 값만 지운다", () => {
+  it("보낸 뒤 그대로인 필드는 지우고, 저장하는 사이 또 고친 필드는 남긴다", () => {
+    const dates = { s: "2026-10-09" };
+    const sent = { ...EMPTY_OVERRIDES, titles: { "21": "보낸 제목" }, descs: { "21": "보낸 설명" }, dates: { "21": dates } };
+    const now = { ...sent, descs: { "21": "또 고친 설명" }, titles: { "21": "보낸 제목", "22": "다른 항목" } };
+    const d = dropSentFieldOv(now, sent, "21");
+    expect(d.titles).toEqual({ "22": "다른 항목" });
+    expect(d.descs).toEqual({ "21": "또 고친 설명" });
+    expect(d.dates).toEqual({});
+    expect(isDirty(d, "21")).toBe(true);
+  });
+  it("보낸 적 없는 필드(저장하는 사이 처음 고친 것)도 남긴다", () => {
+    const sent = { ...EMPTY_OVERRIDES, titles: { "21": "보낸 제목" } };
+    const now = { ...sent, descs: { "21": "새 설명" } };
+    expect(dropSentFieldOv(now, sent, "21").descs).toEqual({ "21": "새 설명" });
   });
 });
