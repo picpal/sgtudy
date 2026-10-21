@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { InfoTip } from "@/components/ui/InfoTip";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
 import { setCurriculumEditor } from "@/lib/api/my-study";
@@ -10,6 +11,8 @@ import type { RoomMemberDto } from "@/lib/api/types";
 import { editorErrorText, editorRows } from "../editors";
 import { LeaveAdmin } from "./LeaveAdmin";
 import { personalStats, type Tree } from "../model";
+
+export const EDITOR_TIP = "켜 두면 그 팀원도 회차·과제를 추가하고 고칠 수 있어요. 기본은 그룹장만 편집해요.";
 
 type Props = {
   slug: string;
@@ -62,9 +65,12 @@ export function MemberAdminCard({ slug, members, meId, toast, tree, roundId, onS
 
   return (
     <section aria-labelledby="member-admin-title" className="flex flex-col gap-3 rounded-[20px] border border-line bg-surface p-5 shadow-[0_10px_30px_rgba(27,34,48,.06)]">
-      <h3 id="member-admin-title" className="m-0 text-[14px] font-bold">
-        멤버 관리
-      </h3>
+      <div className="flex items-center gap-[2px]">
+        <h3 id="member-admin-title" className="m-0 text-[14px] font-bold">
+          멤버 관리
+        </h3>
+        <InfoTip label="진행목표 편집 권한 설명" text={EDITOR_TIP} />
+      </div>
       <ul className="m-0 flex list-none flex-col p-0">
         {rows.map((r) => {
           const st = statOf(r.userId);

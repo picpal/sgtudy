@@ -40,3 +40,12 @@ describe("MemberAdminCard 개인 목표 열", () => {
     expect(btn).toBeTruthy();
   });
 });
+
+describe("MemberAdminCard 편집 권한 설명", () => {
+  it("제목 옆 ⓘ 버튼만 있고 설명 문구는 처음엔 숨김", () => {
+    const doc = render("3");
+    expect(doc.querySelector('button[aria-label="진행목표 편집 권한 설명"]')).toBeTruthy();
+    expect(doc.querySelector('[role="tooltip"]')).toBeNull();
+    expect(doc.textContent).not.toContain("이번 회차 완료/전체예요");
+  });
+});
