@@ -64,7 +64,7 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
     ["late", "지연", CODE_COLOR.M],
     ["done", mine ? "제출 완료" : "전원 제출", "#1E9E6A"],
   ];
-  // 한 회차만 볼 때 예정 칸이 비면 — 다음 회차들의 예정 과제 수를 알려 주고 전체 회차로 넓힐 수 있게 한다
+  // 한 회차만 볼 때 예정 칸이 비면 — 이후 회차 전체의 예정 과제 수를 알려 주고 전체 회차로 넓힐 수 있게 한다
   const at = tree.roots.findIndex((r) => r.id === bRound);
   const later = new Set(at < 0 ? [] : tree.roots.slice(at + 1).map((r) => r.id));
   const nextTodo = scoped.filter((l) => l.roundId && later.has(l.roundId) && boardColumn(l, mine, meId) === "todo").length;
@@ -106,7 +106,7 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
                     onClick={() => update({ bRound: "all" })}
                     className="flex min-h-11 w-full items-center justify-between gap-2 rounded-[12px] border border-dashed border-line-dash bg-surface px-3 text-left text-[12px] font-semibold text-ink-2 hover:border-mint hover:text-mint-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
                   >
-                    <span>다음 회차 과제 {nextTodo}개</span>
+                    <span>이후 회차 과제 {nextTodo}개</span>
                     <span className="text-mint-deep">
                       전체 회차 보기 <span aria-hidden="true">→</span>
                     </span>

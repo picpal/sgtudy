@@ -194,7 +194,7 @@ describe("BoardTab 예정 칸 — 다음 회차 안내", () => {
     const { host, calls } = mount({ bRound: "2", bMode: "mine" });
     const b = hint(host)!;
     expect(b.closest("section")!.getAttribute("aria-label")).toBe("예정");
-    expect(b.textContent).toContain("다음 회차 과제 4개"); // 내 과제 3(311·41·51) + 내 개인 목표 1
+    expect(b.textContent).toContain("이후 회차 과제 4개"); // 내 과제 3(311·41·51) + 내 개인 목표 1
     expect(b.classList.contains("min-h-11")).toBe(true);
     click(b);
     expect(calls).toEqual([{ bRound: "all" }]);
@@ -202,7 +202,7 @@ describe("BoardTab 예정 칸 — 다음 회차 안내", () => {
 
   it("팀 칸반은 모든 과제 기준으로 센다", () => {
     const { host } = mount({ bRound: "2", bMode: "team" });
-    expect(hint(host)!.textContent).toContain("다음 회차 과제 4개");
+    expect(hint(host)!.textContent).toContain("이후 회차 과제 4개");
   });
 
   it("전체 회차일 때, 예정 칸에 카드가 있을 때, 다음 회차 예정 과제가 0개일 때는 없다", () => {
