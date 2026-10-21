@@ -157,6 +157,28 @@ describe("ExamResults", () => {
     expect(host.querySelector("[role=region]")).not.toBeNull();
   });
 
+  it("refreshKey 로 다시 불러오면 펼친 답안을 접고, 다시 누르면 새로 조회", async () => {
+    m.results.mockResolvedValue(RESULTS);
+    const el = (k: string) => createElement(MeProvider, { me: null } as Parameters<typeof MeProvider>[0], createElement(ExamResults, { slug: "aws", nodeId: "311", toast, refreshKey: k }));
+    host = document.body.appendChild(document.createElement("div"));
+    root = createRoot(host);
+    act(() => root!.render(el("a")));
+    await flush();
+    m.attempt.mockResolvedValue(attemptOf(false));
+    act(() => button("답안 ▸")[1].click());
+    await flush();
+    expect(host.querySelector("[role=region]")).not.toBeNull();
+    act(() => root!.render(el("b")));
+    await flush();
+    expect(m.results).toHaveBeenCalledTimes(2);
+    expect(host.querySelector("[role=region]")).toBeNull();
+    expect(host.querySelector("[aria-expanded=true]")).toBeNull();
+    act(() => button("답안 ▸")[1].click());
+    await flush();
+    expect(m.attempt).toHaveBeenCalledTimes(2);
+    expect(host.querySelector("[role=region]")).not.toBeNull();
+  });
+
   it("[답안 ▸] 실패 → 토스트, 펼치지 않음", async () => {
     await mount();
     m.attempt.mockRejectedValue(new ApiException({ code: "FORBIDDEN", message: "x" }));

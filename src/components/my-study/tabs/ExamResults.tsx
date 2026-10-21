@@ -32,7 +32,9 @@ export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
         if (my !== seq.current) return;
         setError(false);
         setData(r);
+        // 새 결과 — 펼쳐 둔 답안은 옛 것이라 접는다
         setAnswers({});
+        setOpen(null);
       },
       () => {
         if (my === seq.current) setError(true);
