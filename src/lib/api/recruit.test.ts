@@ -3,7 +3,7 @@ import { closedAction, actionOf } from "@/lib/api/room-view";
 import { inviteActionOf } from "@/lib/api/invite";
 import { showApplications } from "@/lib/api/leader";
 import { toRoomCard } from "@/lib/api/rooms";
-import { codeInputView, extraRecruitDefaults, extraRecruitNote, formatCode, inviteNote, isCodeShape, normalizeCode, recruitMaxDate } from "@/lib/api/recruit";
+import { codeInputView, extraRecruitDefaults, extraRecruitNote, formatCode, inviteNote, isCodeShape, normalizeCode, recruitErrorText, recruitMaxDate } from "@/lib/api/recruit";
 import type { InvitePreview, RoomCardDto } from "@/lib/api/types";
 
 describe("code", () => {
@@ -83,5 +83,12 @@ describe("toRoomCard extra badge", () => {
     expect(toRoomCard(dto, "2026-10-12")).toMatchObject({ status: "active", extra: "open" });
     expect(toRoomCard({ ...dto, isFull: true }, "2026-10-12")).toMatchObject({ extra: "full" });
     expect(toRoomCard({ ...dto, recruitUntil: null }, "2026-10-12").extra).toBeUndefined();
+  });
+});
+
+describe("recruitErrorText", () => {
+  it("바로 참가 경쟁 패배(ROOM_NOT_RECRUITING)는 전용 문구, 모르는 코드는 서버 메시지", () => {
+    expect(recruitErrorText("ROOM_NOT_RECRUITING", "raw server msg")).toBe("방금 모집이 마감됐어요 · 그룹장에게 새 초대를 받아 주세요");
+    expect(recruitErrorText("OTHER", "raw")).toBe("raw");
   });
 });

@@ -56,6 +56,7 @@ export function recruitErrorText(code: string, message: string): string {
   switch (code) {
     case "CAPACITY_NO_SEAT": return "빈자리가 없어요 · 정원을 늘려 주세요";
     case "INVITE_EXPIRED": return "바로 참가 기한이 끝났거나 인원이 찼어요 · 그룹장에게 문의해 주세요";
+    case "ROOM_NOT_RECRUITING": return "방금 모집이 마감됐어요 · 그룹장에게 새 초대를 받아 주세요";
     case "RATE_LIMITED": return "코드를 너무 많이 틀렸어요 · 1시간 뒤에 다시 시도해 주세요";
     default: return message || "처리하지 못했어요 · 잠시 후 다시 시도해 주세요";
   }

@@ -118,7 +118,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
   const copyCode = async () => {
     if (!inviteCode) return;
     try {
-      await navigator.clipboard.writeText(inviteCode);
+      await navigator.clipboard.writeText(formatCode(inviteCode)); // 화면에 보이는 XXXX-XXXX 그대로 (방 설정 카드와 같은 형식)
       toast({ text: "초대 코드를 복사했어요", tone: "ok" });
     } catch {
       toast({ text: "코드를 복사하지 못했어요", tone: "bad" });

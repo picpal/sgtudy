@@ -242,7 +242,7 @@ describe("LeaderPanel 초대 코드 상태 갱신", () => {
     await flush();
     expect(btn(host, "코드 ABCD-2345 복사")).toHaveLength(0);
     await act(async () => btn(host, "코드 WXYZ-6789 복사")[0].click());
-    expect(write).toHaveBeenLastCalledWith("WXYZ6789");
+    expect(write).toHaveBeenLastCalledWith("WXYZ-6789");
   });
   it("코드가 없던 방: 링크 복사 때 invite_get 이 준 코드로 버튼이 생긴다", async () => {
     api.fetchInvite.mockResolvedValue({ url: "/i/old", token: "old", code: "ABCD2345", bypass: null });
