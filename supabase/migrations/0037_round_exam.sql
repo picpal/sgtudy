@@ -413,6 +413,13 @@ grant execute on function public.exam_brief_put(text, bigint, jsonb) to authenti
 -- 응시 관문 = submission_target(방 잠금·숨김·ACTIVE·보관·리프·담당자) + 시험 존재·발행 + 시작일. 마감 뒤는 허용(지각)
 -- 시험 행은 방 잠금(submission_target) 뒤에 읽는다 — exam_unpublish(node_assert_editable 이 같은 방 잠금)와 직렬화.
 -- submission_target 이 먼저라 비멤버는 ROOM_NOT_FOUND 로 끝난다(노드 id 로 "시험인지" 를 떠볼 수 없다)
+-- 마감 뒤 공개 시험의 마감(스펙 §3.4 의 공개 조건과 같은 식). 정답이 열린 뒤 지각 제출 = 정답 보고 만점 → 응시를 닫는다.
+-- 저장값이 아니라 오늘 기준 — 기간을 연장하면 공개가 다시 닫히고 응시도 다시 열린다. after_submit 은 지각 제출 그대로 허용
+create or replace function public.exam_closed(x public.exams, n public.goal_nodes) returns boolean
+language sql stable set search_path = '' as $$
+  select x.reveal = 'AFTER_DEADLINE' and public.kst_today() > n.end_date
+$$;
+
 create or replace function public.exam_target(p_node bigint, p_uid uuid) returns public.goal_nodes
 language plpgsql security definer set search_path = '' as $$
 declare n public.goal_nodes; x public.exams;
@@ -423,6 +430,9 @@ begin
   if x.status <> 'PUBLISHED' then perform public.fail('EXAM_NOT_PUBLISHED', '아직 발행되지 않은 시험이에요', jsonb_build_object('nodeId', n.id::text)); end if;
   if public.kst_today() < n.start_date then
     perform public.fail('TASK_NOT_STARTED', '아직 시작되지 않은 시험이에요', jsonb_build_object('startDate', to_char(n.start_date, 'YYYY-MM-DD')));
+  end if;
+  if public.exam_closed(x, n) then
+    perform public.fail('EXAM_CLOSED', '마감이 지나 해설이 공개된 시험은 제출할 수 없어요', jsonb_build_object('endDate', to_char(n.end_date, 'YYYY-MM-DD')));
   end if;
   return n;
 end $$;
@@ -438,7 +448,7 @@ begin
     return jsonb_typeof(p_answer) = 'number' and (p_answer #>> '{}')::numeric = floor((p_answer #>> '{}')::numeric)
            and (p_answer #>> '{}')::numeric >= 0 and (p_answer #>> '{}')::numeric < v_n;
   elsif q.qtype = 'MULTI' then
-    if jsonb_typeof(p_answer) <> 'array' or jsonb_array_length(p_answer) > v_n then return false; end if;
+    if jsonb_typeof(p_answer) <> 'array' or jsonb_array_length(p_answer) > 50 then return false; end if;   -- 중복은 저장 때 걷는다(길이 = 상한만)
     for e in select * from jsonb_array_elements(p_answer) loop
       if jsonb_typeof(e) <> 'number' then return false; end if;
       if (e #>> '{}')::numeric <> floor((e #>> '{}')::numeric) or (e #>> '{}')::numeric < 0 or (e #>> '{}')::numeric >= v_n then return false; end if;
@@ -451,6 +461,17 @@ begin
   end if;
   return false;
 end $$;
+
+-- 저장 표기 정규화(모양 검사 통과 뒤에만 부른다): 1.0 → 1 · MULTI 는 정수·중복 제거·정렬. jsonb 는 1.0 의 scale 을 보존해
+-- '1.0'::int 가 22P02 로 터지므로 저장값을 항상 정수 표기로 둔다
+create or replace function public.exam_answer_canon(q public.exam_questions, p_answer jsonb) returns jsonb
+language sql immutable set search_path = '' as $$
+  select case q.qtype
+    when 'SINGLE' then to_jsonb((p_answer #>> '{}')::numeric::int)
+    when 'MULTI'  then (select coalesce(jsonb_agg(s.x order by s.x), '[]'::jsonb)
+                        from (select distinct (e #>> '{}')::numeric::int as x from jsonb_array_elements(p_answer) e) s)
+    else p_answer end
+$$;
 
 -- "답함" 판정 — 웹 exam.ts isAnswered 와 같은 규칙(null·''·[] 는 답 아님). 저장 응답 answered 가 화면 "답함 n/총" 과 같도록
 create or replace function public.exam_is_answered(p_answer jsonb) returns boolean
@@ -465,9 +486,8 @@ begin
   correct := false;
   if public.exam_is_answered(p_answer) and public.exam_answer_shape_ok(q, p_answer) then
     correct := case q.qtype
-      when 'SINGLE' then (p_answer #>> '{}')::int = (q.answer #>> '{}')::int
-      when 'MULTI'  then (select coalesce(jsonb_agg(s.x order by s.x), '[]'::jsonb)
-                          from (select distinct (e #>> '{}')::int as x from jsonb_array_elements(p_answer) e) s) = q.answer
+      when 'SINGLE' then (p_answer #>> '{}')::numeric::int = (q.answer #>> '{}')::numeric::int
+      when 'MULTI'  then public.exam_answer_canon(q, p_answer) = q.answer
       when 'OX'     then (p_answer #>> '{}')::boolean = (q.answer #>> '{}')::boolean
       when 'SHORT'  then exists (select 1 from jsonb_array_elements_text(q.answer) a where public.exam_norm(a) = public.exam_norm(p_answer #>> '{}'))
       else false end;
@@ -480,7 +500,7 @@ create or replace function public.exam_reveal_ok(x public.exams, n public.goal_n
 language sql stable set search_path = '' as $$
   select coalesce(case x.reveal
     when 'AFTER_SUBMIT'   then a.status = 'SUBMITTED'
-    when 'AFTER_DEADLINE' then public.kst_today() > n.end_date      -- 저장값이 아니라 오늘 기준 — 기간 연장 = 다시 닫힘
+    when 'AFTER_DEADLINE' then public.exam_closed(x, n)              -- 저장값이 아니라 오늘 기준 — 기간 연장 = 다시 닫힘
     else false end, false)
 $$;
 
@@ -527,6 +547,7 @@ begin
     when not v_asg then 'not_assignee'
     when x.status <> 'PUBLISHED' then 'not_published'
     when public.kst_today() < n.start_date then 'not_started'
+    when public.exam_closed(x, n) then 'closed'                      -- after_deadline 마감 뒤: 정답이 열려 응시 불가
     else null end;
 
   -- 문항: 편집자 | 담당자(스펙 §3.4 — 담당 아닌 멤버는 요약만). 담당자에게도 초안·시작 전에는 문항을 싣지 않는다
@@ -557,7 +578,8 @@ begin
     'node', jsonb_build_object('id', n.id::text, 'title', n.title, 'startDate', to_char(n.start_date, 'YYYY-MM-DD'),
                                'endDate', to_char(n.end_date, 'YYYY-MM-DD'), 'archived', n.archived_at is not null),
     'exam', jsonb_build_object('status', lower(x.status), 'reveal', lower(x.reveal), 'questionCount', x.question_count,
-                               'totalPoints', x.total_points, 'publishedAt', public.iso(x.published_at))
+                               'totalPoints', x.total_points, 'publishedAt', public.iso(x.published_at),
+                               'closed', public.exam_closed(x, n))
             -- 편집자 전용 키. locked = 응시 행 1건~(진행 중 포함, exam_assert_unlocked 와 같은 규칙) · submittedCount = 제출만
             || case when v_edit then jsonb_build_object('source', lower(x.source), 'locked', v_all > 0, 'submittedCount', v_sub, 'brief', x.brief) else '{}'::jsonb end,
     'viewer', jsonb_build_object('canEdit', v_edit, 'isAssignee', v_asg, 'canTake', v_reason is null, 'reason', v_reason),
@@ -591,13 +613,14 @@ begin
   n := public.exam_target(p_node, v_uid);                    -- 방 잠금
   select * into q from public.exam_questions where id = p_question and node_id = n.id;
   if not found then perform public.fail('NOT_FOUND', '문항을 찾을 수 없어요', jsonb_build_object('questionId', p_question::text)); end if;
-  if not public.exam_answer_shape_ok(q, p_answer) then
-    perform public.fail('VALIDATION_FAILED', '답 모양이 문항 유형과 맞지 않아요', jsonb_build_object('field', 'answer', 'questionId', q.id::text));
-  end if;
+  -- 상태 오류가 모양 오류보다 먼저(제출 뒤엔 무엇을 보내도 EXAM_ALREADY_SUBMITTED). 실패하면 아래 insert 도 함께 롤백된다
   insert into public.exam_attempts (node_id, user_id, started_at) values (n.id, v_uid, v_now) on conflict (node_id, user_id) do nothing;
   select * into a from public.exam_attempts where node_id = n.id and user_id = v_uid for update;   -- 응시 행 잠금(방 잠금 다음)
   if a.status <> 'IN_PROGRESS' then perform public.fail('EXAM_ALREADY_SUBMITTED', '이미 제출한 시험이에요'); end if;
-  insert into public.exam_answers (attempt_id, question_id, answer, saved_at) values (a.id, q.id, p_answer, v_now)
+  if not public.exam_answer_shape_ok(q, p_answer) then
+    perform public.fail('VALIDATION_FAILED', '답 모양이 문항 유형과 맞지 않아요', jsonb_build_object('field', 'answer', 'questionId', q.id::text));
+  end if;
+  insert into public.exam_answers (attempt_id, question_id, answer, saved_at) values (a.id, q.id, public.exam_answer_canon(q, p_answer), v_now)
   on conflict (attempt_id, question_id) do update set answer = excluded.answer, saved_at = excluded.saved_at;
   select count(*)::int into v_cnt from public.exam_answers e where e.attempt_id = a.id and public.exam_is_answered(e.answer);
   select count(*)::int into v_tot from public.exam_questions where node_id = n.id;
@@ -646,7 +669,11 @@ begin
   -- 과제 제출 1행(0022 submission_upsert 와 같은 지각 판정). 가드 트리거는 이 트랜잭션 로컬 설정으로만 연다
   perform set_config('sgtudy.exam_submit', '1', true);
   insert into public.submissions (node_id, user_id, body_md, first_submitted_at, is_late, updated_at)
-  values (n.id, v_uid, '', v_now, v_now >= public.kst_deadline(n.end_date), v_now);
+  values (n.id, v_uid, '', v_now, v_now >= public.kst_deadline(n.end_date), v_now)
+  on conflict (node_id, user_id) do nothing;
+  if not found then   -- 시험이 되기 전 제출물(C10 경합 창) — 원시 23505 대신 코드로
+    perform public.fail('NODE_HAS_SUBMISSIONS', '이미 제출물이 있는 과제예요', jsonb_build_object('nodeId', n.id::text));
+  end if;
   perform set_config('sgtudy.exam_submit', '0', true);
 
   -- 전원 제출 감지(0022 submission_upsert 와 동일 — 이 insert 는 항상 최초 제출)

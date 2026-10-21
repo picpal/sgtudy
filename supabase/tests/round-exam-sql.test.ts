@@ -280,6 +280,9 @@ cases("round exam 0037 · taking & reveal", db, [
     assertEquals([s.viewer.reason, s.viewer.canTake, s.questions], ["not_started", false, null]);   // 시작 전 문항 유출 없음
     await failCode(save(q, node, (await qids(q, node))[0], 0), "TASK_NOT_STARTED");
     await failCode(submitExam(q, node), "TASK_NOT_STARTED");
+    await as(q, "민수");                                     // 편집자는 시작 전에도 문항·정답을 본다
+    const e = await get(q, node);
+    assertEquals([e.questions.length, "answer" in e.questions[0]], [4, true]);
   } },
   { name: "exam_answer_save: shape check per type · creates IN_PROGRESS · answered/total · plain leaf EXAM_NOT_FOUND", run: async (q) => {
     const node = await published(q);
@@ -369,8 +372,15 @@ cases("round exam 0037 · taking & reveal", db, [
     await setToday(q, "2026-10-22");
     await setNow(q, "2026-10-22T09:00:00+09:00");
     await as(q, "철수");
+    assertEquals([(await get(q, node)).viewer.canTake, (await get(q, node)).exam.closed], [true, false]);   // after_submit 은 마감 뒤에도 응시(지각)
     const v = await submitExam(q, node);
     assertEquals([v.attempt.score, v.attempt.correctCount, v.attempt.isLate], [0, 0, true]);
+    await as(q, "하나");                                     // 지각 저장·제출 — 정답은 자기 제출 뒤에만 열린다
+    const ids = await qids(q, node);
+    await save(q, node, ids[0], 0);
+    assertEquals("answer" in (await get(q, node)).questions[0], false);
+    const h = await submitExam(q, node);
+    assertEquals([h.attempt.score, h.attempt.isLate], [1, true]);
     assertEquals((await one(q, "select is_late from public.submissions where node_id = $1::bigint and user_id = $2::uuid", [node, await uidOf(q, "철수")])).is_late, true);
   } },
   { name: "reveal after_deadline: after submit only score · after end_date answers for everyone incl. non-submitters · extending end_date closes again", run: async (q) => {
@@ -439,5 +449,45 @@ cases("round exam 0037 · taking & reveal", db, [
     assertEquals(Object.keys(m.attempt.answers).length, 1);
     await asAnon(q);
     await failCode(save(q, node, (await qids(q, node))[0], 0), "AUTH_REQUIRED");
+  } },
+  { name: "answers stored canonically: 0.0 / [2.0, 0, 0] (direct RPC) → 0 / [0,2] · graded correct (no 22P02)", run: async (q) => {
+    const node = await published(q);
+    const ids = await qids(q, node);
+    await as(q, "지은");
+    // JS 의 JSON.stringify(0.0) 은 "0" 이라 SQL 리터럴로 직접 보낸다(PostgREST 클라이언트는 1.0 을 그대로 보낼 수 있다)
+    await q("select public.exam_answer_save($1::bigint, $2::bigint, '0.0'::jsonb)", [node, ids[0]]);
+    await q("select public.exam_answer_save($1::bigint, $2::bigint, '[2.0, 0, 0]'::jsonb)", [node, ids[1]]);
+    const stored = await q(`select e.answer::text as a from public.exam_answers e join public.exam_attempts t on t.id = e.attempt_id
+                            where t.node_id = $1::bigint order by e.question_id`, [node]);
+    assertEquals(stored.map((x) => x.a), ["0", "[0, 2]"]);
+    // 저장 경로를 거치지 않은 비정규 표기도 채점은 견딘다(exam_grade ::numeric::int)
+    await q("update public.exam_answers set answer = '0.0'::jsonb where question_id = $1::bigint", [ids[0]]);
+    const v = await submitExam(q, node);
+    assertEquals([v.attempt.results[ids[0]].correct, v.attempt.results[ids[1]].correct, v.attempt.score], [true, true, 3]);
+  } },
+  { name: "EXAM_CLOSED: after_deadline past end_date → save & submit rejected · exam.closed / reason closed · extension reopens", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await put(q, node, { ...Q4, reveal: "after_deadline" });
+    await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
+    const ids = await qids(q, node);
+    await setToday(q, "2026-10-16"); await setNow(q, "2026-10-16T12:00:00+09:00");
+    await as(q, "철수");
+    await save(q, node, ids[0], 1);                          // 진행 중 응시
+    await setToday(q, "2026-10-22"); await setNow(q, "2026-10-22T09:00:00+09:00");
+    for (const n of ["철수", "하나"]) {                       // 진행 중 · 응시 전 모두
+      await as(q, n);
+      const v = await get(q, node);
+      assertEquals([v.exam.closed, v.viewer.canTake, v.viewer.reason, "answer" in v.questions[0]], [true, false, "closed", true]);
+      await failCode(save(q, node, ids[0], 0), "EXAM_CLOSED");
+      await failCode(submitExam(q, node), "EXAM_CLOSED");
+    }
+    await as(q, "민수");
+    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-25\"}'::jsonb)", [node]);
+    await as(q, "철수");                                     // 연장 → 공개 닫힘 → 응시 다시 열림
+    const o = await get(q, node);
+    assertEquals([o.exam.closed, o.viewer.canTake, "answer" in o.questions[0]], [false, true, false]);
+    await save(q, node, ids[0], 0);
+    const s = await submitExam(q, node);
+    assertEquals([s.attempt.score, s.attempt.isLate, s.attempt.results], [1, false, null]);
   } },
 ]);
