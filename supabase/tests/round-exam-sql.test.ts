@@ -217,3 +217,227 @@ cases("round exam 0037 · schema & authoring", db, [
     await locked(rpc(q, "public.exam_unpublish('aws', $1::bigint)", [node]), 1, 1);
   } },
 ]);
+
+/** 발행된 4문항 시험 + 오늘 10/16 */
+async function published(q: Q): Promise<string> {
+  const node = await newExamLeaf(q);
+  await put(q, node, Q4);
+  await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
+  await setToday(q, "2026-10-16");
+  await setNow(q, "2026-10-16T12:00:00+09:00");
+  return node;
+}
+const get = (q: Q, node: string) => rpc(q, "public.exam_get('aws', $1::bigint)", [node]);
+const save = (q: Q, node: string, qid: string, a: unknown) => rpc(q, "public.exam_answer_save($1::bigint, $2::bigint, $3::jsonb)", [node, qid, JSON.stringify(a)]);
+const submitExam = (q: Q, node: string) => rpc(q, "public.exam_submit($1::bigint)", [node]);
+const qids = async (q: Q, node: string) => (await q("select id::text as id from public.exam_questions where node_id = $1::bigint order by ord", [node])).map((r) => r.id as string);
+/** 오류 코드 정확히 일치(expectFail 은 부분 문자열 — NOT_FOUND 가 EXAM_NOT_FOUND 에도 맞는다) */
+async function failCode(p: Promise<unknown>, code: string): Promise<void> {
+  try { await p; } catch (e) { assertEquals((e as Error).message, code); return; }
+  throw new Error(`expected ${code}, but the call succeeded`);
+}
+
+cases("round exam 0037 · taking & reveal", db, [
+  { name: "exam_get before submit: assignee gets questions WITHOUT answer/explanation keys · non-assignee no questions · anon EXAM_NOT_FOUND", run: async (q) => {
+    const node = await published(q);
+    await as(q, "지은");
+    const v = await get(q, node);
+    assertEquals(v.viewer.canTake, true);
+    assertEquals(v.questions.length, 4);
+    for (const x of v.questions) { assertEquals("answer" in x, false); assertEquals("explanation" in x, false); }
+    assertEquals(v.attempt, null);
+    for (const k of ["brief", "source", "locked", "submittedCount"]) assertEquals(k in v.exam, false, k);   // 편집자 전용 키
+    await q("update public.rooms set leader_does_tasks = false where slug = 'aws'");
+    await q("select public.assignment_resync((select id from public.rooms where slug = 'aws'))");
+    await as(q, "민수");                                     // 그룹장(과제 안 함) = 편집자 → 정답 본다
+    const m = await get(q, node);
+    assertEquals("answer" in m.questions[0], true);
+    assertEquals([m.viewer.canEdit, m.viewer.isAssignee, m.viewer.reason], [true, false, "not_assignee"]);
+    await as(q, "도윤");                                     // INACTIVE 멤버: 문항 없음
+    const d = await get(q, node);
+    assertEquals(d.questions, null);
+    assertEquals(d.viewer.reason, "not_assignee");
+    assertEquals("locked" in d.exam, false);
+    await asAnon(q);
+    await failCode(get(q, node), "EXAM_NOT_FOUND");
+    // 일반 리프는 시험이 없다
+    await as(q, "지은");
+    await failCode(get(q, await nodeId(q, "aws", "ALB vs NLB 실습")), "EXAM_NOT_FOUND");
+  } },
+  { name: "draft exam: assignee sees status only (reason not_published) · before start not_started, still no questions", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await put(q, node, Q4);
+    await as(q, "지은");
+    const v = await get(q, node);
+    assertEquals(v.viewer.reason, "not_published");
+    assertEquals(v.questions, null);
+    await as(q, "지은");
+    await failCode(save(q, node, (await qids(q, node))[0], 0), "EXAM_NOT_PUBLISHED");
+    await as(q, "민수");
+    await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
+    await as(q, "지은");                                     // 오늘 10/12 < 10/15
+    const s = await get(q, node);
+    assertEquals([s.viewer.reason, s.viewer.canTake, s.questions], ["not_started", false, null]);   // 시작 전 문항 유출 없음
+    await failCode(save(q, node, (await qids(q, node))[0], 0), "TASK_NOT_STARTED");
+    await failCode(submitExam(q, node), "TASK_NOT_STARTED");
+  } },
+  { name: "exam_answer_save: shape check per type · creates IN_PROGRESS · answered/total · plain leaf EXAM_NOT_FOUND", run: async (q) => {
+    const node = await published(q);
+    const ids = await qids(q, node);
+    await as(q, "지은");
+    let r = await save(q, node, ids[0], 0);
+    assertEquals([r.answered, r.total], [1, 4]);
+    assertEquals(r.savedAt, "2026-10-16T03:00:00.000Z");
+    await failCode(save(q, node, ids[0], 9), "VALIDATION_FAILED");
+    await failCode(save(q, node, ids[0], 1e12), "VALIDATION_FAILED");     // 큰 수도 22003 이 아니라 모양 오류
+    await failCode(save(q, node, ids[0], 0.5), "VALIDATION_FAILED");
+    await failCode(save(q, node, ids[0], null), "VALIDATION_FAILED");
+    await failCode(save(q, node, ids[1], 0), "VALIDATION_FAILED");        // multi 는 배열
+    await failCode(save(q, node, ids[1], [1.5]), "VALIDATION_FAILED");
+    await failCode(save(q, node, ids[1], ["0"]), "VALIDATION_FAILED");
+    await failCode(save(q, node, ids[2], "O"), "VALIDATION_FAILED");      // ox 는 boolean
+    await failCode(save(q, node, ids[3], "x".repeat(201)), "VALIDATION_FAILED");
+    await failCode(save(q, node, ids[3], 1), "VALIDATION_FAILED");
+    r = await save(q, node, ids[1], [2, 0]);
+    assertEquals(r.answered, 2);
+    r = await save(q, node, ids[3], "");                     // 빈 답은 저장되지만 "답함" 이 아니다(웹 isAnswered 와 같음)
+    assertEquals(r.answered, 2);
+    r = await save(q, node, ids[1], []);
+    assertEquals(r.answered, 1);
+    assertEquals((await one(q, "select status from public.exam_attempts where node_id = $1::bigint", [node])).status, "IN_PROGRESS");
+    const plain = await nodeId(q, "aws", "ALB vs NLB 실습");
+    await failCode(save(q, plain, ids[0], 0), "EXAM_NOT_FOUND");
+    await failCode(save(q, node, "0", 0), "NOT_FOUND");                    // 다른 시험의 문항 id
+    // 담당자 아님
+    await q("update public.rooms set leader_does_tasks = false where slug = 'aws'");
+    await q("select public.assignment_resync((select id from public.rooms where slug = 'aws'))");
+    await as(q, "민수");
+    await failCode(save(q, node, ids[0], 0), "TASK_NOT_ASSIGNED");
+    // 진행 중 응시가 생기면 편집자 화면 locked = true · submittedCount 는 제출만 센다 · 초안 되돌리기 잠김
+    const e = await get(q, node);
+    assertEquals([e.exam.locked, e.exam.submittedCount], [true, 0]);
+    await failCode(rpc(q, "public.exam_unpublish('aws', $1::bigint)", [node]), "EXAM_LOCKED");
+  } },
+  { name: "exam_submit: server grading (single·multi all-or-nothing·ox·short normalized) · submissions row · progress · answers revealed (after_submit)", run: async (q) => {
+    const node = await published(q);
+    const ids = await qids(q, node);
+    await as(q, "지은");
+    await save(q, node, ids[0], 0);           // 정답
+    await save(q, node, ids[1], [0]);         // 부분 → 오답
+    await save(q, node, ids[2], false);       // 정답
+    await save(q, node, ids[3], " internet  GATEWAY ");   // 정규화 → 정답
+    const v = await submitExam(q, node);
+    assertEquals(v.attempt.status, "submitted");
+    assertEquals([v.attempt.score, v.attempt.maxScore, v.attempt.correctCount], [3, 5, 3]);
+    assertEquals(v.attempt.isLate, false);
+    assertEquals(v.attempt.submittedAt, "2026-10-16T03:00:00.000Z");
+    assertEquals(v.attempt.results[ids[1]], { correct: false, earned: 0 });
+    assertEquals(v.attempt.results[ids[2]], { correct: true, earned: 1 });
+    assertEquals(v.questions[1].answer, [0, 2]);
+    assertEquals(v.questions[1].explanation, "IAM 은 글로벌");
+    assertEquals([v.viewer.reason, v.viewer.canTake], ["submitted", false]);
+    // submissions 1행 → 기존 집계가 "제출" 로 본다
+    const s = await one(q, "select body_md, is_late from public.submissions where node_id = $1::bigint and user_id = $2::uuid", [node, await uidOf(q, "지은")]);
+    assertEquals([s.body_md, s.is_late], ["", false]);
+    const p = await one(q, "select asg, sub from public.room_progress((select id from public.rooms where slug = 'aws')) where node_id = $1::bigint", [node]);
+    assertEquals([p.asg, p.sub], [4, 1]);
+    const st = await one(q, "select st from public.me_schedule_leaves($1::uuid, '2026-10-16') where node_id = $2::bigint", [await uidOf(q, "지은"), node]);
+    assertEquals(st.st, "done");
+    await failCode(submitExam(q, node), "EXAM_ALREADY_SUBMITTED");
+    await failCode(save(q, node, ids[0], 1), "EXAM_ALREADY_SUBMITTED");
+    // 다른 담당자(철수)는 아직 제출 전 — 정답 키 없음, 편집자는 제출 1건
+    await as(q, "철수");
+    assertEquals("answer" in (await get(q, node)).questions[0], false);
+    await as(q, "민수");
+    const e = await get(q, node);
+    assertEquals([e.exam.locked, e.exam.submittedCount], [true, 1]);
+  } },
+  { name: "exam_grade: multi duplicates count once · wrong/missing answers 0 · short punctuation", run: async (q) => {
+    const node = await published(q);
+    const ids = await qids(q, node);
+    await as(q, "하나");
+    await save(q, node, ids[0], 1);                          // 오답
+    await save(q, node, ids[1], [2, 0, 2]);                  // 중복 선택 → [0,2] 정답
+    await save(q, node, ids[3], "IGW.");                     // 구두점 → 정답
+    const v = await submitExam(q, node);
+    assertEquals([v.attempt.score, v.attempt.correctCount], [3, 2]);
+    assertEquals(v.attempt.results[ids[2]], { correct: false, earned: 0 });   // 미답
+    assertEquals(v.attempt.answers[ids[2]], null);                             // 미답 채점 행 = JSON null
+  } },
+  { name: "exam_submit: unanswered questions count wrong · late after deadline · empty attempt allowed (0점)", run: async (q) => {
+    const node = await published(q);
+    await setToday(q, "2026-10-22");
+    await setNow(q, "2026-10-22T09:00:00+09:00");
+    await as(q, "철수");
+    const v = await submitExam(q, node);
+    assertEquals([v.attempt.score, v.attempt.correctCount, v.attempt.isLate], [0, 0, true]);
+    assertEquals((await one(q, "select is_late from public.submissions where node_id = $1::bigint and user_id = $2::uuid", [node, await uidOf(q, "철수")])).is_late, true);
+  } },
+  { name: "reveal after_deadline: after submit only score · after end_date answers for everyone incl. non-submitters · extending end_date closes again", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await put(q, node, { ...Q4, reveal: "after_deadline" });
+    await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
+    await setToday(q, "2026-10-16"); await setNow(q, "2026-10-16T12:00:00+09:00");
+    const ids = await qids(q, node);
+    await as(q, "지은");
+    await save(q, node, ids[0], 0);
+    let v = await submitExam(q, node);
+    assertEquals(v.attempt.score, 1);
+    assertEquals(v.attempt.results, null);
+    assertEquals("answer" in v.questions[0], false);
+    assertEquals("explanation" in v.questions[0], false);
+    await setToday(q, "2026-10-21");                         // 마감 당일 = 아직 닫힘
+    assertEquals("answer" in (await get(q, node)).questions[0], false);
+    await setToday(q, "2026-10-22");
+    v = await get(q, node);
+    assertEquals(v.attempt.results[ids[0]].correct, true);
+    assertEquals("answer" in v.questions[0], true);
+    await as(q, "하나");                                     // 미제출자도 마감 뒤엔 본다
+    const h = await get(q, node);
+    assertEquals("answer" in h.questions[0], true);
+    assertEquals(h.attempt, null);
+    await as(q, "민수");
+    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-25\"}'::jsonb)", [node]);
+    await as(q, "지은");
+    const c = await get(q, node);
+    assertEquals("answer" in c.questions[0], false);         // 연장 → 다시 닫힘
+    assertEquals(c.attempt.results, null);
+  } },
+  { name: "all-submitted notification (IMMEDIATE) fires from exam_submit like a normal task", run: async (q) => {
+    const node = await published(q);
+    await q("update public.room_notification_settings set completion_mode = 'IMMEDIATE' where room_id = (select id from public.rooms where slug = 'aws')");
+    // 행위자는 수신자에서 빠진다 → 마지막 제출자는 그룹장이 아니어야 그룹장에게 간다
+    for (const n of ["민수", "지은", "철수"]) { await as(q, n); await submitExam(q, node); }
+    assertEquals((await q("select 1 from public.notifications where kind = 'TASK_ALL_SUBMITTED' and node_id = $1::bigint", [node])).length, 0);
+    await as(q, "하나");
+    await submitExam(q, node);
+    const notes = await q("select user_id::text as u from public.notifications where kind = 'TASK_ALL_SUBMITTED' and node_id = $1::bigint", [node]);
+    assertEquals(notes.map((x) => x.u), [await uidOf(q, "민수")]);
+  } },
+  { name: "archived exam leaf: take blocked (TASK_ARCHIVED) · editor still sees answers", run: async (q) => {
+    const node = await published(q);
+    await as(q, "민수");
+    await q("select public.node_archive('aws', $1::bigint)", [node]);
+    await as(q, "지은");
+    await failCode(save(q, node, (await qids(q, node))[0], 0), "TASK_ARCHIVED");
+    await failCode(submitExam(q, node), "TASK_ARCHIVED");
+    await as(q, "민수");
+    const v = await get(q, node);
+    assertEquals(v.exam.status, "published");
+    assertEquals(v.node.archived, true);
+    assertEquals("answer" in v.questions[0], true);
+  } },
+  { name: "exam_view: editor-only FORBIDDEN guard for someone else's attempt (p_for) · unauthenticated save rejected", run: async (q) => {
+    const node = await published(q);
+    const ji = await uidOf(q, "지은");
+    const cs = await uidOf(q, "철수");
+    await as(q, "지은");
+    await save(q, node, (await qids(q, node))[0], 0);
+    await failCode(rpc(q, "public.exam_view($1::bigint, $2::uuid, $3::uuid)", [node, cs, ji]), "FORBIDDEN");
+    const m = await rpc(q, "public.exam_view($1::bigint, $2::uuid, $3::uuid)", [node, await uidOf(q, "민수"), ji]);
+    assertEquals(m.attempt.status, "in_progress");
+    assertEquals(Object.keys(m.attempt.answers).length, 1);
+    await asAnon(q);
+    await failCode(save(q, node, (await qids(q, node))[0], 0), "AUTH_REQUIRED");
+  } },
+]);

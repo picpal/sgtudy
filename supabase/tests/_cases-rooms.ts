@@ -818,6 +818,8 @@ export const ROOM_CASES: Case[] = [
         "room_get(text,text)", "room_tags_get(text)", "rooms_list(text,text,text,text[],integer,integer,text)", "task_get(text,bigint)", "tags_search(text)",
         // 0035: AI 연동 게이트웨이(PAT 는 anon 키로 부른다 — 내부 api_*·personal_*_many 는 GRANT 없음)
         "api_invoke(text,text,jsonb)",
+        // 0037: 회차 시험 보기(anon 은 EXAM_NOT_FOUND 로 끝난다 — 존재 숨김)
+        "exam_get(text,bigint)",
       ];
       const AUTH = [
         ...ANON,
@@ -850,6 +852,8 @@ export const ROOM_CASES: Case[] = [
         "curriculum_plan_preview(text,jsonb,text)", "curriculum_plan_apply(text,text)",
         // 0037: 회차 시험 출제(내부 exam_* 헬퍼는 GRANT 없음)
         "exam_put(text,bigint,jsonb)", "exam_publish(text,bigint)", "exam_unpublish(text,bigint)", "exam_brief_put(text,bigint,jsonb)",
+        // 0037: 회차 시험 응시(채점은 exam_submit 안에서만)
+        "exam_answer_save(bigint,bigint,jsonb)", "exam_submit(bigint)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);
