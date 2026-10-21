@@ -521,6 +521,19 @@ cases("round exam 0037 · results & tree", db, [
     const self = await rpc(q, "public.exam_attempt_get('aws', $1::bigint, $2::uuid)", [node, await uidOf(q, "지은")]);
     assertEquals(self, await get(q, node));
   } },
+  { name: "exam_results: aggregates over CURRENT assignees only — released submitter excluded (submitted ≤ assigned)", run: async (q) => {
+    const node = await published(q);
+    const ids = await qids(q, node);
+    for (const [nick, a] of [["지은", 0], ["철수", 1], ["하나", 0]] as const) { await as(q, nick); await save(q, node, ids[0], a); await submitExam(q, node); }
+    await q(`update public.task_assignments set released_at = now()
+             where node_id = $1::bigint and user_id in ($2::uuid, $3::uuid)`, [node, await uidOf(q, "지은"), await uidOf(q, "하나")]);
+    await as(q, "민수");
+    const r = await rpc(q, "public.exam_results('aws', $1::bigint)", [node]);
+    assertEquals([r.submitted, r.assigned], [1, 2]);         // 철수만(민수는 미제출)
+    assert(r.submitted <= r.assigned);
+    assertEquals([r.avg, r.max, r.questions[0].correctRate], [0, 0, 0]);   // 철수 오답만 남는다
+    assertEquals(r.members.map((m: Row) => m.nickname), ["민수", "철수"]);
+  } },
   { name: "exam_results: no submissions → avg/max/correctRate null · draft exam ok · plain leaf EXAM_NOT_FOUND · other room NODE_NOT_FOUND", run: async (q) => {
     const node = await newExamLeaf(q);
     await put(q, node, Q4);

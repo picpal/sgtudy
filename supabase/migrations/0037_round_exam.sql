@@ -722,16 +722,21 @@ begin
   if not found then perform public.fail('EXAM_NOT_FOUND', '시험이 없는 과제예요', jsonb_build_object('nodeId', n.id::text)); end if;
 
   return jsonb_build_object(
-    'submitted', public.exam_submitted_count(n.id),
+    -- 집계(제출·평균·최고·정답률)는 현재 담당자만 — 배정 해제된 사람의 응시는 빼서 submitted ≤ assigned
+    'submitted', (select count(*)::int from public.exam_attempts a where a.node_id = n.id and a.status = 'SUBMITTED'
+                  and public.is_task_assignee(n.id, a.user_id)),
     'assigned', (select count(*)::int from public.task_assignments a where a.node_id = n.id and a.released_at is null),
     'maxScore', x.total_points,
-    'avg', (select round(avg(a.score)::numeric, 1) from public.exam_attempts a where a.node_id = n.id and a.status = 'SUBMITTED'),
-    'max', (select max(a.score) from public.exam_attempts a where a.node_id = n.id and a.status = 'SUBMITTED'),
+    'avg', (select round(avg(a.score)::numeric, 1) from public.exam_attempts a where a.node_id = n.id and a.status = 'SUBMITTED'
+            and public.is_task_assignee(n.id, a.user_id)),
+    'max', (select max(a.score) from public.exam_attempts a where a.node_id = n.id and a.status = 'SUBMITTED'
+            and public.is_task_assignee(n.id, a.user_id)),
     -- 정답률 = 제출된 응시 중 정답 비율(응시 0 → null, pct 규칙)
     'questions', (select coalesce(jsonb_agg(jsonb_build_object('id', q.id::text, 'ord', q.ord, 'type', lower(q.qtype), 'points', q.points,
                     'correctRate', (select public.pct(count(*)::int, (count(*) filter (where e.is_correct))::int)
                                     from public.exam_answers e join public.exam_attempts a on a.id = e.attempt_id
-                                    where e.question_id = q.id and a.status = 'SUBMITTED')) order by q.ord), '[]'::jsonb)
+                                    where e.question_id = q.id and a.status = 'SUBMITTED'
+                                      and public.is_task_assignee(n.id, a.user_id))) order by q.ord), '[]'::jsonb)
                   from public.exam_questions q where q.node_id = n.id),
     -- 유효 담당자 전원(미제출 포함). 순서 = curriculum_json people(그룹장, joined_at, id)
     'members', (select coalesce(jsonb_agg(public.person_json(a.user_id) || jsonb_build_object(
