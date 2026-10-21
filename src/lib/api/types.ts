@@ -452,6 +452,8 @@ export type Notice = {
   updatedAt: string;
   edited: boolean;
   read: boolean;
+  /** 팝업 리비전(다시 알리기마다 +1) — [확인] 이 본 리비전을 돌려 보낸다 */
+  rev: number;
 };
 export type NoticeCounts = { total: number; pinned: number; popup: number };
 /** notice_list — items 는 고정 → 최신순. canWrite = 그룹장 ∧ 준비·모집·진행중 ∧ 비보관 */

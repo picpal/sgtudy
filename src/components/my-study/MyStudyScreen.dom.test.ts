@@ -578,7 +578,7 @@ describe("MyStudyScreen — popstate 가 다른 화면 주소면 손대지 않�
 
 // 공지(0040) — 진입 팝업·탭 점·알림 링크
 describe("MyStudyScreen — 공지", () => {
-  const notice = { id: "5", title: "모임 규칙", bodyMd: "늦지 말아요", popup: true, pinned: false, author: P("u2", "민수", "mint"), createdAt: "2026-10-20T01:00:00.000Z", updatedAt: "2026-10-20T01:00:00.000Z", edited: false, read: false };
+  const notice = { id: "5", title: "모임 규칙", bodyMd: "늦지 말아요", popup: true, pinned: false, author: P("u2", "민수", "mint"), createdAt: "2026-10-20T01:00:00.000Z", updatedAt: "2026-10-20T01:00:00.000Z", edited: false, read: false, rev: 2 };
   const tabBtn = (host: HTMLElement, name: string) => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((b) => b.textContent === name)!;
 
   it("진입하면 notice_inbox — 팝업 공지가 뜨고, [확인] 하면 탭 점이 꺼진다", async () => {
@@ -592,9 +592,18 @@ describe("MyStudyScreen — 공지", () => {
     const dlg = document.querySelector('[role="dialog"]')!;
     expect(dlg.textContent).toContain("모임 규칙");
     await act(async () => buttonByText(dlg, "확인").click());
-    expect(notices.markNoticesRead).toHaveBeenCalledWith("aws", ["5"]);
+    expect(notices.markNoticesRead).toHaveBeenCalledWith("aws", ["5"], [2]);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(tabBtn(host, "공지").getAttribute("aria-label")).toBeNull();
+  });
+
+  it("notice_inbox 가 실패해도 화면은 그대로 — 점·팝업만 없다", async () => {
+    notices.fetchNoticeInbox.mockRejectedValue(new Error("down"));
+    const { host } = mount({ initialTab: "overview" });
+    await act(async () => {});
+    expect(tabBtn(host, "개요").getAttribute("aria-selected")).toBe("true");
+    expect(tabBtn(host, "공지").getAttribute("aria-label")).toBeNull();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it("승인 대기는 notice_inbox 를 부르지 않는다", async () => {

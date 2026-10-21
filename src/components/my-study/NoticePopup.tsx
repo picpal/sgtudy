@@ -8,7 +8,7 @@ import { relativeTime } from "@/lib/api/notifications";
 import type { Notice } from "@/lib/api/types";
 import { MarkdownView } from "./MarkdownView";
 
-/** "나중에" 로 넘긴 공지 id — 이번 브라우저 탭(세션)에서만 다시 띄우지 않는다 (D7) */
+/** "나중에" 로 넘긴 공지 `id:rev` — 이번 브라우저 탭(세션)에서만 다시 띄우지 않는다 (D7). 다시 알리기(rev+1)는 다시 뜬다 */
 export const laterKey = (slug: string) => `notice-later:${slug}`;
 const readLater = (slug: string): string[] => {
   try {
@@ -18,6 +18,7 @@ const readLater = (slug: string): string[] => {
     return [];
   }
 };
+const laterId = (n: Notice) => `${n.id}:${n.rev}`;
 const writeLater = (slug: string, ids: string[]) => {
   try {
     window.sessionStorage.setItem(laterKey(slug), JSON.stringify([...new Set([...readLater(slug), ...ids])]));
@@ -46,11 +47,12 @@ export function NoticePopup({ slug, popups, hold, onAck }: Props) {
   if (popups !== seen) {
     setSeen(popups);
     const later = new Set(readLater(slug));
-    const q = popups.filter((n) => !later.has(n.id));
+    const q = popups.filter((n) => !later.has(laterId(n)));
     setQueue(q);
     setTotal(q.length);
   }
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false); // 연타 — 상태가 다시 그려지기 전 두 번째 클릭도 막는다
   const [err, setErr] = useState(false);
   const cur = !hold ? (queue[0] ?? null) : null;
   const open = cur !== null;
@@ -82,7 +84,7 @@ export function NoticePopup({ slug, popups, hold, onAck }: Props) {
 
   const later = () => {
     if (busy) return;
-    writeLater(slug, queue.map((n) => n.id));
+    writeLater(slug, queue.map(laterId));
     setQueue([]);
     setErr(false);
   };
@@ -98,16 +100,18 @@ export function NoticePopup({ slug, popups, hold, onAck }: Props) {
   });
 
   const ack = async () => {
-    if (!cur || busy) return;
+    if (!cur || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setErr(false);
     try {
-      const r = await markNoticesRead(slug, [cur.id]);
+      const r = await markNoticesRead(slug, [cur.id], [cur.rev]); // 본 리비전만 — 그사이 다시 알리기는 다음에 다시 뜬다
       onAck(r.unread);
       setQueue((q) => q.filter((n) => n.id !== cur.id));
     } catch {
       setErr(true);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -122,9 +126,9 @@ export function NoticePopup({ slug, popups, hold, onAck }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${ids}-t`}
-        aria-describedby={`${ids}-b`}
+        aria-describedby={`${ids}-m`}
         onKeyDown={onTrapKey}
-        className="flex max-h-[calc(100vh-32px)] w-full max-w-[560px] flex-col gap-4 rounded-[18px] bg-surface p-6 shadow-[0_20px_60px_rgba(27,34,48,.25)] motion-safe:animate-[notice-pop_.18s_ease-out] max-sm:max-h-[85vh] max-sm:max-w-none max-sm:rounded-b-none max-sm:rounded-t-[18px] max-sm:px-4 max-sm:pb-[max(16px,env(safe-area-inset-bottom))] max-sm:motion-safe:animate-[notice-sheet_.22s_ease-out]"
+        className="flex max-h-[calc(100dvh-32px)] w-full max-w-[560px] flex-col gap-4 rounded-[18px] bg-surface p-6 shadow-[0_20px_60px_rgba(27,34,48,.25)] motion-safe:animate-[notice-pop_.18s_ease-out] max-sm:max-h-[85dvh] max-sm:max-w-none max-sm:rounded-b-none max-sm:rounded-t-[18px] max-sm:px-4 max-sm:pb-[max(16px,env(safe-area-inset-bottom))] max-sm:motion-safe:animate-[notice-sheet_.22s_ease-out]"
       >
         <div className="flex items-center gap-2">
           <span className="rounded-[6px] bg-mint-soft px-[7px] py-px text-[12px] font-semibold text-mint">공지</span>
@@ -143,12 +147,13 @@ export function NoticePopup({ slug, popups, hold, onAck }: Props) {
           <h2 ref={titleRef} id={`${ids}-t`} tabIndex={-1} className="m-0 break-words text-[20px] font-bold leading-[1.4] outline-none max-sm:text-[18px]">
             {cur.title}
           </h2>
-          <p className="m-0 text-[12px] text-muted">
+          <p id={`${ids}-m`} className="m-0 text-[12px] text-muted">
             {cur.author?.nickname ?? "그룹장"} · {relativeTime(cur.createdAt, new Date())}
             {cur.edited && " · 수정됨"}
           </p>
         </div>
-        <div id={`${ids}-b`} className="thin-scroll max-h-[60vh] overflow-y-auto max-sm:max-h-[55vh]">
+        {/* 본문은 대화상자 설명으로 묶지 않는다 — 제목 포커스에서 스크린리더가 본문을 두 번 읽지 않게 */}
+        <div className="thin-scroll max-h-[60dvh] overflow-y-auto max-sm:max-h-[55dvh]">
           <MarkdownView src={cur.bodyMd} />
         </div>
         {err && (

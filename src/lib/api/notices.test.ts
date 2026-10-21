@@ -16,7 +16,8 @@ describe("notices adapter — RPC 이름·인자(0040)", () => {
     await createNotice("aws", { title: "규칙", bodyMd: "본문", popup: true }, f.client);
     await updateNotice("aws", "12", { renotify: true }, f.client);
     await deleteNotice("aws", "12", f.client);
-    await markNoticesRead("aws", ["12", "13"], f.client);
+    await markNoticesRead("aws", ["12", "13"], undefined, f.client);
+    await markNoticesRead("aws", ["12"], [2], f.client);
     expect(f.calls).toEqual([
       ["notice_list", { p_slug: "aws" }],
       ["notice_inbox", { p_slug: "aws" }],
@@ -24,12 +25,13 @@ describe("notices adapter — RPC 이름·인자(0040)", () => {
       ["notice_update", { p_slug: "aws", p_id: 12, p_patch: { renotify: true } }],
       ["notice_delete", { p_slug: "aws", p_id: 12 }],
       ["notice_read", { p_slug: "aws", p_ids: [12, 13] }],
+      ["notice_read", { p_slug: "aws", p_ids: [12], p_revs: [2] }],   // 본 리비전
     ]);
   });
 
   it("deleteNotice resolves undefined · markNoticesRead returns unread", async () => {
     await expect(deleteNotice("aws", "1", fake(null).client)).resolves.toBeUndefined();
-    await expect(markNoticesRead("aws", ["1"], fake({ unread: false }).client)).resolves.toEqual({ unread: false });
+    await expect(markNoticesRead("aws", ["1"], undefined, fake({ unread: false }).client)).resolves.toEqual({ unread: false });
   });
 
   it("server error → ApiException with code/details", async () => {

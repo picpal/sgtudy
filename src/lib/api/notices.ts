@@ -15,9 +15,10 @@ export const updateNotice = (slug: string, id: string, patch: NoticePatch, clien
   rpc<Notice>("notice_update", { p_slug: slug, p_id: num(id), p_patch: patch }, client);
 export const deleteNotice = (slug: string, id: string, client?: Db) =>
   rpc<null>("notice_delete", { p_slug: slug, p_id: num(id) }, client).then(() => undefined);
-/** 팝업 [확인]·탭 펼침 공용(멱등). 다른 방·지워진 id 는 서버가 건너뛴다. 응답 unread → 탭 미읽음 점 */
-export const markNoticesRead = (slug: string, ids: string[], client?: Db) =>
-  rpc<{ unread: boolean }>("notice_read", { p_slug: slug, p_ids: ids.map(num) }, client);
+/** 팝업 [확인]·탭 펼침 공용(멱등). 다른 방·지워진 id 는 서버가 건너뛴다. 응답 unread → 탭 미읽음 점.
+ *  revs(ids 와 같은 순서) = 화면에 보인 리비전 — 그사이 다시 알리기로 올라간 리비전은 읽음 처리하지 않는다 */
+export const markNoticesRead = (slug: string, ids: string[], revs?: number[], client?: Db) =>
+  rpc<{ unread: boolean }>("notice_read", { p_slug: slug, p_ids: ids.map(num), ...(revs ? { p_revs: revs } : {}) }, client);
 
 /** 저장 전 클라이언트 검증 — 서버 notice_validate 와 같은 규칙·문구. 첫 오류만 */
 export function validateNotice(v: Pick<NoticeInput, "title" | "bodyMd">): { field: "title" | "bodyMd"; text: string } | null {

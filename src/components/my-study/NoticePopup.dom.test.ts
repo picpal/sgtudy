@@ -12,7 +12,7 @@ const { NoticePopup, laterKey } = await import("./NoticePopup");
 
 const N = (id: string, o: Partial<Notice> = {}): Notice => ({
   id, title: `규칙 ${id}`, bodyMd: `본문 **${id}** [링크](https://x.test)`, popup: true, pinned: false, author: { userId: "u2", nickname: "민수", tone: "mint" },
-  createdAt: "2026-10-20T01:00:00.000Z", updatedAt: "2026-10-20T01:00:00.000Z", edited: false, read: false, ...o,
+  createdAt: "2026-10-20T01:00:00.000Z", updatedAt: "2026-10-20T01:00:00.000Z", edited: false, read: false, rev: 1, ...o,
 });
 
 let root: Root | null = null;
@@ -47,7 +47,9 @@ describe("NoticePopup", () => {
     const d = dialog()!;
     expect(d.getAttribute("aria-modal")).toBe("true");
     expect(document.getElementById(d.getAttribute("aria-labelledby")!)?.textContent).toBe("규칙 1");
-    expect(document.getElementById(d.getAttribute("aria-describedby")!)?.querySelector("strong")?.textContent).toBe("1");
+    // 설명 = 작성자·날짜 줄(본문 전체를 설명으로 다시 읽지 않게)
+    expect(document.getElementById(d.getAttribute("aria-describedby")!)?.textContent).toContain("민수");
+    expect(d.querySelector("strong")?.textContent).toBe("1");
     expect(d.parentElement!.className).toContain("backdrop-blur");
     expect(document.activeElement?.textContent).toBe("규칙 1");
     expect(page.hasAttribute("inert")).toBe(true);
@@ -60,12 +62,12 @@ describe("NoticePopup", () => {
     const { opener } = mount([N("1"), N("2")]);
     expect(dialog()!.textContent).toContain("1/2");
     await act(async () => btn("확인").click());
-    expect(api.markNoticesRead).toHaveBeenLastCalledWith("aws", ["1"]);
+    expect(api.markNoticesRead).toHaveBeenLastCalledWith("aws", ["1"], [1]);
     expect(onAck).toHaveBeenLastCalledWith(true);
     expect(dialog()!.textContent).toContain("2/2");
     expect(document.activeElement?.textContent).toBe("규칙 2");
     await act(async () => btn("확인").click());
-    expect(api.markNoticesRead).toHaveBeenLastCalledWith("aws", ["2"]);
+    expect(api.markNoticesRead).toHaveBeenLastCalledWith("aws", ["2"], [1]);
     expect(onAck).toHaveBeenLastCalledWith(false);
     expect(dialog()).toBeNull();
     expect(document.activeElement).toBe(opener);
@@ -80,7 +82,7 @@ describe("NoticePopup", () => {
       else act(() => btn(how === "x" ? "닫기" : "나중에 보기").click());
       expect(dialog(), how).toBeNull();
       expect(api.markNoticesRead).not.toHaveBeenCalled();
-      expect(JSON.parse(window.sessionStorage.getItem(laterKey("aws"))!)).toEqual(["1", "2"]);
+      expect(JSON.parse(window.sessionStorage.getItem(laterKey("aws"))!)).toEqual(["1:1", "2:1"]);
       // 같은 세션에서 다시 들어와도(새 inbox) 그 공지는 뜨지 않고, 새 공지만
       render([N("1"), N("2"), N("3")], false);
       expect(dialog()?.textContent).toContain("규칙 3");
@@ -89,6 +91,29 @@ describe("NoticePopup", () => {
       document.body.innerHTML = "";
       window.sessionStorage.clear();
     }
+  });
+
+  it("본 리비전을 보낸다 · 나중에 넘긴 공지도 다시 알리기(rev+1)면 다시 뜬다", async () => {
+    api.markNoticesRead.mockResolvedValue({ unread: false });
+    const { render } = mount([N("1", { rev: 3 })]);
+    act(() => btn("나중에 보기").click());
+    expect(dialog()).toBeNull();
+    render([N("1", { rev: 4, title: "고친 규칙" })], false);
+    expect(dialog()?.textContent).toContain("고친 규칙");
+    await act(async () => btn("확인").click());
+    expect(api.markNoticesRead).toHaveBeenCalledWith("aws", ["1"], [4]);
+  });
+
+  it("[확인] 연타 — 한 번만 부른다", async () => {
+    let done!: (v: { unread: boolean }) => void;
+    api.markNoticesRead.mockReturnValue(new Promise((r) => (done = r)));
+    mount([N("1")]);
+    act(() => {
+      btn("확인").click();
+      btn("확인").click();
+    });
+    await act(async () => done({ unread: false }));
+    expect(api.markNoticesRead).toHaveBeenCalledTimes(1);
   });
 
   it("배경 클릭은 무반응", () => {
