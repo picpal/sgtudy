@@ -8,6 +8,7 @@ import { fetchNodeFiles, setNodeFiles } from "@/lib/api/nodeFiles";
 import type { FileMeta } from "@/lib/api/types";
 import { rangeShort } from "@/lib/api/format";
 import { useToday } from "@/lib/today";
+import { DATE_NO_OVERFLOW_CLASS } from "@/components/room-new/fields";
 import { TypeBadge } from "../bits";
 import type { LeafNode, ParentNode } from "../model";
 import { draftOf, formScrollNeeded, personalPatch, pickRound, roundWarning, type PersonalDraft } from "../personal";
@@ -242,11 +243,11 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
       <div className="grid grid-cols-2 gap-3">
         <label className={label}>
           시작
-          <input type="date" value={d.s} min={period.start} max={period.end} required onChange={(e) => setDate("s", e.target.value)} className={field} />
+          <input type="date" value={d.s} min={period.start} max={period.end} required onChange={(e) => setDate("s", e.target.value)} className={`${field} ${DATE_NO_OVERFLOW_CLASS}`} />
         </label>
         <label className={label}>
           마감
-          <input type="date" value={d.e} min={period.start} max={period.end} required onChange={(e) => setDate("e", e.target.value)} className={field} />
+          <input type="date" value={d.e} min={period.start} max={period.end} required onChange={(e) => setDate("e", e.target.value)} className={`${field} ${DATE_NO_OVERFLOW_CLASS}`} />
         </label>
       </div>
       {badDates && <p className="-mt-2 m-0 text-[12px] font-medium text-warn">마감일은 시작일 이후여야 해요</p>}

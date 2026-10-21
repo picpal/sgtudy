@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toApiError } from "@/lib/api/errors";
 import { updateRoomEndDate } from "@/lib/api/leader";
 import type { RoomDetail } from "@/lib/api/types";
+import { DATE_NO_OVERFLOW_CLASS } from "@/components/room-new/fields";
 
 type Props = {
   slug: string;
@@ -63,7 +64,7 @@ export function EndDateForm({ slug, initial, min, max, hint, onSaved, onCancel }
           max={max}
           aria-invalid={!!error || undefined}
           onChange={(e) => setValue(e.target.value)}
-          className="h-11 rounded-[10px] border border-line-3 bg-surface px-3 text-[14px] font-normal text-ink"
+          className={`h-11 rounded-[10px] border border-line-3 bg-surface px-3 text-[14px] font-normal text-ink ${DATE_NO_OVERFLOW_CLASS}`}
         />
       </label>
       {hint && <span className="text-[12px] leading-[1.5] text-muted">{hint}</span>}

@@ -18,6 +18,7 @@ import { editReturn, patchOv, type Leave, type ScreenState, type Update } from "
 import type { RoomStatus } from "../submission";
 import { dropKey, type CurriculumApi } from "../useCurriculumApi";
 import { useNodeFileUploads } from "../useNodeFileUploads";
+import { DATE_NO_OVERFLOW_CLASS } from "@/components/room-new/fields";
 import { ChildList } from "./ChildList";
 import { FileUploadList } from "./FileUploadList";
 import { InlineConfirm } from "./InlineConfirm";
@@ -381,11 +382,11 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
           <label className={`${label} min-w-0 flex-[0_1_180px] max-sm:flex-[1_1_140px]`}>
             시작일
-            <input type="date" value={n.s} disabled={n.temp} onChange={(e) => setDate("s", e.target.value)} className={`${field} min-w-0 px-[10px] text-[14px]`} />
+            <input type="date" value={n.s} disabled={n.temp} onChange={(e) => setDate("s", e.target.value)} className={`${field} min-w-0 px-[10px] text-[14px] ${DATE_NO_OVERFLOW_CLASS}`} />
           </label>
           <label className={`${label} min-w-0 flex-[0_1_180px] max-sm:flex-[1_1_140px]`}>
             마감일
-            <input type="date" value={n.e} disabled={n.temp} onChange={(e) => setDate("e", e.target.value)} className={`${field} min-w-0 px-[10px] text-[14px]`} />
+            <input type="date" value={n.e} disabled={n.temp} onChange={(e) => setDate("e", e.target.value)} className={`${field} min-w-0 px-[10px] text-[14px] ${DATE_NO_OVERFLOW_CLASS}`} />
           </label>
           {n.leaf && !n.personal && (
             <div className={`${label} min-w-0 flex-[0_1_300px] max-sm:flex-[1_1_100%]`}>

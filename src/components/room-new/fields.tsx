@@ -22,7 +22,9 @@ export const FIELD_CLASS =
  * 칸 너비 + 좌우 패딩·테두리(34px)만큼 넓게(330→364px, 높이 50px) 그린다. 두 칸이 나란하면 시작일이 종료일을 덮는다.
  * 기본 모양을 끄면 border-box 로 칸 안에 맞는다. 값은 왼쪽 정렬(iOS 기본은 가운데).
  */
-export const DATE_FIELD_CLASS = `${FIELD_CLASS} appearance-none [&::-webkit-date-and-time-value]:text-left`;
+/** 기존 높이·모양은 그대로 두고 iOS 넘침만 막는 조각 — 다른 크기의 날짜 칸에 덧붙인다. */
+export const DATE_NO_OVERFLOW_CLASS = "appearance-none [&::-webkit-date-and-time-value]:text-left";
+export const DATE_FIELD_CLASS = `${FIELD_CLASS} ${DATE_NO_OVERFLOW_CLASS}`;
 
 /** 필수 표시 — 글자로(색만으로 구분하지 않는다) */
 const Required = () => <span className="ml-1 text-[11px] font-semibold text-warn">필수</span>;
