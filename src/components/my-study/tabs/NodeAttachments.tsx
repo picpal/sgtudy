@@ -29,8 +29,9 @@ export function NodeAttachmentsView({ files, onOpen, onRemove, busy = null, remo
               <span className="text-[12px] text-muted">{sizeText(f.size)}</span>
             </span>
             <span className="flex shrink-0 items-center gap-2">
-              <button type="button" aria-label={`${f.name} 받기`} disabled={busy === f.id} onClick={() => onOpen(f)} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50">
-                받기
+              <button type="button" aria-label={`${f.name} 받기`} disabled={busy === f.id} onClick={() => onOpen(f)} className="flex h-11 items-center disabled:opacity-50">
+                {/* 누르는 자리는 44px 그대로, 보이는 알약만 작게 — 첨부 줄 테두리에 닿지 않게 */}
+                <span className="inline-flex h-8 items-center rounded-[16px] border border-line-3 bg-surface px-3 text-[13px] font-semibold text-ink">받기</span>
               </button>
               {onRemove && (
                 <button type="button" aria-label={`${f.name} 빼기`} disabled={removing} onClick={() => onRemove(f)} className="h-11 rounded-[22px] px-3 text-[14px] font-semibold text-warn disabled:opacity-50">
