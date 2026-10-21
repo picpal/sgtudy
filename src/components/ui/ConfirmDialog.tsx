@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { useFocusTrap } from "./useFocusTrap";
 
 /** children: 본문 아래 선택지·입력칸(지금 시작 일정 선택, 탈퇴 요청 사유 등) — 포커스 트랩이 함께 돈다. confirmDisabled: 선택이 덜 됐을 때 */
 type Props = { open: boolean; title: string; body: string; confirmLabel: string; danger?: boolean; busy?: boolean; confirmDisabled?: boolean; children?: ReactNode; onConfirm: () => void; onCancel: () => void };
@@ -18,22 +19,8 @@ export function ConfirmDialog({ open, title, body, confirmLabel, danger, busy, c
       if (trigger?.isConnected) trigger.focus();
     };
   }, [open]);
-  // 포커스 트랩: Tab/Shift+Tab 이 대화상자 안의 버튼 사이만 돈다
-  const onTrapKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Tab") return;
-    const els = Array.from(boxRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled])") ?? []);
-    if (els.length === 0) return;
-    const first = els[0];
-    const last = els[els.length - 1];
-    const at = document.activeElement;
-    if (e.shiftKey && (at === first || !boxRef.current?.contains(at))) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && (at === last || !boxRef.current?.contains(at))) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
+  // 포커스 트랩: Tab/Shift+Tab 이 대화상자 안의 버튼·입력칸 사이만 돈다
+  const onTrapKey = useFocusTrap(boxRef);
   // 처리 중(busy)에는 Esc·바깥 클릭으로 닫히지 않는다
   useEffect(() => {
     if (!open || busy) return;
