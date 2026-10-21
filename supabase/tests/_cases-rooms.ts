@@ -854,6 +854,8 @@ export const ROOM_CASES: Case[] = [
         "exam_put(text,bigint,jsonb)", "exam_publish(text,bigint)", "exam_unpublish(text,bigint)", "exam_brief_put(text,bigint,jsonb)",
         // 0037: 회차 시험 응시(채점은 exam_submit 안에서만)
         "exam_answer_save(bigint,bigint,jsonb)", "exam_submit(bigint)",
+        // 0037: 회차 시험 결과·남의 답안(편집자 — 점수는 본인·편집자만, D7)
+        "exam_results(text,bigint)", "exam_attempt_get(text,bigint,uuid)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

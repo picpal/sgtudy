@@ -504,6 +504,13 @@ language sql stable set search_path = '' as $$
     else false end, false)
 $$;
 
+-- 시험을 볼 수 있는 방 사람 = 그룹장 | ACTIVE·INACTIVE·PENDING 멤버(curriculum_json 의 people 노출과 같은 자격). exam_view·exam_summary 공용
+create or replace function public.exam_viewer_member(r public.rooms, p_uid uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select p_uid is not null and (r.leader_id = p_uid or exists (
+    select 1 from public.room_members m where m.room_id = r.id and m.user_id = p_uid and m.status in ('ACTIVE', 'INACTIVE', 'PENDING')))
+$$;
+
 -- 보는 사람(p_uid)에 따라 깎은 시험 JSON — 노출 규칙(스펙 §3.4)은 이 함수 한 곳에서만 판정한다.
 -- 숨길 값은 키를 만들지 않는다(null 이 아니라 키 없음). p_for = 응시 행 주인(편집자가 남의 답안을 볼 때만 p_uid 와 다르다)
 create or replace function public.exam_view(p_node bigint, p_uid uuid, p_for uuid) returns jsonb
@@ -528,13 +535,14 @@ begin
   select * into n from public.goal_nodes where id = p_node;
   select * into r from public.rooms where id = n.room_id;
   v_edit := coalesce(public.can_edit_curriculum(r, p_uid), false);
-  v_member := p_uid is not null and (r.leader_id = p_uid or exists (
-    select 1 from public.room_members m where m.room_id = r.id and m.user_id = p_uid and m.status in ('ACTIVE', 'INACTIVE', 'PENDING')));
+  v_member := public.exam_viewer_member(r, p_uid);
   -- 비멤버·익명: 공개 방이라도 시험은 비공개(존재 숨김)
   if not v_edit and not v_member then perform public.fail('EXAM_NOT_FOUND', '시험이 없는 과제예요', jsonb_build_object('nodeId', p_node::text)); end if;
   if p_for is distinct from p_uid and not v_edit then perform public.fail('FORBIDDEN', '다른 사람의 답안은 편집자만 볼 수 있어요'); end if;
 
-  v_asg := p_uid is not null and public.is_task_assignee(n.id, p_uid);
+  -- viewer 의 담당·사유는 응시 행 주인(p_for) 기준 — 편집자가 남의 답안을 볼 때 두 사람 상태가 섞이지 않게(exam_attempt_get).
+  -- canTake 는 자기 응시에서만 참(편집자가 남 대신 풀 수 없다)
+  v_asg := p_for is not null and public.is_task_assignee(n.id, p_for);
   select * into a from public.exam_attempts where node_id = p_node and user_id = p_for;
   select count(*)::int, count(*) filter (where s.status = 'SUBMITTED')::int into v_all, v_sub
   from public.exam_attempts s where s.node_id = p_node;
@@ -577,12 +585,16 @@ begin
     'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
     'node', jsonb_build_object('id', n.id::text, 'title', n.title, 'startDate', to_char(n.start_date, 'YYYY-MM-DD'),
                                'endDate', to_char(n.end_date, 'YYYY-MM-DD'), 'archived', n.archived_at is not null),
-    'exam', jsonb_build_object('status', lower(x.status), 'reveal', lower(x.reveal), 'questionCount', x.question_count,
-                               'totalPoints', x.total_points, 'publishedAt', public.iso(x.published_at),
-                               'closed', public.exam_closed(x, n))
+    -- 초안은 편집자가 아니면 상태만(문항 수·배점·공개 시점도 싣지 않는다 — exam_summary 와 같은 규칙)
+    'exam', case when v_edit or x.status = 'PUBLISHED' then
+              jsonb_build_object('status', lower(x.status), 'reveal', lower(x.reveal), 'questionCount', x.question_count,
+                                 'totalPoints', x.total_points, 'publishedAt', public.iso(x.published_at),
+                                 'closed', public.exam_closed(x, n))
+            else jsonb_build_object('status', lower(x.status), 'publishedAt', null, 'closed', false) end
             -- 편집자 전용 키. locked = 응시 행 1건~(진행 중 포함, exam_assert_unlocked 와 같은 규칙) · submittedCount = 제출만
             || case when v_edit then jsonb_build_object('source', lower(x.source), 'locked', v_all > 0, 'submittedCount', v_sub, 'brief', x.brief) else '{}'::jsonb end,
-    'viewer', jsonb_build_object('canEdit', v_edit, 'isAssignee', v_asg, 'canTake', v_reason is null, 'reason', v_reason),
+    'viewer', jsonb_build_object('canEdit', v_edit, 'isAssignee', v_asg,
+                                 'canTake', v_reason is null and p_for is not distinct from p_uid, 'reason', v_reason),
     'questions', v_qs,
     'attempt', v_att);
 end $$;
@@ -691,6 +703,237 @@ end $$;
 grant execute on function public.exam_get(text, bigint)                  to authenticated, anon;   -- anon 은 EXAM_NOT_FOUND 로 끝난다(존재 숨김)
 grant execute on function public.exam_answer_save(bigint, bigint, jsonb) to authenticated;
 grant execute on function public.exam_submit(bigint)                     to authenticated;
+
+-- ───────── 6. 편집자 결과 (스펙 §5.4 · D7 — 점수는 본인·편집자만) ─────────
+create or replace function public.exam_results(p_slug text, p_node bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_uid uuid := public.require_user();
+  r     public.rooms;
+  n     public.goal_nodes;
+  x     public.exams;
+begin
+  select * into r from public.rooms where slug = p_slug;
+  if not found or not public.room_readable(r.id, v_uid) then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
+  perform public.require_curriculum_editor(r, v_uid);
+  select * into n from public.goal_nodes where id = p_node and room_id = r.id;
+  if not found then perform public.fail('NODE_NOT_FOUND', '과제를 찾을 수 없어요'); end if;
+  select * into x from public.exams where node_id = n.id;
+  if not found then perform public.fail('EXAM_NOT_FOUND', '시험이 없는 과제예요', jsonb_build_object('nodeId', n.id::text)); end if;
+
+  return jsonb_build_object(
+    'submitted', public.exam_submitted_count(n.id),
+    'assigned', (select count(*)::int from public.task_assignments a where a.node_id = n.id and a.released_at is null),
+    'maxScore', x.total_points,
+    'avg', (select round(avg(a.score)::numeric, 1) from public.exam_attempts a where a.node_id = n.id and a.status = 'SUBMITTED'),
+    'max', (select max(a.score) from public.exam_attempts a where a.node_id = n.id and a.status = 'SUBMITTED'),
+    -- 정답률 = 제출된 응시 중 정답 비율(응시 0 → null, pct 규칙)
+    'questions', (select coalesce(jsonb_agg(jsonb_build_object('id', q.id::text, 'ord', q.ord, 'type', lower(q.qtype), 'points', q.points,
+                    'correctRate', (select public.pct(count(*)::int, (count(*) filter (where e.is_correct))::int)
+                                    from public.exam_answers e join public.exam_attempts a on a.id = e.attempt_id
+                                    where e.question_id = q.id and a.status = 'SUBMITTED')) order by q.ord), '[]'::jsonb)
+                  from public.exam_questions q where q.node_id = n.id),
+    -- 유효 담당자 전원(미제출 포함). 순서 = curriculum_json people(그룹장, joined_at, id)
+    'members', (select coalesce(jsonb_agg(public.person_json(a.user_id) || jsonb_build_object(
+                    'status', public.task_code(n.start_date, n.end_date, s.first_submitted_at, s.is_late, public.kst_today()),
+                    'score', t.score, 'submittedAt', public.iso(t.submitted_at), 'isLate', s.is_late)
+                  order by (m.role = 'LEADER') desc, m.joined_at nulls last, m.id), '[]'::jsonb)
+                from public.task_assignments a
+                join public.room_members m on m.room_id = r.id and m.user_id = a.user_id
+                left join public.submissions s on s.node_id = n.id and s.user_id = a.user_id
+                left join public.exam_attempts t on t.node_id = n.id and t.user_id = a.user_id and t.status = 'SUBMITTED'
+                where a.node_id = n.id and a.released_at is null));
+end $$;
+
+-- 편집자가 남의 답안 보기(스펙 §5.4) = exam_view(p_for = p_user). 편집자가 아니면 exam_view 가 FORBIDDEN(자기 것은 exam_get 과 같다)
+create or replace function public.exam_attempt_get(p_slug text, p_node bigint, p_user uuid) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v_uid uuid := public.require_user(); r public.rooms; n public.goal_nodes;
+begin
+  select * into r from public.rooms where slug = p_slug;
+  if not found or not public.room_readable(r.id, v_uid) then perform public.fail('ROOM_NOT_FOUND', '방을 찾을 수 없어요'); end if;
+  select * into n from public.goal_nodes where id = p_node and room_id = r.id;
+  if not found then perform public.fail('NODE_NOT_FOUND', '과제를 찾을 수 없어요'); end if;
+  return public.exam_view(n.id, v_uid, p_user);
+end $$;
+
+grant execute on function public.exam_results(text, bigint)           to authenticated;
+grant execute on function public.exam_attempt_get(text, bigint, uuid) to authenticated;
+
+-- ───────── 7. 트리·상세 JSON 재정의 (리프 exam 요약 · 정답 없음) ─────────
+-- 리프 exam 요약(스펙 §3.1 — 문항·정답·점수는 싣지 않는다). 시험 아님 → null.
+-- 편집자: 항상 전부 · 멤버(그룹장·ACTIVE·INACTIVE·PENDING): 발행 뒤 전부, 초안이면 {status} 만(D10 "초안" 배지) ·
+-- 비멤버·익명: null(exam_view 의 존재 숨김과 같다 — 공개 방이라도 시험은 비공개)
+create or replace function public.exam_summary(p_node bigint, p_uid uuid) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare x public.exams; r public.rooms;
+begin
+  select * into x from public.exams where node_id = p_node;
+  if not found then return null; end if;
+  select * into r from public.rooms where id = x.room_id;
+  if coalesce(public.can_edit_curriculum(r, p_uid), false)
+     or (x.status = 'PUBLISHED' and public.exam_viewer_member(r, p_uid)) then
+    return jsonb_build_object('status', lower(x.status), 'questionCount', x.question_count, 'totalPoints', x.total_points, 'reveal', lower(x.reveal));
+  end if;
+  if public.exam_viewer_member(r, p_uid) then return jsonb_build_object('status', lower(x.status)); end if;
+  return null;
+end $$;
+
+-- curriculum_json ← 0032 판. 0037: 리프 exam 요약(정답 없음) + 편집자에게 warnings EXAM_NOT_PUBLISHED(스펙 §4.6·D10)
+-- 주의: 변경 RPC 는 curriculum_json(..) || {warnings: 자기 경고} 라 그 응답에서는 이 경고가 덮인다(트리 exam.status 로도 판정 가능)
+create or replace function public.curriculum_json(p_room bigint, p_uid uuid, p_include_archived boolean) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  r         public.rooms;
+  v_today   date := public.kst_today();
+  v_people  boolean;     -- 팀 과제 people 노출: 그룹장 | ACTIVE·INACTIVE·PENDING 멤버
+  v_viewer  boolean;     -- 남의 개인 목표 노출: 그룹장 | ACTIVE·INACTIVE 멤버 (0014)
+  v_members jsonb;
+  v_nodes   jsonb;
+  v_stats   jsonb;
+  v_warn    jsonb;       -- 0037
+begin
+  select * into r from public.rooms where id = p_room;
+  v_people := p_uid is not null and (r.leader_id = p_uid or exists (
+    select 1 from public.room_members m where m.room_id = p_room and m.user_id = p_uid and m.status in ('ACTIVE', 'INACTIVE', 'PENDING')));
+  v_viewer := public.personal_viewer(p_room, p_uid);
+
+  select coalesce(jsonb_agg(
+           public.person_json(m.user_id) || jsonb_build_object(
+             'role', lower(m.role), 'status', lower(m.status),
+             'doesTasks', m.status = 'ACTIVE' and (m.role = 'MEMBER' or r.leader_does_tasks),
+             'canEditCurriculum', public.member_can_edit_curriculum(r, m))
+           -- 0032: 중간 합류자 공통 과제 배정 시작일(null = 처음부터). 방 사람(v_viewer)에게만 — 공개 방 익명·외부인에겐 키 없음(Codex 2-6)
+           || case when v_viewer then jsonb_build_object('assignFrom', to_char(m.assign_from, 'YYYY-MM-DD')) else '{}'::jsonb end
+           order by (m.role = 'LEADER') desc, m.joined_at nulls last, m.id), '[]'::jsonb)
+  into v_members
+  from public.room_members m
+  where m.room_id = p_room and m.status in ('ACTIVE', 'INACTIVE');
+
+  with recursive prog as materialized (
+    select * from public.room_progress(p_room)),
+  t as (
+    select n.*, array[n.sort_order::bigint, n.id] as path
+    from public.goal_nodes n where n.room_id = p_room and n.parent_id is null
+    union all
+    select c.*, t.path || array[c.sort_order::bigint, c.id]
+    from public.goal_nodes c join t on c.parent_id = t.id),
+  nodes as (
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'id', t.id::text, 'parentId', t.parent_id::text, 'roundId', t.round_id::text,
+             'depth', t.depth, 'sortOrder', t.sort_order, 'label', t.label, 'title', t.title,
+             'descriptionMd', t.description_md,
+             'startDate', to_char(t.start_date, 'YYYY-MM-DD'), 'endDate', to_char(t.end_date, 'YYYY-MM-DD'),
+             'archived', t.archived_at is not null,
+             'ownerId', t.owner_id::text,
+             'createdBy', case when t.created_by is null then null else public.person_json(t.created_by) end,   -- 0024
+             'exam', public.exam_summary(t.id, p_uid),   -- 0037
+             'assigned', coalesce(ps.asg, p.asg), 'submitted', coalesce(ps.sub, p.sub),
+             'pct', case when ps.asg is null then p.pct else public.pct(ps.asg, ps.sub) end,
+             'task', case
+               when t.task_type is null then null
+               when t.task_type = 'PERSONAL' then jsonb_build_object(
+                 'type', 'personal', 'assigned', ps.asg, 'submitted', ps.sub,
+                 'state', public.leaf_state(ps.asg, ps.sub, t.start_date, t.end_date, v_today),
+                 'people', jsonb_build_array(public.person_json(t.owner_id)
+                             || jsonb_build_object('status', public.task_code(t.start_date, t.end_date, ps.first_at, ps.late, v_today))))
+               else jsonb_build_object(
+                 'type', lower(t.task_type),
+                 'assigned', p.asg, 'submitted', p.sub,
+                 'state', public.leaf_state(p.asg, p.sub, t.start_date, t.end_date, v_today),
+                 -- people 은 의도적으로 멤버 순서(그룹장, joined_at, id) — room_get 의 assigned_at 순서와 다르다
+                 'people', case when not v_people then '[]'::jsonb else coalesce((
+                   select jsonb_agg(public.person_json(a.user_id)
+                            || jsonb_build_object('status', public.task_code(t.start_date, t.end_date, s.first_submitted_at, s.is_late, v_today))
+                            order by (m.role = 'LEADER') desc, m.joined_at nulls last, m.id)
+                   from public.task_assignments a
+                   join public.room_members m on m.room_id = p_room and m.user_id = a.user_id
+                   left join public.submissions s on s.node_id = a.node_id and s.user_id = a.user_id
+                   where a.node_id = t.id and a.released_at is null and t.archived_at is null), '[]'::jsonb) end) end)
+             order by t.path), '[]'::jsonb) as j
+    from t
+    join prog p on p.node_id = t.id
+    left join lateral (
+      select case when t.archived_at is null then 1 else 0 end as asg,
+             case when t.archived_at is null and s.id is not null then 1 else 0 end as sub,
+             s.first_submitted_at as first_at, s.is_late as late
+      from (select 1) one
+      left join public.submissions s on s.node_id = t.id and s.user_id = t.owner_id) ps on t.task_type = 'PERSONAL'
+    where (p_include_archived or t.archived_at is null)
+      and (t.owner_id is null or t.owner_id = p_uid or v_viewer)),
+  stats as (
+    select jsonb_build_object(
+      'overallPct', public.pct(coalesce(sum(p.asg), 0)::int, coalesce(sum(p.sub), 0)::int),
+      'leafCount', count(*),
+      'unassignedCount', count(*) filter (where n.task_type = 'DESIGNATED' and p.asg = 0)) as j
+    from public.goal_nodes n join prog p on p.node_id = n.id
+    where n.room_id = p_room and n.task_type in ('COMMON', 'DESIGNATED') and n.archived_at is null)
+  select (select j from nodes), (select j from stats) into v_nodes, v_stats;
+
+  -- 0037: 초안(미발행) 시험 경고 — 편집자에게만(키 자체를 싣지 않는다). 보관된 리프 제외, 기간 순
+  if coalesce(public.can_edit_curriculum(r, p_uid), false) then
+    select coalesce(jsonb_agg(jsonb_build_object('code', 'EXAM_NOT_PUBLISHED', 'nodeId', g.id::text, 'message', '아직 발행되지 않은 시험이에요')
+                              order by g.start_date, g.id), '[]'::jsonb)
+    into v_warn
+    from public.exams x join public.goal_nodes g on g.id = x.node_id
+    where x.room_id = p_room and x.status = 'DRAFT' and g.archived_at is null;
+  end if;
+
+  return jsonb_build_object(
+    'today', to_char(v_today, 'YYYY-MM-DD'),
+    'room', jsonb_build_object('slug', r.slug, 'status', lower(r.status), 'leaderDoesTasks', r.leader_does_tasks),
+    'members', v_members, 'nodes', v_nodes, 'stats', v_stats,
+    'myPermissions', jsonb_build_object('canEditCurriculum', public.can_edit_curriculum(r, p_uid)),
+    'personal', jsonb_build_object(
+      'canAdd', r.archived_at is null and r.status in ('RECRUIT', 'ACTIVE') and public.personal_eligible(p_room, p_uid),
+      'perRound', public.personal_limit()))
+    || case when v_warn is not null then jsonb_build_object('warnings', v_warn) else '{}'::jsonb end;   -- 0037
+end $$;
+
+-- task_node_json ← 0024 판. 0037: 리프 exam 요약(정답 없음)
+create or replace function public.task_node_json(p_node bigint, p_uid uuid) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'id', n.id::text, 'parentId', n.parent_id::text, 'roundId', n.round_id::text, 'depth', n.depth, 'sortOrder', n.sort_order,
+    'label', n.label, 'title', n.title, 'descriptionMd', n.description_md,
+    'startDate', to_char(n.start_date, 'YYYY-MM-DD'), 'endDate', to_char(n.end_date, 'YYYY-MM-DD'),
+    'archived', n.archived_at is not null,
+    'ownerId', n.owner_id::text,
+    'createdBy', case when n.created_by is null then null else public.person_json(n.created_by) end,   -- 0024
+    'exam', public.exam_summary(n.id, p_uid),   -- 0037
+    'task', jsonb_build_object(
+      'type', lower(n.task_type),
+      'people', case
+        when n.task_type = 'PERSONAL' then
+          case when p_uid is null or not (n.owner_id = p_uid or public.personal_viewer(n.room_id, p_uid)) then '[]'::jsonb
+               else jsonb_build_array(public.person_json(n.owner_id) || jsonb_build_object('status',
+                      public.task_code(n.start_date, n.end_date, ow.first_submitted_at, ow.is_late, public.kst_today()))) end
+        when p_uid is null or n.archived_at is not null or not (
+            exists (select 1 from public.rooms rr where rr.id = n.room_id and rr.leader_id = p_uid)
+            or exists (select 1 from public.room_members m where m.room_id = n.room_id and m.user_id = p_uid
+                         and m.status in ('ACTIVE', 'INACTIVE', 'PENDING')))
+          then '[]'::jsonb
+        else coalesce((
+          select jsonb_agg(public.person_json(a.user_id)
+                           || jsonb_build_object('status', public.task_code(n.start_date, n.end_date, s.first_submitted_at, s.is_late, public.kst_today()))
+                           order by a.assigned_at, a.id)
+          from public.task_assignments a
+          left join public.submissions s on s.node_id = a.node_id and s.user_id = a.user_id
+          where a.node_id = n.id and a.released_at is null), '[]'::jsonb) end,
+      'assigned', st.asg, 'submitted', st.sub,
+      'state', public.leaf_state(st.asg, st.sub, n.start_date, n.end_date, public.kst_today())),
+    'assigned', st.asg, 'submitted', st.sub, 'pct', public.pct(st.asg, st.sub))
+  from public.goal_nodes n
+  left join public.submissions ow on n.task_type = 'PERSONAL' and ow.node_id = n.id and ow.user_id = n.owner_id
+  cross join lateral (
+    select case when n.task_type = 'PERSONAL' then (case when n.archived_at is null then 1 else 0 end)
+                else (select count(*)::int from public.task_assignments a where a.node_id = n.id and a.released_at is null) end as asg,
+           case when n.task_type = 'PERSONAL' then (case when n.archived_at is null and ow.id is not null then 1 else 0 end)
+                else (select count(s.id)::int from public.task_assignments a
+                      join public.submissions s on s.node_id = a.node_id and s.user_id = a.user_id
+                      where a.node_id = n.id and a.released_at is null) end as sub) st
+  where n.id = p_node and n.task_type is not null
+$$;
 
 -- ───────── 9. 알림 종류 EXAM_PUBLISHED (exam_publish 가 발행, 스펙 D11·§4.6) ─────────
 -- 재정의: notification_kinds·notify_render·notify_link ← 0034(0035·0036 재정의 없음). 시그니처 동일 → GRANT(없음) 유지.

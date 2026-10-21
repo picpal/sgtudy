@@ -491,3 +491,128 @@ cases("round exam 0037 · taking & reveal", db, [
     assertEquals([s.attempt.score, s.attempt.isLate, s.attempt.results], [1, false, null]);
   } },
 ]);
+
+cases("round exam 0037 · results & tree", db, [
+  { name: "exam_results: editor only · avg/max · per-question correct rate · members incl. non-submitters · attempt_get of a member", run: async (q) => {
+    const node = await published(q);
+    const ids = await qids(q, node);
+    await as(q, "지은"); await save(q, node, ids[0], 0); await save(q, node, ids[2], false); await submitExam(q, node);
+    await as(q, "철수"); await save(q, node, ids[0], 1); await submitExam(q, node);
+    await failCode(rpc(q, "public.exam_results('aws', $1::bigint)", [node]), "NOT_CURRICULUM_EDITOR");
+    await as(q, "민수");
+    const r = await rpc(q, "public.exam_results('aws', $1::bigint)", [node]);
+    assertEquals([r.submitted, r.assigned, r.maxScore], [2, 4, 5]);
+    assertEquals(r.avg, 1);                                  // (2 + 0) / 2
+    assertEquals(r.max, 2);
+    assertEquals(r.questions.map((x: Row) => x.correctRate), [50, 0, 50, 0]);
+    assertEquals(r.questions[1], { id: ids[1], ord: 1, type: "multi", points: 2, correctRate: 0 });
+    const jieun = r.members.find((m: Row) => m.nickname === "지은");
+    assertEquals([jieun.score, jieun.status, jieun.isLate, jieun.submittedAt], [2, "done", false, "2026-10-16T03:00:00.000Z"]);
+    const hana = r.members.find((m: Row) => m.nickname === "하나");
+    assertEquals([hana.score, hana.status, hana.submittedAt, hana.isLate], [null, "open", null, null]);
+    assertEquals(r.members.map((m: Row) => m.nickname), ["민수", "지은", "철수", "하나"]);   // 그룹장 먼저, 합류 순
+    const a = await rpc(q, "public.exam_attempt_get('aws', $1::bigint, $2::uuid)", [node, await uidOf(q, "철수")]);
+    assertEquals(a.attempt.answers[ids[0]], 1);
+    assertEquals(a.attempt.results[ids[0]].correct, false);
+    assertEquals("answer" in a.questions[0], true);         // 편집자 모양
+    await as(q, "지은");
+    await failCode(rpc(q, "public.exam_attempt_get('aws', $1::bigint, $2::uuid)", [node, await uidOf(q, "철수")]), "FORBIDDEN");
+    // 자기 것은 exam_get 과 같다
+    const self = await rpc(q, "public.exam_attempt_get('aws', $1::bigint, $2::uuid)", [node, await uidOf(q, "지은")]);
+    assertEquals(self, await get(q, node));
+  } },
+  { name: "exam_results: no submissions → avg/max/correctRate null · draft exam ok · plain leaf EXAM_NOT_FOUND · other room NODE_NOT_FOUND", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await put(q, node, Q4);
+    const r = await rpc(q, "public.exam_results('aws', $1::bigint)", [node]);
+    assertEquals([r.submitted, r.avg, r.max, r.questions[0].correctRate], [0, null, null, null]);
+    assertEquals(r.members.every((m: Row) => m.score === null), true);
+    await failCode(rpc(q, "public.exam_results('aws', $1::bigint)", [await nodeId(q, "aws", "ALB vs NLB 실습")]), "EXAM_NOT_FOUND");
+    await failCode(rpc(q, "public.exam_results('sqld', $1::bigint)", [node]), "NOT_CURRICULUM_EDITOR");   // 남의 방: 편집자 검사 먼저
+    await asAnon(q);
+    await failCode(rpc(q, "public.exam_results('aws', $1::bigint)", [node]), "AUTH_REQUIRED");
+  } },
+  { name: "exam_attempt_get: viewer fields describe the TARGET user (isAssignee/reason) · canTake false for someone else's attempt", run: async (q) => {
+    const node = await published(q);
+    const ids = await qids(q, node);
+    await q("update public.rooms set leader_does_tasks = false where slug = 'aws'");
+    await q("select public.assignment_resync((select id from public.rooms where slug = 'aws'))");
+    await as(q, "철수"); await save(q, node, ids[0], 1);      // 진행 중
+    await as(q, "지은"); await submitExam(q, node);           // 제출
+    await as(q, "민수");                                      // 편집자 · 담당 아님
+    const own = await get(q, node);
+    assertEquals([own.viewer.isAssignee, own.viewer.reason, own.viewer.canTake], [false, "not_assignee", false]);
+    const at = async (nick: string) => rpc(q, "public.exam_attempt_get('aws', $1::bigint, $2::uuid)", [node, await uidOf(q, nick)]);
+    const c = await at("철수");
+    assertEquals([c.viewer.canEdit, c.viewer.isAssignee, c.viewer.reason, c.viewer.canTake], [true, true, null, false]);
+    assertEquals([c.attempt.status, c.attempt.answers[ids[0]], c.attempt.results], ["in_progress", 1, null]);
+    const j = await at("지은");
+    assertEquals([j.viewer.isAssignee, j.viewer.reason, j.viewer.canTake, j.attempt.status], [true, "submitted", false, "submitted"]);
+    assertEquals(j.attempt.results[ids[0]], { correct: false, earned: 0 });
+    const h = await at("하나");                                // 응시 전
+    assertEquals([h.viewer.isAssignee, h.viewer.reason, h.attempt], [true, null, null]);
+    const d = await at("도윤");                                // 담당 아님(INACTIVE)
+    assertEquals([d.viewer.isAssignee, d.viewer.reason, d.attempt], [false, "not_assignee", null]);
+  } },
+  { name: "curriculum_get/task_get carry exam summary (no answers) · plain leaf exam null", run: async (q) => {
+    const node = await published(q);
+    await as(q, "지은");
+    const c = await rpc(q, "public.curriculum_get('aws', false)");
+    const leaf = (c.nodes as Row[]).find((x) => x.id === node)!;
+    assertEquals(leaf.exam, { status: "published", questionCount: 4, totalPoints: 5, reveal: "after_submit" });
+    assertEquals((c.nodes as Row[]).find((x) => x.title === "ALB vs NLB 실습")!.exam, null);
+    assertEquals(JSON.stringify(c).includes("명시적 Deny 가 먼저예요"), false);
+    assertEquals("warnings" in c, false);                     // 경고는 편집자에게만
+    const t = await rpc(q, "public.task_get('aws', $1::bigint)", [node]);
+    assertEquals(t.node.exam.status, "published");
+    assertEquals(t.mySubmission, null);
+    const plain = await rpc(q, "public.task_get('aws', $1::bigint)", [await nodeId(q, "aws", "ALB vs NLB 실습")]);
+    assertEquals(plain.node.exam, null);
+  } },
+  { name: "no answer/explanation/results/score keys in tree or task_get for members after others submit · scores only via exam_get(self)/exam_results", run: async (q) => {
+    const node = await published(q);
+    const ids = await qids(q, node);
+    await as(q, "지은"); await save(q, node, ids[0], 0); await submitExam(q, node);
+    const keys = (v: unknown) => JSON.stringify(v).match(/"(answer|explanation|results|score|maxScore|correctRate)"/g);
+    for (const nick of ["철수", "지은", "도윤"]) {
+      await as(q, nick);
+      assertEquals(keys(await rpc(q, "public.curriculum_get('aws', false)")), null, nick);
+      assertEquals(keys(await rpc(q, "public.task_get('aws', $1::bigint)", [node])), null, nick);
+    }
+    await as(q, "지은");                                      // 제출 = 과제 제출 → task_get 의 내 제출물에도 점수 없음
+    const t = await rpc(q, "public.task_get('aws', $1::bigint)", [node]);
+    assert(t.mySubmission !== null);
+    assertEquals(t.node.task.people.find((p: Row) => p.nickname === "지은").status, "done");
+  } },
+  { name: "draft exam: editor tree has full summary + warnings EXAM_NOT_PUBLISHED · members see status only · non-members/anon no exam", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await put(q, node, Q4);
+    await as(q, "민수");
+    const e = await rpc(q, "public.curriculum_get('aws', false)");
+    assertEquals((e.nodes as Row[]).find((x) => x.id === node)!.exam, { status: "draft", questionCount: 4, totalPoints: 5, reveal: "after_submit" });
+    assertEquals(e.warnings, [{ code: "EXAM_NOT_PUBLISHED", nodeId: node, message: "아직 발행되지 않은 시험이에요" }]);
+    assertEquals((await rpc(q, "public.task_get('aws', $1::bigint)", [node])).node.exam.questionCount, 4);
+    for (const nick of ["지은", "도윤"]) {                     // 담당자 · INACTIVE 멤버: 상태만
+      await as(q, nick);
+      const c = await rpc(q, "public.curriculum_get('aws', false)");
+      assertEquals((c.nodes as Row[]).find((x) => x.id === node)!.exam, { status: "draft" }, nick);
+      assertEquals("warnings" in c, false);
+      assertEquals((await rpc(q, "public.task_get('aws', $1::bigint)", [node])).node.exam, { status: "draft" });
+    }
+    await as(q, "지은");                                      // exam_get 도 같은 규칙(초안 문항 수·배점·공개 시점 없음)
+    const v = await get(q, node);
+    assertEquals(v.exam, { status: "draft", publishedAt: null, closed: false });
+    await as(q, "서연");                                      // 비멤버(공개 방)
+    assertEquals((await rpc(q, "public.task_get('aws', $1::bigint)", [node])).node.exam, null);
+    await asAnon(q);
+    const a = await rpc(q, "public.curriculum_get('aws', false)");
+    assertEquals((a.nodes as Row[]).find((x) => x.id === node)!.exam, null);
+    // 발행하면 경고가 사라진다 · 보관된 초안은 경고 없음
+    await as(q, "민수");
+    await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
+    assertEquals((await rpc(q, "public.curriculum_get('aws', false)")).warnings, []);
+    await rpc(q, "public.exam_unpublish('aws', $1::bigint)", [node]);
+    await q("update public.goal_nodes set archived_at = now() where id = $1::bigint", [node]);
+    assertEquals((await rpc(q, "public.curriculum_get('aws', true)")).warnings, []);
+  } },
+]);
