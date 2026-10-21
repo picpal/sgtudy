@@ -34,13 +34,13 @@ describe("POST /api/mcp", () => {
     const r = await POST(rpc("tools/list"));
     expect([r.status, r.headers.get("retry-after")]).toEqual([429, "60"]);
   });
-  it("정상 initialize → 200 JSON-RPC 결과(serverInfo sgtudy) · tools/list → 7개", async () => {
+  it("정상 initialize → 200 JSON-RPC 결과(serverInfo sgtudy) · tools/list → 9개", async () => {
     auth.mockResolvedValue(ok);
     const a = await POST(init());
     expect(a.status).toBe(200);
     expect((await a.json()).result.serverInfo.name).toBe("sgtudy");
     const b = await POST(rpc("tools/list", {}, 2));
-    expect((await b.json()).result.tools).toHaveLength(7);
+    expect((await b.json()).result.tools).toHaveLength(9);
     expect(auth).toHaveBeenCalledTimes(2);   // HTTP 요청마다 1회
   });
   it("연결 중 폐기: 첫 요청 200 → 토큰 폐기 → 다음 tools/call 은 401(도구 isError 가 아님)", async () => {
@@ -83,9 +83,9 @@ describe("POST /api/mcp", () => {
     expect(invoke).toHaveBeenCalledWith("curriculum_plan_preview", { study: "aws", plan });
     expect((await r.json()).result.isError).toBe(true);
   });
-  it("prompts/list → draft-curriculum · notifications/initialized → 202", async () => {
+  it("prompts/list → draft-curriculum·draft-exam · notifications/initialized → 202", async () => {
     auth.mockResolvedValue(ok);
-    expect((await (await POST(rpc("prompts/list", {}, 6))).json()).result.prompts.map((p: { name: string }) => p.name)).toEqual(["draft-curriculum"]);
+    expect((await (await POST(rpc("prompts/list", {}, 6))).json()).result.prompts.map((p: { name: string }) => p.name)).toEqual(["draft-curriculum", "draft-exam"]);
     expect((await POST(rpc("notifications/initialized", {}, null))).status).toBe(202);
   });
   it("〔리뷰 I1〕 JSON-RPC 배치(배열) → 400 + JSON-RPC 오류 · 도구 호출 없음", async () => {

@@ -2,12 +2,13 @@ import { z } from "zod";
 import type { ScheduleResponse } from "@/lib/api/types";
 import { toolErrorText, type ToolError } from "./errors";
 import {
-  expiryNotice, formatApply, formatCurriculum, formatPersonalResult, formatPreview, formatRemoveResult, formatStudies, formatTasks,
-  weekWindow, type ApplyData, type PersonalCreateData, type PreviewData, type Range, type StudiesData, type WhoamiData,
+  expiryNotice, formatApply, formatCurriculum, formatExamBrief, formatExamDraft, formatPersonalResult, formatPreview, formatRemoveResult,
+  formatStudies, formatTasks, weekWindow, type ApplyData, type ExamBriefData, type ExamDraftData, type PersonalCreateData, type PreviewData,
+  type Range, type StudiesData, type WhoamiData,
 } from "./format";
 import type { Invoke, InvokeResult } from "./invoke";
 import { planDoc, ROUND_SEL_HELP, roundSel } from "./plan-schema";
-import type { GatewayCurriculum } from "./tree";
+import { toCurriculumTree, type GatewayCurriculum, type TreeNode } from "./tree";
 
 /* MCP 도구 v1 〔UX 재검토 D12·D13〕 — 설명·instructions 는 영어(한국어 용어 병기), title 은 한국어, 결과·오류는 한국어 줄 형식 텍스트 1벌.
    도구는 던지지 않는다 〔C#6〕: 인증은 라우트가 transport 앞에서 끝냈고, 여기서 받은 오류는 isError 텍스트 + 다음 행동 */
@@ -61,6 +62,64 @@ const previewRun = call("curriculum_plan_preview", (a) => ({ study: a.study, pla
   const p = data as PreviewData;
   return { text: formatPreview(p, { slug: typeof a.study === "string" ? a.study : "기본 스터디" }), isError: p.ok === false };   // 검증 오류도 isError
 });
+
+/* ---------- 시험(0037) ---------- */
+/** 숫자 id 또는 제목 정확 일치(TS 측 해석 — DB op 는 id 만 받는다) */
+const task = z.union([z.string(), z.number()]).describe("task id or exact title");
+/** sgtudy.exam/v1(스펙 §3.2) — 서버 exam_validate 와 같은 상한. 유형별 answer 모양(보기 번호·OX·허용 답)은 계약 문구와 서버가 맡는다:
+    유형별 discriminatedUnion 은 tools/list 예산(8,000자)을 넘긴다. 답은 다듬지 않는다(단답 비교는 서버 exam_norm). reveal 은 웹에서만 */
+const examDoc = z.strictObject({
+  questions: z.array(z.strictObject({
+    type: z.enum(["single", "multi", "ox", "short"]),
+    prompt: z.string().min(1).max(2000),
+    choices: z.array(z.string().min(1).max(200)).min(2).max(8).optional(),
+    answer: z.union([z.number().int().min(0), z.array(z.number().int().min(0)).min(1), z.boolean(), z.array(z.string().min(1).max(200)).min(1).max(10)]),
+    explanation: z.string().max(4000).optional(),
+    points: z.number().int().min(1).max(10).optional(),
+  })).min(1).max(50),
+});
+
+const FIX_TASK = 'get_curriculum(detail:"full") 로 말단 과제의 id 를 확인해 task 에 넣고 다시 부르세요';
+/** 진행목표 계획용 다음 행동(NODE_NOT_FOUND → preview 다시)은 여기선 맞지 않아 시험 문맥으로 바꾼다 */
+const EXAM_HINT: Record<string, string> = {
+  NODE_NOT_FOUND: FIX_TASK, PERSONAL_NODE: FIX_TASK, NODE_NOT_LEAF: FIX_TASK,
+  TASK_ARCHIVED: "보관된 과제예요 — 사용자에게 알리세요",
+  NODE_HAS_SUBMISSIONS: "제출이 있는 일반 과제는 시험으로 바꿀 수 없어요 — 사용자에게 새 과제를 만들도록 안내하세요",
+};
+function examFail(e: ToolError): ToolResult {
+  const f = e.details?.field;
+  if (e.code === "VALIDATION_FAILED" && typeof f === "string") {
+    const i = e.details?.index;
+    const where = typeof i === "number" ? `exam.questions[${i}].${f}` : f === "exam" ? "exam" : `exam.${f}`;
+    return fail({ ...e, message: `${where} — ${e.message}` });
+  }
+  return text(toolErrorText(e, EXAM_HINT[e.code]), true);
+}
+
+type Resolved = { id: string; slug?: string } | { error: ToolResult };
+const MAX_TASK_CANDIDATES = 20;
+/** task → 리프 id. 숫자면 그대로(서버가 NODE_NOT_FOUND), 아니면 curriculum_get 트리에서 보관 안 된 팀 리프 제목(trim) 정확 일치 — 유일할 때만 */
+async function resolveTask(invoke: Invoke, a: Record<string, unknown>): Promise<Resolved> {
+  const raw = String(a.task ?? "").trim();
+  if (/^[0-9]{1,18}$/.test(raw)) return { id: BigInt(raw).toString() };
+  const r = await invoke("curriculum_get", defined({ study: a.study }));
+  if (!r.ok) return { error: examFail(r.error) };
+  const tree = toCurriculumTree(r.data as GatewayCurriculum, { includeDescriptions: false });
+  const leaves: { n: TreeNode; round: TreeNode }[] = [];
+  const walk = (n: TreeNode, round: TreeNode) => {
+    if (n.kind === "personal") return;
+    if (n.taskType) leaves.push({ n, round });           // 팀 리프(회차 리프 포함)
+    for (const c of n.children) walk(c, round);
+  };
+  for (const round of tree.rounds) walk(round, round);
+  const name = ({ n, round }: (typeof leaves)[number]) => `${n.id} ${n === round ? "" : `${round.label ?? round.title} › `}${n.title}`;
+  const hit = raw ? leaves.filter((x) => x.n.title.trim() === raw) : [];
+  if (hit.length === 1) return { id: hit[0].n.id, slug: tree.study.slug };
+  const err: ToolError = hit.length > 1
+    ? { code: "TASK_AMBIGUOUS", message: "같은 제목의 과제가 여러 개예요. id 로 골라 주세요", details: { candidates: hit.slice(0, MAX_TASK_CANDIDATES).map(name) } }
+    : { code: "TASK_NOT_FOUND", message: "그 제목의 과제를 찾을 수 없어요(제목이 정확히 같아야 해요)", details: { candidates: leaves.slice(0, MAX_TASK_CANDIDATES).map(name) } };
+  return { error: fail(err) };
+}
 
 export const TOOLS: ToolDef[] = [
   {
@@ -172,5 +231,41 @@ export const TOOLS: ToolDef[] = [
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     run: call("personal_delete_many", (a) => ({ study: a.study, ids: a.ids }),
       (data) => formatRemoveResult(data as { deleted: number; skipped: string[] })),
+  },
+  {
+    name: "get_exam_brief",
+    title: "시험 브리프 보기",
+    description: "[v1] Read the exam brief (시험 브리프) of a task and the sgtudy.exam/v1 question contract. Call before create_exam_draft.",
+    inputSchema: { study, task },
+    annotations: READ,
+    run: async (invoke, a, ctx) => {
+      const t = await resolveTask(invoke, a);
+      if ("error" in t) return t.error;
+      const r = await invoke("exam_get_brief", defined({ study: t.slug ?? a.study, task: t.id }));
+      if (!r.ok) return examFail(r.error);
+      return done(r, ctx, formatExamBrief(r.data as ExamBriefData));
+    },
+  },
+  {
+    name: "create_exam_draft",
+    title: "시험 초안 저장",
+    description: "[v1] Save AI-written questions as the task's exam draft (시험 초안), replacing the previous draft. "
+      + "Follow the contract from get_exam_brief. Not published: the user reviews and publishes on the web.",
+    inputSchema: { study, task, exam: examDoc },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    run: async (invoke, a, ctx) => {
+      const t = await resolveTask(invoke, a);
+      if ("error" in t) return t.error;
+      const r = await invoke("exam_draft_put", defined({ study: t.slug ?? a.study, task: t.id, exam: a.exam }));
+      if (!r.ok) return examFail(r.error);
+      // 응답엔 slug 가 없다 — 제목으로 해석하지 않았으면 브리프(읽기)로 얻는다. read 스코프가 없는 토큰이면 링크 없이
+      let slug = t.slug;
+      if (!slug) {
+        const b = await invoke("exam_get_brief", defined({ study: a.study, task: t.id }));
+        if (b.ok) slug = (b.data as ExamBriefData).study.slug;
+      }
+      const link = slug ? `${ctx.origin.replace(/\/$/, "")}/my-study/${encodeURIComponent(slug)}?tab=curriculum&item=${t.id}` : null;
+      return done(r, ctx, formatExamDraft(r.data as ExamDraftData, link));
+    },
   },
 ];

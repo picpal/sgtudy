@@ -32,7 +32,7 @@ const FIX: Record<string, string> = {
   PLAN_INVALID: FIX_PLAN, INVALID_TITLE: FIX_PLAN, INVALID_PERIOD: FIX_PLAN, VALIDATION_FAILED: FIX_ARG,
   UNKNOWN_REF: FIX_PLAN, DUPLICATE_REF: FIX_PLAN, NODE_NOT_FOUND: FIX_PLAN, NODE_DEPTH_EXCEEDED: FIX_PLAN,
   PLAN_TOO_LARGE: "계획을 회차 몇 개씩 나눠 preview_curriculum_plan 을 여러 번 부르세요",
-  ROUND_NOT_FOUND: FIX_ARG, ROUND_AMBIGUOUS: FIX_ARG, ASSIGNEE_NOT_MEMBER: FIX_PLAN, ASSIGNEE_AMBIGUOUS: FIX_PLAN,
+  ROUND_NOT_FOUND: FIX_ARG, ROUND_AMBIGUOUS: FIX_ARG, TASK_NOT_FOUND: FIX_ARG, TASK_AMBIGUOUS: FIX_ARG, ASSIGNEE_NOT_MEMBER: FIX_PLAN, ASSIGNEE_AMBIGUOUS: FIX_PLAN,
   STUDY_NOT_FOUND: "list_my_studies 로 slug 를 확인해 study 에 넣고 다시 부르세요",
   STUDY_AMBIGUOUS: "사용자에게 어느 스터디인지 물어본 뒤 study 에 그 slug 를 넣어 다시 부르세요",
 };
@@ -52,6 +52,8 @@ const STOP: Record<string, string> = {
   NODE_HAS_SUBMISSIONS: "제출이 있는 항목은 웹에서 고쳐야 해요 — 사용자에게 안내하세요",
   NOT_OWNER: "본인 개인 목표만 지울 수 있어요 — 사용자에게 알리세요",
   PERSONAL_LIMIT_EXCEEDED: "회차당 개인 목표 한도를 넘어요 — 개수를 줄이거나 다른 회차에 넣으세요",
+  EXAM_PUBLISHED: "발행된 시험은 덮어쓸 수 없어요 — 사용자에게 웹에서 초안으로 되돌리거나 새 과제를 만들도록 안내하세요",
+  EXAM_LOCKED: "응시가 시작된 시험은 AI 초안으로 바꿀 수 없어요 — 사용자에게 그대로 알리세요",
   NOTHING_TO_UNDO: "되돌리기는 일정 변경만 돼요 — 그 밖에 바뀐 것은 사용자에게 웹에서 고치도록 안내하세요",
   UNDO_STALE: "되돌리기는 일정 변경만 돼요 — 그 뒤 바뀐 것은 사용자에게 웹에서 고치도록 안내하세요",
   TIMEOUT: SPLIT, PAYLOAD_TOO_LARGE: SPLIT,
@@ -95,14 +97,14 @@ export function errorLine(e: unknown): string {
   return `${where ? where + " " : ""}${asText(o.code)}: ${asText(o.message)}${cand.length ? ` (후보: ${cand.join(", ")})` : ""}`;
 }
 
-/** 도구 오류 → 텍스트. 오류 한 줄 + 경로별 목록(최대 20) + 후보 + `→ 다음:` */
-export function toolErrorText(e: ToolError): string {
+/** 도구 오류 → 텍스트. 오류 한 줄 + 경로별 목록(최대 20) + 후보 + `→ 다음:`. hint 가 있으면 코드별 다음 행동 대신(도구별 문맥) */
+export function toolErrorText(e: ToolError, hint?: string): string {
   const lines = [`오류 ${e.code}: ${e.message}`];
   const errors = Array.isArray(e.details?.errors) ? e.details.errors : [];
   for (const x of errors.slice(0, MAX_ERROR_LINES)) lines.push(`- ${errorLine(x)}`);
   if (errors.length > MAX_ERROR_LINES) lines.push(`- … 외 ${errors.length - MAX_ERROR_LINES}건`);
   const cand = Array.isArray(e.details?.candidates) ? e.details.candidates.map(asText).filter(Boolean) : [];
   if (cand.length) lines.push(`후보: ${cand.join(", ")}`);
-  lines.push(`→ 다음: ${nextStep(e.code, e.details).hint}`);
+  lines.push(`→ 다음: ${hint ?? nextStep(e.code, e.details).hint}`);
   return lines.join("\n");
 }

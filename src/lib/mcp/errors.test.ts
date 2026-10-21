@@ -50,11 +50,18 @@ describe("nextStep", () => {
     expect(nextStep("ROUND_NOT_FOUND", { candidates: ["1주차"] }).hint).toContain("후보 중 하나");
     expect(nextStep("API_RATE_LIMITED", { retryAfterSec: 42 }).hint).toContain("42초 뒤");
   });
+  it("시험(Task 11): TASK_NOT_FOUND·TASK_AMBIGUOUS → fix · EXAM_PUBLISHED·EXAM_LOCKED → stop(웹·사용자 안내)", () => {
+    for (const c of ["TASK_NOT_FOUND", "TASK_AMBIGUOUS"]) expect(nextStep(c).kind).toBe("fix");
+    expect(nextStep("EXAM_PUBLISHED")).toMatchObject({ kind: "stop", hint: expect.stringContaining("웹에서") });
+    expect(nextStep("EXAM_LOCKED").kind).toBe("stop");
+  });
 });
 describe("toolErrorText", () => {
   it("한 줄 + 다음 행동", () =>
     expect(toolErrorText({ code: "STALE_VERSION", message: "미리본 뒤에 진행목표가 바뀌었어요" }))
       .toBe("오류 STALE_VERSION: 미리본 뒤에 진행목표가 바뀌었어요\n→ 다음: 같은 계획으로 preview_curriculum_plan 을 다시 부르세요(재시도 가능)"));
+  it("hint 를 주면 코드별 다음 행동 대신", () =>
+    expect(toolErrorText({ code: "NODE_NOT_FOUND", message: "없어요" }, "다른 안내")).toBe("오류 NODE_NOT_FOUND: 없어요\n→ 다음: 다른 안내"));
   it("경로별 오류 최대 20줄 + 외 N건", () => {
     const errors = Array.from({ length: 25 }, (_, i) => ({ path: `ops[${i}]`, code: "INVALID_TITLE", message: "제목을 넣어 주세요", field: "title" }));
     const lines = toolErrorText({ code: "PLAN_INVALID", message: "계획서에 고칠 곳이 있어요", details: { errors } }).split("\n");
