@@ -142,7 +142,7 @@ describe("NoticeTab — 목록·읽기", () => {
 });
 
 describe("NoticeTab — 그룹장 쓰기·고치기·삭제", () => {
-  it("새 공지: 검증 문구 → 채우면 notice_create, 팝업 토스트, 폼 닫고 새 공지 펼침", async () => {
+  it("새 공지: 검증 문구(빈 채 등록이면 제목·본문 함께) → 채우면 notice_create, 팝업 토스트, 폼 닫고 새 공지 펼침", async () => {
     api.fetchNotices.mockResolvedValue(L([], { canWrite: true }));
     api.createNotice.mockResolvedValue(N("9", { popup: true }));
     const { host, toast } = await mount({ viewer: "leader" });
@@ -152,9 +152,13 @@ describe("NoticeTab — 그룹장 쓰기·고치기·삭제", () => {
     expect(document.activeElement).toBe(title);
     await act(async () => btn(host, "등록")!.click());
     expect(host.textContent).toContain("제목은 1~80자예요");
+    expect(host.textContent).toContain("본문은 1~10,000자예요");
+    expect(title.getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(title);
     expect(api.createNotice).not.toHaveBeenCalled();
     typeIn(title, "  모임 변경 ");
     await act(async () => btn(host, "등록")!.click());
+    expect(host.textContent).not.toContain("제목은 1~80자예요");
     expect(host.textContent).toContain("본문은 1~10,000자예요");
     typeIn(host.querySelector<HTMLTextAreaElement>("[data-md]")!, "화요일로 옮겨요");
     act(() => checkbox(host, "입장 시 팝업으로 알리기")!.click());

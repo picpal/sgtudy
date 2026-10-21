@@ -21,11 +21,14 @@ export const markNoticesRead = (slug: string, ids: string[], revs?: number[], cl
   rpc<{ unread: boolean }>("notice_read", { p_slug: slug, p_ids: ids.map(num), ...(revs ? { p_revs: revs } : {}) }, client);
 
 /** 저장 전 클라이언트 검증 — 서버 notice_validate 와 같은 규칙·문구. 첫 오류만 */
-export function validateNotice(v: Pick<NoticeInput, "title" | "bodyMd">): { field: "title" | "bodyMd"; text: string } | null {
+export type NoticeFieldErrors = Partial<Record<"title" | "bodyMd", string>>;
+/** 두 칸을 함께 본다 — 빈 채 등록하면 제목·본문 문구가 한 번에 뜬다. 문제없으면 null */
+export function validateNotice(v: Pick<NoticeInput, "title" | "bodyMd">): NoticeFieldErrors | null {
+  const out: NoticeFieldErrors = {};
   const t = v.title.trim().length;
-  if (t < 1 || t > NOTICE_LIMITS.title) return { field: "title", text: "제목은 1~80자예요" };
-  if (v.bodyMd.trim() === "" || v.bodyMd.length > NOTICE_LIMITS.bodyMd) return { field: "bodyMd", text: "본문은 1~10,000자예요" };
-  return null;
+  if (t < 1 || t > NOTICE_LIMITS.title) out.title = "제목은 1~80자예요";
+  if (v.bodyMd.trim() === "" || v.bodyMd.length > NOTICE_LIMITS.bodyMd) out.bodyMd = "본문은 1~10,000자예요";
+  return out.title || out.bodyMd ? out : null;
 }
 
 /** 0040 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */

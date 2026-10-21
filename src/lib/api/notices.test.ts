@@ -41,12 +41,13 @@ describe("notices adapter — RPC 이름·인자(0040)", () => {
 });
 
 describe("validateNotice", () => {
-  it("title 1~80 after trim · body non-blank ≤ 10,000", () => {
-    expect(validateNotice({ title: "  ", bodyMd: "b" })).toEqual({ field: "title", text: "제목은 1~80자예요" });
-    expect(validateNotice({ title: "가".repeat(81), bodyMd: "b" })?.field).toBe("title");
+  it("title 1~80 after trim · body non-blank ≤ 10,000 · both at once", () => {
+    expect(validateNotice({ title: "  ", bodyMd: "b" })).toEqual({ title: "제목은 1~80자예요" });
+    expect(validateNotice({ title: "가".repeat(81), bodyMd: "b" })).toEqual({ title: "제목은 1~80자예요" });
     expect(validateNotice({ title: ` ${"가".repeat(80)} `, bodyMd: "b" })).toBeNull();
-    expect(validateNotice({ title: "t", bodyMd: " \n " })?.field).toBe("bodyMd");
-    expect(validateNotice({ title: "t", bodyMd: "a".repeat(10_001) })?.field).toBe("bodyMd");
+    expect(validateNotice({ title: "t", bodyMd: " \n " })).toEqual({ bodyMd: "본문은 1~10,000자예요" });
+    expect(validateNotice({ title: "t", bodyMd: "a".repeat(10_001) })).toEqual({ bodyMd: "본문은 1~10,000자예요" });
+    expect(validateNotice({ title: "", bodyMd: "" })).toEqual({ title: "제목은 1~80자예요", bodyMd: "본문은 1~10,000자예요" });
     expect(validateNotice({ title: "t", bodyMd: "a".repeat(10_000) })).toBeNull();
   });
 });

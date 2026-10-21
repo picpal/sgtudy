@@ -7,7 +7,7 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { MoreMenu, type MoreMenuItem } from "@/components/ui/MoreMenu";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
-import { createNotice, deleteNotice, fetchNotices, markNoticesRead, NOTICE_LIMITS, noticeErrorText, updateNotice, validateNotice } from "@/lib/api/notices";
+import { createNotice, deleteNotice, fetchNotices, markNoticesRead, NOTICE_LIMITS, noticeErrorText, updateNotice, validateNotice, type NoticeFieldErrors } from "@/lib/api/notices";
 import { relativeTime } from "@/lib/api/notifications";
 import type { Notice, NoticeList, NoticePatch } from "@/lib/api/types";
 import { setLeaveGuard } from "@/lib/leaveGuard";
@@ -99,7 +99,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
   const gone = !!editing && !isNew && !!list && (!snap || !list.items.some((n) => n.id === editing.id));
   const base = target ? draftOf(target) : EMPTY;
   const [draft, setDraft] = useState<Draft>(EMPTY);
-  const [fieldErr, setFieldErr] = useState<{ field: "title" | "bodyMd"; text: string } | null>(null);
+  const [fieldErr, setFieldErr] = useState<NoticeFieldErrors | null>(null);
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const writeBtn = useRef<HTMLButtonElement>(null);
@@ -204,7 +204,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
     const bad = validateNotice(draft);
     if (bad) {
       setFieldErr(bad);
-      (bad.field === "title" ? titleRef.current : null)?.focus();
+      (bad.title ? titleRef.current : null)?.focus();
       return;
     }
     setFieldErr(null);
@@ -230,7 +230,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
     } catch (e) {
       const err = toApiError(e);
       const f = err.details?.field;
-      if (err.code === "VALIDATION_FAILED" && (f === "title" || f === "bodyMd")) setFieldErr({ field: f, text: err.message });
+      if (err.code === "VALIDATION_FAILED" && (f === "title" || f === "bodyMd")) setFieldErr({ [f]: err.message });
       else toast({ text: noticeErrorText(err), tone: "bad" });
       // 상한·권한·상태는 그새 바뀌었을 수 있다 — 목록(개수·canWrite)을 다시 받는다
       if (err.code !== "VALIDATION_FAILED") refetch();
@@ -343,15 +343,15 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
               type="text"
               value={draft.title}
               maxLength={NOTICE_LIMITS.title}
-              aria-invalid={fieldErr?.field === "title" || undefined}
-              aria-describedby={fieldErr?.field === "title" ? `${ids}-terr` : undefined}
+              aria-invalid={!!fieldErr?.title || undefined}
+              aria-describedby={fieldErr?.title ? `${ids}-terr` : undefined}
               onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
               placeholder="예: 이번 주 모임은 화요일로 옮겨요"
               className={`${field} font-semibold`}
             />
-            {fieldErr?.field === "title" && (
+            {fieldErr?.title && (
               <span id={`${ids}-terr`} className="text-[12px] font-medium text-warn">
-                {fieldErr.text}
+                {fieldErr.title}
               </span>
             )}
           </label>
@@ -360,9 +360,9 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
               본문
             </span>
             <MarkdownEditor labelledBy={`${ids}-body`} value={draft.bodyMd} onChange={(v) => setDraft((d) => ({ ...d, bodyMd: v }))} placeholder="모두가 알아야 할 규칙·일정을 적어 주세요" minHeight={200} maxHeight="none" expandable={false} />
-            {fieldErr?.field === "bodyMd" && (
+            {fieldErr?.bodyMd && (
               <span role="alert" className="text-[12px] font-medium text-warn">
-                {fieldErr.text}
+                {fieldErr.bodyMd}
               </span>
             )}
           </div>
