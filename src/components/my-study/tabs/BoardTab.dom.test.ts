@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// 보드 회차 필터 — 회차가 많아도(20주차 등) 칩이 여러 줄로 쌓이지 않게 select 하나로 고른다.
+// 보드 회차 필터 — 회차가 많아도(20주차 등) 칩이 여러 줄로 쌓이지 않게 드롭다운(listbox) 하나로 고른다.
 import { afterEach, describe, expect, it } from "vitest";
 import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -49,60 +49,88 @@ function mount(patch: Partial<ScreenState> = {}, t: Tree = tree) {
       createElement(MeProvider, { me } as ComponentProps<typeof MeProvider>, createElement(TodayProvider, { today: REF_DAY } as ComponentProps<typeof TodayProvider>, createElement(BoardTab, { tree: t, S, update: (p) => calls.push(p), goLeaf: () => {} }))),
     ),
   );
-  const select = host.querySelector<HTMLSelectElement>('select[aria-label="회차 필터"]')!;
-  return { host, select, calls };
+  const trigger = host.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
+  return { host, trigger, calls };
 }
 const cardTitles = (h: HTMLElement) => Array.from(h.querySelectorAll("section button")).map((b) => b.querySelector("span.text-\\[14px\\]")?.textContent);
+const options = (h: HTMLElement) => Array.from(h.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]'));
+const click = (el: Element) => act(() => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
 
-describe("BoardTab 회차 필터 select", () => {
-  it("칩 대신 select 하나 — 전체 회차 + 회차마다 한 줄, 글에 이름·기간, 오늘이 든 회차 표시", () => {
-    const { host, select } = mount({ bRound: "2" });
-    expect(select).not.toBeNull();
+describe("BoardTab 회차 필터 드롭다운", () => {
+  it("칩·기본 select 대신 listbox 드롭다운 — 버튼에 고른 회차와 상태 꼬리표", () => {
+    const { host, trigger } = mount({ bRound: "2" });
+    expect(host.querySelector("select")).toBeNull();
     expect(host.querySelector('[role="group"][aria-label="회차 필터"]')).toBeNull();
-    const opts = Array.from(select.options);
-    expect(opts.map((o) => o.value)).toEqual(["all", ...tree.roots.map((r) => r.id)]);
-    expect(opts[0].textContent).toBe("전체 회차");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
     const r2 = tree.roots.find((r) => r.id === "2")!;
-    expect(opts[2].textContent).toBe(`${r2.label} · EC2·S3 (${md(r2.s)} – ${md(r2.e)}) · 이번 회차`);
-    expect(opts[1].textContent).not.toContain("이번 회차");
-    expect(select.value).toBe("2");
+    expect(trigger.textContent).toContain(`${r2.label} · EC2·S3`);
+    expect(trigger.textContent).toContain("이번 회차");
+    expect(trigger.getAttribute("aria-label")).toBe(`회차 필터: ${r2.label} · EC2·S3`);
   });
 
-  it("기본값(현재 회차)대로 그 회차 과제만 보이고, 바꾸면 update({ bRound })", () => {
-    const { host, select, calls } = mount({ bRound: "2", bMode: "team" });
+  it("열면 전체 회차 + 회차마다 한 줄, 이름·기간·과제 수·상태, 고른 회차가 aria-selected", () => {
+    const { host, trigger } = mount({ bRound: "2", bMode: "team" });
+    click(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    const list = host.querySelector('[role="listbox"]')!;
+    expect(list.getAttribute("aria-label")).toBe("회차 필터");
+    const opts = options(host);
+    expect(opts.length).toBe(tree.roots.length + 1);
+    expect(opts[0].textContent).toContain("전체 회차");
+    const r2 = tree.roots.find((r) => r.id === "2")!;
+    expect(opts[2].textContent).toContain(`${md(r2.s)} – ${md(r2.e)}`);
+    expect(opts[2].textContent).toMatch(/과제 \d+개/);
+    expect(opts[2].textContent).toContain("이번 회차");
+    expect(opts[1].textContent).not.toContain("이번 회차");
+    expect(opts.map((o) => o.getAttribute("aria-selected"))).toEqual(opts.map((_, i) => String(i === 2)));
+    expect(document.activeElement).toBe(list);
+  });
+
+  it("기본값(현재 회차)대로 그 회차 과제만 보이고, 항목을 누르면 update({ bRound }) 후 닫힌다", () => {
+    const { host, trigger, calls } = mount({ bRound: "2", bMode: "team" });
     const titles = cardTitles(host);
     expect(titles).toContain("EC2 인스턴스 유형 정리");
     expect(titles).not.toContain("IAM 정책 이해");
-    act(() => {
-      select.value = "all";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    click(trigger);
+    click(options(host)[0]);
     expect(calls).toEqual([{ bRound: "all" }]);
+    expect(host.querySelector('[role="listbox"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("없는 회차 id 면 전체로 — 보이는 값과 거르는 값이 같다", () => {
-    const { host, select } = mount({ bRound: "gone", bMode: "team" });
-    expect(select.value).toBe("all");
+    const { host, trigger } = mount({ bRound: "gone", bMode: "team" });
+    expect(trigger.textContent).toContain("전체 회차");
     expect(cardTitles(host)).toEqual(expect.arrayContaining(["IAM 정책 이해", "EC2 인스턴스 유형 정리"]));
   });
 
-  it("20회차여도 선택지는 select 안 — 누르는 영역 44px, 데스크톱 상자는 세그 높이, 좁은 폭에선 한 줄을 다 쓴다", () => {
+  it("20회차여도 목록은 스크롤되는 패널 안 — 버튼 44px(데스크톱 40px), 좁은 폭에선 한 줄을 다 쓰고 시트로 뜬다", () => {
     const t = manyRounds(20);
-    const { host, select } = mount({ bRound: "r20" }, t);
-    expect(select.options.length).toBe(21);
-    expect(select.value).toBe("r20");
+    const { host, trigger } = mount({ bRound: "r20" }, t);
     expect(host.querySelectorAll("button[aria-pressed]").length).toBe(2); // 내/팀 칸반 세그만
-    expect(select.classList.contains("h-11")).toBe(true); // 누르는 영역 44px — sm 이상에서도 상자(40px) 밖으로 넘쳐 유지
-    const box = select.closest("label")!;
-    expect(box.classList.contains("h-11")).toBe(true);
-    expect(box.classList.contains("sm:h-10")).toBe(true); // 데스크톱: 칸반 세그와 같은 높이
-    expect(box.classList.contains("max-sm:w-full")).toBe(true);
-    expect(select.classList.contains("truncate")).toBe(true);
+    expect(trigger.classList.contains("h-11")).toBe(true);
+    expect(trigger.classList.contains("sm:h-10")).toBe(true);
+    expect(trigger.parentElement!.classList.contains("max-sm:w-full")).toBe(true);
+    click(trigger);
+    expect(options(host).length).toBe(21);
+    const list = host.querySelector('[role="listbox"]')!;
+    expect(list.classList.contains("overflow-y-auto")).toBe(true);
+    const panel = host.querySelector("[data-listbox-panel]")!;
+    expect(panel.className).toMatch(/max-h-\[70vh\]/); // 모바일 시트
+    expect(panel.className).toContain("inset-x-0"); // 화면 폭 안
+    expect(panel.className).toMatch(/sm:max-h-/); // 데스크톱 팝오버
+    expect(list.getAttribute("aria-activedescendant")).toBe(options(host)[20].id);
+    options(host).forEach((o) => expect(o.classList.contains("min-h-11")).toBe(true));
   });
 
-  it("boardRoundOptions: 라벨 없는 회차는 제목만, 보관된 회차는 · 보관됨", () => {
+  it("boardRoundOptions: 라벨 없는 회차는 제목만, 보관된 회차는 보관됨, 지난 회차는 종료, 과제 수", () => {
     const [r] = tree.roots;
-    const opts = boardRoundOptions([{ ...r, label: null, archived: true }], REF_DAY);
-    expect(opts[1]).toEqual([r.id, `${r.title} (${md(r.s)} – ${md(r.e)}) · 보관됨`]);
+    const opts = boardRoundOptions([{ ...r, label: null, archived: true }], REF_DAY, { [r.id]: 3 });
+    expect(opts[0]).toMatchObject({ value: "all", label: "전체 회차", sub: "1개 회차 · 과제 3개" });
+    expect(opts[1]).toEqual({ value: r.id, label: r.title, sub: `${md(r.s)} – ${md(r.e)} · 과제 3개`, tag: { text: "보관됨", tone: "slate" } });
+    const past = boardRoundOptions([{ ...r, s: "2000-01-01", e: "2000-01-07", archived: false }], REF_DAY);
+    expect(past[1].tag).toEqual({ text: "종료", tone: "muted" });
+    const future = boardRoundOptions([{ ...r, s: "2999-01-01", e: "2999-01-07", archived: false }], REF_DAY);
+    expect(future[1].tag).toBeUndefined();
   });
 });
