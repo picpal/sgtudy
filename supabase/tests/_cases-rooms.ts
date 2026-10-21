@@ -863,7 +863,7 @@ export const ROOM_CASES: Case[] = [
         // 0037: 회차 시험 결과·남의 답안(편집자 — 점수는 본인·편집자만, D7)
         "exam_results(text,bigint)", "exam_attempt_get(text,bigint,uuid)",
         // 0040: 그룹장 공지(내부 notice_* 헬퍼는 GRANT 없음)
-        "notice_list(text)", "notice_inbox(text)", "notice_read(text,bigint[])",
+        "notice_list(text)", "notice_inbox(text)", "notice_read(text,bigint[],integer[])",
         "notice_create(text,jsonb)", "notice_update(text,bigint,jsonb)", "notice_delete(text,bigint)",
         // 0041: 회차·과제 댓글(내부 comment_*·8인자 notify_publish 는 GRANT 없음)
         "comment_list(text,bigint,bigint,bigint)", "comment_create(text,bigint,text)", "comment_update(text,bigint,text)", "comment_delete(text,bigint)",
