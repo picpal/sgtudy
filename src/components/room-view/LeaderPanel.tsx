@@ -11,7 +11,7 @@ import { toApiError } from "@/lib/api/errors";
 import { useHashTarget } from "@/lib/hashTarget";
 import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { mmdd, ymd } from "@/lib/api/format";
-import { formatCode, inviteNote } from "@/lib/api/recruit";
+import { inviteNote } from "@/lib/api/recruit";
 import {
   absoluteUrl,
   approveApplicant,
@@ -50,7 +50,6 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"open" | "start" | "rotate" | null>(null);
   const [inviteUrl, setInviteUrl] = useState(detail.invite?.url ?? null);
-  const [inviteCode, setInviteCode] = useState(detail.invite?.code ?? null);
   // 예정보다 일찍 시작 — 일정을 오늘로 당길지 (시나리오 QA D1, 기본 당기기). 0 이면 묻지 않는다
   const early = earlyStartDays(detail);
   const [shift, setShift] = useState<"shift" | "keep">("shift");
@@ -101,11 +100,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
     try {
       // room_get 은 이미 있는 링크만 준다 — 없으면 invite_get 이 만든다
       let url = inviteUrl;
-      if (!url || !inviteCode) {
-        const r = await fetchInvite(detail.slug);
-        url = r.url;
-        setInviteCode(r.code);
-      }
+      if (!url) url = (await fetchInvite(detail.slug)).url;
       setInviteUrl(url);
       await navigator.clipboard.writeText(absoluteUrl(url, window.location.origin));
       toast({ text: "초대 링크를 복사했어요", tone: "ok" });
@@ -115,22 +110,11 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
     }
   };
 
-  const copyCode = async () => {
-    if (!inviteCode) return;
-    try {
-      await navigator.clipboard.writeText(formatCode(inviteCode)); // 화면에 보이는 XXXX-XXXX 그대로 (방 설정 카드와 같은 형식)
-      toast({ text: "초대 코드를 복사했어요", tone: "ok" });
-    } catch {
-      toast({ text: "코드를 복사하지 못했어요", tone: "bad" });
-    }
-  };
-
   const rotate = async () => {
     setBusy(true);
     try {
       const r = await rotateInvite(detail.slug);
       setInviteUrl(r.url);
-      setInviteCode(r.code);
       await navigator.clipboard.writeText(absoluteUrl(r.url, window.location.origin)).catch(() => undefined);
       toast({ text: "새 초대 링크를 만들어 복사했어요 · 이전 링크는 더 이상 열리지 않아요", tone: "ok" });
     } catch (e) {
@@ -223,11 +207,6 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
             </svg>
             초대 링크 복사
           </button>
-          {inviteCode && (
-            <button type="button" onClick={() => void copyCode()} disabled={busy} className={`${SECONDARY} flex-1 whitespace-nowrap font-mono`}>
-              코드 {formatCode(inviteCode)} 복사
-            </button>
-          )}
           <button type="button" onClick={() => setConfirm("rotate")} disabled={busy} className="h-11 whitespace-nowrap rounded-[22px] px-3 text-[13px] font-medium text-ink-3 underline-offset-2 hover:underline disabled:opacity-60">
             새 링크로 바꾸기
           </button>
