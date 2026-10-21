@@ -1,0 +1,575 @@
+-- 0037_round_exam.sql — 2026-10-21 회차 시험(수동 출제 · AI 초안). 배포 후 수정 금지.
+-- 스펙 docs/superpowers/specs/2026-10-21-round-exam-design.md (D1~D14).
+-- 추가형: 표 4개 + 트리거 3개(goal_nodes·submissions·files) + RPC + 재정의 7개(최신 판 복사). 리프는 COMMON/DESIGNATED 그대로(D1), 제출 = submissions 1행(D2).
+-- 재정의 원본: curriculum_json ←0032 · task_node_json ←0024 · notification_kinds·notify_render·notify_link ←0034 · api_scope_of ←0033 · api_invoke ←0035
+-- 절: 1 스키마 · 2 가드 트리거 · 3 계약 검증 · 4 출제 RPC (+ 임시 exam_view) · 5 응시 · 6 편집자 결과 · 7 트리 JSON 재정의 · 8 AI 통로 · 9 알림 종류
+
+-- ───────── 1. 스키마 ─────────
+create table public.exams (
+  node_id        bigint primary key references public.goal_nodes(id) on delete cascade,
+  room_id        bigint not null references public.rooms(id) on delete cascade,
+  status         varchar(10) not null default 'DRAFT',        -- DRAFT|PUBLISHED
+  reveal         varchar(16) not null default 'AFTER_SUBMIT', -- AFTER_SUBMIT|AFTER_DEADLINE (D4)
+  source         varchar(8)  not null default 'MANUAL',       -- MANUAL|AI (마지막으로 문항을 쓴 쪽)
+  question_count int         not null default 0,
+  total_points   int         not null default 0,
+  brief          jsonb,                                       -- AI 브리프 {topic, theory, count, types, difficulty, note} (편집자 전용)
+  published_at   timestamptz,
+  created_by     uuid references public.profiles(id),
+  updated_at     timestamptz not null default now(),
+  constraint ck_exams_status check (status in ('DRAFT', 'PUBLISHED')),
+  constraint ck_exams_reveal check (reveal in ('AFTER_SUBMIT', 'AFTER_DEADLINE')),
+  constraint ck_exams_source check (source in ('MANUAL', 'AI'))
+);
+create index ix_exams_room on public.exams (room_id);
+
+create table public.exam_questions (
+  id             bigint generated always as identity primary key,
+  node_id        bigint not null references public.exams(node_id) on delete cascade,
+  ord            int    not null,
+  qtype          varchar(8) not null,                         -- SINGLE|MULTI|OX|SHORT (D5)
+  prompt_md      text   not null,
+  choices        jsonb,                                       -- SINGLE·MULTI: ["…"] 2~8개
+  answer         jsonb  not null,                             -- SINGLE: 0 · MULTI: [0,2] · OX: true/false · SHORT: ["허용답", …]
+  explanation_md text   not null default '',
+  points         int    not null default 1,
+  unique (node_id, ord),
+  constraint ck_exam_questions_type   check (qtype in ('SINGLE', 'MULTI', 'OX', 'SHORT')),
+  constraint ck_exam_questions_points check (points between 1 and 10)
+);
+
+create table public.exam_attempts (
+  id            bigint generated always as identity primary key,
+  node_id       bigint not null references public.exams(node_id) on delete cascade,
+  user_id       uuid   not null references public.profiles(id),
+  status        varchar(12) not null default 'IN_PROGRESS',   -- IN_PROGRESS|SUBMITTED (D3: 1회)
+  started_at    timestamptz not null default now(),
+  submitted_at  timestamptz,
+  score         int,
+  max_score     int,
+  correct_count int,
+  unique (node_id, user_id),
+  constraint ck_exam_attempts_status check (status in ('IN_PROGRESS', 'SUBMITTED'))
+);
+
+create table public.exam_answers (
+  attempt_id   bigint not null references public.exam_attempts(id) on delete cascade,
+  question_id  bigint not null references public.exam_questions(id) on delete cascade,
+  answer       jsonb  not null,
+  is_correct   boolean,                                       -- exam_submit 만 채운다
+  earned       int,
+  saved_at     timestamptz not null default now(),
+  primary key (attempt_id, question_id)
+);
+
+alter table public.exams          enable row level security;
+alter table public.exam_questions enable row level security;
+alter table public.exam_attempts  enable row level security;
+alter table public.exam_answers   enable row level security;
+revoke all on public.exams, public.exam_questions, public.exam_attempts, public.exam_answers from anon, authenticated;
+
+-- ───────── 2. 가드 트리거 ─────────
+-- 시험 리프는 부모가 될 수 없다(D14) — node_make_parent 가 task_type 을 null 로 바꾸는 순간 막는다
+create or replace function public.exams_guard_leaf() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if new.task_type is null and old.task_type is not null and exists (select 1 from public.exams x where x.node_id = new.id) then
+    perform public.fail('EXAM_NODE', '시험 아래에는 항목을 둘 수 없어요', jsonb_build_object('nodeId', new.id::text));
+  end if;
+  return new;
+end $$;
+create trigger trg_exams_guard_leaf before update of task_type on public.goal_nodes
+  for each row execute function public.exams_guard_leaf();
+
+-- 시험 리프의 submissions 행은 exam_submit 만 만든다(§7-4). 일반 제출·첨부 등록은 EXAM_NODE
+create or replace function public.submissions_guard_exam() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if exists (select 1 from public.exams x where x.node_id = new.node_id)
+     and coalesce(current_setting('sgtudy.exam_submit', true), '') <> '1' then
+    perform public.fail('EXAM_NODE', '시험은 문제를 풀어 제출해요', jsonb_build_object('nodeId', new.node_id::text));
+  end if;
+  return new;
+end $$;
+create trigger trg_submissions_guard_exam before insert on public.submissions
+  for each row execute function public.submissions_guard_exam();
+
+-- file_register 는 submission_target 만 거치고 submissions 를 만들지 않는다 → 시험 리프의 첨부 등록은 files 트리거로 막는다
+create or replace function public.files_guard_exam() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if new.purpose = 'ATTACHMENT' and new.node_id is not null and exists (select 1 from public.exams x where x.node_id = new.node_id) then
+    perform public.fail('EXAM_NODE', '시험에는 첨부를 올릴 수 없어요', jsonb_build_object('nodeId', new.node_id::text));
+  end if;
+  return new;
+end $$;
+create trigger trg_files_guard_exam before insert on public.files
+  for each row execute function public.files_guard_exam();
+
+-- ───────── 3. 계약 검증 (sgtudy.exam/v1, 스펙 §3.2) ─────────
+create or replace function public.exam_norm(p text) returns text
+language sql immutable set search_path = '' as $$
+  -- 구두점을 지운 뒤에도 앞뒤 공백이 남을 수 있어(`IGW .`) 바깥에서 한 번 더 trim
+  select trim(regexp_replace(regexp_replace(lower(trim(normalize(coalesce(p, ''), NFC))), '[[:punct:]]', '', 'g'), '\s+', ' ', 'g'))
+$$;
+
+-- 문항 배열 정규화. 실패는 VALIDATION_FAILED {field, index}. 반환: [{type, prompt, choices, answer, explanation, points}] (type 대문자)
+create or replace function public.exam_validate(p_exam jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$   -- fail() 을 부르므로 volatile 기본값(상수 접기 방지)
+declare
+  qs    jsonb;
+  q     jsonb;
+  i     int := 0;
+  v_t   text;
+  v_c   jsonb;
+  v_a   jsonb;
+  v_n   int;
+  v_p   int;
+  v_out jsonb := '[]'::jsonb;
+  e     jsonb;
+  seen  int[];
+begin
+  if p_exam is null or jsonb_typeof(p_exam) <> 'object' then
+    perform public.fail('VALIDATION_FAILED', '시험 내용이 올바르지 않아요', '{"field":"exam"}'::jsonb);
+  end if;
+  if p_exam ? 'reveal' and (p_exam ->> 'reveal') not in ('after_submit', 'after_deadline') then
+    perform public.fail('VALIDATION_FAILED', '공개 시점은 after_submit 또는 after_deadline 이에요', '{"field":"reveal"}'::jsonb);
+  end if;
+  qs := coalesce(p_exam -> 'questions', '[]'::jsonb);
+  if jsonb_typeof(qs) <> 'array' then perform public.fail('VALIDATION_FAILED', '문항은 배열이어야 해요', '{"field":"questions"}'::jsonb); end if;
+  if jsonb_array_length(qs) > 50 then perform public.fail('VALIDATION_FAILED', '문항은 50개까지예요', '{"field":"questions"}'::jsonb); end if;
+
+  for q in select * from jsonb_array_elements(qs) loop
+    v_t := case when jsonb_typeof(q) = 'object' then lower(q ->> 'type') end;
+    if v_t is null or v_t not in ('single', 'multi', 'ox', 'short') then
+      perform public.fail('VALIDATION_FAILED', '문항 유형은 single·multi·ox·short 예요', jsonb_build_object('field', 'type', 'index', i));
+    end if;
+    if length(trim(coalesce(q ->> 'prompt', ''))) < 1 or length(q ->> 'prompt') > 2000 then
+      perform public.fail('VALIDATION_FAILED', '문제는 1~2,000자예요', jsonb_build_object('field', 'prompt', 'index', i));
+    end if;
+    if length(coalesce(q ->> 'explanation', '')) > 4000 then
+      perform public.fail('VALIDATION_FAILED', '해설은 4,000자까지예요', jsonb_build_object('field', 'explanation', 'index', i));
+    end if;
+    if q ? 'points' and jsonb_typeof(q -> 'points') <> 'null'
+       and (jsonb_typeof(q -> 'points') <> 'number' or (q ->> 'points')::numeric <> floor((q ->> 'points')::numeric)) then
+      perform public.fail('VALIDATION_FAILED', '배점은 1~10점이에요', jsonb_build_object('field', 'points', 'index', i));
+    end if;
+    v_p := coalesce((q ->> 'points')::numeric::int, 1);
+    if v_p < 1 or v_p > 10 then perform public.fail('VALIDATION_FAILED', '배점은 1~10점이에요', jsonb_build_object('field', 'points', 'index', i)); end if;
+    v_a := q -> 'answer';
+    v_c := null;
+
+    if v_t in ('single', 'multi') then
+      v_c := q -> 'choices';
+      if v_c is null or jsonb_typeof(v_c) <> 'array' or jsonb_array_length(v_c) < 2 or jsonb_array_length(v_c) > 8 then
+        perform public.fail('VALIDATION_FAILED', '보기는 2~8개예요', jsonb_build_object('field', 'choices', 'index', i));
+      end if;
+      for e in select * from jsonb_array_elements(v_c) loop
+        if jsonb_typeof(e) <> 'string' or length(trim(e #>> '{}')) < 1 or length(e #>> '{}') > 200 then
+          perform public.fail('VALIDATION_FAILED', '보기는 1~200자예요', jsonb_build_object('field', 'choices', 'index', i));
+        end if;
+      end loop;
+      v_n := jsonb_array_length(v_c);
+      if v_t = 'single' then
+        if v_a is null or jsonb_typeof(v_a) <> 'number' or (v_a #>> '{}')::numeric <> floor((v_a #>> '{}')::numeric)
+           or (v_a #>> '{}')::int < 0 or (v_a #>> '{}')::int >= v_n then
+          perform public.fail('VALIDATION_FAILED', '정답은 보기 번호(0부터) 하나예요', jsonb_build_object('field', 'answer', 'index', i));
+        end if;
+        v_a := to_jsonb((v_a #>> '{}')::int);
+      else
+        if v_a is null or jsonb_typeof(v_a) <> 'array' or jsonb_array_length(v_a) < 1 then
+          perform public.fail('VALIDATION_FAILED', '정답은 보기 번호 배열이에요', jsonb_build_object('field', 'answer', 'index', i));
+        end if;
+        seen := '{}';
+        for e in select * from jsonb_array_elements(v_a) loop
+          if jsonb_typeof(e) <> 'number' or (e #>> '{}')::numeric <> floor((e #>> '{}')::numeric) or (e #>> '{}')::int < 0 or (e #>> '{}')::int >= v_n or (e #>> '{}')::int = any(seen) then
+            perform public.fail('VALIDATION_FAILED', '정답 번호가 보기 범위를 벗어나거나 겹쳐요', jsonb_build_object('field', 'answer', 'index', i));
+          end if;
+          seen := seen || (e #>> '{}')::int;
+        end loop;
+        v_a := (select jsonb_agg(x order by x) from unnest(seen) x);     -- 정렬 저장(채점 비교 단순화)
+      end if;
+    elsif v_t = 'ox' then
+      if v_a is null or jsonb_typeof(v_a) <> 'boolean' then
+        perform public.fail('VALIDATION_FAILED', 'OX 정답은 true/false 예요', jsonb_build_object('field', 'answer', 'index', i));
+      end if;
+    else -- short
+      if v_a is null or jsonb_typeof(v_a) <> 'array' or jsonb_array_length(v_a) < 1 or jsonb_array_length(v_a) > 10 then
+        perform public.fail('VALIDATION_FAILED', '단답 정답은 허용 답 1~10개예요', jsonb_build_object('field', 'answer', 'index', i));
+      end if;
+      for e in select * from jsonb_array_elements(v_a) loop
+        if jsonb_typeof(e) <> 'string' or length(public.exam_norm(e #>> '{}')) < 1 or length(e #>> '{}') > 200 then
+          perform public.fail('VALIDATION_FAILED', '허용 답은 1~200자예요', jsonb_build_object('field', 'answer', 'index', i));
+        end if;
+      end loop;
+    end if;
+
+    v_out := v_out || jsonb_build_array(jsonb_build_object(
+      'type', upper(v_t), 'prompt', q ->> 'prompt', 'choices', v_c, 'answer', v_a,
+      'explanation', coalesce(q ->> 'explanation', ''), 'points', v_p));
+    i := i + 1;
+  end loop;
+  return v_out;
+end $$;
+
+-- 구조 키: 유형·보기·정답·배점·순서 — 잠금 비교용(D6). prompt·explanation 은 제외
+create or replace function public.exam_struct_key(p_qs jsonb) returns text
+language sql immutable set search_path = '' as $$
+  select md5(coalesce((select jsonb_agg(jsonb_build_array(e -> 'type', e -> 'choices', e -> 'answer', e -> 'points') order by o)
+                       from jsonb_array_elements(p_qs) with ordinality x(e, o)), '[]'::jsonb)::text)
+$$;
+
+create or replace function public.exam_submitted_count(p_node bigint) returns int
+language sql stable security definer set search_path = '' as $$
+  select count(*)::int from public.exam_attempts a where a.node_id = p_node and a.status = 'SUBMITTED'
+$$;
+
+-- 현재 문항을 계약 모양(정답 포함, type 대문자)으로
+create or replace function public.exam_questions_jsonb(p_node bigint) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select coalesce(jsonb_agg(jsonb_build_object('type', q.qtype, 'prompt', q.prompt_md, 'choices', q.choices, 'answer', q.answer,
+                                               'explanation', q.explanation_md, 'points', q.points) order by q.ord), '[]'::jsonb)
+  from public.exam_questions q where q.node_id = p_node
+$$;
+
+-- 문항 교체. 잠긴 시험(제출 1건~)은 구조가 같을 때만(문구·해설 갱신) — 아니면 EXAM_LOCKED
+create or replace function public.exam_replace_questions(p_node bigint, p_qs jsonb, p_source text) returns void
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_sub int := public.exam_submitted_count(p_node);
+  q     jsonb;
+  i     int := 0;
+begin
+  if v_sub > 0 then
+    if public.exam_struct_key(p_qs) <> public.exam_struct_key(public.exam_questions_jsonb(p_node)) then
+      perform public.fail('EXAM_LOCKED', format('%s명이 제출해 문항은 잠겼어요 · 문제 글·해설·공개 시점만 고칠 수 있어요', v_sub),
+                          jsonb_build_object('submitted', v_sub));
+    end if;
+    -- 구조 동일: 같은 ord 의 prompt·explanation 만 갱신(exam_answers 의 question_id 보존)
+    for q in select * from jsonb_array_elements(p_qs) loop
+      update public.exam_questions set prompt_md = q ->> 'prompt', explanation_md = q ->> 'explanation' where node_id = p_node and ord = i;
+      i := i + 1;
+    end loop;
+  else
+    delete from public.exam_questions where node_id = p_node;
+    for q in select * from jsonb_array_elements(p_qs) loop
+      insert into public.exam_questions (node_id, ord, qtype, prompt_md, choices, answer, explanation_md, points)
+      values (p_node, i, q ->> 'type', q ->> 'prompt', q -> 'choices', q -> 'answer', q ->> 'explanation', (q ->> 'points')::int);
+      i := i + 1;
+    end loop;
+  end if;
+  update public.exams set question_count = jsonb_array_length(p_qs),
+                          total_points = coalesce((select sum((e ->> 'points')::int) from jsonb_array_elements(p_qs) e), 0),
+                          source = p_source, updated_at = now()
+  where node_id = p_node;
+end $$;
+
+-- ───────── 4. 출제 RPC ─────────
+-- 편집 관문: node_assert_editable(방 잠금·편집자·방 상태) + 리프(PERSONAL 제외) + 이 방 소속
+create or replace function public.exam_editable_leaf(p_slug text, p_node bigint, out r public.rooms, out n public.goal_nodes)
+language plpgsql security definer set search_path = '' as $$
+begin
+  r := public.node_assert_editable(p_slug);
+  n := public.node_get(r.id, p_node);        -- NODE_NOT_FOUND(다른 방 포함) · PERSONAL_NODE
+  if n.task_type is null then perform public.fail('NODE_NOT_LEAF', '시험은 말단 과제에만 둘 수 있어요', jsonb_build_object('nodeId', n.id::text)); end if;
+  if n.archived_at is not null then perform public.fail('TASK_ARCHIVED', '보관된 과제예요', jsonb_build_object('nodeId', n.id::text)); end if;
+end $$;
+
+-- exams 행을 새로 만드는 경로(exam_put·exam_brief_put·exam_draft_put)의 관문. 이미 제출물이 있는 일반 과제를 시험으로 바꾸면
+-- 기존 제출이 "시험 완료" 로 집계되고, 그 사람의 exam_submit 이 submissions 1인 1행과 부딪힌다 → 거부
+create or replace function public.exam_assert_creatable(p_node bigint) returns void
+language plpgsql security definer set search_path = '' as $$
+begin
+  if not exists (select 1 from public.exams x where x.node_id = p_node) and public.node_has_submissions(p_node) then
+    perform public.fail('NODE_HAS_SUBMISSIONS', '제출물이 있는 과제는 시험으로 바꿀 수 없어요', jsonb_build_object('nodeId', p_node::text));
+  end if;
+end $$;
+
+create or replace function public.exam_put(p_slug text, p_node bigint, p_exam jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v     record;
+  r     public.rooms;
+  n     public.goal_nodes;
+  v_uid uuid := public.current_user_id();
+  v_qs  jsonb;
+  v_rev text;
+  v_st  text;
+begin
+  select * into v from public.exam_editable_leaf(p_slug, p_node);   -- OUT 2개 → record 로 받아 나눈다(INTO r, n 은 plpgsql 오류)
+  r := v.r;
+  n := v.n;
+  v_qs := public.exam_validate(p_exam);
+  v_rev := upper(p_exam ->> 'reveal');                              -- 없으면 기존 값 유지(새 시험은 기본 AFTER_SUBMIT)
+  perform public.exam_assert_creatable(n.id);
+  select x.status into v_st from public.exams x where x.node_id = n.id;
+  if v_st = 'PUBLISHED' and jsonb_array_length(v_qs) = 0 then
+    perform public.fail('EXAM_EMPTY', '발행된 시험은 문항을 비울 수 없어요 · 초안으로 되돌린 뒤 고쳐 주세요', jsonb_build_object('nodeId', n.id::text));
+  end if;
+  insert into public.exams as x (node_id, room_id, reveal, created_by) values (n.id, r.id, coalesce(v_rev, 'AFTER_SUBMIT'), v_uid)
+  on conflict (node_id) do update set reveal = coalesce(v_rev, x.reveal), updated_at = now();
+  perform public.exam_replace_questions(n.id, v_qs, 'MANUAL');
+  return public.exam_view(n.id, v_uid, v_uid);
+end $$;
+
+create or replace function public.exam_publish(p_slug text, p_node bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v      record;
+  r      public.rooms;
+  n      public.goal_nodes;
+  x      public.exams;
+  v_uid  uuid := public.current_user_id();
+  v_rcpt uuid[];
+begin
+  select * into v from public.exam_editable_leaf(p_slug, p_node);
+  r := v.r;
+  n := v.n;
+  select * into x from public.exams where node_id = n.id;
+  if not found then perform public.fail('EXAM_NOT_FOUND', '시험이 없어요', jsonb_build_object('nodeId', n.id::text)); end if;
+  if x.question_count < 1 then perform public.fail('EXAM_EMPTY', '문항을 하나 이상 넣어야 발행할 수 있어요', jsonb_build_object('nodeId', n.id::text)); end if;
+  if x.status = 'PUBLISHED' then return public.exam_view(n.id, v_uid, v_uid); end if;   -- 멱등
+  update public.exams set status = 'PUBLISHED', published_at = public.app_now(), updated_at = now() where node_id = n.id;
+  select coalesce(array_agg(a.user_id), '{}') into v_rcpt from public.task_assignments a where a.node_id = n.id and a.released_at is null;
+  perform public.notify_publish('EXAM_PUBLISHED', r.id, n.id, v_uid, v_rcpt, 'EXAM_PUBLISHED:' || r.id || ':' || n.id,
+                                jsonb_build_object('count', x.question_count));
+  return public.exam_view(n.id, v_uid, v_uid);
+end $$;
+
+create or replace function public.exam_unpublish(p_slug text, p_node bigint) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare v record; r public.rooms; n public.goal_nodes; v_uid uuid := public.current_user_id(); v_sub int;
+begin
+  select * into v from public.exam_editable_leaf(p_slug, p_node);
+  r := v.r;
+  n := v.n;
+  v_sub := public.exam_submitted_count(n.id);
+  if v_sub > 0 then perform public.fail('EXAM_LOCKED', format('%s명이 제출해 초안으로 되돌릴 수 없어요', v_sub), jsonb_build_object('submitted', v_sub)); end if;
+  update public.exams set status = 'DRAFT', published_at = null, updated_at = now() where node_id = n.id;
+  if not found then perform public.fail('EXAM_NOT_FOUND', '시험이 없어요', jsonb_build_object('nodeId', n.id::text)); end if;
+  return public.exam_view(n.id, v_uid, v_uid);
+end $$;
+
+-- 브리프(AI 생성 입력). 없는 시험이면 빈 초안을 만든다
+create or replace function public.exam_brief_put(p_slug text, p_node bigint, p_brief jsonb) returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  v record; r public.rooms; n public.goal_nodes; v_uid uuid := public.current_user_id();
+  v_cnt int; v_diff text; e jsonb;
+begin
+  select * into v from public.exam_editable_leaf(p_slug, p_node);
+  r := v.r;
+  n := v.n;
+  if p_brief is null or jsonb_typeof(p_brief) <> 'object' then perform public.fail('VALIDATION_FAILED', '브리프가 올바르지 않아요', '{"field":"brief"}'::jsonb); end if;
+  if length(trim(coalesce(p_brief ->> 'topic', ''))) < 1 or length(p_brief ->> 'topic') > 200 then
+    perform public.fail('VALIDATION_FAILED', '주제는 1~200자예요', '{"field":"topic"}'::jsonb); end if;
+  if length(coalesce(p_brief ->> 'theory', '')) > 20000 then perform public.fail('VALIDATION_FAILED', '기반 이론은 20,000자까지예요', '{"field":"theory"}'::jsonb); end if;
+  if length(coalesce(p_brief ->> 'note', '')) > 1000 then perform public.fail('VALIDATION_FAILED', '참고는 1,000자까지예요', '{"field":"note"}'::jsonb); end if;
+  if p_brief ? 'count' and jsonb_typeof(p_brief -> 'count') <> 'null'
+     and (jsonb_typeof(p_brief -> 'count') <> 'number' or (p_brief ->> 'count')::numeric <> floor((p_brief ->> 'count')::numeric)) then
+    perform public.fail('VALIDATION_FAILED', '문항 수는 1~50이에요', '{"field":"count"}'::jsonb); end if;
+  v_cnt := coalesce((p_brief ->> 'count')::numeric::int, 10);
+  if v_cnt < 1 or v_cnt > 50 then perform public.fail('VALIDATION_FAILED', '문항 수는 1~50이에요', '{"field":"count"}'::jsonb); end if;
+  v_diff := coalesce(p_brief ->> 'difficulty', 'normal');
+  if v_diff not in ('easy', 'normal', 'hard') then perform public.fail('VALIDATION_FAILED', '난이도는 easy·normal·hard 예요', '{"field":"difficulty"}'::jsonb); end if;
+  if p_brief ? 'types' then
+    if jsonb_typeof(p_brief -> 'types') <> 'array' then perform public.fail('VALIDATION_FAILED', '유형은 배열이에요', '{"field":"types"}'::jsonb); end if;
+    for e in select * from jsonb_array_elements(p_brief -> 'types') loop
+      if coalesce(e #>> '{}', '') not in ('single', 'multi', 'ox', 'short') then perform public.fail('VALIDATION_FAILED', '유형은 single·multi·ox·short 예요', '{"field":"types"}'::jsonb); end if;
+    end loop;
+  end if;
+  perform public.exam_assert_creatable(n.id);
+  insert into public.exams (node_id, room_id, created_by) values (n.id, r.id, v_uid) on conflict (node_id) do nothing;
+  update public.exams set brief = jsonb_strip_nulls(jsonb_build_object(
+      'topic', trim(p_brief ->> 'topic'), 'theory', p_brief ->> 'theory', 'count', v_cnt,
+      'types', coalesce(p_brief -> 'types', '["single","multi","ox"]'::jsonb), 'difficulty', v_diff, 'note', p_brief ->> 'note')),
+    updated_at = now()
+  where node_id = n.id;
+  return public.exam_view(n.id, v_uid, v_uid);
+end $$;
+
+grant execute on function public.exam_put(text, bigint, jsonb)       to authenticated;
+grant execute on function public.exam_publish(text, bigint)          to authenticated;
+grant execute on function public.exam_unpublish(text, bigint)        to authenticated;
+grant execute on function public.exam_brief_put(text, bigint, jsonb) to authenticated;
+
+-- 임시 exam_view — 편집자 모양 최소판. Task 2(§5 응시)가 같은 시그니처로 다시 정의(§3.4 깎기)하면 이 블록은 지운다
+create or replace function public.exam_view(p_node bigint, p_uid uuid, p_for uuid) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object(
+    'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
+    'node', jsonb_build_object('id', n.id::text, 'title', n.title, 'startDate', to_char(n.start_date, 'YYYY-MM-DD'), 'endDate', to_char(n.end_date, 'YYYY-MM-DD'), 'archived', n.archived_at is not null),
+    'exam', jsonb_build_object('status', lower(x.status), 'reveal', lower(x.reveal), 'questionCount', x.question_count, 'totalPoints', x.total_points,
+                               'source', lower(x.source), 'publishedAt', public.iso(x.published_at), 'locked', public.exam_submitted_count(x.node_id) > 0,
+                               'submittedCount', public.exam_submitted_count(x.node_id), 'brief', x.brief),
+    'viewer', jsonb_build_object('canEdit', true, 'isAssignee', public.is_task_assignee(n.id, p_uid), 'canTake', false, 'reason', null),
+    'questions', (select coalesce(jsonb_agg(jsonb_build_object('id', q.id::text, 'ord', q.ord, 'type', lower(q.qtype), 'prompt', q.prompt_md, 'choices', q.choices,
+                                                              'answer', q.answer, 'explanation', q.explanation_md, 'points', q.points) order by q.ord), '[]'::jsonb)
+                  from public.exam_questions q where q.node_id = x.node_id),
+    'attempt', null)
+  from public.exams x join public.goal_nodes n on n.id = x.node_id where x.node_id = p_node
+$$;
+
+-- ───────── 9. 알림 종류 EXAM_PUBLISHED (exam_publish 가 발행, 스펙 D11·§4.6) ─────────
+-- 재정의: notification_kinds·notify_render·notify_link ← 0034(0035·0036 재정의 없음). 시그니처 동일 → GRANT(없음) 유지.
+-- notify_enabled(최신 0025)는 그대로 — 알 수 없는 kind 는 else true.
+-- notification_kinds (0034 판 그대로 + EXAM_PUBLISHED)
+create or replace function public.notification_kinds() returns text[]
+language sql immutable set search_path = '' as $$
+  select array['ROUND_STARTED', 'TASK_ALL_SUBMITTED', 'TASK_COMPLETION_DIGEST', 'JOIN_REQUESTED', 'JOIN_APPROVED', 'JOIN_REJECTED',
+               'JOIN_EXPIRED', 'DEADLINE_REMINDER', 'TASK_ASSIGNED', 'TASK_UNASSIGNED', 'SCHEDULE_CHANGED', 'ROOM_STARTED',
+               'ROOM_ENDED', 'ROOM_START_BLOCKED', 'MEMBER_DEACTIVATED',
+               'CURRICULUM_EDITOR_GRANTED', 'CURRICULUM_EDITOR_REVOKED', 'ROOM_PERIOD_CHANGED',
+               -- 0024
+               'ROUND_SCHEDULE_CHANGED', 'ROOM_ARCHIVED', 'PERSONAL_ARCHIVED', 'LEAVE_REQUESTED', 'LEAVE_REQUEST_DISMISSED', 'SUBMISSION_DIGEST'
+               -- 0032
+               , 'MEMBER_JOINED'
+               -- 0034
+               , 'CURRICULUM_BULK_UPDATED'
+               -- 0037
+               , 'EXAM_PUBLISHED']
+$$;
+
+-- notify_render (0034 판 그대로 + EXAM_PUBLISHED 제목·본문)
+create or replace function public.notify_render(p_kind text, p_room bigint, p_node bigint, p_actor uuid, p_model jsonb) returns jsonb
+language plpgsql stable security definer set search_path = '' as $$
+declare
+  v_room  text;
+  v_node  text;
+  v_label text;
+  v_actor text;
+  v_title text;
+  v_body  text;
+  v_today date := public.kst_today();   -- 0024: 표기 기준(알림 생성일). format.ts 의 today 와 같은 역할
+  v_os    date;   -- 0023 SCHEDULE_CHANGED·0024 ROUND_SCHEDULE_CHANGED: 옛 시작·마감, 새 시작·마감
+  v_oe    date;
+  v_ns    date;
+  v_ne    date;
+  v_diff  text;
+  v_tasks int;
+begin
+  select title into v_room from public.rooms where id = p_room;
+  select title, label into v_node, v_label from public.goal_nodes where id = p_node;
+  select coalesce(nickname, '') into v_actor from public.profiles where id = p_actor;
+  v_title := case p_kind
+    when 'ROUND_STARTED'          then format('%s의 %s가 시작됐어요', v_room, coalesce(v_label, v_node))
+    when 'TASK_ALL_SUBMITTED'     then format('"%s" 과제를 전원 제출했어요', v_node)
+    when 'TASK_COMPLETION_DIGEST' then format('어제 %s개 과제가 전원 제출됐어요', coalesce(p_model ->> 'count', '0'))
+    when 'JOIN_REQUESTED'         then format('%s님이 %s 참가를 신청했어요', v_actor, v_room)
+    when 'JOIN_APPROVED'          then format('%s 참가가 승인됐어요', v_room)
+    when 'JOIN_REJECTED'          then format('%s 참가 신청이 거절됐어요', v_room)
+    when 'JOIN_EXPIRED'           then format('%s 참가 신청이 만료됐어요', v_room)
+    when 'DEADLINE_REMINDER'      then format('"%s" 마감 %s일 전이에요', v_node, coalesce(p_model ->> 'days', '1'))
+    when 'TASK_ASSIGNED'          then format('"%s" 과제 담당자로 지정됐어요', v_node)
+    when 'TASK_UNASSIGNED'        then format('"%s" 과제 담당에서 제외됐어요', v_node)
+    when 'SCHEDULE_CHANGED'       then format('%s 일정이 변경됐어요', v_room)
+    when 'ROOM_STARTED'           then format('%s 스터디가 시작됐어요', v_room)
+    when 'ROOM_ENDED'             then format('%s 스터디가 종료됐어요', v_room)
+    when 'ROOM_START_BLOCKED'     then format('%s 시작일이 지났지만 말단 과제가 없어 시작하지 못했어요', v_room)
+    when 'MEMBER_DEACTIVATED'     then format('%s 스터디에서 이탈 처리됐어요', v_room)
+    when 'CURRICULUM_EDITOR_GRANTED' then '진행목표 편집 권한을 받았어요'
+    when 'CURRICULUM_EDITOR_REVOKED' then '진행목표 편집 권한이 회수됐어요'
+    when 'ROOM_PERIOD_CHANGED'    then format('%s 기간이 변경됐어요', v_room)
+    -- 0024
+    when 'ROUND_SCHEDULE_CHANGED' then format('%s 회차 일정이 변경됐어요', v_room)
+    when 'ROOM_ARCHIVED'          then format('%s 스터디가 보관됐어요', v_room)
+    when 'PERSONAL_ARCHIVED'      then format('그룹장이 "%s" 개인 목표를 보관했어요', v_node)
+    when 'LEAVE_REQUESTED'        then format('%s님이 %s 탈퇴를 요청했어요', v_actor, v_room)
+    when 'LEAVE_REQUEST_DISMISSED' then format('%s 탈퇴 요청이 반려됐어요', v_room)
+    when 'SUBMISSION_DIGEST'      then format('어제 제출 %s건이 들어왔어요', coalesce(p_model ->> 'count', '0'))
+    -- 0032
+    when 'MEMBER_JOINED'          then format('%s님이 %s에 합류했어요', v_actor, v_room)
+    -- 0034: 계획 적용·되돌리기 묶음(수신자당 1건). 방 제목은 따옴표 없이
+    when 'CURRICULUM_BULK_UPDATED' then format('%s 진행목표가 한꺼번에 바뀌었어요', v_room)
+    -- 0037
+    when 'EXAM_PUBLISHED'         then format('"%s" 시험이 열렸어요', v_node)
+  end;
+  -- 본문(0013): 방 제목은 프론트가 메타 줄에 따로 그리므로 본문에 넣지 않는다. 제목에 없는 정보만.
+  -- 일정 변경(0023)·회차 일정 변경(0024): 바뀐 쪽만 — 마감만 '마감 옛 → 새', 시작만 '시작 옛 → 새', 둘 다 '기간 옛 범위 → 새 범위'.
+  -- 날짜(0024): notify_date/notify_range — 0018·0023 의 'YY.MM.DD' 대신 format.ts 와 같은 규칙
+  if p_kind in ('SCHEDULE_CHANGED', 'ROUND_SCHEDULE_CHANGED') then
+    v_os := (p_model ->> 'oldStartDate')::date;
+    v_oe := (p_model ->> 'oldEndDate')::date;
+    v_ns := (p_model ->> 'startDate')::date;
+    v_ne := (p_model ->> 'endDate')::date;
+    v_diff := case
+      when v_os is null or v_oe is null then null
+      when v_os is not distinct from v_ns and v_oe is distinct from v_ne then '마감 ' || public.notify_date(v_oe, v_today) || ' → ' || public.notify_date(v_ne, v_today)
+      when v_oe is not distinct from v_ne and v_os is distinct from v_ns then '시작 ' || public.notify_date(v_os, v_today) || ' → ' || public.notify_date(v_ns, v_today)
+      else '기간 ' || public.notify_range(v_os, v_oe, v_today) || ' → ' || public.notify_range(v_ns, v_ne, v_today)
+    end;
+  end if;
+  v_tasks := coalesce((p_model ->> 'tasks')::int, 1);
+  v_body := case
+    -- 0034: 새 과제·일정·담당 건수 중 0 이 아닌 것만
+    when p_kind = 'CURRICULUM_BULK_UPDATED' then
+      nullif(concat_ws(' · ',
+        case when coalesce((p_model ->> 'newTasks')::int, 0) > 0 then '새 과제 ' || (p_model ->> 'newTasks') || '건' end,
+        case when coalesce((p_model ->> 'schedule')::int, 0) > 0 then '일정 ' || (p_model ->> 'schedule') || '건' end,
+        case when coalesce((p_model ->> 'assign')::int, 0) > 0 then '담당 ' || (p_model ->> 'assign') || '건' end), '')
+    when p_kind = 'MEMBER_JOINED' then
+      case p_model ->> 'via' when 'invite' then '초대로 바로 참가했어요' else '추가 모집으로 참가했어요' end
+      || ' · 지정 과제 담당이 필요하면 진행목표에서 정해 주세요'
+    when p_kind = 'ROOM_PERIOD_CHANGED' then
+      coalesce(public.notify_range((p_model ->> 'oldStartDate')::date, (p_model ->> 'oldEndDate')::date, v_today) || ' → ', '')
+      || public.notify_range((p_model ->> 'startDate')::date, (p_model ->> 'endDate')::date, v_today)
+    when p_kind = 'ROUND_STARTED' and v_label is not null and v_node is distinct from v_label then v_node
+    -- 0028: 묶음 이동 묶음 알림(과제 2개 이상). 묶음 시작만 바꿔도 하위 과제는 종료일까지 함께 옮겨지므로
+    -- 0023 의 '시작/마감만' 축약(v_diff) 대신 항상 '기간 옛 범위 → 새 범위' (리뷰 M1)
+    when p_kind = 'SCHEDULE_CHANGED' and p_node is not null and p_model ? 'bundle' then
+      format('"%s" 과제 %s개 일정이 %s일 %s 옮겨졌어요', v_node, v_tasks, abs((p_model ->> 'days')::int),
+             case when (p_model ->> 'days')::int < 0 then '앞으로' else '뒤로' end)
+      || coalesce(' · 기간 ' || public.notify_range(v_os, v_oe, v_today) || ' → ' || public.notify_range(v_ns, v_ne, v_today), '')
+    when p_kind = 'SCHEDULE_CHANGED' and p_node is not null and v_diff is not null then
+      format('"%s" %s', v_node, v_diff)
+    when p_kind = 'SCHEDULE_CHANGED' and p_node is not null then
+      format('"%s"', v_node)
+      || coalesce(' ' || public.notify_range((p_model ->> 'startDate')::date, (p_model ->> 'endDate')::date, v_today), '')
+    when p_kind = 'ROUND_SCHEDULE_CHANGED' and p_node is not null then
+      case when v_label is not null and v_label is distinct from v_node then format('%s "%s"', v_label, v_node) else coalesce(v_label, format('"%s"', v_node)) end
+      || coalesce(' ' || v_diff, '')
+      -- 0026: 과제와 개인 목표를 나눠 말한다(옛 모델 'moved' 만 있으면 0024 문구)
+      || case
+           when p_model ? 'movedTasks' then
+             case when coalesce((p_model ->> 'movedTasks')::int, 0) + coalesce((p_model ->> 'movedPersonal')::int, 0) = 0 then ''
+                  else ' · ' || concat_ws('·',
+                         case when (p_model ->> 'movedTasks')::int > 0 then format('과제 %s개', p_model ->> 'movedTasks') end,
+                         case when (p_model ->> 'movedPersonal')::int > 0 then format('개인 목표 %s개', p_model ->> 'movedPersonal') end)
+                       || '도 함께 옮겼어요' end
+           when coalesce((p_model ->> 'moved')::int, 0) > 0 then format(' · 과제 %s개도 함께 옮겼어요', p_model ->> 'moved')
+           else '' end
+    when p_kind = 'JOIN_REQUESTED'  then nullif(p_model ->> 'message', '')
+    when p_kind = 'LEAVE_REQUESTED' then nullif(p_model ->> 'reason', '')
+    when p_kind = 'ROOM_ARCHIVED'   then '내 스터디의 보관함에서 다시 볼 수 있어요'
+    when p_kind = 'SUBMISSION_DIGEST' and p_node is not null then
+      case when v_tasks <= 1 then format('"%s"', v_node) else format('"%s" 외 과제 %s개', v_node, v_tasks - 1) end
+  end;
+  -- 0037: 시험 발행 — 문항 수 · 마감
+  if p_kind = 'EXAM_PUBLISHED' then
+    v_body := format('%s문항 · %s 마감', coalesce(p_model ->> 'count', '0'), to_char((select g.end_date from public.goal_nodes g where g.id = p_node), 'MM.DD'));
+  end if;
+  return jsonb_build_object('title', left(v_title, 200), 'body', left(v_body, 500));
+end $$;
+
+-- notify_link (0034 판 그대로 + EXAM_PUBLISHED → 과제 포커스)
+create or replace function public.notify_link(p_kind text, p_room bigint, p_node bigint, p_user uuid) returns text
+language sql stable security definer set search_path = '' as $$
+  select case
+    when p_node is not null and p_kind in ('TASK_ALL_SUBMITTED', 'SUBMISSION_DIGEST')
+      then '/my-study/' || r.slug || '?task=' || p_node || '#submissions'
+    when p_node is not null and p_kind in ('DEADLINE_REMINDER', 'TASK_ASSIGNED', 'TASK_UNASSIGNED', 'PERSONAL_ARCHIVED', 'EXAM_PUBLISHED')   -- 0037: EXAM_PUBLISHED
+      then '/my-study/' || r.slug || '?task=' || p_node
+    -- 0028: 일정 변경 — 과제면 리프 포커스, 묶음(유형 없음)이면 진행목표 보기 상세
+    when p_node is not null and p_kind = 'SCHEDULE_CHANGED'
+      then '/my-study/' || r.slug || coalesce('?task=' || (select g.id from public.goal_nodes g where g.id = p_node and g.task_type is not null),
+                                              '?tab=curriculum&item=' || p_node)
+    when p_kind in ('CURRICULUM_EDITOR_GRANTED', 'CURRICULUM_EDITOR_REVOKED', 'ROUND_SCHEDULE_CHANGED', 'CURRICULUM_BULK_UPDATED')
+      then '/my-study/' || r.slug || '?tab=curriculum'
+    when r.leader_id = p_user and p_kind = 'JOIN_REQUESTED'  then '/my-study/' || r.slug || '#applications'
+    when r.leader_id = p_user and p_kind = 'LEAVE_REQUESTED' then '/my-study/' || r.slug || '#leave-requests'
+    when r.leader_id = p_user
+      or exists (select 1 from public.room_members m where m.room_id = r.id and m.user_id = p_user and m.status = 'ACTIVE')
+      then '/my-study/' || r.slug
+    else '/rooms/' || r.slug end
+  from public.rooms r where r.id = p_room
+$$;

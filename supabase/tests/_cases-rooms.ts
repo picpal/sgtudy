@@ -848,6 +848,8 @@ export const ROOM_CASES: Case[] = [
         "pat_create(text,text[],integer)", "pat_list()", "pat_revoke(uuid)",
         // 0034: 진행목표 계획 미리보기·적용(내부 plan_* 는 GRANT 없음)
         "curriculum_plan_preview(text,jsonb,text)", "curriculum_plan_apply(text,text)",
+        // 0037: 회차 시험 출제(내부 exam_* 헬퍼는 GRANT 없음)
+        "exam_put(text,bigint,jsonb)", "exam_publish(text,bigint)", "exam_unpublish(text,bigint)", "exam_brief_put(text,bigint,jsonb)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);
