@@ -16,6 +16,7 @@ const update = (q: Q, id: string, patch: Record<string, unknown>, slug = "aws") 
 const list = (q: Q, slug = "aws") => rpc(q, "public.notice_list($1)", [slug]);
 const inbox = (q: Q, slug = "aws") => rpc(q, "public.notice_inbox($1)", [slug]);
 const read = (q: Q, ids: string[], slug = "aws") => rpc(q, "public.notice_read($1, $2::bigint[])", [slug, `{${ids.join(",")}}`]);
+const readRev = (q: Q, ids: string[], revs: number[], slug = "aws") => rpc(q, "public.notice_read($1, $2::bigint[], $3::int[])", [slug, `{${ids.join(",")}}`, `{${revs.join(",")}}`]);
 const popupIds = async (q: Q, nick: string) => { await as(q, nick); return ((await inbox(q)).popups as Row[]).map((n) => n.id); };
 const posted = async (q: Q, nick: string) =>
   await q("select title, body, link, dedupe_key from public.notifications where user_id = $1::uuid and kind = 'NOTICE_POSTED' order by id", [await uidOf(q, nick)]);
@@ -37,11 +38,11 @@ cases("notices 0040 · schema & permissions", db, [
       }
       assertEquals((await one(q, "select relrowsecurity as v from pg_class where oid = $1::regclass", [`public.${t}`])).v, true, t);
     }
-    for (const f of ["notice_list(text)", "notice_inbox(text)", "notice_read(text,bigint[])", "notice_create(text,jsonb)", "notice_update(text,bigint,jsonb)", "notice_delete(text,bigint)"]) {
+    for (const f of ["notice_list(text)", "notice_inbox(text)", "notice_read(text,bigint[],integer[])", "notice_create(text,jsonb)", "notice_update(text,bigint,jsonb)", "notice_delete(text,bigint)"]) {
       assertEquals((await one(q, "select has_function_privilege('authenticated', $1, 'execute') as v", [`public.${f}`])).v, true, f);
       assertEquals((await one(q, "select has_function_privilege('anon', $1, 'execute') as v", [`public.${f}`])).v, false, f);
     }
-    for (const f of ["notice_json(public.room_notices,uuid)", "notice_notify(public.room_notices,uuid)", "notice_mark_read(bigint,uuid)", "notice_reader_room(text)"]) {
+    for (const f of ["notice_json(public.room_notices,uuid)", "notice_notify(public.room_notices,uuid)", "notice_mark_read(bigint,uuid,integer)", "notice_reader_room(text)"]) {
       assertEquals((await one(q, "select has_function_privilege('authenticated', $1, 'execute') as v", [`public.${f}`])).v, false, f);
     }
   } },
@@ -118,6 +119,17 @@ cases("notices 0040 · validation & limits", db, [
     assertEquals((await failHint(update(q, n.id, { author: "x" }), "VALIDATION_FAILED")).field, "author");
     assertEquals((await failHint(update(q, n.id, { title: "" }), "VALIDATION_FAILED")).field, "title");
     assertEquals((await failHint(update(q, n.id, { renotify: 1 }), "VALIDATION_FAILED")).field, "renotify");
+    // 팝업 끄기 + 다시 알리기는 뜻이 모호하다 — 거부
+    assertEquals((await failHint(update(q, n.id, { popup: false, renotify: true }), "VALIDATION_FAILED")).field, "renotify");
+  } },
+  { name: "whitespace-only title/body (newline·tab·NBSP·전각) rejected · title trimmed of all whitespace", run: async (q) => {
+    await as(q, "민수");
+    for (const t of ["\n", "\t \r\n", "\u00a0", "\u3000"]) assertEquals((await failHint(create(q, { title: t }), "VALIDATION_FAILED")).field, "title", JSON.stringify(t));
+    for (const b of ["\n\n", " \t\r\n ", "\u00a0\u3000"]) assertEquals((await failHint(create(q, { bodyMd: b }), "VALIDATION_FAILED")).field, "bodyMd", JSON.stringify(b));
+    const n = await create(q, { title: "\n\t 모임 변경\u3000", bodyMd: "\n본문\n" });
+    assertEquals([n.title, n.bodyMd], ["모임 변경", "\n본문\n"]);   // 본문은 원문 그대로
+    assertEquals((await update(q, n.id, { title: "\t새 제목\n" })).title, "새 제목");
+    assertEquals((await failHint(update(q, n.id, { bodyMd: "\n\t" }), "VALIDATION_FAILED")).field, "bodyMd");
   } },
   { name: "NOTICE_NOT_FOUND: unknown id · another room's id", run: async (q) => {
     await as(q, "태호");
@@ -232,6 +244,22 @@ cases("notices 0040 · popup inbox & reads", db, [
     assertEquals(((await inbox(q)).popups as Row[]).map((n) => n.id), [p.id]);
     await as(q, "도윤");
     assertEquals(await inbox(q), { unread: true, popups: [] });
+  } },
+  { name: "notice_read p_revs: a stale rev (renotify meanwhile) does not mark the new rev read · length mismatch rejected", run: async (q) => {
+    await as(q, "민수");
+    const n = await create(q, { popup: true });
+    assertEquals(n.rev, 1);
+    await as(q, "지은");
+    const shown = ((await inbox(q)).popups as Row[])[0];
+    assertEquals(shown.rev, 1);
+    await as(q, "민수");
+    assertEquals((await update(q, n.id, { renotify: true, bodyMd: "고친 규칙" })).rev, 2);
+    await as(q, "지은");
+    assertEquals(await readRev(q, [n.id], [shown.rev]), { unread: true });   // 본 것은 rev1 — rev2 는 아직
+    assertEquals(await popupIds(q, "지은"), [n.id]);
+    assertEquals(await readRev(q, [n.id], [99]), { unread: false });          // 지금 리비전보다 크게 줘도 지금까지만
+    assertEquals((await one(q, "select read_rev from public.room_notice_reads where notice_id = $1::bigint and user_id = $2::uuid", [n.id, await uidOf(q, "지은")])).read_rev, 2);
+    await expectFail(readRev(q, [n.id], [1, 2]), "VALIDATION_FAILED");
   } },
   { name: "notice_read skips foreign / deleted ids · caps array at 100", run: async (q) => {
     await as(q, "태호");

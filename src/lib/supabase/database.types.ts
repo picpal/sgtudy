@@ -2481,7 +2481,7 @@ export type Database = {
       notice_limits: { Args: never; Returns: Json }
       notice_list: { Args: { p_slug: string }; Returns: Json }
       notice_mark_read: {
-        Args: { p_notice: number; p_user: string }
+        Args: { p_notice: number; p_rev?: number; p_user: string }
         Returns: undefined
       }
       notice_notify: {
@@ -2491,7 +2491,10 @@ export type Database = {
         }
         Returns: number
       }
-      notice_read: { Args: { p_ids: number[]; p_slug: string }; Returns: Json }
+      notice_read: {
+        Args: { p_ids: number[]; p_revs?: number[]; p_slug: string }
+        Returns: Json
+      }
       notice_reader_room: {
         Args: { p_slug: string }
         Returns: {
@@ -2526,6 +2529,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      notice_trim: { Args: { p: string }; Returns: string }
       notice_unread: {
         Args: { p_room: number; p_viewer: string }
         Returns: boolean

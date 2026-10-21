@@ -2,7 +2,7 @@
 -- 스펙 docs/superpowers/specs/2026-10-21-room-notices-design.md (D1~D18 권장안).
 -- 추가형: 표 2개(room_notices·room_notice_reads, RPC 전용) + RPC 6개 + 알림 종류 NOTICE_POSTED.
 -- 재정의 원본: notification_kinds·notify_render·notify_link ← 0037 (0038·0039 재정의 없음). 시그니처 동일 → GRANT(없음) 유지.
--- notify_enabled(최신 0024)는 그대로 — 알 수 없는 kind 는 else true.
+-- notify_enabled(최신 0025)는 그대로 — 알 수 없는 kind 는 else true.
 -- 절: 1 스키마 · 2 내부 헬퍼 · 3 읽기 RPC · 4 그룹장 쓰기 RPC · 5 GRANT · 6 알림 종류
 
 -- ───────── 1. 스키마 (스펙 §4) ─────────
@@ -76,6 +76,7 @@ language sql stable security definer set search_path = '' as $$
     'author', case when n.author_id is null then null else public.person_json(n.author_id) end,
     'createdAt', public.iso(n.created_at), 'updatedAt', public.iso(n.updated_at),
     'edited', n.updated_at > n.created_at + interval '1 minute',
+    'rev', n.popup_rev,   -- 팝업 [확인] 이 본 리비전을 돌려 보낸다(notice_read p_revs)
     'read', exists (select 1 from public.room_notice_reads x where x.notice_id = n.id and x.user_id = p_viewer and x.read_rev >= n.popup_rev))
 $$;
 
@@ -88,13 +89,19 @@ language sql stable security definer set search_path = '' as $$
       and not exists (select 1 from public.room_notice_reads x where x.notice_id = n.id and x.user_id = p_viewer and x.read_rev >= n.popup_rev))
 $$;
 
--- 확인 기록(멱등) — read_rev 는 줄지 않는다
-create or replace function public.notice_mark_read(p_notice bigint, p_user uuid) returns void
+-- 확인 기록(멱등) — read_rev 는 줄지 않는다. p_rev = 화면이 본 리비전(그사이 다시 알리기로 올라간 리비전까지 읽음 처리하지 않게)
+create or replace function public.notice_mark_read(p_notice bigint, p_user uuid, p_rev int default null) returns void
 language sql security definer set search_path = '' as $$
   insert into public.room_notice_reads (notice_id, user_id, read_rev)
-  select n.id, p_user, n.popup_rev from public.room_notices n where n.id = p_notice
+  select n.id, p_user, least(coalesce(p_rev, n.popup_rev), n.popup_rev) from public.room_notices n where n.id = p_notice
   on conflict (notice_id, user_id) do update
     set read_rev = greatest(public.room_notice_reads.read_rev, excluded.read_rev), read_at = now()
+$$;
+
+-- 앞뒤 공백 — 스페이스뿐 아니라 줄바꿈·탭·NBSP·전각 공백까지(클라이언트 String.trim 과 같게)
+create or replace function public.notice_trim(p text) returns text
+language sql immutable set search_path = '' as $$
+  select regexp_replace(p, '^[\s\u00a0\u3000]+|[\s\u00a0\u3000]+$', '', 'g')
 $$;
 
 -- 게시 벨(D8): ACTIVE 멤버(그룹장·작성자 제외 — notify_publish 가 actor 를 뺀다). dedupe = NOTICE_POSTED:{id}:{rev}
@@ -124,12 +131,12 @@ begin
     end if;
   end loop;
   if not p_partial or p_in ? 'title' then
-    if jsonb_typeof(p_in -> 'title') is distinct from 'string' or char_length(btrim(p_in ->> 'title')) not between 1 and 80 then
+    if jsonb_typeof(p_in -> 'title') is distinct from 'string' or char_length(public.notice_trim(p_in ->> 'title')) not between 1 and 80 then
       perform public.fail('VALIDATION_FAILED', '제목은 1~80자예요', '{"field":"title"}'::jsonb);
     end if;
   end if;
   if not p_partial or p_in ? 'bodyMd' then
-    if jsonb_typeof(p_in -> 'bodyMd') is distinct from 'string' or btrim(p_in ->> 'bodyMd') = ''
+    if jsonb_typeof(p_in -> 'bodyMd') is distinct from 'string' or public.notice_trim(p_in ->> 'bodyMd') = ''
        or char_length(p_in ->> 'bodyMd') > 10000 then
       perform public.fail('VALIDATION_FAILED', '본문은 1~10,000자예요', '{"field":"bodyMd"}'::jsonb);
     end if;
@@ -196,19 +203,28 @@ begin
             order by n.pinned desc, n.created_at, n.id limit 5) q), '[]'::jsonb) end);
 end $$;
 
--- 확인 처리(팝업 [확인]·탭 펼침 공용, 멱등). 이 방 공지가 아닌 id·이미 지워진 id 는 건너뛴다(팝업이 열린 사이 삭제돼도 실패하지 않게)
-create or replace function public.notice_read(p_slug text, p_ids bigint[]) returns jsonb
+-- 확인 처리(팝업 [확인]·탭 펼침 공용, 멱등). 이 방 공지가 아닌 id·이미 지워진 id 는 건너뛴다(팝업이 열린 사이 삭제돼도 실패하지 않게).
+-- p_revs(선택, p_ids 와 같은 순서) = 화면에 보인 리비전 — 없으면 지금 리비전
+create or replace function public.notice_read(p_slug text, p_ids bigint[], p_revs int[] default null) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
   r     public.rooms := public.notice_reader_room(p_slug);
   v_uid uuid := public.current_user_id();
   v_id  bigint;
+  v_rev int;
 begin
   if coalesce(cardinality(p_ids), 0) > 100 then
     perform public.fail('VALIDATION_FAILED', '한 번에 100개까지 확인할 수 있어요', '{"field":"ids"}'::jsonb);
   end if;
-  for v_id in select distinct n.id from public.room_notices n where n.room_id = r.id and n.id = any(coalesce(p_ids, '{}')) loop
-    perform public.notice_mark_read(v_id, v_uid);
+  if p_revs is not null and cardinality(p_revs) is distinct from cardinality(p_ids) then
+    perform public.fail('VALIDATION_FAILED', '확인할 공지와 리비전 수가 달라요', '{"field":"revs"}'::jsonb);
+  end if;
+  for v_id, v_rev in
+    select n.id, min(t.rev) from public.room_notices n
+    join unnest(coalesce(p_ids, '{}'), p_revs) as t(id, rev) on t.id = n.id
+    where n.room_id = r.id group by n.id
+  loop
+    perform public.notice_mark_read(v_id, v_uid, v_rev);
   end loop;
   return jsonb_build_object('unread', public.notice_unread(r.id, v_uid));
 end $$;
@@ -228,7 +244,7 @@ begin
   if coalesce((p_input ->> 'pinned')::boolean, false) then perform public.notice_assert_limit(r.id, 'pinned'); end if;
   if coalesce((p_input ->> 'popup')::boolean, false) then perform public.notice_assert_limit(r.id, 'popup'); end if;
   insert into public.room_notices (room_id, author_id, title, body_md, popup, pinned)
-  values (r.id, v_uid, btrim(p_input ->> 'title'), p_input ->> 'bodyMd',
+  values (r.id, v_uid, public.notice_trim(p_input ->> 'title'), p_input ->> 'bodyMd',
           coalesce((p_input ->> 'popup')::boolean, false), coalesce((p_input ->> 'pinned')::boolean, false))
   returning * into n;
   perform public.notice_mark_read(n.id, v_uid);   -- 작성 = 읽음(D17)
@@ -252,17 +268,20 @@ begin
   if not found then perform public.fail('NOTICE_NOT_FOUND', '공지를 찾을 수 없어요'); end if;
   perform public.notice_validate(p_patch, array['title', 'bodyMd', 'popup', 'pinned', 'renotify'], true);
   v_re  := coalesce((p_patch ->> 'renotify')::boolean, false);
+  if v_re and (p_patch ->> 'popup')::boolean is false then   -- 다시 알리기는 팝업을 켠다 — 끄기와 함께 오면 뜻이 모호하다
+    perform public.fail('VALIDATION_FAILED', '팝업을 끄면서 다시 알릴 수는 없어요', '{"field":"renotify"}'::jsonb);
+  end if;
   v_pop := case when v_re then true else coalesce((p_patch ->> 'popup')::boolean, n.popup) end;
   v_pin := coalesce((p_patch ->> 'pinned')::boolean, n.pinned);
   if v_pin and not n.pinned then perform public.notice_assert_limit(r.id, 'pinned', n.id); end if;
   if v_pop and not n.popup  then perform public.notice_assert_limit(r.id, 'popup', n.id); end if;
   update public.room_notices x set
-    title      = coalesce(btrim(p_patch ->> 'title'), x.title),
+    title      = coalesce(public.notice_trim(p_patch ->> 'title'), x.title),
     body_md    = coalesce(p_patch ->> 'bodyMd', x.body_md),
     popup      = v_pop,
     pinned     = v_pin,
     popup_rev  = x.popup_rev + case when v_re then 1 else 0 end,
-    updated_at = case when coalesce(btrim(p_patch ->> 'title'), x.title) is distinct from x.title
+    updated_at = case when coalesce(public.notice_trim(p_patch ->> 'title'), x.title) is distinct from x.title
                         or coalesce(p_patch ->> 'bodyMd', x.body_md) is distinct from x.body_md then now() else x.updated_at end
   where x.id = n.id
   returning * into n;
@@ -286,14 +305,14 @@ end $$;
 -- ───────── 5. GRANT (공개 RPC 만 — notice_* 헬퍼는 GRANT 없음) ─────────
 grant execute on function public.notice_list(text)                 to authenticated;
 grant execute on function public.notice_inbox(text)                to authenticated;
-grant execute on function public.notice_read(text, bigint[])       to authenticated;
+grant execute on function public.notice_read(text, bigint[], int[]) to authenticated;
 grant execute on function public.notice_create(text, jsonb)        to authenticated;
 grant execute on function public.notice_update(text, bigint, jsonb) to authenticated;
 grant execute on function public.notice_delete(text, bigint)       to authenticated;
 
 -- ───────── 6. 알림 종류 NOTICE_POSTED (notice_create·notice_update(renotify) 가 발행, 스펙 D8) ─────────
 -- 재정의: notification_kinds·notify_render·notify_link ← 0037(0038·0039 재정의 없음). 시그니처 동일 → GRANT(없음) 유지.
--- notify_enabled(최신 0024)는 그대로 — 알 수 없는 kind 는 else true.
+-- notify_enabled(최신 0025)는 그대로 — 알 수 없는 kind 는 else true.
 -- notification_kinds (0037 판 그대로 + NOTICE_POSTED)
 create or replace function public.notification_kinds() returns text[]
 language sql immutable set search_path = '' as $$
