@@ -224,7 +224,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
             초대 링크 복사
           </button>
           {inviteCode && (
-            <button type="button" onClick={() => void copyCode()} disabled={busy} className={`${SECONDARY} whitespace-nowrap font-mono`}>
+            <button type="button" onClick={() => void copyCode()} disabled={busy} className={`${SECONDARY} flex-1 whitespace-nowrap font-mono`}>
               코드 {formatCode(inviteCode)} 복사
             </button>
           )}
