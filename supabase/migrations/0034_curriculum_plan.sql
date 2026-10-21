@@ -150,10 +150,16 @@ language sql immutable set search_path = '' as $$
   from f order by k
 $$;
 
+-- 오류 문구·field 에 되돌려 싣는 사용자 문자열 상한(40자 + …)
+create or replace function public.plan_clip(p text) returns text
+language sql immutable set search_path = '' as $$
+  select case when length(p) > 40 then left(p, 40) || '…' else p end
+$$;
+
 -- 〔C#11〕 해석(plan_resolve — 재귀·멤버 조회) 전에 값싼 모양·크기 거부. 통과면 null. 예외 없음
 create or replace function public.plan_shape_check(p_plan jsonb) returns jsonb
 language plpgsql immutable set search_path = '' as $$
-declare v_deep boolean;
+declare v_deep boolean; v_key text;
 begin
   if jsonb_typeof(p_plan) is distinct from 'object' or p_plan ->> 'schema' is distinct from 'sgtudy.plan/v1' then
     return public.plan_err('$', 'PLAN_INVALID', '계획서 schema 는 sgtudy.plan/v1 이어야 해요', 'schema');
@@ -163,6 +169,10 @@ begin
   end if;
   if octet_length(p_plan::text) > 262144 then
     return public.plan_err('$', 'PLAN_TOO_LARGE', '계획서는 256KB 까지예요');
+  end if;
+  select key into v_key from jsonb_object_keys(p_plan) key where key not in ('schema', 'ops', 'baseVersion') order by key limit 1;
+  if v_key is not null then
+    return public.plan_err('$', 'PLAN_INVALID', '계획서에 쓸 수 없는 항목이에요(schema·ops·baseVersion 만)', public.plan_clip(v_key));
   end if;
   if jsonb_array_length(p_plan -> 'ops') > 200 then
     return public.plan_err('$', 'PLAN_TOO_LARGE', '한 번에 200개 항목까지예요');
@@ -265,11 +275,11 @@ begin
       v_hit := coalesce(p_members -> v_t, '[]'::jsonb);
       if jsonb_array_length(v_hit) = 0 then
         return jsonb_build_object('error', jsonb_build_object('code', 'ASSIGNEE_NOT_MEMBER',
-          'message', '「' || v_t || '」 님은 이 스터디의 활성 참가자가 아니에요'));
+          'message', '「' || public.plan_clip(v_t) || '」 님은 이 스터디의 활성 참가자가 아니에요'));
       elsif jsonb_array_length(v_hit) > 1 then
         return jsonb_build_object('error', jsonb_build_object('code', 'ASSIGNEE_AMBIGUOUS',
-          'message', '「' || v_t || '」 닉네임의 참가자가 여러 명이에요. userId 로 지정해 주세요',
-          'candidates', (select jsonb_agg(to_jsonb(v_t)) from jsonb_array_elements(v_hit))));
+          'message', '「' || public.plan_clip(v_t) || '」 닉네임의 참가자가 여러 명이에요. userId 로 지정해 주세요',
+          'candidates', (select jsonb_agg(to_jsonb(public.plan_clip(v_t))) from jsonb_array_elements(v_hit))));
       end if;
       v_t := v_hit ->> 0;
     end if;
@@ -368,7 +378,7 @@ begin
       -- 키 · days · from · to · 순서
       select key into k from jsonb_object_keys(v_op) key where key not in ('op', 'from', 'to', 'days') limit 1;
       if k is not null then
-        v_err := public.plan_err(v_path, 'PLAN_INVALID', 'shift 에 쓸 수 없는 항목이에요', k);
+        v_err := public.plan_err(v_path, 'PLAN_INVALID', 'shift 에 쓸 수 없는 항목이에요', public.plan_clip(k));
       elsif jsonb_typeof(v_op -> 'days') is distinct from 'number'
             or (v_op ->> 'days')::numeric <> trunc((v_op ->> 'days')::numeric)
             or abs((v_op ->> 'days')::numeric) > 180 or (v_op ->> 'days')::numeric = 0 then
@@ -464,8 +474,12 @@ begin
           v_errs := v_errs || jsonb_build_object('o', o.i, 'e', v_err);
         end if;
       end if;
-      if v_kind in ('update', 'move') and jsonb_typeof(v_op -> 'id') = 'string' then
-        v_um := v_um || jsonb_build_array(jsonb_build_array(v_op ->> 'id', v_path, o.i));
+      -- 숫자 id 는 정규형으로("00123" → "123") — shift 충돌 검사·실행이 같은 노드로 본다
+      if v_kind in ('update', 'move') and jsonb_typeof(v_op -> 'id') = 'string' and (v_op ->> 'id') ~ '^\d{1,18}$' then
+        v_op := v_op || jsonb_build_object('id', ((v_op ->> 'id')::bigint)::text);
+        v_um := v_um || jsonb_build_array(jsonb_build_array(v_op ->> 'id', v_path, o.i, v_kind,
+          v_kind = 'update' and jsonb_typeof(v_op -> 'set') = 'object'
+          and ((v_op -> 'set') ?| array['startDate', 'endDate', 'shiftDescendants'])));
       end if;
     end if;
 
@@ -476,10 +490,18 @@ begin
   end loop;
 
   -- ③ shift 가 펼친 회차를 다른 update/move 가 건드리면 충돌(앞뒤 순서 무관)
+  -- 하위 항목: shift 가 함께 옮기는(shiftDescendants) 회차 안 노드의 날짜를 바꾸는 update 도 충돌.
+  -- 하위의 move·날짜 외 update 는 허용(스펙 §5.2 N2: shift → 자식 move 는 기록된 날짜로 되돌린다)
   for x in select u from jsonb_array_elements(v_um) u loop
     if v_touch ? (x ->> 0) then
       v_errs := v_errs || jsonb_build_object('o', (x ->> 2)::int, 'e',
         public.plan_err(x ->> 1, 'PLAN_INVALID', 'shift(' || (v_touch ->> (x ->> 0)) || ')가 옮기는 회차를 이 op 도 바꿔요', 'SHIFT_CONFLICT'));
+    elsif (x ->> 4)::boolean then
+      select n.round_id::text into k from public.goal_nodes n where n.id = (x ->> 0)::bigint and n.room_id = r.id;
+      if k is not null and v_touch ? k then
+        v_errs := v_errs || jsonb_build_object('o', (x ->> 2)::int, 'e',
+          public.plan_err(x ->> 1, 'PLAN_INVALID', 'shift(' || (v_touch ->> k) || ')가 함께 옮기는 회차 안 항목의 날짜를 이 op 도 바꿔요', 'SHIFT_CONFLICT'));
+      end if;
     end if;
   end loop;
 
@@ -581,7 +603,7 @@ begin
         v_err := v_err || public.plan_err(f.path, 'DESTRUCTIVE_OP_NOT_ALLOWED', '보관·삭제는 AI 로 할 수 없어요. 웹에서 해 주세요');
         continue;
       elsif v_kind not in ('create', 'update', 'move') then
-        v_err := v_err || public.plan_err(f.path, 'UNKNOWN_OP', '알 수 없는 op 예요: ' || left(v_kind, 40), 'op');
+        v_err := v_err || public.plan_err(f.path, 'UNKNOWN_OP', '알 수 없는 op 예요: ' || public.plan_clip(v_kind), 'op');
         continue;
       end if;
     end if;
@@ -595,7 +617,7 @@ begin
       select key into k from jsonb_object_keys(o) key
       where key not in ('op', 'ref', 'parent', 'label', 'title', 'startDate', 'endDate', 'descriptionMd', 'taskType', 'assigneeIds', 'index')
       limit 1;
-      if k is not null then v_err := v_err || public.plan_err(f.path, 'PLAN_INVALID', '쓸 수 없는 항목이에요', k); continue; end if;
+      if k is not null then v_err := v_err || public.plan_err(f.path, 'PLAN_INVALID', '쓸 수 없는 항목이에요', public.plan_clip(k)); continue; end if;
       if f.parent_path is not null and o ? 'parent' then
         v_err := v_err || public.plan_err(f.path, 'PLAN_INVALID', 'children 안의 항목은 parent 를 쓰지 않아요(바깥 항목이 부모)', 'parent');
         continue;
@@ -622,7 +644,7 @@ begin
         v_pinfo := null;                                    -- 회차
       elsif jsonb_typeof(o -> 'parent') = 'string' and left(o ->> 'parent', 1) = '@' then
         if not v_refs ? substr(o ->> 'parent', 2) or v_refs ->> substr(o ->> 'parent', 2) = f.path then
-          v_err := v_err || public.plan_err(f.path, 'UNKNOWN_REF', '앞선 create 에 ref 「' || substr(o ->> 'parent', 2) || '」 가 없어요', 'parent'); continue;
+          v_err := v_err || public.plan_err(f.path, 'UNKNOWN_REF', '앞선 create 에 ref 「' || public.plan_clip(substr(o ->> 'parent', 2)) || '」 가 없어요', 'parent'); continue;
         end if;
         v_pinfo := v_info -> (v_refs ->> substr(o ->> 'parent', 2));
         if v_pinfo is null then continue; end if;
@@ -727,14 +749,14 @@ begin
     select key into k from jsonb_object_keys(o) key
     where key <> all (case when v_kind = 'update' then array['op', 'id', 'set'] else array['op', 'id', 'parent', 'index'] end)
     limit 1;
-    if k is not null then v_err := v_err || public.plan_err(f.path, 'PLAN_INVALID', '쓸 수 없는 항목이에요', k); continue; end if;
+    if k is not null then v_err := v_err || public.plan_err(f.path, 'PLAN_INVALID', '쓸 수 없는 항목이에요', public.plan_clip(k)); continue; end if;
     v_node := null;
     if jsonb_typeof(o -> 'id') = 'string' and left(o ->> 'id', 1) = '@' then
       if v_kind = 'update' then
         v_err := v_err || public.plan_err(f.path, 'PLAN_INVALID', 'update 의 id 에는 @ref 를 쓸 수 없어요(create 에 바로 적어 주세요)', 'id'); continue;
       end if;
       if not v_refs ? substr(o ->> 'id', 2) then
-        v_err := v_err || public.plan_err(f.path, 'UNKNOWN_REF', '앞선 create 에 ref 「' || substr(o ->> 'id', 2) || '」 가 없어요', 'id'); continue;
+        v_err := v_err || public.plan_err(f.path, 'UNKNOWN_REF', '앞선 create 에 ref 「' || public.plan_clip(substr(o ->> 'id', 2)) || '」 가 없어요', 'id'); continue;
       end if;
       if not v_info ? (v_refs ->> substr(o ->> 'id', 2)) then continue; end if;
     elsif jsonb_typeof(o -> 'id') = 'string' and (o ->> 'id') ~ '^\d{1,18}$' then
@@ -763,7 +785,7 @@ begin
       select key into k from jsonb_object_keys(s) key
       where key not in ('title', 'descriptionMd', 'startDate', 'endDate', 'label', 'taskType', 'assigneeIds', 'shiftDescendants')
       limit 1;
-      if k is not null then v_err := v_err || public.plan_err(f.path, 'VALIDATION_FAILED', '알 수 없는 항목이에요', k); continue; end if;
+      if k is not null then v_err := v_err || public.plan_err(f.path, 'VALIDATION_FAILED', '알 수 없는 항목이에요', public.plan_clip(k)); continue; end if;
       if s ? 'title' and (jsonb_typeof(s -> 'title') <> 'string' or length(trim(s ->> 'title')) not between 1 and 80) then
         v_err := v_err || public.plan_err(f.path, 'INVALID_TITLE', '제목은 1~80자예요', 'title'); continue;
       end if;
@@ -813,7 +835,7 @@ begin
       null;
     elsif jsonb_typeof(o -> 'parent') = 'string' and left(o ->> 'parent', 1) = '@' then
       if not v_refs ? substr(o ->> 'parent', 2) then
-        v_err := v_err || public.plan_err(f.path, 'UNKNOWN_REF', '앞선 create 에 ref 「' || substr(o ->> 'parent', 2) || '」 가 없어요', 'parent'); continue;
+        v_err := v_err || public.plan_err(f.path, 'UNKNOWN_REF', '앞선 create 에 ref 「' || public.plan_clip(substr(o ->> 'parent', 2)) || '」 가 없어요', 'parent'); continue;
       end if;
       if not v_info ? (v_refs ->> substr(o ->> 'parent', 2)) then continue; end if;
     elsif jsonb_typeof(o -> 'parent') = 'string' and (o ->> 'parent') ~ '^\d{1,18}$' then

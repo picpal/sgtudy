@@ -324,6 +324,47 @@ cases("curriculum plan 0034 · resolve", db, [
     assertEquals(bad.errors.map((x: Row) => [x.path, x.code, x.field]), [
       ["ops[0]", "PLAN_INVALID", "days"], ["ops[1]", "PLAN_INVALID", "from"], ["ops[2]", "PLAN_INVALID", "days"]]);
   } },
+  // ── 리뷰 보강 ──
+  { name: "SHIFT_CONFLICT: 0 붙인 id 도 같은 회차 · 하위 날짜 update 는 충돌, 하위 move·제목 update 는 허용", run: async (q) => {
+    await as(q, "민수");
+    const r3 = await nodeId(q, "aws", "고가용성 아키텍처");
+    const alb = await nodeId(q, "aws", "ALB vs NLB 실습");     // 3주차 안(묶음 아래)
+    const r = await resolve(q, "aws", plan([
+      { op: "update", id: "00" + r3, set: { title: "x" } },
+      { op: "shift", from: 3, to: 3, days: 7 },
+      { op: "update", id: alb, set: { endDate: "2026-10-25" } },
+      { op: "update", id: alb, set: { title: "제목만" } },
+      { op: "move", id: alb, parent: await nodeId(q, "aws", "오토스케일링"), index: 0 },
+    ]));
+    assertEquals(r.errors.map((e: Row) => [e.path, e.code, e.field]), [
+      ["ops[0]", "PLAN_INVALID", "SHIFT_CONFLICT"], ["ops[2]", "PLAN_INVALID", "SHIFT_CONFLICT"]]);
+    assertEquals(r.plan.ops[0].id, r3);                        // 정규형으로
+  } },
+  { name: "되돌려 싣는 사용자 문자열은 40자 + … 로 자른다(ref·닉네임·키)", run: async (q) => {
+    await as(q, "민수");
+    const long = "가".repeat(500);
+    const r2 = await nodeId(q, "aws", "EC2·S3");
+    const v = await validate(q, "aws", plan([
+      { op: "create", parent: "@" + "a".repeat(500), title: "x" },
+      { op: "create", title: "x", ["k".repeat(500)]: 1 },
+      { op: "update", id: r2, set: { ["s".repeat(500)]: 1 } },
+      { op: "x".repeat(500) },
+    ]));
+    assertEquals(v.errors.length, 4);
+    for (const e of v.errors) assert(JSON.stringify(e).length < 300, JSON.stringify(e).slice(0, 80));
+    assertEquals(v.errors[1].field, "k".repeat(40) + "…");
+    const r = await resolve(q, "aws", plan([{ op: "create", parent: r2, title: "x", taskType: "designated", assignees: [long] }]));
+    assert(r.errors[0].message.length < 120);
+    assert(!r.errors[0].message.includes(long));
+  } },
+  { name: "최상위 키는 schema·ops·baseVersion 만 → 그 밖은 PLAN_INVALID(field = 키)", run: async (q) => {
+    const shape = async (p: string) => (await one(q, "select public.plan_shape_check($1::jsonb) as v", [p])).v as Row | null;
+    assertEquals(await shape(plan([{ op: "create", title: "R" }], { baseVersion: "abc" })), null);
+    const e = (await shape(plan([{ op: "create", title: "R" }], { opz: [] })))!;
+    assertEquals([e.path, e.code, e.field], ["$", "PLAN_INVALID", "opz"]);
+    const { slug } = await mkRoom(q, "민수");
+    assertEquals((await validate(q, slug, plan([{ op: "create", title: "R" }], { extra: 1 }))).errors.map((x: Row) => [x.code, x.field]), [["PLAN_INVALID", "extra"]]);
+  } },
   { name: "형태 오류는 건드리지 않고 넘긴다 · plan_map_paths 는 앞부분만 원래 경로로", run: async (q) => {
     await as(q, "민수");
     const raw = { schema: "x", ops: "nope" };
