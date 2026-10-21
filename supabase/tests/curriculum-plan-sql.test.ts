@@ -72,6 +72,16 @@ cases("curriculum plan 0034 · core", db, [
     await q("update public.room_members set status = 'INACTIVE' where room_id = $1::bigint and user_id = $2::uuid", [id, await uidOf(q, "지은")]);
     assertNotEquals(await ver(q, slug), v4);    // ACTIVE 에서 빠짐
   } },
+  { name: "curriculum_version: 멤버가 나갔다 다시 들어와 assign_from 만 바뀌어도(ACTIVE 집합 동일) 달라진다", run: async (q) => {
+    const { slug, id } = await mkRoom(q, "민수");
+    const ji = await uidOf(q, "지은");
+    await q(`insert into public.room_members (room_id, user_id, role, status, joined_at, assign_from)
+             values ($1::bigint, $2::uuid, 'MEMBER', 'ACTIVE', now(), '2026-11-03')`, [id, ji]);
+    const v0 = await ver(q, slug);
+    await q("update public.room_members set status = 'INACTIVE' where room_id = $1::bigint and user_id = $2::uuid", [id, ji]);
+    await q("update public.room_members set status = 'ACTIVE', assign_from = '2026-11-10' where room_id = $1::bigint and user_id = $2::uuid", [id, ji]);
+    assertNotEquals(await ver(q, slug), v0);
+  } },
   { name: "curriculum_version: 같은 상태면 같은 값 · 방 없음(null)도 예외 없이 32자", run: async (q) => {
     const { slug } = await mkRoom(q, "민수");
     assertEquals(await ver(q, slug), await ver(q, slug));

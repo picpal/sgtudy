@@ -92,14 +92,14 @@ begin
 end $$;
 
 -- ───────── 2. curriculum_version ─────────
--- 〔C#3〕 jsonb 배열 직렬화(문자열 이스케이프·null 자리 유지)의 md5. 세 부분: 방 설정 · ACTIVE 멤버 · 팀 노드(id 순).
+-- 〔C#3〕 jsonb 배열 직렬화(문자열 이스케이프·null 자리 유지)의 md5. 세 부분: 방 설정 · ACTIVE 멤버([user_id, assign_from] — 재합류로 배정 시작일이 바뀌면 달라진다) · 팀 노드(id 순).
 -- 제출·개인 목표(owner_id not null)는 반영하지 않는다. 내부 헬퍼 — GRANT 없음. p_room null → md5('[null, [], []]').
 create or replace function public.curriculum_version(p_room bigint) returns text
 language sql stable security definer set search_path = '' as $$
   select md5(jsonb_build_array(
     (select jsonb_build_array(r.start_date, r.end_date, r.status, r.leader_does_tasks, r.archived_at is not null)
        from public.rooms r where r.id = p_room),
-    (select coalesce(jsonb_agg(m.user_id order by m.user_id), '[]'::jsonb)
+    (select coalesce(jsonb_agg(jsonb_build_array(m.user_id, m.assign_from) order by m.user_id), '[]'::jsonb)
        from public.room_members m where m.room_id = p_room and m.status = 'ACTIVE'),
     (select coalesce(jsonb_agg(jsonb_build_array(n.id, n.parent_id, n.sort_order, n.depth, n.start_date, n.end_date, n.label, n.title,
               md5(n.description_md), n.task_type, n.archived_at,
