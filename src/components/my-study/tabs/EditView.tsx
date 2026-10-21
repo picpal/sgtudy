@@ -20,6 +20,7 @@ import { dropKey, type CurriculumApi } from "../useCurriculumApi";
 import { useNodeFileUploads } from "../useNodeFileUploads";
 import { DATE_NO_OVERFLOW_CLASS } from "@/components/room-new/fields";
 import { ChildList } from "./ChildList";
+import { ExamAiTab } from "./ExamAiTab";
 import { ExamEditor, type ExamEditorHandle } from "./ExamEditor";
 import { FileUploadList } from "./FileUploadList";
 import { InlineConfirm } from "./InlineConfirm";
@@ -555,6 +556,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             toast={toast}
             onDirty={setExamDirty}
             onChanged={() => void api.refresh()}
+            ai={(ed, goManual) => <ExamAiTab slug={slug} nodeId={id} ed={ed} goManual={goManual} toast={toast} />}
           />
         )}
 

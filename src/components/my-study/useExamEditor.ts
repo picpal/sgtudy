@@ -52,6 +52,9 @@ export function useExamEditor(slug: string, nodeId: string, toast: (m: ToastMsg)
     setLoadErr(false);
   }, []);
 
+  /** 문항은 그대로 두고 view(브리프·상태)만 바꾼다 — 브리프 저장(exam_brief_put)은 문항을 바꾸지 않으니 고친 문항을 지우지 않는다 */
+  const applyMeta = useCallback((v: ExamView) => setView(v), []);
+
   const reload = useCallback(
     () =>
       fetchExam(slug, nodeId).then(
@@ -182,7 +185,7 @@ export function useExamEditor(slug: string, nodeId: string, toast: (m: ToastMsg)
     [locked],
   );
 
-  return { view, loadErr, draft, base, dirty, locked, lockNote, saving, publishing, fieldErr, dispatch, save, publish, discard, replace, reload, applyView };
+  return { view, loadErr, draft, base, dirty, locked, lockNote, saving, publishing, fieldErr, dispatch, save, publish, discard, replace, reload, applyView, applyMeta };
 }
 
 export type ExamEditorApi = ReturnType<typeof useExamEditor>;

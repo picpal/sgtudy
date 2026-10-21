@@ -132,9 +132,9 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
         </div>
       )}
 
-      {ai && tab === "ai" ? (
-        ai(ed, () => setTab("manual"))
-      ) : (
+      {/* AI 탭은 숨겨도 붙여 둔다 — 탭을 오가도 적던 브리프·붙여 넣은 JSON 이 남게 */}
+      {ai && <div hidden={tab !== "ai"}>{ai(ed, () => setTab("manual"))}</div>}
+      {ai && tab === "ai" ? null : (
         <>
           {lockNote && (
             <p id={lockId} role="note" className="m-0 rounded-[9px] bg-[#FDF4E1] px-[10px] py-2 text-[12px] font-semibold text-amber-text">
