@@ -86,6 +86,15 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     return () => ro.disconnect();
   }, []);
 
+  // 저장 요청이 나가 있는 동안 — 두 저장 버튼·첨부 고르기/빼기를 막는다(두 번 눌러 node_update 가 두 번 가지 않게).
+  // savingRef 는 같은 틱의 두 번째 클릭도 막는 동기 표시, editedMid 는 저장 중에 또 고쳤는지 — 그러면 저장 뒤 떠나지 않는다(고친 것을 묻지 않고 버리지 않게)
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const editedMid = useRef(false);
+  const edit: Update = (patch) => {
+    if (savingRef.current) editedMid.current = true;
+    update(patch);
+  };
   // 첨부 — 붙은 목록은 서버(node_files), 고친 선택은 ov.files 에 모았다가 "저장" 때 node_files_set. 임시 행은 저장한 뒤에 붙인다
   const [savedFiles, setSavedFiles] = useState<FileMeta[] | null>(null);
   // 못 불러오면 빈 목록으로 보지 않는다 — node_files_set 은 통째 교체라 일부 목록으로 저장하면 붙은 파일이 지워진다 (리뷰 I-1)
@@ -107,7 +116,12 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     saved,
     selected: S.ov.files[id] ?? savedIds,
     toast,
-    onSelect: (ids) => update((p) => ({ ...patchOv(p, "files", sameIds(ids, savedIds) ? dropKey(p.ov.files, id) : { ...p.ov.files, [id]: ids }), saved: "" })),
+    onSelect: (ids) => edit((p) => ({ ...patchOv(p, "files", sameIds(ids, savedIds) ? dropKey(p.ov.files, id) : { ...p.ov.files, [id]: ids }), saved: "" })),
+  });
+  // 저장 응답 뒤(await 다음) 읽는 지금 값 — 렌더 중이 아니라 effect 에서 맞춘다
+  const uploadingRef = useRef(up.uploading);
+  useEffect(() => {
+    uploadingRef.current = up.uploading;
   });
   // 올리는 중이면 ov 수정이 없어도 떠나기 전에 묻는다 (CurriculumTab·MyStudyScreen 은 S.uploading 을 본다)
   useEffect(() => {
@@ -183,13 +197,13 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
 
   const setDate = (k: "s" | "e", v: string) => {
     if (!v) return;
-    update((p) => ({ ...patchOv(p, "dates", { ...p.ov.dates, [id]: { ...(p.ov.dates[id] ?? {}), [k]: v } }), saved: "" }));
+    edit((p) => ({ ...patchOv(p, "dates", { ...p.ov.dates, [id]: { ...(p.ov.dates[id] ?? {}), [k]: v } }), saved: "" }));
   };
   // 개인 목표는 편집 모드에 그려지지 않는 전제 — 그래도 들어오면 유형·담당을 바꾸지 않는다(지정으로 떨어지지 않게)
   const isPersonalLeaf = n.leaf && n.personal;
   const setType = (t: TaskType) => {
     if (isPersonalLeaf || locks?.typeReason) return;
-    update((p) => ({
+    edit((p) => ({
       ov: { ...p.ov, typeOv: { ...p.ov.typeOv, [id]: t }, assignOv: t === "지정" ? { ...p.ov.assignOv, [id]: p.ov.assignOv[id] ?? ids } : p.ov.assignOv },
       saved: "",
     }));
@@ -198,7 +212,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     if (isGong || isPersonalLeaf) return;
     if (ids.includes(m.userId) && locks?.lockedIds.has(m.userId)) return;
     const next = ids.includes(m.userId) ? ids.filter((x) => x !== m.userId) : [...ids, m.userId];
-    update((p) => ({ ...patchOv(p, "assignOv", { ...p.ov.assignOv, [id]: next }), saved: "" }));
+    edit((p) => ({ ...patchOv(p, "assignOv", { ...p.ov.assignOv, [id]: next }), saved: "" }));
   };
   const askRemove = () => {
     if (n.archived) void api.archive(id, false);
@@ -224,15 +238,27 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   // 회차·묶음 시작일을 옮겼으면 저장 전에 "하위도 같은 날수만큼 옮길까요?" (시나리오 QA D2). then = 저장 뒤 이동할 곳(떠나기 전 저장)
   const [shiftAsk, setShiftAsk] = useState<{ ask: ShiftAsk; then: typeof S.leave } | null>(null);
   const doSave = async (shift: boolean, then: typeof S.leave) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    editedMid.current = false;
+    setSaving(true);
     setShiftAsk(null);
     let text = "저장했어요";
-    if (await api.save(n, S.ov, { shift, onFiles: setSavedFiles, skipFiles: savedFiles === null, onSaved: (t) => (text = t) })) {
+    let ok = false;
+    try {
+      ok = await api.save(n, S.ov, { shift, onFiles: setSavedFiles, skipFiles: savedFiles === null, onSaved: (t) => (text = t) });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+    if (ok) {
       update({ fresh: null });
-      if (then) {
+      // 저장하는 사이 또 고쳤거나 파일을 올리기 시작했으면 떠나지 않는다 — 머물러 평소처럼(미저장 표시·떠나기 확인) 이어 간다
+      if (then && !editedMid.current && !uploadingRef.current) {
         // 화면을 떠나면 막대의 저장 문구(S.saved)가 사라진다 — 토스트로 알린다
         toast({ text, tone: "ok" });
         go(then);
-      }
+      } else if (then) update({ leave: null });
     } else if (then) update({ leave: null });
   };
   const trySave = (then: typeof S.leave) => {
@@ -297,10 +323,10 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
               </button>
             )}
             {/* [임시저장] = 저장하고 머문다(보조), [저장] = 저장하고 들어오기 전 화면으로(주). 올리는 중엔 둘 다 막는다 (리뷰 M-1) */}
-            <button type="button" disabled={n.temp || !!askShown || up.uploading || !dirty} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50 max-sm:px-3">
+            <button type="button" disabled={n.temp || !!askShown || up.uploading || saving || !dirty} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50 max-sm:px-3">
               임시저장
             </button>
-            <button type="button" disabled={n.temp || !!askShown || up.uploading} onClick={saveAndReturn} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50 max-sm:px-4">
+            <button type="button" disabled={n.temp || !!askShown || up.uploading || saving} aria-busy={saving || undefined} onClick={saveAndReturn} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50 max-sm:px-4">
               {up.uploading ? "파일을 올리는 중이에요" : "저장"}
             </button>
           </div>
@@ -317,8 +343,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             onCancel={() => setShiftAsk(null)}
             actions={[
               // 올리는 중엔 저장하지 않는다 — 올리던 파일이 빠진 채 저장된다 (리뷰 M-1)
-              { label: "함께 옮기기", tone: "primary", onClick: () => void doSave(true, askShown.then), disabled: up.uploading },
-              { label: kind === "회차" ? "회차만 바꾸기" : "이 묶음만 바꾸기", onClick: () => void doSave(false, askShown.then), disabled: up.uploading },
+              { label: "함께 옮기기", tone: "primary", onClick: () => void doSave(true, askShown.then), disabled: up.uploading || saving },
+              { label: kind === "회차" ? "회차만 바꾸기" : "이 묶음만 바꾸기", onClick: () => void doSave(false, askShown.then), disabled: up.uploading || saving },
             ]}
           />
         )}
@@ -328,7 +354,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             text={up.uploading ? (dirty ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일과 저장하지 않은 수정은 버려져요" : "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요") : "저장하지 않은 수정이 있어요. 저장할까요?"}
             cancelLabel="계속 편집"
             onCancel={() => update({ leave: null })}
-            actions={[{ label: "버리기", onClick: leaveDiscard }, ...(up.uploading ? [] : [{ label: "저장하고 이동", onClick: () => void leaveSave(), tone: "primary" as const }])]}
+            actions={[{ label: "버리기", onClick: leaveDiscard }, ...(up.uploading ? [] : [{ label: "저장하고 이동", onClick: () => void leaveSave(), tone: "primary" as const, disabled: saving }])]}
           />
         )}
         {S.confirm && (
@@ -348,7 +374,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         </div>
         <label className={label}>
           제목
-          <input ref={titleInput} type="text" value={n.title} disabled={n.temp} onChange={(e) => update((p) => ({ ...patchOv(p, "titles", { ...p.ov.titles, [id]: e.target.value }), saved: "" }))} className={`${field} h-[52px] px-[14px] text-[18px] font-bold disabled:bg-surface-2`} />
+          <input ref={titleInput} type="text" value={n.title} disabled={n.temp} onChange={(e) => edit((p) => ({ ...patchOv(p, "titles", { ...p.ov.titles, [id]: e.target.value }), saved: "" }))} className={`${field} h-[52px] px-[14px] text-[18px] font-bold disabled:bg-surface-2`} />
         </label>
 
         {/* 기간·유형은 한 줄에 — 좁으면 접어 내린다. 회차·묶음의 하위 집계는 같은 줄 끝의 보조 글 */}
@@ -509,7 +535,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           <MarkdownEditor
             labelledBy={`desc-label-${id}`}
             value={n.desc}
-            onChange={(v) => update((p) => ({ ...patchOv(p, "descs", { ...p.ov.descs, [id]: v }), saved: "" }))}
+            onChange={(v) => edit((p) => ({ ...patchOv(p, "descs", { ...p.ov.descs, [id]: v }), saved: "" }))}
             placeholder="목표, 참고 링크, 제출 형식 등을 적어 주세요"
             minHeight={n.leaf ? "max(420px, calc(100dvh - 520px))" : "420px"}
             maxHeight="none"
@@ -525,7 +551,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           onRemove={up.remove}
           onRetry={up.retry}
           canRetry={up.canRetry}
-          disabled={n.temp || savedFiles === null}
+          disabled={n.temp || savedFiles === null || saving}
         />
       </div>
     </section>

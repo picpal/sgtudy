@@ -71,7 +71,7 @@ beforeEach(() => {
   m.upload.mockReset();
   m.set.mockReset();
   toast.mockReset();
-  updatePersonal.mockReset().mockResolvedValue({});
+  updatePersonal.mockReset().mockResolvedValue(AWS);
   onBack.mockReset();
 });
 afterEach(() => {
@@ -262,6 +262,15 @@ describe("PersonalForm [임시저장]·[저장]", () => {
     expect(updatePersonal).toHaveBeenCalledWith("32", expect.objectContaining({ title: "고친 제목" }), "저장했어요", "");
     expect(host.querySelector("form")).not.toBeNull();
     expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("[임시저장] — 서버가 다듬은 값을 기준으로 삼아 더 고친 게 없으면 다시 비활성", async () => {
+    updatePersonal.mockImplementation(async (id: string) => ({ ...AWS, nodes: AWS.nodes.map((x) => (x.id === id ? { ...x, title: "다듬은 제목" } : x)) }));
+    await openEdit();
+    typeTitle("다듬은  제목");
+    await act(async () => button("임시저장").click());
+    await flush();
+    expect(host.querySelector<HTMLInputElement>("form input[type=text]")!.value).toBe("다듬은 제목");
   });
 
   it("[저장] — 저장하고 상세로 돌아간다", async () => {

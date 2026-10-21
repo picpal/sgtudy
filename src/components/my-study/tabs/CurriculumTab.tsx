@@ -113,7 +113,9 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
         update({ leave: null });
         router.push(to.href);
       }
-    } else if ("view" in to) update({ viewSel: to.view, viewFocus: null, confirm: false, leave: null, saved: "" });
+    } else if ("view" in to)
+      // 보기 상세(·목록)로 — 편집 화면 [저장] 이 편집을 연 항목의 상세로 돌아갈 때도 여기로 온다(편집 모드를 닫는다)
+      update({ curMode: "view", editSel: null, editFrom: null, quickAdd: null, viewSel: to.view, viewFocus: null, confirm: false, leave: null, saved: "" });
     // 목록에서 연 편집 화면은 [저장] 하면 목록으로 — 편집 화면 안에서 다른 항목으로 옮길 때는 처음 들어온 곳을 그대로 둔다
     else update((p) => ({ editSel: to.sel, editFrom: to.sel === null ? null : p.editSel === null ? "list" : p.editFrom, quickAdd: null, confirm: false, leave: null, saved: "" }));
   };

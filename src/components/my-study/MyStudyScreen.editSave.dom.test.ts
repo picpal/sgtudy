@@ -118,6 +118,30 @@ describe("편집 화면 [저장] → 들어오기 전 화면으로", () => {
     expect(window.location.search).not.toContain("item=");
   });
 
+  it("상세 21 → 편집 21 → 편집 안에서 회차 2 로 → [저장] = 21 의 보기 상세, 기록은 [목록, 21] (쓸모없는 기록 없음)", async () => {
+    m.update.mockResolvedValue(CUR);
+    const { host } = await openFromDetail();
+    const len = window.history.length;
+    act(() => btn(editView(host)!.querySelector('nav[aria-label="경로"]')!, CUR.nodes.find((n) => n.id === "2")!.label + " " + CUR.nodes.find((n) => n.id === "2")!.title).click());
+    await flush();
+    expect(window.location.search).toContain("item=2&");
+    expect(window.history.length).toBe(len); // 편집 안 이동은 replace
+    typeTitle(host, "고친 회차");
+    await flush();
+    await clickAndSettle(btn(editView(host)!, "저장"));
+    expect(m.update).toHaveBeenCalledWith("aws", "2", expect.anything());
+    expect(editView(host)).toBeNull();
+    expect(host.querySelector("#detail-title")?.textContent).toBe(CUR.nodes.find((n) => n.id === "21")!.title);
+    expect(window.location.search).toContain("item=21");
+    expect(window.location.search).not.toContain("mode=edit");
+    const popped = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
+    window.history.back();
+    await act(async () => void (await popped));
+    await flush();
+    expect(window.location.search).not.toContain("item=");
+    expect(host.querySelector("#detail-title")).toBeNull();
+  });
+
   it("편집 목록 → 항목 → [저장] = 편집 목록", async () => {
     m.update.mockResolvedValue(saved());
     window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");

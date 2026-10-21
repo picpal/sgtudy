@@ -222,12 +222,55 @@ describe("EditView [임시저장]·[저장]", () => {
     expect(toast).toHaveBeenCalledWith({ text: "저장했어요", tone: "ok" });
   });
 
-  it("[저장] — 상세에서 들어왔거나 모르면 같은 항목의 보기 상세로", async () => {
-    await mount(leaf, { editFrom: "view" });
+  it("[저장] — 상세에서 들어왔으면 편집을 연 항목의 보기 상세로", async () => {
+    await mount(leaf, { editFrom: { view: "2" } });
+    typeTitle("새 제목");
+    await act(async () => button("저장").click());
+    await flush();
+    expect(went).toEqual([{ view: "2" }]);
+  });
+
+  it("[저장] — 들어온 곳을 모르면(새로고침) 같은 항목의 보기 상세로", async () => {
+    await mount(leaf);
     typeTitle("새 제목");
     await act(async () => button("저장").click());
     await flush();
     expect(went).toEqual([{ mode: "view" }]);
+  });
+
+  it("저장 중 — 두 번 눌러도 요청은 한 번, 두 저장 버튼·파일 고르기 비활성", async () => {
+    let done!: (v: boolean) => void;
+    save.mockReturnValue(new Promise<boolean>((r) => (done = r)));
+    await mount(leaf, { editFrom: "list" });
+    typeTitle("새 제목");
+    act(() => {
+      button("저장").click();
+      button("저장").click();
+    });
+    await flush();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(button("저장").disabled).toBe(true);
+    expect(button("임시저장").disabled).toBe(true);
+    expect(button("파일 고르기").disabled).toBe(true);
+    await act(async () => done(true));
+    await flush();
+    expect(went).toEqual([{ sel: null }]);
+    expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  it("저장 중에 또 고쳤으면 — 저장이 끝나도 떠나지 않는다", async () => {
+    let done!: (v: boolean) => void;
+    save.mockReturnValue(new Promise<boolean>((r) => (done = r)));
+    await mount(leaf, { editFrom: "list" });
+    typeTitle("새 제목");
+    act(() => button("저장").click());
+    await flush();
+    typeTitle("또 고친 제목");
+    await act(async () => done(true));
+    await flush();
+    expect(went).toEqual([]);
+    expect(live.S.leave).toBeNull();
+    expect(button("저장").disabled).toBe(false);
   });
 
   it("[저장] 실패 — 머문다 (오류는 api 가 알린다)", async () => {

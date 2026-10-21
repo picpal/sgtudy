@@ -156,6 +156,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
       onDone();
     };
     const sent = filesChanged ? fileIds : null;
+    const sent0 = d;
     const steps = saveSteps(patchEmpty, sent ?? undefined);
     setSaving(true);
     try {
@@ -177,6 +178,11 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
       }
       const to = patch.roundId ? roots.find((r) => r.id === patch.roundId) : null;
       const cur = await api.updatePersonal(n.id, patch, to ? `${to.label ?? to.title}로 옮겼어요` : "저장했어요", steps[0] === "files" ? "첨부 파일은 저장했어요 · " : "");
+      if (cur && stay) {
+        // 머무르면 기준을 서버 값으로 — 서버가 값을 다듬었으면(공백 등) 그대로 두면 계속 "미저장" 으로 남는다. 저장 중에 또 고쳤으면 그 글은 남긴다
+        const saved = cur.nodes.find((x) => x.id === n.id);
+        if (saved) setD((x) => (x === sent0 ? { title: saved.title, desc: saved.descriptionMd, s: saved.startDate, e: saved.endDate, roundId: saved.roundId } : x));
+      }
       if (cur) finish();
     } finally {
       setSaving(false);

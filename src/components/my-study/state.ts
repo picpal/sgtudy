@@ -15,9 +15,10 @@ export type ScreenState = {
   curMode: CurMode;
   /** 편집 화면에 열린 항목 — 있으면 목록 대신 전용 편집 화면 (URL ?item=) */
   editSel: string | null;
-  /** 편집 화면에 들어오기 전 화면 — "view" = 같은 항목의 보기 상세, "list" = 편집 목록, null = 모름(새로고침·링크 진입).
-   *  편집 화면 [저장] 이 저장한 뒤 이곳으로 돌아간다 (editReturn). 편집 화면 안에서 다른 항목으로 옮겨도 그대로 둔다 */
-  editFrom: "view" | "list" | null;
+  /** 편집 화면에 들어오기 전 화면 — { view: id } = 그 항목의 보기 상세, "list" = 편집 목록, null = 모름(새로고침 진입).
+   *  편집 화면 [저장] 이 저장한 뒤 이곳으로 돌아간다 (editReturn). 편집 화면 안에서 다른 항목으로 옮겨도 그대로 둔다
+   *  (상세 X → 편집 X → 편집 안에서 Y → [저장] = X 의 상세) */
+  editFrom: { view: string } | "list" | null;
   /** 보기 모드 상세 화면에 열린 항목 — 있으면 목록 대신 읽기 전용 상세 (URL ?item=, mode 없음) */
   viewSel: string | null;
   /** 보기 상세가 열리며 한 번 옮길 포커스 — 보드·캘린더·간트·알림 진입은 제출 영역 (스펙 §2.6) */
@@ -89,11 +90,11 @@ export const goLeafPatch = (id: string): Partial<ScreenState> => ({ tab: "curric
 export function modeSwitchPatch(S: ScreenState, mode: CurMode): Partial<ScreenState> {
   const open = mode === "edit" ? S.viewSel : S.editSel;
   const carry = open && /^\d+$/.test(open) ? open : null;
-  return { curMode: mode, editSel: mode === "edit" ? carry : null, editFrom: mode === "edit" && carry ? "view" : null, viewSel: mode === "view" ? carry : null, viewFocus: null, quickAdd: null, confirm: false, leave: null, saved: "" };
+  return { curMode: mode, editSel: mode === "edit" ? carry : null, editFrom: mode === "edit" && carry ? { view: carry } : null, viewSel: mode === "view" ? carry : null, viewFocus: null, quickAdd: null, confirm: false, leave: null, saved: "" };
 }
 
-/** 편집 화면 [저장] 이 저장한 뒤 돌아갈 곳 — 들어오기 전 화면. 모르면 같은 항목의 보기 상세 */
-export const editReturn = (S: Pick<ScreenState, "editFrom">): Leave => (S.editFrom === "list" ? { sel: null } : { mode: "view" });
+/** 편집 화면 [저장] 이 저장한 뒤 돌아갈 곳 — 들어오기 전 화면(목록 · 편집을 연 항목의 상세). 모르면 지금 항목의 보기 상세 */
+export const editReturn = (S: Pick<ScreenState, "editFrom">): Leave => (S.editFrom === "list" ? { sel: null } : S.editFrom ? { view: S.editFrom.view } : { mode: "view" });
 
 /** 오버라이드 한 키만 갱신하는 헬퍼 */
 export const patchOv = <K extends keyof Overrides>(prev: ScreenState, key: K, value: Overrides[K]): Partial<ScreenState> => ({ ov: { ...prev.ov, [key]: value } });

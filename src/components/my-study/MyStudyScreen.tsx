@@ -129,6 +129,9 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const shownTab = useRef<TabId>(S.tab);
   // guardPop: 미저장 확인 때문에 popstate 가 되돌려 쌓은 기록 아래(뒤로 간 곳)의 항목·모드 — "버리기"로 그곳을 열면 replace 로 같은 기록을 하나 더 만들지 않고 back 으로 그 기록에 돌아간다 (재리뷰 nit)
   const guardPop = useRef<{ id: string | null; mode: CurMode } | null>(null);
+  // belowView: 편집 기록 바로 아래에 있는 보기 상세 기록(상세 → "편집" 으로 쌓았다)과 그 상세 기록의 pushed — 편집 안에서 다른 항목으로 옮겨(replace) 그 위가
+  // 다른 항목의 편집이 되어도 남는다. [저장] 이 그 상세로 돌아가면 replace 대신 back 해서 상세 기록이 둘이 되지 않게 한다
+  const belowView = useRef<{ id: string; pushed: string | null } | null>(null);
   useEffect(() => {
     const url = readItem(window.location.search);
     const urlMode = readMode(window.location.search);
@@ -136,6 +139,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     const href = withItem(window.location.href, openItem, openMode);
     const gp = guardPop.current;
     guardPop.current = null;
+    const below = belowView.current;
+    if (openItem === null || openMode === "view") belowView.current = null; // 편집을 닫았다
     if (step === "replace" && gp && gp.id === openItem && gp.mode === openMode) {
       // 뒤로 간 기록이 바로 아래에 있다 — 그 popstate 는 화면과 같아 따로 바꾸지 않는다. 기록 상태는 popstate 가 그 기록을 열었을 때와 같게
       closedByBack.current = true;
@@ -144,7 +149,16 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       overView.current = false;
       return;
     }
+    if (step === "replace" && below && openMode === "view" && below.id === openItem) {
+      // 편집 기록 아래가 바로 그 상세 기록 — back 으로 돌아간다. popstate 는 화면과 같아 따로 바꾸지 않는다
+      closedByBack.current = true;
+      window.history.back();
+      pushed.current = below.pushed;
+      overView.current = false;
+      return;
+    }
     const modePush = step === "push" && url !== null && url === openItem;
+    if (modePush && openItem) belowView.current = { id: openItem, pushed: pushed.current };
     // 목록 기록 위에 상세·편집을 쌓을 때, 그 목록 기록이 보여 주던 탭(보드 카드 → 상세 등) — 뒤로 가기로 돌아오면 그 탭으로
     if (step === "push" && url === null) backTab.current = shownTab.current;
     if (step === "push") window.history.pushState(null, "", href);
@@ -219,10 +233,10 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       if (!overView.current) pushed.current = target.id;
       update(
         target.id === null
-          ? { ...(backTab.current ? { tab: backTab.current } : {}), editSel: null, viewSel: null, confirm: false, leave: null, saved: "" }
+          ? { ...(backTab.current ? { tab: backTab.current } : {}), editSel: null, editFrom: null, viewSel: null, confirm: false, leave: null, saved: "" }
           : target.mode === "edit"
-            ? { tab: "curriculum", curMode: "edit", editSel: target.id, editFrom: overView.current ? "view" : "list", viewSel: null, confirm: false, leave: null, saved: "" }
-            : { tab: "curriculum", curMode: "view", viewSel: target.id, editSel: null, confirm: false, leave: null, saved: "" },
+            ? { tab: "curriculum", curMode: "edit", editSel: target.id, editFrom: overView.current ? { view: target.id } : "list", viewSel: null, confirm: false, leave: null, saved: "" }
+            : { tab: "curriculum", curMode: "view", viewSel: target.id, editSel: null, editFrom: null, confirm: false, leave: null, saved: "" },
       );
     };
     window.addEventListener("popstate", onPop);
@@ -260,7 +274,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     }
     update(
       edit
-        ? { tab: "curriculum", curMode: "edit", editSel: id, viewSel: null, confirm: false, leave: null, saved: "" }
+        ? { tab: "curriculum", curMode: "edit", editSel: id, editFrom: "list", viewSel: null, confirm: false, leave: null, saved: "" }
         : { tab: "curriculum", curMode: "view", viewSel: id, editSel: null, confirm: false, leave: null, saved: "" },
     );
   });
