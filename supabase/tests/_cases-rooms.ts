@@ -862,6 +862,9 @@ export const ROOM_CASES: Case[] = [
         "exam_answer_save(bigint,bigint,jsonb)", "exam_submit(bigint)",
         // 0037: 회차 시험 결과·남의 답안(편집자 — 점수는 본인·편집자만, D7)
         "exam_results(text,bigint)", "exam_attempt_get(text,bigint,uuid)",
+        // 0040: 그룹장 공지(내부 notice_* 헬퍼는 GRANT 없음)
+        "notice_list(text)", "notice_inbox(text)", "notice_read(text,bigint[])",
+        "notice_create(text,jsonb)", "notice_update(text,bigint,jsonb)", "notice_delete(text,bigint)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

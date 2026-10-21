@@ -703,8 +703,8 @@ cases("curriculum plan 0034 · run", db, [
   } },
   { name: "CURRICULUM_BULK_UPDATED 종류·렌더·링크 등록(MEMBER_JOINED 유지)", run: async (q) => {
     const k = (await one(q, "select public.notification_kinds() as k")).k as string[];
-    // 0037 이 EXAM_PUBLISHED 를 끝에 더했다 — CURRICULUM_BULK_UPDATED 는 그 바로 앞
-    assertEquals([k.includes("CURRICULUM_BULK_UPDATED"), k.includes("MEMBER_JOINED"), k[k.length - 2], k[k.length - 1]], [true, true, "CURRICULUM_BULK_UPDATED", "EXAM_PUBLISHED"]);
+    // 0037 이 EXAM_PUBLISHED, 0040 이 NOTICE_POSTED 를 끝에 더했다 — CURRICULUM_BULK_UPDATED 는 그 바로 앞
+    assertEquals([k.includes("CURRICULUM_BULK_UPDATED"), k.includes("MEMBER_JOINED"), k.slice(-3)], [true, true, ["CURRICULUM_BULK_UPDATED", "EXAM_PUBLISHED", "NOTICE_POSTED"]]);
     const aws = await roomId(q, "aws");
     const t = (await one(q, "select public.notify_render('CURRICULUM_BULK_UPDATED', $1::bigint, null, null, '{\"newTasks\":2,\"schedule\":3,\"assign\":0}') as t", [aws])).t as Row;
     assertEquals([t.title, t.body], ["AWS SAA 자격증 3개월 완주 진행목표가 한꺼번에 바뀌었어요", "새 과제 2건 · 일정 3건"]);
