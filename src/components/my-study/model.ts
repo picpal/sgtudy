@@ -434,16 +434,17 @@ export function periodWarnings(n: { s: string; e: string }, parent: { s: string;
 
 /* ---------------- 보드 ---------------- */
 
-export type BoardCol = "todo" | "doing" | "done";
+/** 예정 · 진행중 · 지연(기한 지남 · 미제출) · 제출 완료(전원 제출) */
+export type BoardCol = "todo" | "doing" | "late" | "done";
 
 export const myCode = (l: LeafNode, meId: string | null): Code | null => (meId ? (l.people.find((p) => p.userId === meId)?.c ?? null) : null);
 
 export function boardColumn(l: LeafNode, mine: boolean, meId: string | null): BoardCol {
   if (mine) {
     const c = myCode(l, meId);
-    return c === "P" ? "todo" : isDoneCode(c) ? "done" : "doing";
+    return c === "P" ? "todo" : isDoneCode(c) ? "done" : c === "M" ? "late" : "doing";
   }
-  return l.state === "planned" || l.state === "unassigned" ? "todo" : l.state === "complete" ? "done" : "doing";
+  return l.state === "planned" || l.state === "unassigned" ? "todo" : l.state === "complete" ? "done" : l.state === "delayed" ? "late" : "doing";
 }
 
 /* ---------------- 캘린더 ---------------- */

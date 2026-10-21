@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { CODE_LABEL, EMPTY_OVERRIDES, buildTree, leafLocks, codeLabel, descendantCount, dropFieldOv, dropSentFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope, type LeafNode } from "./model";
+import { CODE_LABEL, EMPTY_OVERRIDES, boardColumn, buildTree, leafLocks, codeLabel, descendantCount, dropFieldOv, dropSentFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope, type LeafNode } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -384,5 +384,36 @@ describe("dropSentFieldOv — 저장에 보낸 값만 지운다", () => {
     const sent = { ...EMPTY_OVERRIDES, titles: { "21": "보낸 제목" } };
     const now = { ...sent, descs: { "21": "새 설명" } };
     expect(dropSentFieldOv(now, sent, "21").descs).toEqual({ "21": "새 설명" });
+  });
+});
+
+describe("boardColumn — 예정 · 진행중 · 지연 · 제출", () => {
+  const t = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
+  const leaf = (id: string) => t.leaves.find((l) => l.id === id)!;
+  const withMy = (l: LeafNode, c: LeafNode["people"][number]["c"]): LeafNode => ({ ...l, people: l.people.map((p) => (p.userId === CHULSU ? { ...p, c } : p)) });
+
+  it("내 칸반: 내 코드 P→예정, O→진행중, M(기한 지남·미제출)→지연, D·L→제출 완료", () => {
+    const l = leaf("21");
+    expect(myCode(l, CHULSU)).toBe("O");
+    expect((["P", "O", "M", "D", "L"] as const).map((c) => boardColumn(withMy(l, c), true, CHULSU))).toEqual(["todo", "doing", "late", "done", "done"]);
+  });
+
+  it("팀 칸반: planned·unassigned→예정, progress→진행중, delayed(기한 지남·미완)→지연, complete→전원 제출", () => {
+    expect(t.leaves.map((l) => [l.id, l.state, boardColumn(l, false, CHULSU)])).toEqual([
+      ["11", "delayed", "late"],
+      ["12", "delayed", "late"],
+      ["21", "progress", "doing"],
+      ["22", "progress", "doing"],
+      ["311", "planned", "todo"],
+      ["41", "planned", "todo"],
+      ["51", "planned", "todo"],
+      ["52", "planned", "todo"],
+    ]);
+    expect(boardColumn({ ...leaf("11"), state: "complete" }, false, CHULSU)).toBe("done");
+    expect(boardColumn({ ...leaf("11"), state: "unassigned" }, false, CHULSU)).toBe("todo");
+  });
+
+  it("같은 과제라도 범위마다 다르다 — 팀은 지연이어도 내가 제출했으면 내 칸반은 제출 완료", () => {
+    expect([boardColumn(leaf("11"), false, CHULSU), boardColumn(leaf("11"), true, CHULSU)]).toEqual(["late", "done"]);
   });
 });

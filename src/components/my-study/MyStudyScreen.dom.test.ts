@@ -243,7 +243,7 @@ describe("MyStudyScreen — 상세 [← 연 곳]", () => {
   const openFromBoardCard = () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=board");
     const m = mount({ initialTab: "board" });
-    const card = m.host.querySelector<HTMLButtonElement>('section[aria-label="예정"] button, section[aria-label="진행중"] button, section[aria-label="제출 완료"] button')!;
+    const card = m.host.querySelector<HTMLButtonElement>('section[aria-label="예정"] button[data-card-open], section[aria-label="진행중"] button[data-card-open], section[aria-label="제출 완료"] button[data-card-open]')!;
     const name = card.textContent!;
     act(() => card.click());
     expect(name).toContain(detailTitle(m.host)!.trim());

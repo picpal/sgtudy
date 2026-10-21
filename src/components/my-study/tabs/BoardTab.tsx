@@ -34,6 +34,13 @@ export function boardRoundOptions(roots: Tree["roots"], today: string, counts: R
   ];
 }
 
+const EMPTY: Record<BoardCol, string> = {
+  todo: "예정된 과제가 없어요",
+  doing: "진행 중인 과제가 없어요",
+  late: "기한이 지난 과제가 없어요",
+  done: "아직 제출이 끝난 과제가 없어요",
+};
+
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
 
 export function BoardTab({ tree, S, update, goLeaf }: Props) {
@@ -54,8 +61,13 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
   const cols: [BoardCol, string, string][] = [
     ["todo", "예정", "#8C97A4"],
     ["doing", "진행중", "#12A386"],
+    ["late", "지연", CODE_COLOR.M],
     ["done", mine ? "제출 완료" : "전원 제출", "#1E9E6A"],
   ];
+  // 한 회차만 볼 때 예정 칸이 비면 — 다음 회차들의 예정 과제 수를 알려 주고 전체 회차로 넓힐 수 있게 한다
+  const at = tree.roots.findIndex((r) => r.id === bRound);
+  const later = new Set(at < 0 ? [] : tree.roots.slice(at + 1).map((r) => r.id));
+  const nextTodo = scoped.filter((l) => l.roundId && later.has(l.roundId) && boardColumn(l, mine, meId) === "todo").length;
 
   return (
     <div className="mt-[18px] flex flex-col gap-3">
@@ -66,27 +78,44 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
         <Listbox label="회차 필터" prefix="회차" value={bRound} options={rounds} onChange={(v) => update({ bRound: v })} className="max-sm:w-full sm:w-[300px] sm:max-w-[360px]" />
       </div>
       <p className="m-0 text-[12px] text-muted">
-        {mine ? "내가 담당한 과제만 보여요. 제출 상태에 따라 칸이 자동으로 바뀌어요 · 카드를 누르면 진행목표에서 상세를 볼 수 있어요." : "모든 과제의 팀 진행 상황이에요. 담당자 전원이 제출하면 ‘전원 제출’로 이동해요."}
+        {mine
+          ? "내가 담당한 과제만 보여요. 제출 상태에 따라 칸이 자동으로 바뀌고, 기한이 지나도록 제출하지 않으면 ‘지연’으로 옮겨져요 · 카드를 누르면 진행목표에서 상세를 볼 수 있어요."
+          : "모든 과제의 팀 진행 상황이에요. 기한이 지났는데 아직 다 제출하지 않은 과제는 ‘지연’, 담당자 전원이 제출하면 ‘전원 제출’로 이동해요."}
       </p>
       {noMine && <div className="rounded-[14px] border border-dashed border-line-dash p-5 text-center text-[13px] text-muted">아직 내게 배정된 과제가 없어요. 참가가 확정되면 여기에 보여요.</div>}
 
-      <div className="grid items-start gap-[14px]" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
-        {cols.map(([id, label, dot]) => {
-          const cards = src.filter((l) => boardColumn(l, mine, meId) === id);
-          return (
-            <section key={id} aria-label={label} className="flex min-h-[180px] flex-col gap-[10px] rounded-[16px] bg-[#F4F7F6] p-3">
-              <h3 className="mx-1 my-[2px] flex items-center gap-2 text-[14px] font-bold">
-                <span className="h-[9px] w-[9px] rounded-full" style={{ background: dot }} />
-                {label}
-                <span className="rounded-[10px] bg-[#E3E9E7] px-2 py-px text-[12px] font-semibold text-ink-3">{cards.length}</span>
-              </h3>
-              {cards.map((l) => (
-                <Card key={l.id} l={l} mine={mine} today={today} meId={meId} onOpen={() => goLeaf(l.id)} />
-              ))}
-              {cards.length === 0 && <p className="mx-1 my-[6px] text-[12px] text-faint">해당하는 과제가 없어요</p>}
-            </section>
-          );
-        })}
+      {/* 칸 4개 — 자기 폭 기준으로 1열(좁은 폭) · 2×2 · 4열. auto-fit 이면 3+1 로 지연·제출 칸이 홀로 떨어져서 단계를 고정한다(4열은 칸 하나 ≥200px) */}
+      <div className="@container">
+        <div className="grid grid-cols-1 items-start gap-[14px] @min-[420px]:grid-cols-2 @min-[850px]:grid-cols-4">
+          {cols.map(([id, label, dot]) => {
+            const cards = src.filter((l) => boardColumn(l, mine, meId) === id);
+            return (
+              <section key={id} aria-label={label} className="flex min-h-[180px] flex-col gap-[10px] rounded-[16px] bg-[#F4F7F6] p-3">
+                <h3 className="mx-1 my-[2px] flex items-center gap-2 text-[14px] font-bold">
+                  <span className="h-[9px] w-[9px] rounded-full" style={{ background: dot }} />
+                  {label}
+                  <span className="rounded-[10px] bg-[#E3E9E7] px-2 py-px text-[12px] font-semibold text-ink-3">{cards.length}</span>
+                </h3>
+                {cards.map((l) => (
+                  <Card key={l.id} l={l} mine={mine} today={today} meId={meId} onOpen={() => goLeaf(l.id)} />
+                ))}
+                {cards.length === 0 && <p className="mx-1 my-[6px] text-[12px] text-faint">{EMPTY[id]}</p>}
+                {id === "todo" && cards.length === 0 && bRound !== "all" && nextTodo > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => update({ bRound: "all" })}
+                    className="flex min-h-11 w-full items-center justify-between gap-2 rounded-[12px] border border-dashed border-line-dash bg-surface px-3 text-left text-[12px] font-semibold text-ink-2 hover:border-mint hover:text-mint-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
+                  >
+                    <span>다음 회차 과제 {nextTodo}개</span>
+                    <span className="text-mint-deep">
+                      전체 회차 보기 <span aria-hidden="true">→</span>
+                    </span>
+                  </button>
+                )}
+              </section>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

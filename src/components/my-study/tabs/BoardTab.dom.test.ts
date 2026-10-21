@@ -158,3 +158,60 @@ describe("BoardTab 카드", () => {
     expect(card.querySelector<HTMLElement>("[data-avatar] [title] > span")!.style.width).toBe("24px");
   });
 });
+
+const columns = (h: HTMLElement) => Array.from(h.querySelectorAll<HTMLElement>("section[aria-label]")).map((sec) => [sec.getAttribute("aria-label"), sec.querySelector("h3 span.rounded-\\[10px\\]")?.textContent]);
+const titlesIn = (h: HTMLElement, label: string) => cardTitles(h.querySelector<HTMLElement>(`section[aria-label="${label}"]`)!);
+const hint = (h: HTMLElement) => [...h.querySelectorAll<HTMLButtonElement>("section button")].find((b) => b.textContent?.includes("전체 회차 보기")) ?? null;
+
+describe("BoardTab 칸 — 예정 · 진행중 · 지연 · 제출", () => {
+  it("팀 칸반: 네 칸이 이 순서, 기한이 지났는데 다 제출하지 않은 과제는 지연 칸(카드는 기한 지남 강조 그대로)", () => {
+    const { host } = mount({ bRound: "all", bMode: "team" });
+    expect(columns(host)).toEqual([["예정", "4"], ["진행중", "2"], ["지연", "2"], ["전원 제출", "0"]]);
+    expect(titlesIn(host, "지연")).toEqual(["IAM 정책 이해", "VPC 실습"]);
+    const card = host.querySelector('section[aria-label="지연"] [data-card-open]')!.parentElement!;
+    expect(card.textContent).toContain("기한 지남");
+    expect(card.style.borderColor).toBe("rgb(231, 169, 163)");
+    expect(host.querySelector('section[aria-label="전원 제출"]')!.textContent).toContain("아직 제출이 끝난 과제가 없어요");
+    expect(host.textContent).toContain("‘지연’");
+  });
+
+  it("내 칸반: 제출 완료 칸 이름, 지연 칸은 비면 안내 문구", () => {
+    const { host } = mount({ bRound: "all", bMode: "mine" });
+    expect(columns(host).map(([l]) => l)).toEqual(["예정", "진행중", "지연", "제출 완료"]);
+    expect(host.querySelector('section[aria-label="지연"]')!.textContent).toContain("기한이 지난 과제가 없어요");
+  });
+
+  it("4열은 넓은 폭에서만 — 컨테이너 기준 1열 · 2×2 · 4열(3+1 로 떨어지지 않게)", () => {
+    const { host } = mount({ bRound: "all", bMode: "team" });
+    const grid = host.querySelector("section[aria-label]")!.parentElement!;
+    expect(grid.parentElement!.classList.contains("@container")).toBe(true);
+    expect([...grid.classList]).toEqual(expect.arrayContaining(["grid-cols-1", "@min-[420px]:grid-cols-2", "@min-[850px]:grid-cols-4"]));
+  });
+});
+
+describe("BoardTab 예정 칸 — 다음 회차 안내", () => {
+  it("이번 회차만 볼 때 예정이 비고 다음 회차에 내 예정 과제가 있으면 개수와 전체 회차 보기 버튼", () => {
+    const { host, calls } = mount({ bRound: "2", bMode: "mine" });
+    const b = hint(host)!;
+    expect(b.closest("section")!.getAttribute("aria-label")).toBe("예정");
+    expect(b.textContent).toContain("다음 회차 과제 4개"); // 내 과제 3(311·41·51) + 내 개인 목표 1
+    expect(b.classList.contains("min-h-11")).toBe(true);
+    click(b);
+    expect(calls).toEqual([{ bRound: "all" }]);
+  });
+
+  it("팀 칸반은 모든 과제 기준으로 센다", () => {
+    const { host } = mount({ bRound: "2", bMode: "team" });
+    expect(hint(host)!.textContent).toContain("다음 회차 과제 4개");
+  });
+
+  it("전체 회차일 때, 예정 칸에 카드가 있을 때, 다음 회차 예정 과제가 0개일 때는 없다", () => {
+    expect(hint(mount({ bRound: "all", bMode: "mine" }).host)).toBeNull();
+    act(() => root?.unmount());
+    host?.remove();
+    expect(hint(mount({ bRound: "3", bMode: "mine" }).host)).toBeNull();
+    act(() => root?.unmount());
+    host?.remove();
+    expect(hint(mount({ bRound: "r1", bMode: "team" }, manyRounds(3)).host)).toBeNull();
+  });
+});
