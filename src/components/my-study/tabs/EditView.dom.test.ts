@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement, useCallback, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type { FileMeta } from "@/lib/api/types";
+import type { ExamView, FileMeta } from "@/lib/api/types";
 import { TodayProvider } from "@/lib/today";
 import { AWS, REF_DAY } from "../fixtures";
 import { EMPTY_OVERRIDES, buildTree, type TreeNode } from "../model";
@@ -17,6 +17,8 @@ vi.mock("@/lib/api/nodeFiles", () => ({ fetchNodeFiles: m.fetch, registerNodeFil
 vi.mock("@/lib/api/submission", () => ({ roomIdOfNode: () => Promise.resolve("7") }));
 vi.mock("@/lib/api/upload", () => ({ uploadAttachment: m.upload, uploadErrorText: () => "실패" }));
 vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }));
+const ex = vi.hoisted(() => ({ fetch: vi.fn(), put: vi.fn(), publish: vi.fn() }));
+vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: ex.fetch, putExam: ex.put, publishExam: ex.publish }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push: () => {} }) }));
 
 const tree = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY);
@@ -42,11 +44,11 @@ function Harness({ n, init }: { n: TreeNode; init?: Partial<ScreenState> }) {
   };
   // CurriculumTab.request 와 같은 규칙
   const request = (to: Leave) => (editUnsaved(S, S.editSel) ? update({ leave: to, confirm: false }) : go(to));
-  const api = { save, discard: vi.fn(), toast: vi.fn() } as unknown as CurriculumApi;
+  const api = { save, discard: vi.fn(), toast: vi.fn(), refresh: vi.fn().mockResolvedValue(undefined) } as unknown as CurriculumApi;
   return createElement(
     TodayProvider,
     { today: REF_DAY } as Parameters<typeof TodayProvider>[0],
-    createElement(EditView, { n, parent: null, nodes: tree.nodes, roots: tree.roots, period: { start: "2026-10-01", end: "2026-11-30" }, members: tree.members, S, update, api, go, request, toast }),
+    createElement(EditView, { n, parent: null, nodes: tree.nodes, roots: tree.roots, period: { start: "2026-10-01", end: "2026-11-30" }, members: tree.members, S, update, api, go, request, toast, slug: "aws" }),
   );
 }
 
@@ -311,5 +313,96 @@ describe("EditView [임시저장]·[저장]", () => {
     expect(live.S.leave).toBeNull();
     expect(host.textContent).not.toContain("저장하지 않은 수정이 있어요");
     expect(went).toEqual([{ sel: null }]);
+  });
+});
+
+describe("EditView 시험 리프 — 「문제」 섹션 · 미저장 가드 (Review Focus 10)", () => {
+  const examLeaf = { ...leaf, exam: { status: "draft" as const, questionCount: 1, totalPoints: 1, reveal: "after_submit" as const } };
+  const examView = (answer: number) =>
+    ({
+      today: "2026-10-12",
+      node: { id: "21", title: leaf.title, startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
+      exam: { status: "draft", questionCount: 1, totalPoints: 1, reveal: "after_submit", publishedAt: null, closed: false, locked: false, submittedCount: 0 },
+      viewer: { canEdit: true, isAssignee: false, canTake: false, reason: "not_assignee" },
+      questions: [{ id: "9", ord: 0, type: "single", prompt: "IAM?", choices: ["a", "b"], points: 1, answer, explanation: "" }],
+      attempt: null,
+    }) as unknown as ExamView;
+  const pickSecond = () => act(() => host.querySelectorAll<HTMLInputElement>('input[name="exam-q-0-answer"]')[1].click());
+
+  beforeEach(() => {
+    ex.fetch.mockReset().mockResolvedValue(examView(0));
+    ex.put.mockReset().mockResolvedValue(examView(1));
+    ex.publish.mockReset();
+  });
+
+  it("시험 아님 — 「문제」 섹션 없음, exam_get 도 부르지 않는다", async () => {
+    await mount(leaf);
+    expect(host.querySelector("[data-exam-editor]")).toBeNull();
+    expect(ex.fetch).not.toHaveBeenCalled();
+  });
+
+  it("시험 리프 — 담당자 아래 「문제」 섹션", async () => {
+    await mount(examLeaf);
+    const sec = host.querySelector("[data-exam-editor]")!;
+    expect(sec).toBeTruthy();
+    expect(ex.fetch).toHaveBeenCalledWith("aws", "21");
+    const assignee = Array.from(host.querySelectorAll("span")).find((x) => x.textContent?.startsWith("담당자"))!;
+    expect(assignee.compareDocumentPosition(sec) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("문항을 고치면 S.examDirty — '진행목표'(뒤로)·경로(다른 항목)가 '저장하지 않은 수정이 있어요' 로 보류, 버리기 → 이동·해제", async () => {
+    await mount(examLeaf);
+    expect(live.S.examDirty).toBeNull();
+    pickSecond();
+    expect(live.S.examDirty).toBe("21");
+    act(() => button("진행목표").click());
+    expect(live.S.leave).toEqual({ sel: null });
+    expect(went).toEqual([]);
+    expect(host.textContent).toContain("저장하지 않은 수정이 있어요. 저장할까요?");
+    act(() => button("계속 편집").click());
+    // 경로의 조상 = 다른 항목으로 이동
+    const anc = host.querySelector<HTMLButtonElement>('nav[aria-label="경로"] button')!;
+    act(() => anc.click());
+    expect(live.S.leave).toEqual({ sel: leaf.parentId });
+    act(() => button("버리기").click());
+    await flush();
+    expect(went).toEqual([{ sel: leaf.parentId }]);
+    expect(live.S.examDirty).toBeNull();
+    expect(ex.put).not.toHaveBeenCalled();
+  });
+
+  it("'저장하고 이동' — 문항을 저장(exam_put)하고 이동, 바뀌지 않은 제목은 node_update 없이", async () => {
+    await mount(examLeaf);
+    pickSecond();
+    act(() => button("진행목표").click());
+    await act(async () => button("저장하고 이동").click());
+    await flush();
+    expect(ex.put).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(went).toEqual([{ sel: null }]);
+    expect(live.S.examDirty).toBeNull();
+  });
+
+  it("위쪽 [저장] — 고친 문항을 버리지 않고 저장한 뒤 돌아간다", async () => {
+    await mount(examLeaf, { editFrom: "list" });
+    pickSecond();
+    expect(button("임시저장").disabled).toBe(false);
+    await act(async () => button("저장").click());
+    await flush();
+    expect(ex.put).toHaveBeenCalledTimes(1);
+    expect(went).toEqual([{ sel: null }]);
+    expect(toast).toHaveBeenCalledWith({ text: "문제를 저장했어요", tone: "ok" });
+  });
+
+  it("위쪽 [저장] — 문항 저장이 거절되면 머문다(제목 저장도 하지 않는다)", async () => {
+    ex.put.mockRejectedValue(new Error("x"));
+    await mount(examLeaf, { editFrom: "list" });
+    pickSecond();
+    await act(async () => button("저장").click());
+    await flush();
+    expect(ex.put).toHaveBeenCalledTimes(1);
+    expect(save).not.toHaveBeenCalled();
+    expect(went).toEqual([]);
+    expect(live.S.examDirty).toBe("21");
   });
 });

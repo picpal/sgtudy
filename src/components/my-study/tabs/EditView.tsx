@@ -20,6 +20,7 @@ import { dropKey, type CurriculumApi } from "../useCurriculumApi";
 import { useNodeFileUploads } from "../useNodeFileUploads";
 import { DATE_NO_OVERFLOW_CLASS } from "@/components/room-new/fields";
 import { ChildList } from "./ChildList";
+import { ExamEditor, type ExamEditorHandle } from "./ExamEditor";
 import { FileUploadList } from "./FileUploadList";
 import { InlineConfirm } from "./InlineConfirm";
 
@@ -42,6 +43,8 @@ type Props = {
   roomStatus?: RoomStatus;
   /** 첨부 업로드 안내·오류 */
   toast: (m: ToastMsg) => void;
+  /** 방 주소 — 시험 리프의 「문제」 섹션(exam_* RPC) */
+  slug: string;
 };
 
 const NO_FILES: FileMeta[] = [];
@@ -55,7 +58,7 @@ const label = "flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3";
  * 글(설명)이 주인공: 제목 한 줄 → 기간·유형 한 줄 → 남은 높이를 채우는 마크다운 편집기. 저장·삭제는 위쪽 고정 막대에 늘 보인다.
  * 내용 변경은 오버라이드에 모았다가 "저장" 1회(node_update), 삭제·보관은 즉시 RPC.
  */
-export function EditView({ n, parent, nodes, roots, period, members, S, update, api, go, request, roomStatus = "active", toast }: Props) {
+export function EditView({ n, parent, nodes, roots, period, members, S, update, api, go, request, roomStatus = "active", toast, slug }: Props) {
   const id = n.id;
   const view = useRef<HTMLElement>(null);
   const bar = useRef<HTMLDivElement>(null);
@@ -131,10 +134,21 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     return () => update((p) => (p.uploading === id ? { uploading: null } : {}));
   }, [up.uploading, id, update]);
 
+  // 시험 리프의 「문제」 섹션 — 문항 수정은 [문제 저장](exam_put) 따로. 저장 안 한 문항이 있으면 S.examDirty 로 올려
+  // 올리는 중(S.uploading)과 같은 "저장하지 않은 수정이 있어요" 경로로 탭·뒤로 가기·다른 항목 이동을 막는다 (Review Focus 10)
+  const exam = n.leaf && !n.temp && n.exam ? n.exam : null;
+  const examRef = useRef<ExamEditorHandle>(null);
+  const [examDirty, setExamDirty] = useState(false);
+  useEffect(() => {
+    if (!examDirty) return;
+    update({ examDirty: id });
+    return () => update((p) => (p.examDirty === id ? { examDirty: null } : {}));
+  }, [examDirty, id, update]);
+
   // 저장하지 않은 수정이 있는 채로 새로고침·탭 닫기·다른 문서로 이동(전체 다시 불러오기가 되는 뒤로 가기 포함) → 브라우저 확인.
   // 앱 안 이동은 아래 "저장하지 않은 수정이 있어요" 확인이 맡는다
   const dirty = isDirty(S.ov, id);
-  const unsaved = dirty || up.uploading;
+  const unsaved = dirty || up.uploading || examDirty;
   useEffect(() => {
     if (!unsaved) return;
     const warn = (e: BeforeUnloadEvent) => {
@@ -247,7 +261,10 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     let text = "저장했어요";
     let ok = false;
     try {
-      ok = await api.save(n, S.ov, { shift, onFiles: setSavedFiles, skipFiles: savedFiles === null, onSaved: (t) => (text = t) });
+      // 저장하지 않은 시험 문항도 함께 — 위쪽 [저장] 이 고친 문항을 묻지 않고 버리지 않게. 문항 저장이 거절되면(검사·잠김) 머문다
+      ok = !examDirty || (await examRef.current?.save()) !== false;
+      if (ok && !dirty && examDirty) update({ saved: (text = "문제를 저장했어요") });
+      else if (ok) ok = await api.save(n, S.ov, { shift, onFiles: setSavedFiles, skipFiles: savedFiles === null, onSaved: (t) => (text = t) });
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -273,7 +290,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   // [저장] = 저장한 뒤 편집에 들어오기 전 화면으로(상세·목록, 모르면 같은 항목 상세). 바뀐 게 없으면 저장 없이 돌아간다.
   // 이동은 go — request 가 아니라 "저장하지 않은 수정" 확인을 거치지 않는다(성공하면 수정은 이미 지워졌다). [임시저장] = 저장하고 머문다
   const saveAndReturn = () => {
-    if (dirty) return trySave(editReturn(S));
+    if (dirty || examDirty) return trySave(editReturn(S));
     // 저장한 적 없는 새 회차도 [저장] 을 눌렀으면 남긴다 (예전 "저장" 이 fresh 를 지운 것과 같게 — 빈 회차 정리 대상에서 뺀다)
     if (S.fresh === id) update({ fresh: null });
     go(editReturn(S));
@@ -284,6 +301,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     const to = S.leave;
     // 올린 채 저장하지 않은 첨부도 버린다 — 선택 id(ov.files)는 dropFieldOv 가 함께 지운다
     up.discardUnsaved();
+    examRef.current?.discard();
     update((p) => ({ ov: dropFieldOv(p.ov, id) }));
     // 다른 화면으로 가면 이 화면이 사라진다 — 저장한 적 없는 새 회차는 여기서 지운다(앱 안 이동은 MyStudyScreen 이 맡는다)
     if (to && "href" in to && fresh && !samePage(to.href)) api.discard(id);
@@ -324,7 +342,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
               </button>
             )}
             {/* [임시저장] = 저장하고 머문다(보조), [저장] = 저장하고 들어오기 전 화면으로(주). 올리는 중엔 둘 다 막는다 (리뷰 M-1) */}
-            <button type="button" disabled={n.temp || !!askShown || up.uploading || saving || !dirty} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50 max-sm:px-3">
+            <button type="button" disabled={n.temp || !!askShown || up.uploading || saving || (!dirty && !examDirty)} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50 max-sm:px-3">
               임시저장
             </button>
             <button type="button" disabled={n.temp || !!askShown || up.uploading || saving} aria-busy={saving || undefined} onClick={saveAndReturn} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50 max-sm:px-4">
@@ -352,7 +370,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         {S.leave && (
           // 올리는 중이면 "저장하고 이동" 은 없다 — 기다리지 않고 막는다 (리뷰 I-2: 저장하면 올리던 파일이 빠진다)
           <InlineConfirm
-            text={up.uploading ? (dirty ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일과 저장하지 않은 수정은 버려져요" : "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요") : "저장하지 않은 수정이 있어요. 저장할까요?"}
+            text={up.uploading ? (dirty || examDirty ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일과 저장하지 않은 수정은 버려져요" : "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요") : "저장하지 않은 수정이 있어요. 저장할까요?"}
             cancelLabel="계속 편집"
             onCancel={() => update({ leave: null })}
             actions={[{ label: "버리기", onClick: leaveDiscard }, ...(up.uploading ? [] : [{ label: "저장하고 이동", onClick: () => void leaveSave(), tone: "primary" as const, disabled: saving }])]}
@@ -525,6 +543,19 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
               </span>
             )}
           </div>
+        )}
+
+        {exam && (
+          <ExamEditor
+            ref={examRef}
+            slug={slug}
+            nodeId={id}
+            summary={exam}
+            assignees={ids.length}
+            toast={toast}
+            onDirty={setExamDirty}
+            onChanged={() => void api.refresh()}
+          />
         )}
 
         <div className="flex flex-col gap-[6px]">

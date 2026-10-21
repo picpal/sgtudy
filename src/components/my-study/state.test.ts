@@ -82,6 +82,18 @@ describe("editUnsaved — 첨부를 올리는 중이면 수정이 없어도 미�
   });
 });
 
+describe("editUnsaved — 저장하지 않은 시험 문항(examDirty)도 미저장 (uploading 과 같은 경로, Review Focus 10)", () => {
+  it("그 항목의 examDirty 만 — 탭·뒤로 가기·다른 항목 이동 모두 같은 판정", () => {
+    const S = { ...INITIAL_STATE, tab: "curriculum" as const, curMode: "edit" as const, editSel: "7" };
+    expect(editUnsaved({ ...S, examDirty: "7" }, "7")).toBe(true);
+    expect(editUnsaved({ ...S, examDirty: "8" }, "7")).toBe(false);
+    expect(editUnsaved({ ...S, examDirty: "7" }, null)).toBe(false);
+    expect(blocksLeave({ ...S, examDirty: "7" }, true)).toBe(true);
+    expect(tabPatch({ ...S, examDirty: "7" }, "board", true)).toEqual({ leave: { tab: "board" }, confirm: false });
+    expect(INITIAL_STATE.examDirty).toBeNull();
+  });
+});
+
 describe("개인 목표 편집 폼 미저장 (personalUnsaved) — 보기 모드여도 탭을 막는다", () => {
   const S = { ...INITIAL_STATE, tab: "curriculum" as const, personalUnsaved: "32" };
   it("blocksLeave — 권한·모드와 무관, 진행목표 탭에서만", () => {

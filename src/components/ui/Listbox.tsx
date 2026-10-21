@@ -36,6 +36,9 @@ export function Listbox({
   options,
   onChange,
   className = "",
+  disabled = false,
+  describedBy,
+  align = "right",
 }: {
   /** 버튼·목록의 접근성 이름 (모바일 시트 제목으로도 쓴다) */
   label: string;
@@ -45,6 +48,12 @@ export function Listbox({
   options: ListboxOption[];
   onChange: (value: string) => void;
   className?: string;
+  /** 고를 수 없다(잠김) — 포커스는 남기고 열지 않는다(aria-disabled) */
+  disabled?: boolean;
+  /** 잠긴 이유 등 버튼 설명 id */
+  describedBy?: string;
+  /** sm 이상 팝오버를 버튼의 어느 끝에 맞출지 — 줄 왼쪽에 놓인 좁은 버튼은 "left" (팝오버가 화면 왼쪽 밖으로 나가지 않게) */
+  align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -97,7 +106,7 @@ export function Listbox({
   }, [open]);
 
   const onButtonKey = (e: KeyboardEvent<HTMLButtonElement>) => {
-    if (open) return;
+    if (open || disabled) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       openAt(selIndex);
@@ -147,9 +156,11 @@ export function Listbox({
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-label={`${label}: ${selected?.label ?? ""}`}
-        onClick={() => (open ? close(false) : openAt(selIndex))}
+        aria-disabled={disabled || undefined}
+        aria-describedby={describedBy}
+        onClick={() => (open ? close(false) : !disabled && openAt(selIndex))}
         onKeyDown={onButtonKey}
-        className={`relative flex h-11 w-full min-w-0 items-center gap-2 rounded-[12px] border bg-surface pl-3 pr-[10px] text-left text-[13px] transition-[border-color,box-shadow] duration-150 before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-[''] hover:border-line-dash focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/40 sm:h-10 ${
+        className={`relative flex h-11 w-full min-w-0 items-center gap-2 rounded-[12px] border bg-surface pl-3 pr-[10px] text-left text-[13px] transition-[border-color,box-shadow] duration-150 before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-[''] hover:border-line-dash focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/40 aria-disabled:cursor-default aria-disabled:bg-surface-2 aria-disabled:opacity-70 aria-disabled:hover:border-line-3 sm:h-10 ${
           open ? "border-mint shadow-[0_0_0_3px_rgba(13,122,100,.12)]" : "border-line-3"
         }`}
       >
@@ -167,7 +178,7 @@ export function Listbox({
           <div
             ref={panel}
             data-listbox-panel=""
-            className="fixed inset-x-0 bottom-0 z-50 flex max-h-[70vh] flex-col rounded-t-[20px] border border-line bg-surface pb-[max(8px,env(safe-area-inset-bottom))] shadow-[0_-12px_32px_rgba(27,34,48,.18)] sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-[calc(100%+6px)] sm:z-30 sm:max-h-[min(360px,60vh)] sm:w-[340px] sm:min-w-full sm:rounded-[14px] sm:pb-0 sm:shadow-[0_12px_32px_rgba(27,34,48,.16)]"
+            className={`fixed inset-x-0 bottom-0 z-50 flex max-h-[70vh] flex-col rounded-t-[20px] border border-line bg-surface pb-[max(8px,env(safe-area-inset-bottom))] shadow-[0_-12px_32px_rgba(27,34,48,.18)] sm:absolute sm:inset-x-auto sm:bottom-auto ${align === "left" ? "sm:left-0" : "sm:right-0"} sm:top-[calc(100%+6px)] sm:z-30 sm:max-h-[min(360px,60vh)] sm:w-[340px] sm:min-w-full sm:rounded-[14px] sm:pb-0 sm:shadow-[0_12px_32px_rgba(27,34,48,.16)]`}
           >
             <div className="flex shrink-0 flex-col items-center gap-2 px-4 pb-1 pt-2 sm:hidden">
               <span aria-hidden="true" className="h-1 w-10 rounded-full bg-line-3" />

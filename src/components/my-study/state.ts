@@ -37,6 +37,8 @@ export type ScreenState = {
   leave: Leave | null;
   /** 첨부를 올리는 중인 편집 항목 id — ov 수정이 없어도 떠나기 전에 묻는다 (EditView 가 맞춘다) */
   uploading: string | null;
+  /** 시험 문항을 고치고 [문제 저장] 하지 않은 편집 항목 id — ov 밖의 수정이라 uploading 과 같이 떠나기 전에 묻는다 (EditView 가 맞춘다, 0037) */
+  examDirty: string | null;
   /** 개인 목표 편집 폼에 저장하지 않은 수정·올리는 중인 파일이 있는 목표 id — 보기 모드라 ov 에 없다. 탭·뒤로 가기 전에 묻는다 (DetailView 가 맞춘다) */
   personalUnsaved: string | null;
   saved: string;
@@ -68,6 +70,7 @@ export const INITIAL_STATE: ScreenState = {
   confirm: false,
   leave: null,
   uploading: null,
+  examDirty: null,
   personalUnsaved: null,
   saved: "",
   ov: EMPTY_OVERRIDES,
@@ -105,8 +108,9 @@ export const SHOW_OTHERS_PATCH: Partial<ScreenState> = { tab: "curriculum", curM
 export const toggleMinePatch = (p: ScreenState): Partial<ScreenState> => ({ mineOnly: !p.mineOnly, othersPersonal: p.mineOnly ? p.othersPersonal : false });
 export const toggleOthersPatch = (p: ScreenState): Partial<ScreenState> => ({ othersPersonal: !p.othersPersonal, mineOnly: p.othersPersonal ? p.mineOnly : false });
 
-/** 그 편집 항목에 저장하지 않은 것이 있나 — ov 수정 또는 올리는 중인 첨부 */
-export const editUnsaved = (S: Pick<ScreenState, "ov" | "uploading">, id: string | null): boolean => isDirty(S.ov, id) || (!!id && S.uploading === id);
+/** 그 편집 항목에 저장하지 않은 것이 있나 — ov 수정 · 올리는 중인 첨부 · 저장하지 않은 시험 문항 */
+export const editUnsaved = (S: Pick<ScreenState, "ov" | "uploading" | "examDirty">, id: string | null): boolean =>
+  isDirty(S.ov, id) || (!!id && (S.uploading === id || S.examDirty === id));
 
 /** 진행목표 편집 화면에 저장하지 않은 수정이 열려 있다 — 탭·헤더 메뉴·뒤로 가기로 떠나기 전에 묻는다 (Q2-1) */
 export const blocksLeave = (S: ScreenState, canEdit: boolean): boolean =>
