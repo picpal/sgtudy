@@ -77,7 +77,7 @@ function TakeInput({ q, mine, onChange, disabled }: { q: ExamQuestion; mine: unk
                 checked={on}
                 disabled={disabled}
                 onChange={() => onChange(q.type === "single" ? k : toggleIndex(nums(mine), k))}
-                className="size-[18px] shrink-0 accent-mint"
+                className="size-[18px] shrink-0 scroll-mb-20 accent-mint"
               />
               <span className="min-w-0 [overflow-wrap:anywhere]">{c}</span>
             </label>

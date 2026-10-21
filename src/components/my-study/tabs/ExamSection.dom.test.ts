@@ -260,6 +260,103 @@ describe("ExamSection — 응시", () => {
   });
 });
 
+const held = <T,>() => {
+  let resolve!: (v: T) => void, reject!: (e: unknown) => void;
+  const promise = new Promise<T>((a, b) => ((resolve = a), (reject = b)));
+  return { promise, resolve, reject };
+};
+const radio = (k: number) => host.querySelectorAll<HTMLInputElement>("input[type=radio]")[k];
+
+describe("ExamSection — 저장 순서(Fix round 1)", () => {
+  it("하단 막대에 가리지 않게 — 포커스가 가는 모든 입력에 scroll-mb-20", async () => {
+    await mount(view());
+    const focusables = Array.from(host.querySelectorAll<HTMLElement>("ol input, ol button"));
+    expect(focusables.length).toBe(2 + 3 + 2 + 1);
+    for (const el of focusables) expect(el.className).toContain("scroll-mb-20");
+  });
+  it("나가기: 보내던 같은 문항 저장이 끝난 뒤에 새 답을 보낸다(옛 답이 나중에 닿지 않게)", async () => {
+    const a = held<unknown>();
+    m.save.mockReturnValueOnce(a.promise).mockResolvedValue({ savedAt: "x", answered: 1, total: 4 });
+    await mount(view());
+    act(() => radio(0).click());
+    await tickSave();
+    expect(m.save).toHaveBeenCalledTimes(1);
+    act(() => radio(1).click());
+    act(() => root!.unmount());
+    root = null;
+    await flush();
+    expect(m.save).toHaveBeenCalledTimes(1);
+    a.resolve({ savedAt: "x", answered: 1, total: 4 });
+    await flush();
+    expect(m.save.mock.calls.map((c) => c[2])).toEqual([0, 1]);
+  });
+  it("나가기: 보내던 저장이 나간 뒤 실패하면 그 답을 한 번 더 보낸다", async () => {
+    const a = held<unknown>();
+    m.save.mockReturnValueOnce(a.promise).mockResolvedValue({ savedAt: "x", answered: 1, total: 4 });
+    await mount(view());
+    act(() => radio(1).click());
+    await tickSave();
+    act(() => root!.unmount());
+    root = null;
+    a.reject(new ApiException({ code: "UNKNOWN", message: "fetch failed" }));
+    await flush();
+    expect(m.save.mock.calls.map((c) => [c[1], c[2]])).toEqual([
+      ["1", 1],
+      ["1", 1],
+    ]);
+  });
+  it("재조회가 보내는 중인 답을 되돌리지 않는다", async () => {
+    m.save.mockResolvedValueOnce({ savedAt: "x", answered: 3, total: 4 }); // 화면 1 ≠ 서버 3 → 재조회
+    const f = held<ExamView>();
+    await mount(view());
+    m.fetch.mockReturnValueOnce(f.promise);
+    act(() => radio(0).click());
+    await tickSave();
+    expect(m.fetch).toHaveBeenCalledTimes(2);
+    const s2 = held<unknown>();
+    m.save.mockReturnValueOnce(s2.promise);
+    act(() => host.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].click());
+    await tickSave();
+    expect(m.save).toHaveBeenLastCalledWith("311", "2", [1]);
+    // 서버는 아직 2번 답을 모른다
+    await act(async () => f.resolve(view({ attempt: { status: "in_progress", answers: { "1": 0, "3": true, "4": "x" }, score: null, maxScore: null, correctCount: null, submittedAt: null, isLate: null, results: null } })));
+    await flush();
+    expect(host.querySelectorAll<HTMLInputElement>("input[type=checkbox]")[1].checked).toBe(true);
+    expect(bar()).toContain("4/4 답함");
+    s2.resolve({ savedAt: "x", answered: 4, total: 4 });
+    await flush();
+  });
+  it("제출은 마지막으로 고른 답을 먼저 저장하고, 제출 전에 떠난 재조회 응답은 결과를 되돌리지 않는다", async () => {
+    m.save.mockResolvedValue({ savedAt: "x", answered: 3, total: 4 }); // 어긋남 → 재조회
+    await mount(view());
+    const f = held<ExamView>();
+    m.fetch.mockReturnValueOnce(f.promise);
+    act(() => radio(0).click());
+    act(() => radio(1).click());
+    m.submit.mockResolvedValue(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
+    act(() => button("제출하기")!.click());
+    await act(async () => button("제출")!.click());
+    await flush();
+    expect(m.save.mock.calls.map((c) => [c[1], c[2]])).toEqual([["1", 1]]);
+    expect(m.save.mock.invocationCallOrder[0]).toBeLessThan(m.submit.mock.invocationCallOrder[0]);
+    expect(host.textContent).toContain("4/5점 (80%)");
+    await act(async () => f.resolve(view()));
+    await flush();
+    expect(host.textContent).toContain("4/5점 (80%)");
+    expect(button("제출하기")).toBeUndefined();
+  });
+  it("VALIDATION_FAILED 는 다시 보내지 않고 서버 것을 다시 받는다", async () => {
+    m.save.mockRejectedValue(new ApiException({ code: "VALIDATION_FAILED", message: "답 모양이 문항 유형과 맞지 않아요", details: { field: "answer" } }));
+    await mount(view());
+    act(() => radio(0).click());
+    await tickSave();
+    expect(toast).toHaveBeenCalledWith({ text: "답 모양이 문항 유형과 맞지 않아요", tone: "bad" });
+    expect(m.fetch).toHaveBeenCalledTimes(2);
+    expect(bar()).not.toContain("저장 실패");
+    expect(button("다시 시도")).toBeUndefined();
+  });
+});
+
 describe("ExamSection — 결과", () => {
   it("공개(after_submit) → 점수 카드 · 정오 · 내 답/정답 · 해설 <details>", async () => {
     await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
