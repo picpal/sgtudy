@@ -13,6 +13,8 @@ import { InlineConfirm } from "./InlineConfirm";
 /** EditView 가 위쪽 [저장]·떠나기 확인에서 부른다 — 저장하지 않은 문항을 저장하거나 버린다 */
 export type ExamEditorHandle = { save: () => Promise<boolean>; discard: () => void };
 export type ExamTab = "manual" | "ai";
+/** AI 탭의 브리프 폼 — 저장하지 않은 브리프도 미저장 가드에 들어간다(위쪽 [저장]·떠나기 확인이 함께 저장·버린다) */
+export type BriefHandle = { dirty: boolean; save: () => Promise<boolean>; discard: () => void };
 
 type Props = {
   slug: string;
@@ -27,7 +29,7 @@ type Props = {
   /** 저장·발행 성공 — 트리 요약(배지·문항 수)을 다시 받는다 */
   onChanged?: () => void;
   /** 「AI 로 생성」 탭 내용 (Task 8). 없으면 탭 줄 없이 직접 작성만 */
-  ai?: (ed: ExamEditorApi, goManual: () => void) => ReactNode;
+  ai?: (ed: ExamEditorApi, goManual: () => void, bindBrief: (h: BriefHandle | null) => void) => ReactNode;
   ref?: Ref<ExamEditorHandle>;
 };
 
@@ -45,13 +47,27 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
   const [tab, setTab] = useState<ExamTab>("manual");
   const [ask, setAsk] = useState<"publish" | "unpublish" | null>(null);
 
-  useImperativeHandle(ref, () => ({ save: ed.save, discard: ed.discard }), [ed.save, ed.discard]);
+  // AI 탭 브리프 폼의 손잡이 — 그 탭이 붙을 때·dirty 가 바뀔 때 바꿔 끼운다
+  const [brief, bindBrief] = useState<BriefHandle | null>(null);
+  const briefDirty = !!brief?.dirty;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      save: async () => (await ed.save()) && (brief?.dirty ? await brief.save() : true),
+      discard: () => {
+        ed.discard();
+        brief?.discard();
+      },
+    }),
+    [ed, brief],
+  );
 
   const onDirtyRef = useRef(onDirty);
   useEffect(() => {
     onDirtyRef.current = onDirty;
   });
-  useEffect(() => onDirtyRef.current(dirty), [dirty]);
+  useEffect(() => onDirtyRef.current(dirty || briefDirty), [dirty, briefDirty]);
   useEffect(() => () => onDirtyRef.current(false), []);
 
   const lockId = `exam-lock-${nodeId}`;
@@ -133,7 +149,7 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
       )}
 
       {/* AI 탭은 숨겨도 붙여 둔다 — 탭을 오가도 적던 브리프·붙여 넣은 JSON 이 남게 */}
-      {ai && <div hidden={tab !== "ai"}>{ai(ed, () => setTab("manual"))}</div>}
+      {ai && <div hidden={tab !== "ai"}>{ai(ed, () => setTab("manual"), bindBrief)}</div>}
       {ai && tab === "ai" ? null : (
         <>
           {lockNote && (

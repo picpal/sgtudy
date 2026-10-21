@@ -556,7 +556,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             toast={toast}
             onDirty={setExamDirty}
             onChanged={() => void api.refresh()}
-            ai={(ed, goManual) => <ExamAiTab slug={slug} nodeId={id} ed={ed} goManual={goManual} toast={toast} />}
+            ai={(ed, goManual, bindBrief) => <ExamAiTab slug={slug} nodeId={id} ed={ed} goManual={goManual} toast={toast} onBrief={bindBrief} />}
           />
         )}
 

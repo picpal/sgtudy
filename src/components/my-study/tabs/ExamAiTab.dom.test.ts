@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, createElement } from "react";
+import { act, createElement, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { ApiException } from "@/lib/api/errors";
 import { EMPTY_DRAFT } from "../exam";
 import type { ExamBrief, ExamQuestion, ExamSummary, ExamView } from "@/lib/api/types";
-import { COPY_FAIL, ExamAiTab, NO_AI_DRAFT, REPLACE_ASK, briefForm, jsonInstruction } from "./ExamAiTab";
-import { ExamEditor } from "./ExamEditor";
+import { COPY_FAIL, ExamAiTab, NO_AI_DRAFT, NO_NEW_AI_DRAFT, REPLACE_ASK, briefForm, jsonInstruction } from "./ExamAiTab";
+import { ExamEditor, type ExamEditorHandle } from "./ExamEditor";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -155,15 +155,27 @@ describe("ExamAiTab — AI 에게 넘기기(MCP)", () => {
     expect(box.value).toContain("task 311");
   });
 
-  it("[초안 새로 불러오기] — AI 초안이 없으면 안내만(문항 그대로)", async () => {
+  it("[초안 새로 불러오기] — AI 초안이 없으면 안내만(문항 그대로) · 사람이 저장한 문항이면 '새 AI 초안이 없어요'", async () => {
     mount();
-    m.fetch.mockResolvedValue(view({ source: "manual" }));
+    m.fetch.mockResolvedValue(view({ source: "manual", questions: [] }));
     await act(async () => button("초안 새로 불러오기")!.click());
     await flush();
     expect(m.fetch).toHaveBeenCalledWith("aws", "311");
     expect(host.textContent).toContain(NO_AI_DRAFT);
+    m.fetch.mockResolvedValue(view({ source: "manual" }));
+    await act(async () => button("초안 새로 불러오기")!.click());
+    await flush();
+    expect(host.textContent).toContain(NO_NEW_AI_DRAFT);
+    expect(host.textContent).not.toContain(NO_AI_DRAFT);
     expect(ed.applyView).not.toHaveBeenCalled();
     expect(goManual).not.toHaveBeenCalled();
+  });
+
+  it("발행된 시험 — [초안 새로 불러오기] 비활성 + 이유(발행 토스트 없음)", () => {
+    mount({ view: view({ status: "published", source: "ai" }) });
+    const b = button("초안 새로 불러오기")!;
+    expect(b.disabled).toBe(true);
+    expect(host.querySelector(`#${b.getAttribute("aria-describedby")}`)!.textContent).toBe("발행된 시험은 AI 초안으로 바꿀 수 없어요 · 초안으로 되돌린 뒤 해 주세요");
   });
 
   it("[초안 새로 불러오기] — 고친 문항이 있으면 묻고, 바꾸면 수동 탭으로", async () => {
@@ -242,6 +254,53 @@ describe("ExamAiTab — JSON 붙여넣기", () => {
 
 describe("ExamEditor + AI 탭", () => {
   const SUMMARY: ExamSummary = { status: "draft", questionCount: 2, totalPoints: 2, reveal: "after_submit" };
+  it("저장하지 않은 브리프도 미저장 — onDirty(true) · handle.save 가 브리프 저장 · discard 가 되돌린다", async () => {
+    m.fetch.mockResolvedValue(view());
+    const onDirty = vi.fn();
+    const ref = createRef<ExamEditorHandle>();
+    host = document.body.appendChild(document.createElement("div"));
+    root = createRoot(host);
+    act(() =>
+      root!.render(
+        createElement(ExamEditor, {
+          slug: "aws",
+          nodeId: "311",
+          summary: SUMMARY,
+          assignees: 2,
+          toast,
+          onDirty,
+          ref,
+          ai: (e, go, bind) => createElement(ExamAiTab, { slug: "aws", nodeId: "311", ed: e, goManual: go, toast, onBrief: bind }),
+        }),
+      ),
+    );
+    await flush();
+    expect(onDirty).toHaveBeenLastCalledWith(false);
+    type(fieldOf("주제"), "새 주제");
+    expect(onDirty).toHaveBeenLastCalledWith(true);
+    act(() => ref.current!.discard());
+    expect(fieldOf<HTMLInputElement>("주제").value).toBe("AWS IAM·VPC 핵심");
+    expect(onDirty).toHaveBeenLastCalledWith(false);
+    type(fieldOf("주제"), "새 주제");
+    m.brief.mockResolvedValue(view({ brief: { ...BRIEF, topic: "새 주제" } }));
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await ref.current!.save();
+    });
+    await flush();
+    expect(ok).toBe(true);
+    expect(m.put).not.toHaveBeenCalled(); // 문항은 그대로라 보내지 않는다
+    expect(m.brief).toHaveBeenCalledWith("aws", "311", { ...BRIEF, topic: "새 주제" });
+    expect(onDirty).toHaveBeenLastCalledWith(false);
+    // 주제를 비우면 저장 실패 — 숨은 탭이라도 토스트
+    type(fieldOf("주제"), "");
+    await act(async () => {
+      ok = await ref.current!.save();
+    });
+    expect(ok).toBe(false);
+    expect(toast).toHaveBeenCalledWith({ text: "브리프 · 주제는 1~200자예요", tone: "bad" });
+  });
+
   it("탭 줄 · 탭을 오가도 적던 브리프가 남는다 · 가져오기 → 직접 작성 탭에 문항 + 저장 전", async () => {
     m.fetch.mockResolvedValue(view());
     host = document.body.appendChild(document.createElement("div"));

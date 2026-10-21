@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { Listbox, type ListboxOption } from "@/components/ui/Listbox";
 import type { ToastMsg } from "@/components/ui/Toast";
@@ -10,6 +10,7 @@ import type { ExamBrief, ExamDifficulty, ExamQType, ExamView } from "@/lib/api/t
 import { Seg } from "../bits";
 import { DIFFICULTY_KO, QTYPE_KO, aiInstruction, examErrorAction } from "../exam";
 import type { ExamEditorApi } from "../useExamEditor";
+import type { BriefHandle } from "./ExamEditor";
 import { InlineConfirm } from "./InlineConfirm";
 
 /** 브리프 한도 — 서버 exam_brief_put 과 같다 */
@@ -17,6 +18,8 @@ export const BRIEF_LIMITS = { topic: 200, theory: 20000, note: 1000 } as const;
 export const REPLACE_ASK = "작성 중인 문항을 AI 초안으로 바꿀까요?";
 export const COPY_FAIL = "복사하지 못했어요 · 직접 선택해 복사해 주세요";
 export const NO_AI_DRAFT = "아직 AI 가 저장한 초안이 없어요 · AI 가 저장했다고 하면 다시 눌러 주세요";
+/** 문항은 있는데 마지막으로 쓴 쪽이 사람([문제 저장]) — 그 뒤로 AI 가 새로 쓴 초안이 없다 */
+export const NO_NEW_AI_DRAFT = "새 AI 초안이 없어요 · AI 에게 다시 만들어 달라고 해 주세요";
 
 const QTYPES = Object.keys(QTYPE_KO) as ExamQType[];
 const COUNT_OPTIONS: ListboxOption[] = Array.from({ length: EXAM_LIMITS.questions }, (_, k) => ({ value: String(k + 1), label: `${k + 1}문항` }));
@@ -76,7 +79,7 @@ export function jsonInstruction(f: BriefForm): string {
 }
 
 type Ed = Pick<ExamEditorApi, "view" | "draft" | "dirty" | "locked" | "replace" | "applyView" | "applyMeta" | "reload">;
-type Props = { slug: string; nodeId: string; ed: Ed; goManual: () => void; toast: (m: ToastMsg) => void };
+type Props = { slug: string; nodeId: string; ed: Ed; goManual: () => void; toast: (m: ToastMsg) => void; onBrief?: (h: BriefHandle | null) => void };
 
 const field = "w-full min-w-0 rounded-[10px] border border-line-3 bg-surface px-3 py-[10px] text-[14px] leading-[1.55] text-ink aria-invalid:border-warn";
 const area = `${field} min-h-[96px] resize-y [field-sizing:content]`;
@@ -118,14 +121,14 @@ function CopyButton({ label: text, value, id }: { label: string; value: string; 
  * 출제 화면의 「AI 로 생성」 탭 (스펙 §4.2). 브리프 저장 → AI 에게 넘기기(① MCP: 지시문 복사 → [초안 새로 불러오기], ② MCP 없이: JSON 붙여넣기).
  * AI 가 쓴 문항은 수동 탭의 초안이 된다 — 발행은 언제나 사람이 검토한 뒤.
  */
-export function ExamAiTab({ slug, nodeId, ed, goManual, toast }: Props) {
+export function ExamAiTab({ slug, nodeId, ed, goManual, toast, onBrief }: Props) {
   const { view } = ed;
   // 불러오기 실패·다시 불러오기는 「직접 작성」 탭이 보여 준다
   if (!view) return <p className="m-0 text-[13px] text-muted">문제를 불러오는 중…</p>;
-  return <AiBody key={nodeId} slug={slug} nodeId={nodeId} view={view} ed={ed} goManual={goManual} toast={toast} />;
+  return <AiBody key={nodeId} slug={slug} nodeId={nodeId} view={view} ed={ed} goManual={goManual} toast={toast} onBrief={onBrief} />;
 }
 
-function AiBody({ slug, nodeId, view, ed, goManual, toast }: Props & { view: ExamView }) {
+function AiBody({ slug, nodeId, view, ed, goManual, toast, onBrief }: Props & { view: ExamView }) {
   const saved = briefForm(view.exam.brief);
   const [form, setForm] = useState<BriefForm>(saved);
   const [briefErr, setBriefErr] = useState<string | null>(null);
@@ -146,26 +149,50 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast }: Props & { view: Exa
   const blocked = ed.locked ? "응시가 시작된 시험이라 문항을 AI 초안으로 바꿀 수 없어요" : view.exam.status === "published" ? "발행된 시험은 AI 초안으로 바꿀 수 없어요 · 초안으로 되돌린 뒤 해 주세요" : null;
   const instruction = aiInstruction(slug, nodeId, view.node.title, view.exam.brief ?? null);
 
-  const saveBrief = async () => {
+  const saveBrief = async (): Promise<boolean> => {
     const bad = briefError(form);
     if (bad) {
       setBriefErr(bad);
-      return;
+      return false;
     }
     setSavingBrief(true);
     try {
       ed.applyMeta(await putExamBrief(slug, nodeId, toBrief(form)));
       setBriefErr(null);
       toast({ text: "브리프를 저장했어요", tone: "ok" });
+      return true;
     } catch (e) {
       const act = examErrorAction(toApiError(e));
       setBriefErr(act.text);
       toast({ text: act.text, tone: "bad" });
       if (act.kind === "refetch") await ed.reload();
+      return false;
     } finally {
       setSavingBrief(false);
     }
   };
+
+  // 저장하지 않은 브리프 → ExamEditor(미저장 가드). 위쪽 [저장]·떠나기 확인의 저장/버리기가 여기로 온다
+  const live = useRef({ saveBrief, saved, form, toast });
+  useEffect(() => {
+    live.current = { saveBrief, saved, form, toast };
+  });
+  useEffect(() => {
+    onBrief?.({
+      dirty: briefDirty,
+      save: () => {
+        // AI 탭이 숨어 있을 수 있다 — 클라이언트 검사 실패도 토스트로 알린다(서버 거절은 saveBrief 가 토스트)
+        const bad = briefError(live.current.form);
+        if (bad) live.current.toast({ text: `브리프 · ${bad}`, tone: "bad" });
+        return live.current.saveBrief();
+      },
+      discard: () => {
+        setForm(live.current.saved);
+        setBriefErr(null);
+      },
+    });
+  }, [briefDirty, onBrief]);
+  useEffect(() => () => onBrief?.(null), [onBrief]);
 
   const applyAi = (v: ExamView) => {
     setAsk(null);
@@ -181,8 +208,9 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast }: Props & { view: Exa
     setLoading(true);
     try {
       const v = await fetchExam(slug, nodeId);
-      if (v.exam.source !== "ai" || !v.questions?.length) {
-        setLoadNote(NO_AI_DRAFT);
+      if (v.exam.status === "published") ed.applyMeta(v); // 그새 발행됨 — 버튼이 막히고 이유가 보인다
+      else if (v.exam.source !== "ai" || !v.questions?.length) {
+        setLoadNote(v.questions?.length ? NO_NEW_AI_DRAFT : NO_AI_DRAFT);
         ed.applyMeta(v);
       } else if (ed.dirty) setAsk({ kind: "reload", v });
       else applyAi(v);
@@ -283,7 +311,7 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast }: Props & { view: Exa
       <div className="flex min-w-0 flex-col gap-3 border-t border-line-2 pt-4">
         <h4 className="m-0 text-[14px] font-bold text-ink">AI 에게 넘기기</h4>
         {blocked && (
-          <p role="note" className={noteCls}>
+          <p id={`exam-ai-blocked-${nodeId}`} role="note" className={noteCls}>
             {blocked}
           </p>
         )}
@@ -304,7 +332,7 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast }: Props & { view: Exa
         </pre>
         <div className="flex flex-wrap items-center gap-2">
           <CopyButton label="지시문 복사" value={instruction} id={`exam-ai-copy-${nodeId}`} />
-          <button type="button" disabled={loading} aria-busy={loading || undefined} onClick={() => void loadAi()} className={btn}>
+          <button type="button" disabled={loading || !!blocked} aria-busy={loading || undefined} aria-describedby={blocked ? `exam-ai-blocked-${nodeId}` : undefined} onClick={() => void loadAi()} className={btn}>
             {loading ? "불러오는 중…" : "초안 새로 불러오기"}
           </button>
         </div>
@@ -341,7 +369,7 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast }: Props & { view: Exa
             {jsonErr}
           </p>
         )}
-        <button type="button" disabled={!json.trim() || !!blocked} onClick={onImport} className={`${btn} w-full`}>
+        <button type="button" disabled={!json.trim() || !!blocked} aria-describedby={blocked ? `exam-ai-blocked-${nodeId}` : undefined} onClick={onImport} className={`${btn} w-full`}>
           가져오기
         </button>
         {ask?.kind === "import" && confirm(() => doImport(ask.d))}
