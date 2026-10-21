@@ -38,7 +38,8 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
     <>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line">
         {/* 390 폭에서 탭 3개가 358px 를 넘는다 — 페이지가 아니라 탭 줄만 가로로 스크롤(Q1-03). pb-px: -mb-px 밑줄이 세로 스크롤을 만들지 않게 */}
-        <div role="tablist" aria-label="방 범위" className="thin-scroll flex min-w-0 max-w-full gap-1 max-sm:overflow-x-auto max-sm:pb-px">
+        {/* ≤640: 스크롤 줄을 화면 끝까지 늘려(-mx-4·px-4) 잘린 탭이 본문 여백 한가운데가 아니라 화면 가장자리에서 넘어가게 — 더 있다는 게 보인다 */}
+        <div role="tablist" aria-label="방 범위" className="thin-scroll flex min-w-0 max-w-full gap-1 max-sm:-mx-4 max-sm:w-[calc(100%+2rem)] max-sm:max-w-none max-sm:overflow-x-auto max-sm:px-4 max-sm:pb-px">
           {TABS.filter((t) => !anonymous || t.key === "public").map((t) => {
             const on = t.key === tab;
             return (
@@ -85,8 +86,9 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
         </div>
       </div>
 
-      {/* 태그 칩·초기화는 보이는 32px, 누르는 영역 44px — 줄 간격 12(= 44 − 32). 위 상태 칩과는 구분선·여백 26px 이라 겹치지 않는다 */}
-      <div role="group" aria-label="태그 필터" className="-mt-2 mb-6 flex flex-wrap items-center gap-x-2 gap-y-3">
+      {/* 태그 칩·초기화는 보이는 32px, 누르는 영역 44px — 줄 간격 12(= 44 − 32). 위 상태 칩과는 구분선·여백 26px 이라 겹치지 않는다.
+          ≤640: 태그가 많으면 칩이 여러 줄을 차지해 방 목록이 한참 밀린다 — 칩만 한 줄 가로 스크롤(화면 끝까지), 44px 누름 영역은 py 로 안에 둔다 */}
+      <div role="group" aria-label="태그 필터" className="-mt-2 mb-6 flex flex-wrap items-center gap-x-2 gap-y-3 max-sm:mb-4 max-sm:-mt-3 max-sm:gap-y-1">
         <span className="mr-1 flex items-center gap-1 text-[13px] font-semibold text-ink-2">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" />
@@ -94,6 +96,7 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
           </svg>
           태그
         </span>
+        <div className="thin-scroll contents max-sm:-mr-4 max-sm:flex max-sm:min-w-0 max-sm:flex-1 max-sm:gap-2 max-sm:overflow-x-auto max-sm:py-[6px] max-sm:pr-4">
         {tagCounts.map(({ slug, tag, count }) => {
           const on = tags.includes(slug);
           return (
@@ -111,6 +114,7 @@ export function FilterBar({ tab, tabCounts, onTab, status, onStatus, tagCounts, 
             </button>
           );
         })}
+        </div>
         {tags.length > 1 && (
           // 서버는 고른 태그 중 하나라도 가진 방을 돌려준다(OR) — 좁히는 게 아니라 넓힌다는 걸 알린다(Q3-4)
           <span data-tag-hint className="basis-full text-[12px] text-muted">

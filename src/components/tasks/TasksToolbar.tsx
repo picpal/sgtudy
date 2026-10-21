@@ -102,8 +102,9 @@ export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilte
           완료 숨기기
         </label>
       </div>
+      {/* ≤640: 스터디가 많으면 칩이 한 줄씩 쌓여 목록이 한참 밀린다 — 한 줄 가로 스크롤(상자 끝까지) */}
       {studies.length > 1 && (
-        <div role="group" aria-label="스터디" className="flex flex-wrap items-center gap-x-[6px] gap-y-[10px]">
+        <div role="group" aria-label="스터디" className="thin-scroll flex flex-wrap items-center gap-x-[6px] gap-y-[10px] max-sm:-mx-2 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-2 max-sm:[&>*]:shrink-0">
           <span aria-hidden="true" className="mr-1 text-[13px] font-semibold text-ink-3">스터디</span>
           <Chip on={filter.study === "all"} onClick={() => set({ study: "all" })}>
             모든 스터디

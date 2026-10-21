@@ -113,12 +113,12 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
       </AppHeader>
 
       <PageBody as="main">
-        <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+        <div className="mb-7 flex flex-wrap items-end justify-between gap-4 max-sm:mb-5 max-sm:gap-3">
           <div>
-            <h1 className="m-0 text-[28px] font-bold tracking-[-0.02em]">슥터디 룸</h1>
-            <p className="mb-0 mt-[6px] text-[15px] text-muted">함께 목표를 세우고, 누가 어디까지 왔는지 한눈에 확인하세요.</p>
+            <h1 className="m-0 text-[28px] font-bold tracking-[-0.02em] max-sm:text-[22px]">슥터디 룸</h1>
+            <p className="mb-0 mt-[6px] text-[15px] text-muted max-sm:mt-1 max-sm:text-[14px]">함께 목표를 세우고, 누가 어디까지 왔는지 한눈에 확인하세요.</p>
           </div>
-          <Link href={createHref} className="flex h-[46px] items-center gap-2 rounded-[14px] bg-navy px-5 text-[15px] font-semibold text-white hover:text-white">
+          <Link href={createHref} className="flex h-[46px] items-center gap-2 rounded-[14px] bg-navy px-5 text-[15px] font-semibold text-white hover:text-white max-sm:h-11 max-sm:rounded-[12px] max-sm:px-4 max-sm:text-[14px]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
               <path d="M12 5v14M5 12h14" />
             </svg>
@@ -157,7 +157,7 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
           />
         )}
 
-        <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]" aria-busy={loading} style={{ opacity: loading ? 0.6 : 1 }}>
+        <div className="grid gap-6 max-sm:gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]" aria-busy={loading} style={{ opacity: loading ? 0.6 : 1 }}>
           {rooms.map((r) => (
             <RoomCard key={r.id} room={r} selectedTags={selectedLabels} anonymous={!me} filters={{ scope: tab, status, q: dq, tags }} />
           ))}

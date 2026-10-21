@@ -254,7 +254,7 @@ export function AppHeader({ active, children, bell }: Props) {
 
   return (
     <header className="border-b border-line bg-surface">
-      <div className="mx-auto flex max-w-[1376px] flex-wrap items-center gap-4 px-8 py-3 max-sm:px-4">{inner}</div>
+      <div className="mx-auto flex max-w-[1376px] flex-wrap items-center gap-4 px-8 py-3 max-sm:gap-x-3 max-sm:gap-y-2 max-sm:px-4 max-sm:py-2">{inner}</div>
     </header>
   );
 }

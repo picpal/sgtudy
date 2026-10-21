@@ -6,6 +6,7 @@ import { PAL } from "@/lib/palette";
 import { JOIN_MODE_LABEL } from "@/lib/types";
 import { type Room } from "@/data/room-view";
 import { StatusBadge } from "./StatusBadge";
+import { INFO_DL, PeriodText } from "@/components/ui/InfoList";
 import { CurrentRoundCard } from "./CurrentRoundCard";
 import { ScheduleList } from "./ScheduleList";
 
@@ -47,7 +48,7 @@ export function RoomInfo({ room, onShare, more }: { room: Room; onShare: () => v
           <h1 title={room.title} className="line-clamp-3 break-words text-[30px] font-bold leading-[1.3] tracking-[-0.02em] max-sm:text-[22px]">
             {room.title}
           </h1>
-          <p className="mt-2 text-[15px] leading-[1.6] text-ink-3">{room.intro}</p>
+          <p className="mt-2 text-[15px] leading-[1.6] text-ink-3 max-sm:text-[14px]">{room.intro}</p>
         </div>
         <div className="flex shrink-0 gap-[6px]">
           <button type="button" aria-label="공유" title="링크 복사" onClick={onShare} className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface">
@@ -60,10 +61,10 @@ export function RoomInfo({ room, onShare, more }: { room: Room; onShare: () => v
         </div>
       </div>
 
-      <dl className="mt-6 grid grid-cols-[150px_minmax(0,1fr)] items-center gap-x-3 gap-y-[14px] text-[14px]">
+      <dl className={`mt-6 max-sm:mt-4 ${INFO_DL}`}>
         <Dt icon={dtIcon(<circle cx="12" cy="12" r="9" />, <path d="M12 7v5l3 2" />)}>기간</Dt>
-        <dd className="flex flex-wrap items-center gap-2 font-medium">
-          {room.period}
+        <dd className="flex flex-wrap items-center gap-x-2 font-medium">
+          <PeriodText period={room.period} />
           <span
             className="rounded-[7px] px-2 py-[2px] text-[12px] font-semibold"
             style={room.archived ? { color: "#4A5563", background: "#E9EEF0" } : recruit ? { color: "#2F5BC2", background: "#E3ECFD" } : { color: "#0D7A64", background: "#DDF4EE" }}

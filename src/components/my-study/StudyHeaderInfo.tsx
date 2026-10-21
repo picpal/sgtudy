@@ -8,6 +8,7 @@ import { PAL } from "@/lib/palette";
 import { roomStatusLabel, type RoomStatus } from "@/lib/types";
 import type { StudyRoom } from "@/lib/api/my-study";
 import { routes, type MyStudyTab } from "@/lib/routes";
+import { INFO_DL, PeriodText } from "@/components/ui/InfoList";
 import { RoundIconButton, toneOfName } from "./bits";
 
 export type TabId = MyStudyTab;
@@ -78,10 +79,10 @@ export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: Stu
       </div>
 
       {tab === "overview" && (
-        <dl className="mt-6 mb-0 grid grid-cols-[150px_minmax(0,1fr)] items-center gap-x-3 gap-y-[14px] text-[14px] max-[390px]:grid-cols-[110px_minmax(0,1fr)]">
+        <dl className={`mt-6 mb-0 max-sm:mt-4 ${INFO_DL}`}>
           <Dt icon={ic(<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>)}>기간</Dt>
-          <dd className="m-0 flex flex-wrap items-center gap-2 font-medium">
-            {room.period}
+          <dd className="m-0 flex flex-wrap items-center gap-x-2 font-medium">
+            <PeriodText period={room.period} />
             <span className={`rounded-[7px] px-2 py-[2px] text-[12px] font-semibold ${room.archived ? "bg-slate-soft text-ink-3" : "bg-mint-soft text-mint"}`}>{room.draft ? `모집 전 · ${room.dday}` : room.dday}</span>
           </dd>
           <Dt icon={ic(<path d="M4 21V4M4 4h12l-2 4 2 4H4" />)}>상태</Dt>
@@ -128,7 +129,7 @@ export function StudyHeaderInfo({ room, tab, onTab, onShare, more }: { room: Stu
         </dl>
       )}
 
-      <div id="my-study-tabs" role="tablist" aria-label="방 상세 탭" className="mt-[26px] scroll-mt-4 flex gap-1 overflow-x-auto border-y border-line-2 py-[5px]">
+      <div id="my-study-tabs" role="tablist" aria-label="방 상세 탭" className="mt-[26px] scroll-mt-4 max-sm:mt-5 flex gap-1 overflow-x-auto border-y border-line-2 py-[5px]">
         {TABS.map(([id, label]) => {
           const on = tab === id;
           return (

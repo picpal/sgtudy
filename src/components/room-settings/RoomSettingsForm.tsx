@@ -152,10 +152,10 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
     <div className="flex min-h-screen flex-col">
       <AppHeader active="myStudy" bell={<NotificationBell />} />
       <PageBody>
-        <main className="relative mx-auto w-full max-w-[880px] rounded-[20px] bg-surface p-7 max-sm:p-5">
+        <main className="relative mx-auto w-full max-w-[880px] rounded-[20px] bg-surface p-7 max-sm:p-4">
           <TopBackLink href={back} />
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em]">방 설정</h1>
+            <h1 className="m-0 text-[24px] font-bold tracking-[-0.02em] max-sm:text-[22px]">방 설정</h1>
             <StatusBadge status={uiStatus(d.status)} draft={d.status === "draft"} />
             {d.archived && <span className="rounded-[8px] bg-slate-soft px-[10px] py-[3px] text-[12px] font-semibold text-ink-3">보관됨</span>}
           </div>
