@@ -448,3 +448,18 @@ describe("EditView 시험 리프 — 「문제」 섹션 · 미저장 가드 (Re
     expect(live.S.examDirty).toBe("21");
   });
 });
+
+describe("EditView 기간·유형·회차 줄", () => {
+  const row = () => host.querySelector<HTMLElement>("[data-meta-row]")!;
+  const heads = () => Array.from(row().children).map((c) => c.firstChild?.textContent?.trim());
+
+  it("과제 — 시작일·마감일·과제 유형·회차 네 칸, 칸 안에는 라벨과 조절기만 (안내 글은 줄 밖)", async () => {
+    await mount(leaf);
+    expect(heads()).toEqual(["시작일", "마감일", "과제 유형", "회차"]);
+    const select = row().querySelector("select")!;
+    expect(select.parentElement!.children).toHaveLength(1);
+    const help = host.querySelector(`#${select.getAttribute("aria-describedby")}`)!;
+    expect(help.textContent).toContain("다른 회차로 옮기면");
+    expect(row().contains(help)).toBe(false);
+  });
+});

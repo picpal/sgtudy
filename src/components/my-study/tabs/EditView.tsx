@@ -193,6 +193,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   const locks = n.leaf ? leafLocks(n) : null;
   const removeLabel = n.archived ? "보관 해제" : hasSub ? "보관" : "삭제";
   const plan = removePlan(n);
+  // 리프의 회차 고르기 — 지금 회차와 선택지
+  const round = n.leaf ? { cur: roundOf(nodes, n), opts: roundOptions(roots) } : null;
   // 내부 depth("2단계")는 보여 주지 않는다 (Q1-17) — "1주차 · 회차", "1주차 IAM·VPC › 과제"(시험 리프는 "› 시험" — 상세와 같게). 조상은 누르면 그 편집 화면으로
   const kind = n.leaf ? (n.exam ? "시험" : "과제") : n.d === 0 ? "회차" : "묶음";
   const ancestors: TreeNode[] = [];
@@ -397,67 +399,75 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           <input ref={titleInput} type="text" value={n.title} disabled={n.temp} onChange={(e) => edit((p) => ({ ...patchOv(p, "titles", { ...p.ov.titles, [id]: e.target.value }), saved: "" }))} className={`${field} h-[52px] px-[14px] text-[18px] font-bold disabled:bg-surface-2`} />
         </label>
 
-        {/* 기간·유형은 한 줄에 — 좁으면 접어 내린다. 회차·묶음의 하위 집계는 같은 줄 끝의 보조 글 */}
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-3">
-          <label className={`${label} min-w-0 flex-[0_1_180px] max-sm:flex-[1_1_140px]`}>
+        {/* 기간·유형·회차 — 칸마다 라벨 한 줄 + 높이 44 조절기라 라벨·칸이 한 줄에 맞는다. 안내 글은 격자 밖(아래)에 둔다.
+            과제: 좁으면 기간 2칸 + 유형·회차 한 줄씩, 넓으면 2×2, 아주 넓으면 4칸 한 줄. 회차·묶음: 기간 2칸 + 하위 집계 */}
+        <div
+          data-meta-row
+          className={`grid grid-cols-2 items-start gap-x-3 gap-y-3 ${
+            n.leaf ? (n.personal ? "@min-[960px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]" : "@min-[960px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1.6fr)]") : "@min-[560px]:grid-cols-[minmax(0,180px)_minmax(0,180px)_minmax(0,1fr)]"
+          }`}
+        >
+          <label className={`${label} min-w-0`}>
             시작일
             <input type="date" value={n.s} disabled={n.temp} onChange={(e) => setDate("s", e.target.value)} className={`${field} min-w-0 px-[10px] text-[14px] ${DATE_NO_OVERFLOW_CLASS}`} />
           </label>
-          <label className={`${label} min-w-0 flex-[0_1_180px] max-sm:flex-[1_1_140px]`}>
+          <label className={`${label} min-w-0`}>
             마감일
             <input type="date" value={n.e} disabled={n.temp} onChange={(e) => setDate("e", e.target.value)} className={`${field} min-w-0 px-[10px] text-[14px] ${DATE_NO_OVERFLOW_CLASS}`} />
           </label>
           {n.leaf && !n.personal && (
-            <div className={`${label} min-w-0 flex-[0_1_300px] max-sm:flex-[1_1_100%]`}>
+            <div className={`${label} col-span-2 min-w-0 @min-[640px]:col-span-1`}>
               <span>과제 유형</span>
-              <div className="[&_button]:h-11">
+              {/* 바깥(p-3)까지 44 — 날짜·회차 칸과 같은 높이 */}
+              <div className="[&_[role=group]]:h-11 [&_button]:h-full">
                 <Seg<TaskType> label="과제 유형" value={n.type} onChange={setType} grow disabled={!!locks?.typeReason} describedBy={locks?.typeReason ? `type-lock-${id}` : undefined} options={[["공통", "공통 · 참가자 전원"], ["지정", "지정 · 일부 인원"]]} />
               </div>
             </div>
           )}
-          {n.leaf &&
-            (() => {
-              const cur = roundOf(nodes, n);
-              const opts = roundOptions(roots);
-              return (
-                <label className={`${label} min-w-0 flex-[0_1_300px] max-sm:flex-[1_1_100%]`}>
-                  회차
-                  <select
-                    value={cur?.id ?? ""}
-                    disabled={n.temp || n.archived || dirty || busy !== null}
-                    onChange={(e) => {
-                      const to = roots.find((r) => r.id === e.target.value);
-                      if (!to || !cur || (to.id === cur.id && n.parentId === cur.id)) return;
-                      const period = to.id === cur.id ? null : movedPeriod(n, cur, to);
-                      setBusy(id);
-                      void api
-                        .move(id, to.id, undefined, period ? [{ id, ...period }] : [], period ? `${to.label}로 옮겼어요 · 기간 ${rangeShort(period.s, period.e, today)}` : `${to.label}로 옮겼어요`)
-                        .then((ok) => ok && update({ saved: moveNote(n, period, false) }))
-                        .finally(() => setBusy(null));
-                    }}
-                    className={`${field} min-w-0 bg-surface px-[10px] text-[14px]`}
-                  >
-                    {!cur && <option value="">회차 없음</option>}
-                    {opts.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.text}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-[12px] font-medium text-muted">
-                    {dirty ? "저장한 뒤 옮길 수 있어요" : `${n.parentId !== cur?.id ? `지금: ${n.crumb} · ` : ""}다른 회차로 옮기면 그 회차 기간에 맞춰져요 · 제출이 있으면 기간은 그대로예요`}
-                  </span>
-                </label>
-              );
-            })()}
+          {round && (
+            <label className={`${label} col-span-2 min-w-0 @min-[640px]:col-span-1`}>
+              회차
+              <select
+                value={round.cur?.id ?? ""}
+                disabled={n.temp || n.archived || dirty || busy !== null}
+                aria-describedby={`round-help-${id}`}
+                onChange={(e) => {
+                  const cur = round.cur;
+                  const to = roots.find((r) => r.id === e.target.value);
+                  if (!to || !cur || (to.id === cur.id && n.parentId === cur.id)) return;
+                  const period = to.id === cur.id ? null : movedPeriod(n, cur, to);
+                  setBusy(id);
+                  void api
+                    .move(id, to.id, undefined, period ? [{ id, ...period }] : [], period ? `${to.label}로 옮겼어요 · 기간 ${rangeShort(period.s, period.e, today)}` : `${to.label}로 옮겼어요`)
+                    .then((ok) => ok && update({ saved: moveNote(n, period, false) }))
+                    .finally(() => setBusy(null));
+                }}
+                className={`${field} min-w-0 truncate bg-surface px-[10px] text-[14px]`}
+              >
+                {!round.cur && <option value="">회차 없음</option>}
+                {round.opts.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.text}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {!n.leaf && (
-            <p className="m-0 min-w-0 flex-[1_1_220px] pb-[2px] text-[13px] leading-[1.55] text-ink-2 @min-[560px]:text-right">
+            <p className="col-span-2 m-0 min-w-0 self-end text-[13px] leading-[1.55] text-ink-2 @min-[560px]:col-span-1 @min-[560px]:text-right">
               과제 {n.kids.filter((k) => !isPersonal(k)).length}개 · 진척률 {n.pct}%
               <br />
               <span className="text-[12px] text-muted">과제의 제출 수 ÷ 담당 건수로 자동 집계돼요</span>
             </p>
           )}
         </div>
+
+        {/* 회차 옮기기 안내 — 칸 높이를 흔들지 않게 격자 밖에 */}
+        {round && (
+          <p id={`round-help-${id}`} className="m-0 -mt-1 text-[12px] font-medium text-muted">
+            {dirty ? "회차는 저장한 뒤 옮길 수 있어요" : `${n.parentId !== round.cur?.id ? `지금: ${n.crumb} · ` : ""}다른 회차로 옮기면 그 회차 기간에 맞춰져요 · 제출이 있으면 기간은 그대로예요`}
+          </p>
+        )}
 
         {/* 제출이 있는 과제 — 유형 잠금 이유 (시나리오 QA #11). 기간·유형 줄의 세로 정렬을 흔들지 않게 줄 밖에 */}
         {locks?.typeReason && (
