@@ -76,6 +76,12 @@ cases("round exam 0037 · schema & authoring", db, [
     await expectFail(put(q, node, { reveal: "never", questions: [] }), "VALIDATION_FAILED");
     await bad({ type: undefined }, "type");                  // 유형 없음
     await bad({ points: 1.5 }, "points");
+    // 큰 수는 int 캐스트(22003) 전에 범위로 거른다
+    await bad({ points: 1e12 }, "points");
+    await bad({ answer: 99999999999 }, "answer");
+    await bad({ prompt: 123 }, "prompt");                    // 문자열만
+    await bad({ explanation: { md: "x" } }, "explanation");
+    await expectFail(put(q, node, { questions: [{ ...Q4.questions[1], answer: [0, 1e12] }] }), "VALIDATION_FAILED");
     await expectFail(put(q, node, { questions: [{ ...Q4.questions[1], answer: [0, 0] }] }), "VALIDATION_FAILED");   // 복수 정답 중복
     await expectFail(put(q, node, { questions: ["문항"] }), "VALIDATION_FAILED");
     // 0 문항 초안은 허용
@@ -124,11 +130,11 @@ cases("round exam 0037 · schema & authoring", db, [
     assert(v.exam.publishedAt);
     const notes = await q(`select n.user_id, n.title, n.link from public.notifications n where n.kind = 'EXAM_PUBLISHED' and n.node_id = $1::bigint order by n.id`, [node]);
     assertEquals(notes.length, 3);                           // 지은·철수·하나 (민수 = 발행자 제외, 도윤 INACTIVE)
-    assert((notes[0].title as string).includes("시험이 열렸어요"));
+    assertEquals(notes[0].title, "AWS SAA 자격증 3개월 완주 「3주차 정리 시험」 시험이 열렸어요");   // 스펙 §4.6 앞부분
     assertEquals(notes[0].link, `/my-study/aws?task=${node}`);
     assertEquals(notes.map((x) => x.user_id).sort(), [await uidOf(q, "지은"), await uidOf(q, "철수"), await uidOf(q, "하나")].sort());
     const body = (await one(q, "select body from public.notifications where kind = 'EXAM_PUBLISHED' and node_id = $1::bigint limit 1", [node])).body;
-    assertEquals(body, "4문항 · 10.21 마감");
+    assertEquals(body, "4문항 · ~10.21");                                                   // 스펙 §4.6 뒷부분
     // 다시 발행해도 멱등(알림 추가 없음)
     assertEquals((await rpc(q, "public.exam_publish('aws', $1::bigint)", [node])).exam.status, "published");
     assertEquals((await q("select 1 from public.notifications where kind = 'EXAM_PUBLISHED' and node_id = $1::bigint", [node])).length, 3);
@@ -165,6 +171,14 @@ cases("round exam 0037 · schema & authoring", db, [
     assertEquals(v.exam.brief.types, ["single", "ox"]);
     await expectFail(rpc(q, "public.exam_brief_put('aws', $1::bigint, $2::jsonb)", [node, JSON.stringify({ topic: "x".repeat(201) })]), "VALIDATION_FAILED");
     await expectFail(rpc(q, "public.exam_brief_put('aws', $1::bigint, $2::jsonb)", [node, JSON.stringify({ topic: "a", count: 0 })]), "VALIDATION_FAILED");
+    try {
+      await rpc(q, "public.exam_brief_put('aws', $1::bigint, $2::jsonb)", [node, JSON.stringify({ topic: "a", count: 1e12 })]);
+      throw new Error("expected fail");
+    } catch (e) {
+      const er = e as Error & { hint?: string };
+      assert(er.message.includes("VALIDATION_FAILED"), er.message);
+      assertEquals(JSON.parse(er.hint ?? "{}").field, "count");
+    }
     await expectFail(rpc(q, "public.exam_brief_put('aws', $1::bigint, $2::jsonb)", [node, JSON.stringify({ topic: "a", types: ["essay"] })]), "VALIDATION_FAILED");
     await expectFail(rpc(q, "public.exam_brief_put('aws', $1::bigint, $2::jsonb)", [node, JSON.stringify({ topic: "a", difficulty: "insane" })]), "VALIDATION_FAILED");
     // 브리프만 넣은 새 리프 = 빈 초안 · 기본값(count 10 · types single/multi/ox · normal)
@@ -173,5 +187,33 @@ cases("round exam 0037 · schema & authoring", db, [
     assertEquals([b.exam.status, b.exam.questionCount, b.exam.brief], ["draft", 0, { topic: "ELB", count: 10, types: ["single", "multi", "ox"], difficulty: "normal" }]);
     await as(q, "지은");
     await expectFail(rpc(q, "public.exam_brief_put('aws', $1::bigint, $2::jsonb)", [node, JSON.stringify({ topic: "x" })]), "NOT_CURRICULUM_EDITOR");
+  } },
+  { name: "lock: any attempt (even IN_PROGRESS) locks structure & unpublish (EXAM_LOCKED) · text·explanation·reveal still editable", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await put(q, node, Q4);
+    await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
+    // 응시 RPC 는 Task 2 — 진행 중 응시 행을 직접 넣는다(테스트는 소유자 권한) + 저장된 답 1개
+    const att = (await one(q, "insert into public.exam_attempts (node_id, user_id) values ($1::bigint, $2::uuid) returning id::text as id", [node, await uidOf(q, "지은")])).id;
+    const q0 = (await one(q, "select id::text as id from public.exam_questions where node_id = $1::bigint and ord = 0", [node])).id;
+    await q("insert into public.exam_answers (attempt_id, question_id, answer) values ($1::bigint, $2::bigint, '0')", [att, q0]);
+    const locked = async (p: Promise<unknown>, started: number, submitted: number) => {
+      try { await p; throw new Error("expected fail"); }
+      catch (e) {
+        const er = e as Error & { hint?: string };
+        assert(er.message.includes("EXAM_LOCKED"), er.message);
+        assertEquals(JSON.parse(er.hint ?? "{}"), { submitted, started });
+      }
+    };
+    await locked(put(q, node, { questions: Q4.questions.slice(0, 3) }), 1, 0);                                       // 개수
+    await locked(put(q, node, { questions: [{ ...Q4.questions[0], answer: 1 }, ...Q4.questions.slice(1)] }), 1, 0); // 정답
+    await locked(put(q, node, { questions: [{ ...Q4.questions[0], points: 3 }, ...Q4.questions.slice(1)] }), 1, 0); // 배점
+    await locked(rpc(q, "public.exam_unpublish('aws', $1::bigint)", [node]), 1, 0);
+    // 문구·해설·공개 시점은 허용 — 문항 id 와 저장된 답이 남는다
+    const v = await put(q, node, { reveal: "after_deadline", questions: [{ ...Q4.questions[0], prompt: "고친 문제", explanation: "고친 해설" }, ...Q4.questions.slice(1)] });
+    assertEquals([v.questions[0].id, v.questions[0].prompt, v.questions[0].explanation, v.exam.reveal, v.exam.locked], [q0, "고친 문제", "고친 해설", "after_deadline", true]);
+    assertEquals((await one(q, "select count(*)::int as c from public.exam_answers where attempt_id = $1::bigint", [att])).c, 1);
+    // 제출된 응시가 있으면 문구만 바뀐다(코드는 같고 details.submitted 가 센다)
+    await q("update public.exam_attempts set status = 'SUBMITTED', submitted_at = now() where id = $1::bigint", [att]);
+    await locked(rpc(q, "public.exam_unpublish('aws', $1::bigint)", [node]), 1, 1);
   } },
 ]);

@@ -82,6 +82,7 @@ create trigger trg_exams_guard_leaf before update of task_type on public.goal_no
   for each row execute function public.exams_guard_leaf();
 
 -- 시험 리프의 submissions 행은 exam_submit 만 만든다(§7-4). 일반 제출·첨부 등록은 EXAM_NODE
+-- 우회 불가: sgtudy.exam_submit 은 트랜잭션 로컬 GUC 이고, 클라이언트(PostgREST)는 set_config 를 부를 수 없다(GRANT 된 RPC 만 실행)
 create or replace function public.submissions_guard_exam() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
@@ -144,14 +145,15 @@ begin
     if v_t is null or v_t not in ('single', 'multi', 'ox', 'short') then
       perform public.fail('VALIDATION_FAILED', '문항 유형은 single·multi·ox·short 예요', jsonb_build_object('field', 'type', 'index', i));
     end if;
-    if length(trim(coalesce(q ->> 'prompt', ''))) < 1 or length(q ->> 'prompt') > 2000 then
+    if jsonb_typeof(q -> 'prompt') is distinct from 'string' or length(trim(q ->> 'prompt')) < 1 or length(q ->> 'prompt') > 2000 then
       perform public.fail('VALIDATION_FAILED', '문제는 1~2,000자예요', jsonb_build_object('field', 'prompt', 'index', i));
     end if;
-    if length(coalesce(q ->> 'explanation', '')) > 4000 then
+    if (q ? 'explanation' and jsonb_typeof(q -> 'explanation') not in ('string', 'null')) or length(coalesce(q ->> 'explanation', '')) > 4000 then
       perform public.fail('VALIDATION_FAILED', '해설은 4,000자까지예요', jsonb_build_object('field', 'explanation', 'index', i));
     end if;
     if q ? 'points' and jsonb_typeof(q -> 'points') <> 'null'
-       and (jsonb_typeof(q -> 'points') <> 'number' or (q ->> 'points')::numeric <> floor((q ->> 'points')::numeric)) then
+       and (jsonb_typeof(q -> 'points') <> 'number' or (q ->> 'points')::numeric <> floor((q ->> 'points')::numeric)
+            or (q ->> 'points')::numeric not between 1 and 10) then     -- int 캐스트 전에 범위(1e12 → 22003 대신 VALIDATION_FAILED)
       perform public.fail('VALIDATION_FAILED', '배점은 1~10점이에요', jsonb_build_object('field', 'points', 'index', i));
     end if;
     v_p := coalesce((q ->> 'points')::numeric::int, 1);
@@ -172,7 +174,7 @@ begin
       v_n := jsonb_array_length(v_c);
       if v_t = 'single' then
         if v_a is null or jsonb_typeof(v_a) <> 'number' or (v_a #>> '{}')::numeric <> floor((v_a #>> '{}')::numeric)
-           or (v_a #>> '{}')::int < 0 or (v_a #>> '{}')::int >= v_n then
+           or (v_a #>> '{}')::numeric < 0 or (v_a #>> '{}')::numeric >= v_n then
           perform public.fail('VALIDATION_FAILED', '정답은 보기 번호(0부터) 하나예요', jsonb_build_object('field', 'answer', 'index', i));
         end if;
         v_a := to_jsonb((v_a #>> '{}')::int);
@@ -182,7 +184,8 @@ begin
         end if;
         seen := '{}';
         for e in select * from jsonb_array_elements(v_a) loop
-          if jsonb_typeof(e) <> 'number' or (e #>> '{}')::numeric <> floor((e #>> '{}')::numeric) or (e #>> '{}')::int < 0 or (e #>> '{}')::int >= v_n or (e #>> '{}')::int = any(seen) then
+          if jsonb_typeof(e) <> 'number' or (e #>> '{}')::numeric <> floor((e #>> '{}')::numeric)
+             or (e #>> '{}')::numeric < 0 or (e #>> '{}')::numeric >= v_n or (e #>> '{}')::int = any(seen) then
             perform public.fail('VALIDATION_FAILED', '정답 번호가 보기 범위를 벗어나거나 겹쳐요', jsonb_build_object('field', 'answer', 'index', i));
           end if;
           seen := seen || (e #>> '{}')::int;
@@ -224,6 +227,21 @@ language sql stable security definer set search_path = '' as $$
   select count(*)::int from public.exam_attempts a where a.node_id = p_node and a.status = 'SUBMITTED'
 $$;
 
+-- 편집 잠금 판정: 응시 행이 하나라도 있으면(IN_PROGRESS 포함) 잠긴다 — 구조를 바꾸면 exam_questions 삭제가
+-- 저장된 exam_answers 를 cascade 로 지우므로(답 유실). 문구·해설·공개 시점 수정은 허용
+create or replace function public.exam_assert_unlocked(p_node bigint, p_what text) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_all int; v_sub int;
+begin
+  select count(*)::int, count(*) filter (where a.status = 'SUBMITTED')::int into v_all, v_sub
+  from public.exam_attempts a where a.node_id = p_node;
+  if v_all > 0 then
+    perform public.fail('EXAM_LOCKED',
+      case when v_sub > 0 then format('%s명이 제출해 %s', v_sub, p_what) else format('%s명이 응시 중이라 %s', v_all, p_what) end,
+      jsonb_build_object('submitted', v_sub, 'started', v_all));
+  end if;
+end $$;
+
 -- 현재 문항을 계약 모양(정답 포함, type 대문자)으로
 create or replace function public.exam_questions_jsonb(p_node bigint) returns jsonb
 language sql stable security definer set search_path = '' as $$
@@ -232,18 +250,16 @@ language sql stable security definer set search_path = '' as $$
   from public.exam_questions q where q.node_id = p_node
 $$;
 
--- 문항 교체. 잠긴 시험(제출 1건~)은 구조가 같을 때만(문구·해설 갱신) — 아니면 EXAM_LOCKED
+-- 문항 교체. 잠긴 시험(응시 1건~, 진행 중 포함)은 구조가 같을 때만(문구·해설 갱신) — 아니면 EXAM_LOCKED
 create or replace function public.exam_replace_questions(p_node bigint, p_qs jsonb, p_source text) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
-  v_sub int := public.exam_submitted_count(p_node);
   q     jsonb;
   i     int := 0;
 begin
-  if v_sub > 0 then
+  if exists (select 1 from public.exam_attempts a where a.node_id = p_node) then
     if public.exam_struct_key(p_qs) <> public.exam_struct_key(public.exam_questions_jsonb(p_node)) then
-      perform public.fail('EXAM_LOCKED', format('%s명이 제출해 문항은 잠겼어요 · 문제 글·해설·공개 시점만 고칠 수 있어요', v_sub),
-                          jsonb_build_object('submitted', v_sub));
+      perform public.exam_assert_unlocked(p_node, '문항은 잠겼어요 · 문제 글·해설·공개 시점만 고칠 수 있어요');
     end if;
     -- 구조 동일: 같은 ord 의 prompt·explanation 만 갱신(exam_answers 의 question_id 보존)
     for q in select * from jsonb_array_elements(p_qs) loop
@@ -338,13 +354,12 @@ end $$;
 
 create or replace function public.exam_unpublish(p_slug text, p_node bigint) returns jsonb
 language plpgsql security definer set search_path = '' as $$
-declare v record; r public.rooms; n public.goal_nodes; v_uid uuid := public.current_user_id(); v_sub int;
+declare v record; r public.rooms; n public.goal_nodes; v_uid uuid := public.current_user_id();
 begin
   select * into v from public.exam_editable_leaf(p_slug, p_node);
   r := v.r;
   n := v.n;
-  v_sub := public.exam_submitted_count(n.id);
-  if v_sub > 0 then perform public.fail('EXAM_LOCKED', format('%s명이 제출해 초안으로 되돌릴 수 없어요', v_sub), jsonb_build_object('submitted', v_sub)); end if;
+  perform public.exam_assert_unlocked(n.id, '초안으로 되돌릴 수 없어요');
   update public.exams set status = 'DRAFT', published_at = null, updated_at = now() where node_id = n.id;
   if not found then perform public.fail('EXAM_NOT_FOUND', '시험이 없어요', jsonb_build_object('nodeId', n.id::text)); end if;
   return public.exam_view(n.id, v_uid, v_uid);
@@ -366,7 +381,8 @@ begin
   if length(coalesce(p_brief ->> 'theory', '')) > 20000 then perform public.fail('VALIDATION_FAILED', '기반 이론은 20,000자까지예요', '{"field":"theory"}'::jsonb); end if;
   if length(coalesce(p_brief ->> 'note', '')) > 1000 then perform public.fail('VALIDATION_FAILED', '참고는 1,000자까지예요', '{"field":"note"}'::jsonb); end if;
   if p_brief ? 'count' and jsonb_typeof(p_brief -> 'count') <> 'null'
-     and (jsonb_typeof(p_brief -> 'count') <> 'number' or (p_brief ->> 'count')::numeric <> floor((p_brief ->> 'count')::numeric)) then
+     and (jsonb_typeof(p_brief -> 'count') <> 'number' or (p_brief ->> 'count')::numeric <> floor((p_brief ->> 'count')::numeric)
+          or (p_brief ->> 'count')::numeric not between 1 and 50) then
     perform public.fail('VALIDATION_FAILED', '문항 수는 1~50이에요', '{"field":"count"}'::jsonb); end if;
   v_cnt := coalesce((p_brief ->> 'count')::numeric::int, 10);
   if v_cnt < 1 or v_cnt > 50 then perform public.fail('VALIDATION_FAILED', '문항 수는 1~50이에요', '{"field":"count"}'::jsonb); end if;
@@ -400,7 +416,7 @@ language sql stable security definer set search_path = '' as $$
     'today', to_char(public.kst_today(), 'YYYY-MM-DD'),
     'node', jsonb_build_object('id', n.id::text, 'title', n.title, 'startDate', to_char(n.start_date, 'YYYY-MM-DD'), 'endDate', to_char(n.end_date, 'YYYY-MM-DD'), 'archived', n.archived_at is not null),
     'exam', jsonb_build_object('status', lower(x.status), 'reveal', lower(x.reveal), 'questionCount', x.question_count, 'totalPoints', x.total_points,
-                               'source', lower(x.source), 'publishedAt', public.iso(x.published_at), 'locked', public.exam_submitted_count(x.node_id) > 0,
+                               'source', lower(x.source), 'publishedAt', public.iso(x.published_at), 'locked', exists (select 1 from public.exam_attempts a where a.node_id = x.node_id),
                                'submittedCount', public.exam_submitted_count(x.node_id), 'brief', x.brief),
     'viewer', jsonb_build_object('canEdit', true, 'isAssignee', public.is_task_assignee(n.id, p_uid), 'canTake', false, 'reason', null),
     'questions', (select coalesce(jsonb_agg(jsonb_build_object('id', q.id::text, 'ord', q.ord, 'type', lower(q.qtype), 'prompt', q.prompt_md, 'choices', q.choices,
@@ -482,7 +498,7 @@ begin
     -- 0034: 계획 적용·되돌리기 묶음(수신자당 1건). 방 제목은 따옴표 없이
     when 'CURRICULUM_BULK_UPDATED' then format('%s 진행목표가 한꺼번에 바뀌었어요', v_room)
     -- 0037
-    when 'EXAM_PUBLISHED'         then format('"%s" 시험이 열렸어요', v_node)
+    when 'EXAM_PUBLISHED'         then format('%s 「%s」 시험이 열렸어요', v_room, v_node)   -- 스펙 §4.6
   end;
   -- 본문(0013): 방 제목은 프론트가 메타 줄에 따로 그리므로 본문에 넣지 않는다. 제목에 없는 정보만.
   -- 일정 변경(0023)·회차 일정 변경(0024): 바뀐 쪽만 — 마감만 '마감 옛 → 새', 시작만 '시작 옛 → 새', 둘 다 '기간 옛 범위 → 새 범위'.
@@ -544,9 +560,9 @@ begin
     when p_kind = 'SUBMISSION_DIGEST' and p_node is not null then
       case when v_tasks <= 1 then format('"%s"', v_node) else format('"%s" 외 과제 %s개', v_node, v_tasks - 1) end
   end;
-  -- 0037: 시험 발행 — 문항 수 · 마감
+  -- 0037: 시험 발행 — 스펙 §4.6 "{방} 「{제목}」 시험이 열렸어요 · n문항 · ~MM.DD" 의 뒷부분(제목 · 본문 으로 나눠 그린다)
   if p_kind = 'EXAM_PUBLISHED' then
-    v_body := format('%s문항 · %s 마감', coalesce(p_model ->> 'count', '0'), to_char((select g.end_date from public.goal_nodes g where g.id = p_node), 'MM.DD'));
+    v_body := format('%s문항 · ~%s', coalesce(p_model ->> 'count', '0'), to_char((select g.end_date from public.goal_nodes g where g.id = p_node), 'MM.DD'));
   end if;
   return jsonb_build_object('title', left(v_title, 200), 'body', left(v_body, 500));
 end $$;
