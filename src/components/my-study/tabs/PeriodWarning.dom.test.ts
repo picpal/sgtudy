@@ -26,6 +26,7 @@ const labels = (host: HTMLElement) => Array.from(host.querySelectorAll("button")
 
 afterEach(() => {
   document.body.innerHTML = "";
+  window.localStorage.clear();
   vi.clearAllMocks();
 });
 
@@ -42,19 +43,19 @@ describe("PeriodWarning (방 기간을 벗어난 회차)", () => {
   it("편집자: 회차 편집으로 (보기·개요에서). 편집 모드 안에서는 버튼 대신 안내", () => {
     const onEditRounds = vi.fn();
     const { host } = mount({ canEdit: true, onEditRounds });
-    expect(labels(host)).toEqual(["회차 기간 고치기"]);
+    expect(labels(host)).toEqual(["회차 기간 고치기", "그대로 두기"]);
     act(() => host.querySelector("button")!.click());
     expect(onEditRounds).toHaveBeenCalled();
     document.body.innerHTML = "";
     const inEdit = mount({ canEdit: true, onEditRounds: undefined });
-    expect(labels(inEdit.host)).toEqual([]);
+    expect(labels(inEdit.host)).toEqual(["그대로 두기"]);
     expect(inEdit.host.textContent).toContain("회차를 눌러 기간을 고쳐 주세요");
   });
   it("그룹장: 종료일 늘리기 → 마지막 마감으로 채운 폼 → 저장", async () => {
     api.updateRoomEndDate.mockResolvedValue({});
     const toast = vi.fn();
     const { host } = mount({ canEdit: true, isLeader: true, toast });
-    expect(labels(host)).toEqual(["회차 기간 고치기", "종료일 늘리기"]);
+    expect(labels(host)).toEqual(["회차 기간 고치기", "그대로 두기", "종료일 늘리기"]);
     act(() => Array.from(host.querySelectorAll("button")).find((b) => b.textContent === "종료일 늘리기")!.click());
     const input = host.querySelector<HTMLInputElement>("input[type=date]")!;
     expect(input.value).toBe("2026-11-25");
@@ -79,6 +80,20 @@ describe("PeriodWarning (방 기간을 벗어난 회차)", () => {
   });
   it("종료일로 못 맞추면(fitEnd null) 그룹장에게도 회차 편집만", () => {
     const { host } = mount({ gap: { ...gap, fitEnd: null }, canEdit: true, isLeader: true });
-    expect(labels(host)).toEqual(["회차 기간 고치기"]);
+    expect(labels(host)).toEqual(["회차 기간 고치기", "그대로 두기"]);
+  });
+  it("그대로 두기: 이 브라우저에서 숨기고, 문구(개수·기간)가 바뀌면 다시 보인다", () => {
+    const toast = vi.fn();
+    const { host, root } = mount({ canEdit: true, toast });
+    act(() => host.querySelector<HTMLButtonElement>("[data-keep-period]")!.click());
+    expect(host.querySelector("[data-period-warning]")).toBeNull();
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ tone: "ok" }));
+    expect(window.localStorage.getItem("sgtudy:period-kept:aws")).toBe(gap.text);
+    // 팀원(편집 권한 없음)에게는 숨김이 적용되지 않는다 — 버튼도 없다
+    act(() => root.render(createElement(TodayProvider, { today: "2026-10-12" } as Parameters<typeof TodayProvider>[0], createElement(PeriodWarning, { ...base }))));
+    expect(host.querySelector("[data-period-warning]")).not.toBeNull();
+    document.body.innerHTML = "";
+    const changed = mount({ canEdit: true, gap: { ...gap, text: "회차 4개가 스터디 기간(10.15 – 10.23)을 벗어나요" } });
+    expect(changed.host.querySelector("[data-period-warning]")).not.toBeNull();
   });
 });
