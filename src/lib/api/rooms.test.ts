@@ -73,6 +73,13 @@ describe("toRoomCard (main §3)", () => {
     expect(r.status).toBe("draft");
     expect(r.slot.note).toBe("11.02(월) 시작 예정 · 모집 전");
   });
+  it("mine: 그룹장·ACTIVE 참가자만 — 카드를 누르면 내 스터디로", () => {
+    const mine = (membership: RoomCardDto["membership"]) => toRoomCard(dto({ membership }), TODAY).mine;
+    expect(mine({ role: "leader", status: "active" })).toBe(true);
+    expect(mine({ role: "member", status: "active" })).toBe(true);
+    for (const status of ["pending", "inactive", "rejected", "canceled", "expired"] as const) expect(mine({ role: "member", status })).toBe(false);
+    expect(mine(null)).toBe(false);
+  });
   it("private room → pub false", () => {
     expect(toRoomCard(dto({ isPublic: false }), TODAY).pub).toBe(false);
   });

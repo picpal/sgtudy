@@ -74,6 +74,7 @@ export function toRoomCard(d: RoomCardDto, today: string): Room {
     leaderId: d.leader.userId,
     tags: d.tags.map((t) => t.label),
     created: m?.role === "leader",
+    mine: m?.role === "leader" || m?.status === "active",
     period: periodCard(d.startDate, d.endDate),
     slot: slotOf(d, today),
     extra: d.status === "active" && d.recruitUntil ? (d.isFull ? "full" : "open") : undefined,

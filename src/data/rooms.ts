@@ -31,6 +31,8 @@ export type Room = {
   leaderId?: string;
   tags: string[];
   created: boolean;
+  /** 그룹장이거나 ACTIVE 참가자 — 카드를 누르면 공개 방 대신 내 스터디로 (승인 대기·이탈은 공개 방) */
+  mine?: boolean;
   period: string;
   slot: Slot;
 };

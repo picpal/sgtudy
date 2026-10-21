@@ -4,6 +4,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { routes } from "@/lib/routes";
+import { MARK } from "@/data/room-view";
 import type { CardStatus, Room } from "@/data/rooms";
 
 const STATUS_BADGE: Record<CardStatus, { label: string; bg: string; fg: string }> = {
@@ -25,10 +26,13 @@ const SLOT_TONE: Record<CardStatus, { bg: string; label: string; bar: string; tr
 
 /** anonymous: 비로그인이면 카드를 누를 때 로그인부터 — 로그인 뒤 그 방으로 돌아온다 */
 /** filters: 지금 둘러보기 필터 — 상세 화면 왼쪽 목록이 이어받는다 (시나리오 QA #19) */
+/** room.mine(그룹장·참가중): 공개 방 대신 그 방의 내 스터디로 — 공개 방 화면은 주소로 바로 열면 그대로 열린다 */
 type Props = { room: Room; selectedTags: string[]; anonymous?: boolean; filters?: HomeFilters };
 
 export function RoomCard({ room, selectedTags, anonymous = false, filters = DEFAULT_FILTERS }: Props) {
-  const href = roomHrefWith(room.id, filters);
+  const href = room.mine ? routes.myStudy(room.id) : roomHrefWith(room.id, filters);
+  // 내 방 표시는 상세 왼쪽 목록(markForScope)과 같은 말·색 — 그룹장은 만든 스터디 목록에서만 뺀다(전부 그룹장 방)
+  const mark = room.created ? (filters.scope === "created" ? undefined : MARK.owner) : room.mine ? MARK.joined : undefined;
   const badge = STATUS_BADGE[room.status];
   const tone = SLOT_TONE[room.status];
   const isFull = room.cur >= room.max;
@@ -36,6 +40,7 @@ export function RoomCard({ room, selectedTags, anonymous = false, filters = DEFA
   return (
     <Link
       href={anonymous ? routes.login(routes.room(room.id)) : href}
+      aria-label={!anonymous && room.mine ? `${room.title} — 내 스터디로 이동` : undefined}
       className="flex flex-col overflow-hidden rounded-[18px] border border-line bg-surface text-ink no-underline transition-[transform,box-shadow] duration-[180ms] ease-[ease] hover:-translate-y-1.5 hover:text-ink hover:shadow-[0_14px_28px_rgba(27,34,48,0.10)]"
     >
       <div className="flex flex-[1_1_auto] flex-col gap-[10px] px-[18px] pb-4 pt-[18px]">
@@ -48,10 +53,9 @@ export function RoomCard({ room, selectedTags, anonymous = false, filters = DEFA
               {room.extra === "full" ? "추가 모집 · 정원 마감" : "추가 모집"}
             </Badge>
           )}
-          {/* 참가한 스터디(mine)는 내가 그룹장인 방도 담는다(0029) — 그 방을 알아보게. 색은 상세 왼쪽 목록 표시와 같다 */}
-          {filters.scope === "mine" && room.created && (
-            <Badge bg="#E3ECFD" fg="#2F5BC2">
-              그룹장
+          {mark && (
+            <Badge bg={mark.bg} fg={mark.fg}>
+              {mark.label}
             </Badge>
           )}
           {!room.pub && (
