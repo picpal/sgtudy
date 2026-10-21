@@ -283,7 +283,10 @@ cases("scenario-qa (0024)", db, [
     const peek = async (role: string, nick: string | null) => {
       if (nick) await as(q, nick); else await q("select set_config('app.uid', '', true)");
       await q(`set local role ${role}`);
-      const req = await q("select u.nickname as who, r.leave_request_reason as reason, r.apply_message as msg from public.member_requests r join public.public_profiles u on u.id = r.user_id order by 1");
+      // 0036 O1: anon 은 public_profiles 자체가 닫혀 있어 조인 없이 행 수만 본다
+      const req = await q(role === "anon"
+        ? "select r.user_id::text as who, r.leave_request_reason as reason, r.apply_message as msg from public.member_requests r order by 1"
+        : "select u.nickname as who, r.leave_request_reason as reason, r.apply_message as msg from public.member_requests r join public.public_profiles u on u.id = r.user_id order by 1");
       const leak = await q(`select count(*)::int as n from public.room_members
                             where apply_message is not null or leave_requested_at is not null or leave_request_reason is not null`);
       await q("reset role");

@@ -21,6 +21,11 @@ dbTest("storage: non-assignee upload rejected, assignee upload + file_register r
     const { data, error } = await c.rpc("file_register", { p_node: ec2.id, p_path: path, p_name: "x.png", p_mime: "image/png", p_size: 4 });
     assertEquals(error, null);
     assertEquals(data.status, "ready");
+    // 0036 G1: 작성자가 Storage API 로 직접 지워도 객체가 남는다(삭제는 cleanup-files 의 service_role 만)
+    const rm = await c.storage.from("attachments").remove([path]);
+    assertEquals(rm.data ?? [], []);
+    const left = await admin.storage.from("attachments").list(path.slice(0, path.lastIndexOf("/")));
+    assertEquals(left.data?.some((o) => path.endsWith("/" + o.name)), true);
   } finally {
     await admin.storage.from("attachments").remove([path]);
     await admin.from("files").delete().eq("id", fid);

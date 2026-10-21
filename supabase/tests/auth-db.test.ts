@@ -4,14 +4,17 @@ import { anon, dbTest, RUN, userClient } from "./_testenv.ts";
 // 실제 Postgres + GoTrue + PostgREST 에서만 보이는 것: RLS 차단, anon/authenticated 역할, RPC 에러 전달 형식.
 // 시드 행은 읽기만. 쓰기는 테스트 사용자 자신의 profiles 행뿐.
 
-dbTest("anon cannot read profiles (emails hidden), but sees public_profiles without email", async () => {
+dbTest("anon cannot read profiles nor public_profiles (0036 O1); authenticated sees public_profiles without email", async () => {
   const a = anon();
   const { data: p, error: e1 } = await a.from("profiles").select("id, email");
   assertEquals(e1, null);
   assertEquals(p, []);
-  const { data: pub, error: e2 } = await a.from("public_profiles").select("*").limit(5);
-  assertEquals(e2, null);
-  assert(pub!.length > 0, "seeded public profiles visible");
+  const { error: e2 } = await a.from("public_profiles").select("*").limit(5);
+  assert(e2 !== null && e2.code === "42501", `anon select: ${e2?.code}`);
+  const { c } = await userClient(1);
+  const { data: pub, error: e3 } = await c.from("public_profiles").select("*").limit(5);
+  assertEquals(e3, null);
+  assert(pub!.length > 0, "seeded public profiles visible to authenticated");
   assertEquals("email" in pub![0], false);
 });
 
@@ -24,7 +27,7 @@ dbTest("public_profiles cannot be written through by anon or authenticated (C1)"
   const { c } = await userClient(1);
   const { error: e3 } = await c.from("public_profiles").update({ nickname: "pwned" }).eq("id", "00000000-0000-4000-8000-000000000001");
   assert(e3 !== null && e3.code === "42501", `authenticated update: ${e3?.code}`);
-  const { data } = await a.from("public_profiles").select("nickname").eq("id", "00000000-0000-4000-8000-000000000001").single();
+  const { data } = await c.from("public_profiles").select("nickname").eq("id", "00000000-0000-4000-8000-000000000001").single();
   assertEquals(data?.nickname, "철수");
 });
 

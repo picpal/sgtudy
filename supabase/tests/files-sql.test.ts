@@ -131,7 +131,7 @@ cases("files", db, [
     const path = `${room}/${ec2}/${cheolsu}/${fid}.pdf`;
     await uploaded(q, path, cheolsu, 10, "application/pdf");
     await register(q, ec2, path, "보고서.pdf", "application/pdf", 10);
-    await q("delete from storage.objects where name = $1", [path]);   // 소유자가 attachments_delete_own 으로 지운 상황(스텁 행 삭제는 테스트 전용)
+    await q("delete from storage.objects where name = $1", [path]);   // 객체가 사라진 상황(0036 이전엔 소유자 직접 삭제로 가능했다. 스텁 행 삭제는 테스트 전용)
     await expectFail(submit(q, ec2, "첨부", [], [fid]), "FILE_NOT_READY");
   } },
 

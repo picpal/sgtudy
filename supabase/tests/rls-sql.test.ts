@@ -117,15 +117,16 @@ sqlTest("rls: public_profiles exposes only id/nickname/avatar_tone", withCase(db
   assertEquals(cols.map((c) => c.column_name), ["id", "nickname", "avatar_tone"]);
 }));
 
-sqlTest("rls: public_profiles is read-only for anon/authenticated even under Supabase's default table grants (C1)", withCase(db, async (q) => {
+sqlTest("rls: public_profiles is select-only for authenticated and closed to anon even under Supabase's default table grants (C1, 0036 O1)", withCase(db, async (q) => {
   // 회귀 가드: 마이그레이션 자체가 쓰기 권한을 남기지 않았어야 한다
   assertEquals((await q("select has_table_privilege('anon', 'public.public_profiles', 'update') as ok"))[0].ok, false);
   // 호스팅 기본값 흉내: anon/authenticated 에 ALL 이 있었더라도 0003 의 revoke 뒤에는 select 만 남아야 한다
   await q("grant all on public.public_profiles to anon, authenticated");
   await q("revoke all on public.public_profiles from anon, authenticated, public");
   await q("grant select on public.public_profiles to anon, authenticated");
+  await q("revoke all on public.public_profiles from anon");                 // 0036 O1
   for (const role of ["anon", "authenticated"]) {
-    assertEquals((await q("select has_table_privilege($1, 'public.public_profiles', 'select') as ok", [role]))[0].ok, true, role);
+    assertEquals((await q("select has_table_privilege($1, 'public.public_profiles', 'select') as ok", [role]))[0].ok, role === "authenticated", role);
     for (const priv of ["insert", "update", "delete"]) {
       assertEquals((await q("select has_table_privilege($1, 'public.public_profiles', $2) as ok", [role, priv]))[0].ok, false, `${role} ${priv}`);
     }
@@ -144,5 +145,5 @@ sqlTest("rls: attachments bucket and storage policies exist", withCase(db, async
   assertEquals(Number(bk[0].file_size_limit), 10485760);
   assert((bk[0].allowed_mime_types as string[]).includes("application/pdf"));
   const pols = await q("select polname from pg_policy where polrelid = 'storage.objects'::regclass order by 1");
-  assertEquals(pols.map((p) => p.polname), ["attachments_delete_own", "attachments_insert_assignee", "attachments_insert_node_doc", "attachments_select_member", "attachments_select_node_doc"]);
+  assertEquals(pols.map((p) => p.polname), ["attachments_insert_assignee", "attachments_insert_node_doc", "attachments_select_member", "attachments_select_node_doc"]);
 }));
