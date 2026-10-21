@@ -303,6 +303,11 @@ cases("notices 0040 · NOTICE_POSTED notification (D8)", db, [
     const aws = await roomId(q, "aws");
     const t = (await one(q, `select public.notify_render('NOTICE_POSTED', $1::bigint, null, null, '{"title":"규칙"}') as t`, [aws])).t as Row;
     assertEquals([t.title, t.body], ["AWS SAA 자격증 3개월 완주 새 공지: 규칙", null]);
+    // 0043: 다시 알리기(renotify)는 새 공지와 다른 제목
+    const re = (await one(q, `select public.notify_render('NOTICE_POSTED', $1::bigint, null, null, '{"title":"규칙","renotify":true}') as t`, [aws])).t as Row;
+    assertEquals([re.title, re.body], ["AWS SAA 자격증 3개월 완주 공지 다시 알림: 규칙", null]);
+    const first = (await one(q, `select public.notify_render('NOTICE_POSTED', $1::bigint, null, null, '{"title":"규칙","renotify":false}') as t`, [aws])).t as Row;
+    assertEquals(first.title, "AWS SAA 자격증 3개월 완주 새 공지: 규칙");
     assertEquals((await one(q, "select public.notify_link('NOTICE_POSTED', $1::bigint, null, $2::uuid) as l", [aws, await uidOf(q, "지은")])).l, "/my-study/aws?tab=notice");
   } },
   { name: "create notifies ACTIVE members only (not leader/author, INACTIVE) · plain update none · renotify once per rev · dedupe", run: async (q) => {
@@ -322,7 +327,7 @@ cases("notices 0040 · NOTICE_POSTED notification (D8)", db, [
     const got = await posted(q, "지은");
     assertEquals(got.length, 2);
     assert(got[1].dedupe_key.startsWith(`NOTICE_POSTED:${n.id}:2:`));
-    assertEquals(got[1].title, "AWS SAA 자격증 3개월 완주 새 공지: 중간고사 일정(수정)");
+    assertEquals(got[1].title, "AWS SAA 자격증 3개월 완주 공지 다시 알림: 중간고사 일정(수정)");   // 0043
     // 같은 리비전으로 다시 발행해도 dedupe
     assertEquals((await one(q, "select public.notice_notify(n, $2::uuid) as c from public.room_notices n where n.id = $1::bigint", [n.id, await uidOf(q, "민수")])).c, 0);
   } },

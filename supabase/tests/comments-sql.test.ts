@@ -285,10 +285,11 @@ cases("comments 0041 · exam lock (D4)", db, [
     await create(q, node, "정답은 X 예요");
     await as(q, "지은");
     const l = await list(q, node);
-    assertEquals([l.items, l.people, l.total, l.locked, l.canWrite, l.writeBlock], [[], {}, 1, { reason: "exam" }, false, "exam_locked"]);
+    assertEquals([l.items, l.people, l.total, l.locked, l.canWrite, l.writeBlock], [[], {}, null, { reason: "exam" }, false, "exam_locked"]);   // 0043: 잠금이면 개수도 없다
     assertEquals(await failHint(create(q, node, "x"), "COMMENT_LOCKED"), { reason: "exam" });
     await q("select public.exam_submit($1::bigint)", [node]);
-    assertEquals([(await list(q, node)).items.length, (await list(q, node)).locked], [1, null]);
+    const open = await list(q, node);
+    assertEquals([open.items.length, open.locked, open.total], [1, null, 1]);
     // 편집자 멤버는 미제출이어도 열림
     await q("update public.room_members set can_edit_curriculum = true where room_id = $1 and user_id = $2::uuid", [await roomId(q, "aws"), await uidOf(q, "철수")]);
     await as(q, "철수");
@@ -326,7 +327,7 @@ cases("comments 0041 · exam lock (D4)", db, [
     await q("update public.rooms set status = 'ENDED' where slug = 'aws'");
     await as(q, "지은");
     const l = await list(q, node);
-    assertEquals([l.items, l.locked, l.canWrite, l.writeBlock, l.total], [[], { reason: "exam" }, false, "ended", 1]);
+    assertEquals([l.items, l.locked, l.canWrite, l.writeBlock, l.total], [[], { reason: "exam" }, false, "ended", null]);
     await q("update public.rooms set status = 'ACTIVE', archived_at = now() where slug = 'aws'");
     assertEquals([(await list(q, node)).locked, (await list(q, node)).items], [{ reason: "exam" }, []]);
     await as(q, "민수");   // 편집자는 그대로 열림
