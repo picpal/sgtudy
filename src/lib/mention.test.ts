@@ -94,15 +94,16 @@ describe("matchMembers · searchKey (Korean IME)", () => {
     expect(searchKey("닭").startsWith(searchKey("달"))).toBe(true);
     expect(searchKey("ＡB")).toBe("ａb");
   });
-  it("prefix before contains · self last · limit", () => {
+  it("prefix before contains · self excluded · limit", () => {
     // "하" 는 "한결" 의 접두이기도 하다(조합 중 "한" 이 될 수 있다)
-    expect(matchMembers("하", ms, "me").map((m) => m.nickname)).toEqual(["한결", "김하나", "하나"]);
+    expect(matchMembers("하", ms, "me").map((m) => m.nickname)).toEqual(["한결", "김하나"]);   // 본인(하나)은 후보에 없다
     expect(matchMembers("하나", ms, null).map((m) => m.nickname)).toEqual(["하나", "김하나"]);
     expect(matchMembers("ㅎ", ms, null).map((m) => m.nickname)).toEqual(["하나", "한결", "김하나"]);
     expect(matchMembers("한", ms, null).map((m) => m.nickname)).toEqual(["하나", "한결", "김하나"]);
     expect(matchMembers("hana", ms, null).map((m) => m.nickname)).toEqual(["Hana Kim"]);
     expect(matchMembers("닭", ms, null).map((m) => m.nickname)).toEqual(["닭강정"]);
     expect(matchMembers("", ms, "me", 3).map((m) => m.nickname)).toEqual(["철수", "Hana Kim", "김하나"]);
+    expect(matchMembers("하나", ms, "me").map((m) => m.nickname)).toEqual(["김하나"]);
     expect(matchMembers("zz", ms, null)).toEqual([]);
   });
 });

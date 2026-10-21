@@ -54,12 +54,12 @@ afterEach(() => {
 });
 
 describe("CommentComposer — 멘션 자동완성(MentionPicker)", () => {
-  it("@ 를 치면 그룹장·ACTIVE 후보가 열린다 — 본인은 맨 뒤 (나), ARIA combobox/listbox", () => {
+  it("@ 를 치면 그룹장·ACTIVE 후보가 열린다 — 본인은 빠진다, ARIA combobox/listbox", () => {
     mount();
     expect(area().getAttribute("role")).toBe("combobox");
     expect(area().getAttribute("aria-expanded")).toBe("false");
     typeIn("안녕 @");
-    expect(options()).toEqual(["김 하나", "하나둘", "민수", "철수(나)"]);
+    expect(options()).toEqual(["김 하나", "하나둘", "민수"]);
     expect(area().getAttribute("aria-expanded")).toBe("true");
     expect(area().getAttribute("aria-controls")).toBe(listbox()!.id);
     const first = host.querySelector('[role="option"]')!;

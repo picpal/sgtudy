@@ -280,7 +280,6 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
               >
                 <Avatar name={m.nickname} size={24} tone={m.tone} id={m.userId} />
                 <span className="min-w-0 truncate">{m.nickname}</span>
-                {m.userId === meId && <span className="shrink-0 text-[12px] text-muted">(나)</span>}
               </li>
             ))}
           </ul>

@@ -131,8 +131,8 @@ export function searchKey(s: string): string {
 }
 
 /**
- * 자동완성 후보(§6.4): 접두 일치 → 포함 일치 순, 같은 무리 안에서는 들어온 순서, 본인은 맨 뒤, 최대 limit.
- * 빈 질의("@" 만 침)는 전원
+ * 자동완성 후보(§6.4): 접두 일치 → 포함 일치 순, 같은 무리 안에서는 들어온 순서, 최대 limit.
+ * 본인(selfId)은 후보에서 뺀다 — 이미 본문에 있는 자기 멘션(수정 모드)은 picks 로 그대로 남는다. 빈 질의("@" 만 침)는 본인 빼고 전원
  */
 export function matchMembers<T extends { userId: string; nickname: string }>(query: string, members: T[], selfId: string | null, limit = 6): T[] {
   const q = searchKey(query);
@@ -141,9 +141,9 @@ export function matchMembers<T extends { userId: string; nickname: string }>(que
     return k.startsWith(q) ? 0 : k.includes(q) ? 1 : -1;
   };
   return members
-    .map((m, i) => ({ m, i, r: rank(m), self: m.userId === selfId }))
-    .filter((x) => x.r >= 0)
-    .sort((a, b) => Number(a.self) - Number(b.self) || a.r - b.r || a.i - b.i)
+    .map((m, i) => ({ m, i, r: rank(m) }))
+    .filter((x) => x.r >= 0 && x.m.userId !== selfId)
+    .sort((a, b) => a.r - b.r || a.i - b.i)
     .slice(0, limit)
     .map((x) => x.m);
 }
