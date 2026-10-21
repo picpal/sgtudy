@@ -33,7 +33,7 @@ type Props = {
   onToggle: (item: MeTaskItem) => void;
 };
 
-/** 내 과제 한 줄 — 왼쪽 44px(개인 = 완료 체크 버튼, 팀 = 상태 아이콘), 본문 = 과제 상세 링크 */
+/** 내 과제 한 줄 — 왼쪽 44px(개인 = 완료 체크 버튼, 팀 = 진행목표 트리와 같은 점), 본문 = 과제 상세 링크 */
 export function TaskRow({ item, study, round, today, withRoundChip, busy, onToggle }: Props) {
   const done = isDone(item.st);
   const personal = item.type === "personal";
@@ -73,8 +73,9 @@ export function TaskRow({ item, study, round, today, withRoundChip, busy, onTogg
           )}
         </button>
       ) : (
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center">
-          <StatusIcon status={item.st} size={16} label={false} />
+        // 팀 과제는 누를 수 없는 줄머리 — 빈 원(상태 아이콘)은 체크 칸처럼 보여서 진행목표 트리와 같은 채운 점으로. 상태는 오른쪽 칩이 말한다
+        <span aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center">
+          <span className={`h-[6px] w-[6px] rounded-full ${personal ? "bg-personal-dot" : "bg-line-dash"}`} />
         </span>
       )}
       <Link
