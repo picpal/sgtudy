@@ -44,6 +44,8 @@ describe("deny", () => {
     expect(r.headers.get("www-authenticate")).toBe('Bearer realm="sgtudy", error="invalid_token"');
     expect(await r.json()).toEqual({ error: "API_TOKEN_INVALID" });
   });
+  it("AUTH_REQUIRED(자격 없음) → error 파라미터 없음", () =>
+    expect(deny(401, "AUTH_REQUIRED").headers.get("www-authenticate")).toBe('Bearer realm="sgtudy"'));
   it("429 → Retry-After", () => {
     const r = deny(429, "API_RATE_LIMITED", 60);
     expect([r.status, r.headers.get("retry-after")]).toEqual([429, "60"]);

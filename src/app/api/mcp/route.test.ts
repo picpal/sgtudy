@@ -88,6 +88,21 @@ describe("POST /api/mcp", () => {
     expect((await (await POST(rpc("prompts/list", {}, 6))).json()).result.prompts.map((p: { name: string }) => p.name)).toEqual(["draft-curriculum"]);
     expect((await POST(rpc("notifications/initialized", {}, null))).status).toBe(202);
   });
+  it("〔리뷰 I1〕 JSON-RPC 배치(배열) → 400 + JSON-RPC 오류 · 도구 호출 없음", async () => {
+    auth.mockResolvedValue(ok);
+    const one = { jsonrpc: "2.0", method: "tools/call", params: { name: "list_my_studies", arguments: {} } };
+    const r = await POST(new Request("http://x/api/mcp", { method: "POST", body: JSON.stringify([{ ...one, id: 1 }, { ...one, id: 2 }]),
+      headers: { authorization: `Bearer ${PAT}`, "content-type": "application/json", accept: "application/json, text/event-stream" } }));
+    expect(r.status).toBe(400);
+    expect((await r.json()).error.code).toBe(-32600);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+  it("Authorization 없음 → error 파라미터 없는 Bearer 챌린지(RFC 6750 §3.1) · 형식 틀린 PAT → invalid_token", async () => {
+    const none = await POST(new Request("http://x/api/mcp", { method: "POST", body: "{}" }));
+    expect(none.headers.get("www-authenticate")).toBe('Bearer realm="sgtudy"');
+    const bad = await POST(new Request("http://x/api/mcp", { method: "POST", body: "{}", headers: { authorization: "Bearer sgt_pat_xyz" } }));
+    expect([bad.status, bad.headers.get("www-authenticate")]).toEqual([401, 'Bearer realm="sgtudy", error="invalid_token"']);
+  });
   it("GET → 405", async () => {
     const { GET } = await import("./route");
     expect((await GET()).status).toBe(405);
