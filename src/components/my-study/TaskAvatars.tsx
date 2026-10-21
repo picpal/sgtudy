@@ -67,7 +67,8 @@ export function TaskAvatars({ people, size, iconSize, compactSize, compactIconSi
       >
         <span title={p.title} className="relative inline-flex shrink-0 rounded-full" style={{ border: `2px solid ${ring}` }}>
           <Avatar name={p.name} size={s} tone={p.tone} id={p.id} />
-          <span className="absolute -right-[3px] -bottom-[3px] flex">
+          {/* 상태 원은 아바타 바깥 모서리로 더 빼고 다음 얼굴 위에 둔다 — 작아진 아바타에서 이니셜을 가리지 않게 */}
+          <span className="absolute -right-[5px] -bottom-[5px] z-[1] flex">
             <RingedStatus status={p.status} size={icon} />
           </span>
         </span>

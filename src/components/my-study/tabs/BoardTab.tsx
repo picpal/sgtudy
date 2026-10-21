@@ -145,9 +145,9 @@ function Card({ l, mine, today, meId, onOpen }: { l: LeafNode; mine: boolean; to
           <TaskAvatars
             people={l.people.map((p) => ({ key: p.userId, name: p.name, tone: p.tone, id: p.userId, status: CODE_STATUS[p.c], title: `${p.name} · ${CODE_LABEL[p.c]}` }))}
             size={24}
-            iconSize={13}
+            iconSize={11}
             compactSize={22}
-            compactIconSize={11}
+            compactIconSize={10}
             ring="#FFFFFF"
           />
           <span className="flex-1" />

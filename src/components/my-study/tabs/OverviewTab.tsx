@@ -134,9 +134,9 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, onOpenTask, p
                     <TaskAvatars
                       people={t.people.map(([name, s]) => ({ key: name, name, tone: t.tones?.[name] ?? toneOfName(name), id: t.ids?.[name], status: s, title: `${name} · ${STATUS_LABEL[s]}` }))}
                       size={28}
-                      iconSize={14}
+                      iconSize={12}
                       compactSize={26}
-                      compactIconSize={13}
+                      compactIconSize={11}
                       ring="#F7FAF9"
                     />
                     <div className="flex w-24 flex-col gap-[5px]">
