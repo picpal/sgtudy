@@ -118,9 +118,12 @@ sqlTest("privileges: 0002 helpers are not executable by anon/authenticated (D7 d
   }
 }));
 
-sqlTest("current_user_id: auth.uid() only — no GUC fallback in the function body (D13)", withCase(db, async (q) => {
+// D13(2026-10-13) 은 0033(AI 연동 스펙 §4)이 대체: auth.uid() 가 먼저, 보조 신원은 sgtudy.api_uid 하나뿐(api_authenticate 만 설정)
+sqlTest("current_user_id: auth.uid() first, only fallback = sgtudy.api_uid (0033, supersedes D13)", withCase(db, async (q) => {
   const src = (await q("select prosrc from pg_proc where oid = 'public.current_user_id()'::regprocedure"))[0].prosrc as string;
-  assertEquals(src.includes("current_setting"), false);
+  const settings = [...src.matchAll(/current_setting\('([^']+)'/g)].map((m) => m[1]);
+  assertEquals(settings, ["sgtudy.api_uid"]);
+  assertEquals(/coalesce\(\s*auth\.uid\(\)\s*,/.test(src), true);
 }));
 
 sqlTest("person_json: userId/nickname/tone, empty nickname before onboarding", withCase(db, async (q) => {

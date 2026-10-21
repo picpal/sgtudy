@@ -842,6 +842,8 @@ export const ROOM_CASES: Case[] = [
         "room_extra_recruit_open(text,date,integer,text)", "room_extra_recruit_close(text)",
         // 0032: 바로 참가 설정 · 코드 조회
         "invite_bypass_set(text,date,integer)", "invite_code_lookup(text)",
+        // 0033: AI 연동 개인 액세스 토큰(내부 api_* 헬퍼는 GRANT 없음)
+        "pat_create(text,text[],integer)", "pat_list()", "pat_revoke(uuid)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);
