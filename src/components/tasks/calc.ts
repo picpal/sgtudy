@@ -60,12 +60,27 @@ export function applyFilter(m: MeTasks, f: TasksFilter): MeTaskItem[] {
   });
 }
 
-/** 미완료 먼저 → 마감 빠른 순 → 팀 과제 먼저 → 제목(ko) */
+/** ord 없는 옛 서버(0042 전) 정렬: 미완료 먼저 → 마감 빠른 순 → 팀 과제 먼저 → 제목(ko) */
 const cmpItem = (a: MeTaskItem, b: MeTaskItem) =>
   Number(isDone(a.st)) - Number(isDone(b.st)) ||
   a.endDate.localeCompare(b.endDate) ||
   Number(a.type === "personal") - Number(b.type === "personal") ||
   a.title.localeCompare(b.title, "ko");
+
+const cmpOrd = (x: [number, number][], y: [number, number][]): number => {
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    const d = x[i][0] - y[i][0] || x[i][1] - y[i][1];
+    if (d) return d;
+  }
+  return x.length - y.length;
+};
+
+/** 진행목표 순서(model.visibleNodes 와 같은 기준): 팀 과제 먼저(개인 목표는 회차 끝) → 트리 깊이 우선(형제 sort_order → id). 같은 회차 안에서만 뜻이 있다 */
+export const curriculumCmp = (a: MeTaskItem, b: MeTaskItem): number =>
+  Number(a.type === "personal") - Number(b.type === "personal") || cmpOrd(a.ord ?? [], b.ord ?? []);
+
+/** 서버가 ord 를 주면(0042~) 진행목표 순서, 아니면 옛 정렬 */
+const hasOrd = (its: MeTaskItem[]) => its.every((it) => Array.isArray(it.ord));
 
 export type RoundGroup = { study: MeTaskStudy; round: MeTaskRound | null; items: MeTaskItem[]; done: number; canAdd: boolean };
 
@@ -83,7 +98,7 @@ export function groupByRound(m: MeTasks, items: MeTaskItem[], f: TasksFilter): R
       return {
         study,
         round,
-        items: [...its].sort(cmpItem),
+        items: [...its].sort(hasOrd(its) ? curriculumCmp : cmpItem),
         done: its.filter((it) => isDone(it.st)).length,
         canAdd: !!round && round.canAdd && study.canAddPersonal && personal < m.personalPerRound,
       };
@@ -109,8 +124,8 @@ const DUE_ORDER: [DueSection, string][] = [
   ["done", "완료"],
 ];
 
-/** 일~토 주 (내 일정 calc 와 같은 경계) */
-export function groupByDue(items: MeTaskItem[], today: string): { key: DueSection; label: string; items: MeTaskItem[] }[] {
+/** 일~토 주 (내 일정 calc 와 같은 경계). 구간 안 = 마감일 → 스터디·회차 순서(m) → 진행목표 순서 */
+export function groupByDue(m: MeTasks, items: MeTaskItem[], today: string): { key: DueSection; label: string; items: MeTaskItem[] }[] {
   const weekEnd = addDays(today, 6 - new Date(parseISO(today)).getUTCDay());
   const nextEnd = addDays(weekEnd, 7);
   const sectionOf = (it: MeTaskItem): DueSection => {
@@ -126,7 +141,13 @@ export function groupByDue(items: MeTaskItem[], today: string): { key: DueSectio
     const k = sectionOf(it);
     buckets.set(k, [...(buckets.get(k) ?? []), it]);
   }
-  return DUE_ORDER.filter(([k]) => buckets.has(k)).map(([key, label]) => ({ key, label, items: buckets.get(key)!.sort(cmpItem) }));
+  const studyAt = new Map(m.studies.map((s, i) => [s.slug, i]));
+  const roundAt = new Map(m.rounds.map((r, i) => [r.id, i]));
+  const at = (map: Map<string, number>, k: string) => map.get(k) ?? map.size;
+  const cmp = (a: MeTaskItem, b: MeTaskItem) =>
+    a.endDate.localeCompare(b.endDate) || at(studyAt, a.slug) - at(studyAt, b.slug) || at(roundAt, a.roundId) - at(roundAt, b.roundId) || curriculumCmp(a, b);
+  const sorter = hasOrd(items) ? cmp : cmpItem;
+  return DUE_ORDER.filter(([k]) => buckets.has(k)).map(([key, label]) => ({ key, label, items: buckets.get(key)!.sort(sorter) }));
 }
 
 export function summary(m: MeTasks, items: MeTaskItem[]): { left: number; dueToday: number; personalDone: number; personalTotal: number } {

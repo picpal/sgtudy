@@ -329,4 +329,19 @@ cases("personal goals · me", db, [
     assert((p.tasks as Row[]).some((t) => t.title === "EC2 인스턴스 유형 정리"));
     assertEquals((p.tasks as Row[]).some((t) => t.title === "지은 일정"), false);
   } },
+  { name: "me_tasks ord (0042): 회차 아래 조상 경로 [sort_order, id] — 묶음 안 리프 2단, 개인 목표 1단", run: async (q) => {
+    const aws = await roomId(q, "aws");
+    await asUser(q, await uidOf(q, "지은"));
+    const pid = (await create(q, await roundOf(q, "3주차"), "지은 3주차 목표")).createdId as string;
+    const m = (await one(q, "select public.me_tasks() as m")).m;
+    const ordOf = async (id: string) => {
+      const r = await one(q, "select sort_order, id from public.goal_nodes where id = $1", [id]);
+      return [Number(r.sort_order), Number(r.id)];
+    };
+    const bundle = await nodeByTitle(q, aws, "로드밸런서 비교");
+    const leaf = await nodeByTitle(q, aws, "ALB vs NLB 실습");
+    const items = m.items as Row[];
+    assertEquals(items.find((i) => i.id === String(leaf))!.ord, [await ordOf(String(bundle)), await ordOf(String(leaf))]);
+    assertEquals(items.find((i) => i.id === pid)!.ord, [await ordOf(pid)]);
+  } },
 ]);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MeTaskItem, MeTasks } from "@/lib/api/types";
-import { DEFAULT_FILTER, addBlockReason, studyNote, addableRounds, checkMode, addableStudies, applyFilter, atLimit, defaultCollapsed, defaultRound, emptyKind, normalizeFilter, personalCount, rowState, filterQuery, groupByDue, groupByRound, parseFilter, statusText, summary, type TasksFilter } from "./calc";
+import { DEFAULT_FILTER, addBlockReason, studyNote, addableRounds, checkMode, addableStudies, applyFilter, atLimit, defaultCollapsed, defaultRound, emptyKind, normalizeFilter, personalCount, rowState, filterQuery, curriculumCmp, groupByDue, groupByRound, parseFilter, statusText, summary, type TasksFilter } from "./calc";
 
 const item = (o: Partial<MeTaskItem> & { id: string }): MeTaskItem => ({
   slug: "aws", roundId: "a3", groupTitle: null, title: o.id, type: "common", startDate: "2026-10-15", endDate: "2026-10-21", st: "open", submittedAt: null, ...o,
@@ -124,11 +124,58 @@ describe("minor 보강", () => {
   });
 });
 
+/** 진행목표 트리(aws 3주차): 묶음 B(0) [L0(0) 완료, L1(1)] · 리프 T(1) · 내 개인 P1(2) · P2(3). 2주차 리프 Z, old 1주차 리프 W */
+const ordFx = (): MeTasks => ({
+  ...fx(),
+  items: [
+    item({ id: "P2", type: "personal", endDate: "2026-10-16", ord: [[3, 15]] }),
+    item({ id: "T", endDate: "2026-10-16", ord: [[1, 13]] }),
+    item({ id: "P1", type: "personal", endDate: "2026-10-18", ord: [[2, 14]] }),
+    item({ id: "L1", groupTitle: "B", endDate: "2026-10-20", ord: [[0, 10], [1, 12]] }),
+    item({ id: "L0", groupTitle: "B", endDate: "2026-10-21", st: "done", ord: [[0, 10], [0, 11]] }),
+    item({ id: "Z", roundId: "a2", endDate: "2026-10-20", ord: [[0, 5]] }),
+    item({ id: "W", slug: "old", roundId: "o1", endDate: "2026-10-20", ord: [[0, 1]] }),
+  ],
+});
+
+describe("진행목표 순서 (ord, 0042)", () => {
+  it("curriculumCmp: 형제 sort_order → 같으면 id, 조상이 먼저, 개인 목표는 팀 뒤", () => {
+    const a = item({ id: "a", ord: [[1, 9]] });
+    const b = item({ id: "b", ord: [[1, 3]] });
+    const parent = item({ id: "p", ord: [[0, 50]] });
+    const child = item({ id: "c", ord: [[0, 50], [0, 1]] });
+    const mine = item({ id: "m", type: "personal", ord: [[0, 2]] });
+    expect(ids([a, mine, child, b, parent].sort(curriculumCmp))).toEqual(["p", "c", "b", "a", "m"]);
+  });
+  it("회차별: 묶음 깊이 우선 → 팀 → 내 개인 목표(sort_order). 완료·마감일과 무관", () => {
+    const m = ordFx();
+    const g = groupByRound(m, applyFilter(m, DEFAULT_FILTER), DEFAULT_FILTER);
+    expect(ids(g[0].items)).toEqual(["L0", "L1", "T", "P1", "P2"]);
+  });
+  it("마감일 묶기: 구간 → 마감일 → 스터디 → 회차 → 진행목표 순서", () => {
+    const m = ordFx();
+    const all = { ...DEFAULT_FILTER, scope: "all" as const, group: "due" as const };
+    const secs = groupByDue(m, applyFilter(m, all), m.today);
+    expect(Object.fromEntries(secs.map((s) => [s.key, ids(s.items)]))).toEqual({
+      today: ["T", "P2"],
+      next: ["P1", "Z", "L1", "W"],
+      done: ["L0"],
+    });
+  });
+  it("ord 없는 옛 서버 응답은 옛 정렬(미완료 → 마감 → 팀 → 제목)", () => {
+    const m = ordFx();
+    m.items = m.items.map(({ ord: _o, ...it }) => it); // eslint-disable-line @typescript-eslint/no-unused-vars
+    const g = groupByRound(m, applyFilter(m, DEFAULT_FILTER), DEFAULT_FILTER);
+    expect(ids(g[0].items)).toEqual(["T", "P2", "P1", "L1", "L0"]);
+  });
+});
+
 describe("groupByDue", () => {
   const today = "2026-10-16";
   const mk = (id: string, endDate: string, st: MeTaskItem["st"] = "open") => item({ id, endDate, st });
   it("경계", () => {
     const secs = groupByDue(
+      fx(),
       [mk("od", "2026-10-15"), mk("td", "2026-10-16"), mk("sat", "2026-10-17"), mk("sun", "2026-10-18"), mk("nsat", "2026-10-24"), mk("later", "2026-10-25"), mk("dn", "2026-10-10", "done"), mk("ln", "2026-10-10", "late")],
       today,
     );
@@ -137,15 +184,15 @@ describe("groupByDue", () => {
     expect(secs.map((s) => s.key)).toEqual(["overdue", "today", "week", "next", "later", "done"]);
   });
   it("오늘이 토요일: week 는 비고 next = 다음 일~토", () => {
-    const secs = groupByDue([mk("t", "2026-10-17"), mk("sun", "2026-10-18"), mk("nsat", "2026-10-24"), mk("later", "2026-10-25")], "2026-10-17");
+    const secs = groupByDue(fx(), [mk("t", "2026-10-17"), mk("sun", "2026-10-18"), mk("nsat", "2026-10-24"), mk("later", "2026-10-25")], "2026-10-17");
     expect(Object.fromEntries(secs.map((s) => [s.key, ids(s.items)]))).toEqual({ today: ["t"], next: ["sun", "nsat"], later: ["later"] });
   });
   it("오늘이 일요일: week = 월~토", () => {
-    const secs = groupByDue([mk("t", "2026-10-18"), mk("mon", "2026-10-19"), mk("sat", "2026-10-24"), mk("nsun", "2026-10-25"), mk("later", "2026-11-02")], "2026-10-18");
+    const secs = groupByDue(fx(), [mk("t", "2026-10-18"), mk("mon", "2026-10-19"), mk("sat", "2026-10-24"), mk("nsun", "2026-10-25"), mk("later", "2026-11-02")], "2026-10-18");
     expect(Object.fromEntries(secs.map((s) => [s.key, ids(s.items)]))).toEqual({ today: ["t"], week: ["mon", "sat"], next: ["nsun"], later: ["later"] });
   });
   it("빈 섹션은 뺀다", () => {
-    expect(groupByDue([mk("a", "2026-10-16")], today).map((s) => s.key)).toEqual(["today"]);
+    expect(groupByDue(fx(), [mk("a", "2026-10-16")], today).map((s) => s.key)).toEqual(["today"]);
   });
 });
 

@@ -325,6 +325,8 @@ export type MeTaskItem = {
   endDate: string;
   st: TaskStatus;
   submittedAt: string | null;
+  /** 회차 아래부터 이 노드까지 조상 경로 [sort_order, id] (0042). 옛 서버엔 없음 → 화면은 옛 정렬 */
+  ord?: [number, number][];
 };
 export type MeTasks = {
   today: string;

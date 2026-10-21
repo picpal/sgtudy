@@ -175,7 +175,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
     if (filter.group === "due") {
       return (
         <div className="overflow-hidden rounded-[16px] border border-line">
-          {groupByDue(items, today).map((sec) => (
+          {groupByDue(data, items, today).map((sec) => (
             <section key={sec.key} aria-label={sec.label}>
               <h3 className="m-0 flex items-center gap-2 bg-surface-3 px-[18px] py-3 text-[13px] font-bold text-ink-2 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-line-2">
                 {(sec.key === "overdue" || sec.key === "today") && <span aria-hidden="true" className="h-2 w-2 rounded-full bg-warn" />}
