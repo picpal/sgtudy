@@ -18,6 +18,7 @@ vi.mock("@/components/ui/AppHeader", () => ({ AppHeader: () => null }));
 vi.mock("@/lib/api/nodeFiles", async (orig) => ({ ...(await orig<object>()), fetchNodeFiles: () => Promise.resolve([]), fetchNodeFilesOrEmpty: () => Promise.resolve([]) }));
 vi.mock("@/lib/api/submission", async (orig) => ({ ...(await orig<object>()), roomIdOfNode: () => Promise.resolve("7"), fetchTask: () => new Promise(() => {}) }));
 vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }));
+vi.mock("@/lib/api/notices", async (orig) => ({ ...(await orig<object>()), fetchNoticeInbox: () => Promise.resolve({ unread: false, popups: [] }) }));
 vi.mock("@/lib/api/my-study", async (orig) => ({ ...(await orig<object>()), recheckCurriculumEdit: () => Promise.resolve({ allowed: true, cur: null }), nodeUpdate: m.update }));
 
 const { MeProvider } = await import("@/lib/me");

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { announceHash, announceItem } from "@/lib/hashTarget";
+import { announceHash, announceItem, announceTab } from "@/lib/hashTarget";
 import { guardNavigate } from "@/lib/leaveGuard";
 import { useRouter } from "next/navigation";
 import type { MouseEvent as ReactMouseEvent } from "react";
@@ -106,6 +106,7 @@ export function NotificationBell() {
     // 링크 해시(#applications 등)의 영역이 찾아가게 알린다 — 같은 화면이면 Next 가 화면을 그대로 두고, 새 화면이면 마운트 때 받는다 (시나리오 QA #8)
     announceHash(n.link);
     announceItem(n.link); // 같은 화면 ?item= — 같은 item 을 다시 눌러도 화면이 연다 (백로그 F 재리뷰 m1)
+    announceTab(n.link); // 같은 화면 ?tab=notice — 다른 탭을 보고 있어도 공지 탭으로 (0040)
     router.push(n.link);
   };
   const onReadAll = async () => {

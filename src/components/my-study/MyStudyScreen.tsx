@@ -14,12 +14,13 @@ import { toApiError } from "@/lib/api/errors";
 import { canEditCurriculumOf, toSidebarGroups, toStudyRoom } from "@/lib/api/my-study";
 import { cancelApplication, leaveRoom } from "@/lib/api/room-view";
 import { cancelLeaveRequest, leaveErrorText, requestLeave } from "@/lib/api/leave";
-import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
+import type { Curriculum, MeStudies, Notice, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
 import { setScreenKey } from "@/lib/leaveGuard";
 import { clearTaskOrigin, taskOriginOf } from "@/lib/taskOrigin";
-import { OVERVIEW_ANCHORS, useHashAnnounce, useItemAnnounce } from "@/lib/hashTarget";
+import { OVERVIEW_ANCHORS, useHashAnnounce, useItemAnnounce, useTabAnnounce } from "@/lib/hashTarget";
+import { fetchNoticeInbox } from "@/lib/api/notices";
 import { useRefetchOnFocus } from "@/lib/useRefetchOnFocus";
 import { TodayProvider } from "@/lib/today";
 import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
@@ -37,6 +38,8 @@ import { BoardTab } from "./tabs/BoardTab";
 import { CalendarTab } from "./tabs/CalendarTab";
 import { MemberAdminCard } from "./tabs/MemberAdminCard";
 import { GanttTab } from "./tabs/GanttTab";
+import { NoticeTab, type NoticeViewer } from "./tabs/NoticeTab";
+import { NoticePopup } from "./NoticePopup";
 import { useCurriculumApi } from "./useCurriculumApi";
 import { RoomArchivedProvider } from "./roomArchived";
 
@@ -112,6 +115,40 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     [update, canEdit],
   );
   useHashAnnounce(onAnnounce);
+  // 공지(0040) — 탭 점(D9)·진입 팝업(D5) 은 첫 페인트 뒤 notice_inbox 로 (D15). 승인 대기는 볼 수 없다(D10)
+  const noticeViewer: NoticeViewer = isLeader ? "leader" : detail.me?.state === "active" ? "member" : detail.me?.state === "inactive" ? "left" : "pending";
+  const [noticeUnread, setNoticeUnread] = useState(false);
+  const [popups, setPopups] = useState<Notice[]>([]);
+  useEffect(() => {
+    if (noticeViewer === "pending") return;
+    let live = true;
+    fetchNoticeInbox(detail.slug)
+      .then((r) => {
+        if (!live) return;
+        setNoticeUnread(r.unread);
+        setPopups(r.popups);
+      })
+      .catch(() => {}); // 부가 기능 — 실패해도 화면은 그대로
+    return () => {
+      live = false;
+    };
+  }, [detail.slug, noticeViewer]);
+  // 같은 화면(같은 key)에서 공지 알림을 다시 누르면 — 다른 탭을 보고 있었어도 공지 탭으로, 목록은 새로 받는다
+  const [noticeReload, setNoticeReload] = useState(0);
+  const onTabAnnounce = useCallback(
+    (t: string) => {
+      if (t !== "notice") return;
+      update((p) => tabPatch(p, "notice", canEdit));
+      setNoticeReload((n) => n + 1);
+    },
+    [update, canEdit],
+  );
+  useTabAnnounce(onTabAnnounce);
+  // 팝업 [확인] — 탭 점, 공지 탭이 열려 있으면 그 목록의 안 읽음 표시도
+  const onNoticeAck = useCallback((unread: boolean) => {
+    setNoticeUnread(unread);
+    setNoticeReload((n) => n + 1);
+  }, []);
   // 승인 대기 중에 열어 둔 화면 — 다른 탭에서 돌아오면 다시 불러 승인(참가 확정)을 반영한다 (시나리오 QA #9)
   useRefetchOnFocus(detail.me?.state === "pending", router.refresh);
   const closeToast = useCallback(() => setToast(null), []);
@@ -418,8 +455,9 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
               {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}
               <div className="flex flex-wrap items-start gap-7 @container">
                 <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
-                  <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} />
+                  <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} noticeUnread={noticeUnread} />
                   {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} today={today} onGoCurriculum={() => update({ tab: "curriculum" })} onOpenTask={goLeaf} periodWarning={periodWarning(editRounds)} />}
+                  {S.tab === "notice" && <NoticeTab slug={detail.slug} S={S} update={update} viewer={noticeViewer} ended={detail.status === "ended"} onUnread={setNoticeUnread} toast={setToast} reload={noticeReload} />}
                   {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} onViewBack={viewBack} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
                   {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                   {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
@@ -444,6 +482,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
             </main>
           </div>
           <Toast msg={toast} onClose={closeToast} />
+          <NoticePopup slug={detail.slug} popups={popups} hold={confirm !== null || S.leave !== null} onAck={onNoticeAck} />
           <ConfirmDialog
             open={confirm !== null}
             title={CONFIRM_TEXT[confirm ?? "leave"].title}

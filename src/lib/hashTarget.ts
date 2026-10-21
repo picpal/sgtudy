@@ -75,6 +75,28 @@ export function useItemAnnounce(fn: (item: string) => void): void {
   }, [fn]);
 }
 
+const TAB_EVENT = "sgtudy:tab";
+
+/** 알림 벨이 이동할 링크의 ?tab= 을 알린다(항목·과제 없는 탭 링크만) — 같은 방 화면 key(page.tsx: tab)가 같으면 다시 마운트되지 않아
+ *  다른 탭을 보던 화면이 그 탭으로 옮기지 못한다(공지 알림 ?tab=notice, 0040) */
+export function announceTab(href: string): void {
+  const u = new URL(href, "http://x");
+  const tab = u.searchParams.get("tab");
+  if (tab && !u.searchParams.has("item") && !u.searchParams.has("task")) window.dispatchEvent(new CustomEvent<{ tab: string; path: string }>(TAB_EVENT, { detail: { tab, path: u.pathname } }));
+}
+
+/** 지금 화면 경로로 알린 탭만 받는다 */
+export function useTabAnnounce(fn: (tab: string) => void): void {
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ tab: string; path: string }>).detail;
+      if (d.path === window.location.pathname) fn(d.tab);
+    };
+    window.addEventListener(TAB_EVENT, on);
+    return () => window.removeEventListener(TAB_EVENT, on);
+  }, [fn]);
+}
+
 /** 주소에서 해시만 지운다 (기록은 그대로) */
 const dropHash = () => {
   if (!window.location.hash) return;

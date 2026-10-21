@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { MeStudies, RoomDetail } from "@/lib/api/types";
@@ -14,6 +14,8 @@ vi.mock("@/components/ui/NotificationBell", () => ({ NotificationBell: () => nul
 vi.mock("@/components/ui/AppHeader", () => ({ AppHeader: () => null }));
 vi.mock("@/lib/api/nodeFiles", async (orig) => ({ ...(await orig<object>()), fetchNodeFiles: () => Promise.resolve([]), fetchNodeFilesOrEmpty: () => Promise.resolve([]) }));
 vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }));
+const notices = vi.hoisted(() => ({ fetchNoticeInbox: vi.fn(), fetchNotices: vi.fn(), markNoticesRead: vi.fn() }));
+vi.mock("@/lib/api/notices", async (orig) => ({ ...(await orig<object>()), ...notices }));
 
 const { MeProvider } = await import("@/lib/me");
 const { announceItem } = await import("@/lib/hashTarget");
@@ -53,6 +55,11 @@ const mount = (p: Partial<Props>) => {
 const title = (id: string) => AWS.nodes.find((n) => n.id === id)!.title;
 const buttonByText = (el: Element, text: string) => [...el.querySelectorAll("button")].find((b) => b.textContent?.includes(text)) as HTMLButtonElement;
 const detailTitle = (host: HTMLElement) => host.querySelector("#detail-title")?.textContent ?? null;
+
+beforeEach(() => {
+  notices.fetchNoticeInbox.mockResolvedValue({ unread: false, popups: [] });
+  notices.fetchNotices.mockResolvedValue({ items: [], canWrite: false, limits: { total: 100, pinned: 3, popup: 5 }, counts: { total: 0, pinned: 0, popup: 0 } });
+});
 
 afterEach(() => {
   act(() => root?.unmount());
@@ -566,5 +573,47 @@ describe("MyStudyScreen — popstate 가 다른 화면 주소면 손대지 않�
     await back();
     expect(window.location.search).not.toContain("item=");
     expect(detailTitle(m.host)).toBeNull();
+  });
+});
+
+// 공지(0040) — 진입 팝업·탭 점·알림 링크
+describe("MyStudyScreen — 공지", () => {
+  const notice = { id: "5", title: "모임 규칙", bodyMd: "늦지 말아요", popup: true, pinned: false, author: P("u2", "민수", "mint"), createdAt: "2026-10-20T01:00:00.000Z", updatedAt: "2026-10-20T01:00:00.000Z", edited: false, read: false };
+  const tabBtn = (host: HTMLElement, name: string) => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((b) => b.textContent === name)!;
+
+  it("진입하면 notice_inbox — 팝업 공지가 뜨고, [확인] 하면 탭 점이 꺼진다", async () => {
+    notices.fetchNoticeInbox.mockResolvedValue({ unread: true, popups: [notice] });
+    notices.markNoticesRead.mockResolvedValue({ unread: false });
+    window.history.replaceState(null, "", "/my-study/aws");
+    const { host } = mount({ initialTab: "overview" });
+    await act(async () => {});
+    expect(notices.fetchNoticeInbox).toHaveBeenCalledWith("aws");
+    expect(tabBtn(host, "공지").getAttribute("aria-label")).toBe("공지, 안 읽은 공지 있음");
+    const dlg = document.querySelector('[role="dialog"]')!;
+    expect(dlg.textContent).toContain("모임 규칙");
+    await act(async () => buttonByText(dlg, "확인").click());
+    expect(notices.markNoticesRead).toHaveBeenCalledWith("aws", ["5"]);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(tabBtn(host, "공지").getAttribute("aria-label")).toBeNull();
+  });
+
+  it("승인 대기는 notice_inbox 를 부르지 않는다", async () => {
+    mount({ initialTab: "overview", detail: { ...detail, me: { state: "pending" } } as RoomDetail });
+    await act(async () => {});
+    expect(notices.fetchNoticeInbox).not.toHaveBeenCalled();
+  });
+
+  it("?tab=notice 로 열면 공지 탭 · 같은 화면에서 공지 알림을 다시 누르면 다른 탭에서도 공지 탭으로", async () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=notice");
+    const { host } = mount({ initialTab: "notice" });
+    await act(async () => {});
+    expect(tabBtn(host, "공지").getAttribute("aria-selected")).toBe("true");
+    expect(host.textContent).toContain("공지사항");
+    act(() => tabBtn(host, "보드").click());
+    expect(tabBtn(host, "보드").getAttribute("aria-selected")).toBe("true");
+    const { announceTab } = await import("@/lib/hashTarget");
+    await act(async () => announceTab("/my-study/aws?tab=notice"));
+    expect(tabBtn(host, "공지").getAttribute("aria-selected")).toBe("true");
+    expect(notices.fetchNotices).toHaveBeenCalledTimes(2);
   });
 });
