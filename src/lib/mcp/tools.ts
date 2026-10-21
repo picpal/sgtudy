@@ -65,7 +65,7 @@ const previewRun = call("curriculum_plan_preview", (a) => ({ study: a.study, pla
 
 /* ---------- 시험(0037) ---------- */
 /** 숫자 id 또는 제목 정확 일치(TS 측 해석 — DB op 는 id 만 받는다) */
-const task = z.union([z.string(), z.number()]).describe("task id or exact title");
+const task = z.union([z.string(), z.number().int().nonnegative()]).describe("task id or exact title");
 /** sgtudy.exam/v1(스펙 §3.2) — 서버 exam_validate 와 같은 상한. 유형별 answer 모양(보기 번호·OX·허용 답)은 계약 문구와 서버가 맡는다:
     유형별 discriminatedUnion 은 tools/list 예산(8,000자)을 넘긴다. 답은 다듬지 않는다(단답 비교는 서버 exam_norm). reveal 은 웹에서만 */
 const examDoc = z.strictObject({
