@@ -107,4 +107,23 @@ describe("NotificationBell 해시 알림 + 편집 화면 가드", () => {
     offKey();
     window.history.replaceState(null, "", "/");
   });
+  it("멘션 알림(#comment-) — 해시·과제를 알리고 그 링크로 이동한다(같은 과제 화면이 다른 탭을 보고 있어도 상세로)", async () => {
+    api.read = [];
+    api.pushed = [];
+    window.history.replaceState(null, "", "/my-study/aws?tab=board");
+    const heard: string[] = [];
+    const onHash = (e: Event) => heard.push(`hash:${(e as CustomEvent<{ hash: string }>).detail.hash}`);
+    const onTask = (e: Event) => heard.push(`task:${(e as CustomEvent<{ task: string }>).detail.task}`);
+    window.addEventListener("sgtudy:hash", onHash);
+    window.addEventListener("sgtudy:task", onTask);
+    const link = "/my-study/aws?task=3#comment-9";
+    const host = await open([{ ...item("m", "2026-10-21T03:00:00Z"), kind: "MENTIONED", title: "민수님이 댓글에서 회원님을 언급했어요", link }]);
+    await act(async () => host.querySelector<HTMLAnchorElement>(`a[href='${link}']`)!.click());
+    expect(heard).toEqual(["hash:comment-9", "task:3"]);
+    expect(api.pushed).toEqual([link]);
+    expect(api.read).toEqual(["m"]);
+    window.removeEventListener("sgtudy:hash", onHash);
+    window.removeEventListener("sgtudy:task", onTask);
+    window.history.replaceState(null, "", "/");
+  });
 });

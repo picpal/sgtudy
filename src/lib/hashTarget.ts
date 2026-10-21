@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * 알림 딥링크 앵커 (0024 계약 §7) — 서버가 만든 링크의 해시로 화면 안 영역을 찾아간다.
@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 export const OVERVIEW_ANCHORS = ["applications", "leave-requests"] as const;
 
 const EVENT = "sgtudy:hash";
-type Announce = { hash: string; path: string };
+type Announce = { hash: string; path: string; search: string };
 
 /** 링크의 해시(# 없이) */
 export const hashOf = (href: string): string => {
@@ -22,15 +22,17 @@ export const hashOf = (href: string): string => {
   return i < 0 ? "" : decodeURIComponent(href.slice(i + 1));
 };
 const pathOf = (href: string): string => new URL(href, "http://x").pathname;
+const searchOf = (href: string): string => new URL(href, "http://x").search;
 
 // 다른 화면으로 넘어갈 때는 새 화면이 마운트되는 시점에 주소 해시가 아직 없을 수 있다 → 링크 경로와 함께 잠깐 기억해 둔다.
 // 경로가 다른 화면(다른 방)은 가로채지 않는다 (최종 리뷰 Minor 1)
 let pending: (Announce & { at: number }) | null = null;
-const livePending = (match: (hash: string) => boolean): string | null =>
-  !pending || !match(pending.hash) || pending.path !== window.location.pathname || Date.now() - pending.at > 8000 ? null : pending.hash;
+// accept: 링크 쿼리로 받는 쪽을 가린다(댓글 = 그 노드의 ?task=·?item= 링크만). 없으면 경로만 본다
+const livePending = (match: (hash: string) => boolean, accept?: (search: string) => boolean): string | null =>
+  !pending || !match(pending.hash) || pending.path !== window.location.pathname || Date.now() - pending.at > 8000 || (accept && !accept(pending.search)) ? null : pending.hash;
 /** 맞는 pending 해시를 꺼낸다(꺼내면 지운다) */
-const takePending = (match: (hash: string) => boolean): string | null => {
-  const h = livePending(match);
+const takePending = (match: (hash: string) => boolean, accept?: (search: string) => boolean): string | null => {
+  const h = livePending(match, accept);
   if (h !== null) pending = null;
   return h;
 };
@@ -40,8 +42,9 @@ export function announceHash(href: string): void {
   const hash = hashOf(href);
   if (!hash) return;
   const path = pathOf(href);
-  pending = { hash, path, at: Date.now() };
-  window.dispatchEvent(new CustomEvent<Announce>(EVENT, { detail: { hash, path } }));
+  const search = searchOf(href);
+  pending = { hash, path, search, at: Date.now() };
+  window.dispatchEvent(new CustomEvent<Announce>(EVENT, { detail: { hash, path, search } }));
 }
 
 /** 다른 화면 상태(탭 전환 등)를 앵커에 맞추고 싶을 때 — 지금 화면 경로로 알린 해시만 받는다 */
@@ -97,6 +100,28 @@ export function useTabAnnounce(fn: (tab: string) => void): void {
     };
     window.addEventListener(TAB_EVENT, on);
     return () => window.removeEventListener(TAB_EVENT, on);
+  }, [fn]);
+}
+
+const TASK_EVENT = "sgtudy:task";
+
+/** 알림 벨이 이동할 링크의 ?task= 를 알린다 — 같은 과제 key(page.tsx: task)의 화면은 다시 마운트되지 않아, 다른 탭·항목을 보던 화면이
+ *  그 과제 상세로 돌아가지 못한다(댓글 멘션 #comment-, 0041). 화면은 주소가 그 task 가 된 뒤 연다 */
+export function announceTask(href: string): void {
+  const u = new URL(href, "http://x");
+  const task = u.searchParams.get("task");
+  if (task) window.dispatchEvent(new CustomEvent<{ task: string; path: string }>(TASK_EVENT, { detail: { task, path: u.pathname } }));
+}
+
+/** 지금 화면 경로로 알린 task 만 받는다 */
+export function useTaskAnnounce(fn: (task: string) => void): void {
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ task: string; path: string }>).detail;
+      if (d.path === window.location.pathname) fn(d.task);
+    };
+    window.addEventListener(TASK_EVENT, on);
+    return () => window.removeEventListener(TASK_EVENT, on);
   }, [fn]);
 }
 
@@ -173,28 +198,35 @@ export function peekHashPrefix(prefix: string): string | null {
  * pending·announce·해시 제거 규칙은 같다. 화면은 돌려받은 id 로 데이터를 불러오고(댓글 from=…), ready 가 되면 이 훅이
  * 그 id 의 요소(없으면 fallbackId — 지워진·없는 댓글은 섹션)로 가운데 스크롤 + 포커스하고 해시를 지운 뒤 null 로 돌아간다
  */
-export function useHashPrefixTarget(prefix: string, ready: boolean, opts: { fallbackId?: string } = {}): string | null {
+export function useHashPrefixTarget(prefix: string, ready: boolean, opts: { fallbackId?: string; accept?: (search: string) => boolean } = {}): string | null {
   const [hit, setHit] = useState<{ id: string | null; seq: number }>({ id: null, seq: 0 });
-  const { fallbackId } = opts;
+  const { fallbackId, accept } = opts;
+  // accept 는 매 렌더 새 함수일 수 있다 — 구독을 다시 걸지 않게 ref 로 본다
+  const acceptRef = useRef(accept);
+  useEffect(() => {
+    acceptRef.current = accept;
+  });
   useEffect(() => {
     const match = prefixMatch(prefix);
+    const ok = (search: string) => !acceptRef.current || acceptRef.current(search);
     const first = () => {
       const byHash = hashOf(window.location.hash);
-      const byPending = takePending(match);
-      const id = match(byHash) ? byHash : byPending;
+      const byPending = takePending(match, acceptRef.current);
+      const id = match(byHash) && ok(window.location.search) ? byHash : byPending;
       if (id) setHit((p) => (p.id === id ? p : { id, seq: p.seq + 1 }));
     };
     first();
     const late = window.setTimeout(first, 120);
     const on = (e: Event) => {
       const d = (e as CustomEvent<Announce>).detail;
-      if (!match(d.hash) || d.path !== window.location.pathname) return;
+      // 다른 노드의 링크(같은 화면에서 다른 회차 상세로 가는 알림)는 받지 않는다 — pending 은 그 노드 상세가 열리며 받는다
+      if (!match(d.hash) || d.path !== window.location.pathname || !ok(d.search)) return;
       pending = null; // 이 화면이 받았다
       setHit((p) => ({ id: d.hash, seq: p.seq + 1 }));
     };
     const onHash = () => {
       const h = hashOf(window.location.hash);
-      if (match(h)) setHit((p) => ({ id: h, seq: p.seq + 1 }));
+      if (match(h) && ok(window.location.search)) setHit((p) => ({ id: h, seq: p.seq + 1 }));
     };
     window.addEventListener(EVENT, on);
     window.addEventListener("hashchange", onHash);

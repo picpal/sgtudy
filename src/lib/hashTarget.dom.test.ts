@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { announceHash, commentIdOfHash, hashOf, peekHashPrefix, useHashPrefixTarget, useHashTarget } from "./hashTarget";
+import { announceHash, announceTask, commentIdOfHash, hashOf, peekHashPrefix, useHashPrefixTarget, useHashTarget, useTaskAnnounce } from "./hashTarget";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -229,5 +229,57 @@ describe("useHashPrefixTarget — 댓글 앵커", () => {
     expect(commentIdOfHash("comment-31")).toBe("31");
     expect(commentIdOfHash("comment-")).toBeNull();
     expect(commentIdOfHash("submissions")).toBeNull();
+  });
+});
+
+// 댓글 섹션은 자기 노드 링크(?task={id}·?item={id})만 받는다 — 같은 화면에서 다른 회차 상세로 가는 알림을 지금 열린 상세가 가로채지 않게
+function AcceptProbe({ node, ready }: { node: string; ready: boolean }) {
+  const hit = useHashPrefixTarget("comment-", ready, { fallbackId: "comments", accept: (s) => new URLSearchParams(s).get("item") === node || new URLSearchParams(s).get("task") === node });
+  return createElement("section", { id: "comments", tabIndex: -1, "data-hit": hit ?? "" }, createElement("li", { id: "comment-9", tabIndex: -1 }, "9"));
+}
+describe("useHashPrefixTarget — accept(노드 링크만)", () => {
+  it("다른 노드 링크의 알림은 받지 않고 pending 으로 남겨, 그 노드 섹션이 마운트될 때 받는다", () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum&item=3");
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(AcceptProbe, { node: "3", ready: false })));
+    act(() => announceHash("/my-study/aws?tab=curriculum&item=5#comment-9"));
+    expect(host.querySelector("section")!.dataset.hit).toBe("");
+    // 화면이 회차 5 상세를 연다 — 주소가 바뀌고 새 섹션이 마운트
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum&item=5");
+    act(() => root.render(createElement(AcceptProbe, { key: "5", node: "5", ready: false })));
+    expect(host.querySelector("section")!.dataset.hit).toBe("comment-9");
+    act(() => root.render(createElement(AcceptProbe, { key: "5", node: "5", ready: true })));
+    expect(scrolled).toEqual(["comment-9"]);
+    act(() => root.unmount());
+  });
+  it("주소 해시도 그 노드 주소일 때만", () => {
+    window.history.replaceState(null, "", "/my-study/aws?task=4#comment-9");
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(AcceptProbe, { node: "3", ready: true })));
+    expect([host.querySelector("section")!.dataset.hit, scrolled]).toEqual(["", []]);
+    act(() => root.unmount());
+  });
+});
+
+describe("announceTask · useTaskAnnounce", () => {
+  it("?task= 링크만, 지금 화면 경로로 알린 것만 받는다", () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=board");
+    const got: string[] = [];
+    function T() {
+      useTaskAnnounce((t) => got.push(t));
+      return null;
+    }
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(T)));
+    act(() => {
+      announceTask("/my-study/aws?task=7#comment-1");
+      announceTask("/my-study/aws?tab=curriculum&item=7#comment-1");
+      announceTask("/my-study/other?task=8");
+    });
+    expect(got).toEqual(["7"]);
+    act(() => root.unmount());
   });
 });

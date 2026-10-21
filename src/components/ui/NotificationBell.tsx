@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { announceHash, announceItem, announceTab } from "@/lib/hashTarget";
+import { announceHash, announceItem, announceTab, announceTask } from "@/lib/hashTarget";
 import { guardNavigate } from "@/lib/leaveGuard";
 import { useRouter } from "next/navigation";
 import type { MouseEvent as ReactMouseEvent } from "react";
@@ -107,6 +107,7 @@ export function NotificationBell() {
     announceHash(n.link);
     announceItem(n.link); // 같은 화면 ?item= — 같은 item 을 다시 눌러도 화면이 연다 (백로그 F 재리뷰 m1)
     announceTab(n.link); // 같은 화면 ?tab=notice — 다른 탭을 보고 있어도 공지 탭으로 (0040)
+    announceTask(n.link); // 같은 과제 화면 ?task= — 다른 탭·항목을 보고 있어도 그 과제 상세로 (댓글 멘션 #comment-, 0041)
     router.push(n.link);
   };
   const onReadAll = async () => {
