@@ -72,7 +72,8 @@ export function MyPersonalLine({ tree, userId, roundId, slug, today }: { tree: T
 }
 
 /** roundId = 개인 목표 "이번 회차"(thisRoundId — /tasks 와 같은 규칙). 모집·진행 중이 아닌 방이면 null → 내 개인 목표 줄 없음 */
-export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning, today }: { room: StudyRoom; tree: Tree; roundId: string | null; onGoCurriculum: () => void; periodWarning?: React.ReactNode; today?: string }) {
+/** onOpenTask = 이번 회차 과제 카드 누름 → 그 과제의 진행목표 보기 상세 (보드 카드와 같은 goLeaf). 시험 과제도 같은 상세(시험 영역)로 */
+export function OverviewTab({ room, tree, roundId, onGoCurriculum, onOpenTask, periodWarning, today }: { room: StudyRoom; tree: Tree; roundId: string | null; onGoCurriculum: () => void; onOpenTask?: (id: string) => void; periodWarning?: React.ReactNode; today?: string }) {
   const cur = room.cur;
   const hasTasks = cur.tasks.length > 0;
   // 참가 중인 나(그룹장 포함) + 이번 회차가 있을 때만 내 개인 목표 줄
@@ -112,12 +113,25 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, periodWarning
                 const shown = t.people.slice(0, MAX_PEOPLE);
                 const over = t.people.length - shown.length;
                 const pct = t.people.length === 0 ? 0 : Math.round((subs / t.people.length) * 100);
+                const id = t.id;
+                const open = id && onOpenTask ? () => onOpenTask(id) : undefined;
                 return (
-                  <li key={t.title} className="flex flex-wrap items-center gap-[14px] rounded-[12px] bg-surface-2 px-[14px] py-3">
+                  // 카드 전체가 누르는 영역 — 마우스는 li 클릭(아바타 title 툴팁을 가리지 않게 덮개를 두지 않는다), 키보드·보조기기는 제목 버튼(Enter·Space 의 click 이 li 로 올라온다)
+                  <li
+                    key={t.id ?? t.title}
+                    onClick={open}
+                    className={`flex flex-wrap items-center gap-[14px] rounded-[12px] bg-surface-2 px-[14px] py-3${open ? " cursor-pointer transition-shadow duration-150 hover:shadow-[0_6px_16px_rgba(27,34,48,.08)] has-[button:focus-visible]:outline-2 has-[button:focus-visible]:outline-offset-2 has-[button:focus-visible]:outline-mint" : ""}`}
+                  >
                     <div className="min-w-0 flex-[1_1_200px]">
                       <div className="flex flex-wrap items-center gap-2">
                         <TypeBadge type={t.type} />
-                        <span className="text-[14px] font-semibold">{t.title}</span>
+                        {open ? (
+                          <button type="button" className="text-left text-[14px] font-semibold text-ink focus-visible:outline-none">
+                            {t.title}
+                          </button>
+                        ) : (
+                          <span className="text-[14px] font-semibold">{t.title}</span>
+                        )}
                       </div>
                       <div className="mt-1 text-[12px] text-muted">{t.dates}</div>
                     </div>

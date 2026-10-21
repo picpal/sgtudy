@@ -189,6 +189,25 @@ describe("MyStudyScreen — 신청 취소 확인 문구", () => {
   });
 });
 
+// 개요 이번 회차 과제 카드 → 진행목표 탭 그 과제의 보기 상세(보드 카드와 같은 goLeaf) — 주소는 ?tab=curriculum&item=, 다시 불러오지 않는다
+describe("MyStudyScreen — 개요 과제 카드", () => {
+  const withRound = {
+    ...detail,
+    currentRound: { id: "2", label: "2주차", title: "EC2·S3", startDate: "2026-10-08", endDate: "2026-10-14", leafCount: 1, assigned: 2, submitted: 1, pct: 50, tasks: [
+      { id: "21", title: title("21"), type: "designated", startDate: "2026-10-08", endDate: "2026-10-14", people: [{ ...P("u3", "지은", "peach"), status: "done" }, { ...P("u1", "철수", "blue"), status: "open" }] },
+    ] },
+  } as RoomDetail;
+  it("카드를 누르면 진행목표 탭 + 그 과제 상세, 주소 ?item=21", () => {
+    window.history.replaceState(null, "", "/my-study/aws");
+    const { host } = mount({ detail: withRound, initialTab: "overview" });
+    const card = [...host.querySelectorAll("li")].find((li) => li.textContent?.includes(title("21")))!;
+    act(() => void card.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    expect(host.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toContain("진행목표");
+    expect(detailTitle(host)).toContain(title("21"));
+    expect(new URLSearchParams(window.location.search).get("item")).toBe("21");
+  });
+});
+
 // 백로그 F 리뷰(1319cc2) #6: 내 스터디에서 방 설정으로 가는 링크는 지금 탭을 ?from= 으로 싣는다 → 설정 "이전 페이지" 가 그 탭으로
 const { routes, MY_STUDY_TABS } = await import("@/lib/routes");
 const { TABS } = await import("./StudyHeaderInfo");

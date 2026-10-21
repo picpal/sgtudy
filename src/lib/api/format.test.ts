@@ -124,7 +124,7 @@ describe("curOf (roomview §1.3 / mystudy §3.8)", () => {
     expect(v.pill).toBe("2주차 · 진행중");
     expect(v.title).toBe("EC2·S3");
     expect(v.meta).toBe("10.08(목) – 10.14(수) · 마감 D-2");
-    expect(v.tasks[0]).toEqual({ title: "EC2 인스턴스 유형 정리", type: "지정", dates: "10.08 – 10.14",
+    expect(v.tasks[0]).toEqual({ id: "21", title: "EC2 인스턴스 유형 정리", type: "지정", dates: "10.08 – 10.14",
       people: [{ userId: "u-jieun", name: "지은", tone: "peach", status: "done" }, { userId: "u-1", name: "철수", tone: "blue", status: "open" }] });
   });
   it("ended algo — 'N주 완주' is period weeks (13), not round count (seed has 3 depth-2 rounds) (D14, S10)", () => {

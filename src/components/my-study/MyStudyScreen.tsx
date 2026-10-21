@@ -402,7 +402,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
               <div className="flex flex-wrap items-start gap-7 @container">
                 <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
                   <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} />
-                  {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} today={today} onGoCurriculum={() => update({ tab: "curriculum" })} periodWarning={periodWarning(editRounds)} />}
+                  {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} today={today} onGoCurriculum={() => update({ tab: "curriculum" })} onOpenTask={goLeaf} periodWarning={periodWarning(editRounds)} />}
                   {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
                   {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                   {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}

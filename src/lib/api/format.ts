@@ -88,11 +88,12 @@ export function roundRow(r: RoundSummary, status: RoomStatusDto, today: string, 
 }
 
 export type CurPersonView = { userId: string; name: string; tone: Tone; status: TaskStatus };
-export type CurTaskView = { title: string; type: "공통" | "지정" | "개인"; dates: string; people: CurPersonView[] };
+export type CurTaskView = { id: string; title: string; type: "공통" | "지정" | "개인"; dates: string; people: CurPersonView[] };
 export type CurView = { pill: string; title: string; meta: string; tasks: CurTaskView[] };
 export type CurInput = Pick<RoomDetail, "status" | "startDate" | "endDate" | "currentRound" | "rounds" | "stats">;
 
 const taskView = (t: LeafSummary, today: string): CurTaskView => ({
+  id: t.id,
   title: t.title,
   type: TASK_TYPE_KO[t.type],
   dates: rangeShort(t.startDate, t.endDate, today),

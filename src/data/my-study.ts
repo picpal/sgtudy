@@ -32,6 +32,8 @@ export type MemberInfo = {
 };
 
 export type CurTask = {
+  /** 리프 노드 id — 개요 카드를 누르면 진행목표 보기 상세로 연다. 없으면(정적 시안) 누를 수 없는 카드 */
+  id?: string;
   title: string;
   type: TaskType;
   /** "10.08 – 10.14" */

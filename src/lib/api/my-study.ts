@@ -116,7 +116,7 @@ export function toStudyRoom(dto: RoomDetail, tree: Tree, today: string, meId: st
     visibility: d.isPublic ? "공개" : "비공개 · 초대 링크로만 참가",
     leader: d.leader.nickname, leaderTone: d.leader.tone, leaderId: d.leader.userId, tags: d.tags.map((t) => ({ label: t.label, tone: t.tone, auto: t.auto })),
     capCur: d.memberCount, capMax: d.maxMembers, ...minTextOf(d), members,
-    cur: { pill: cur.pill, title: cur.title, meta: cur.meta, tasks: cur.tasks.map((t) => ({ title: t.title, type: t.type, dates: t.dates, people: t.people.map((p) => [p.name, p.status] as [string, typeof p.status]), tones: Object.fromEntries(t.people.map((p) => [p.name, p.tone])), ids: Object.fromEntries(t.people.map((p) => [p.name, p.userId])) })) },
+    cur: { pill: cur.pill, title: cur.title, meta: cur.meta, tasks: cur.tasks.map((t) => ({ id: t.id, title: t.title, type: t.type, dates: t.dates, people: t.people.map((p) => [p.name, p.status] as [string, typeof p.status]), tones: Object.fromEntries(t.people.map((p) => [p.name, p.tone])), ids: Object.fromEntries(t.people.map((p) => [p.name, p.userId])) })) },
     about: d.descriptionMd, rules: rulesOf(d.rulesMd), rounds,
     moreRounds: win.more ? `${win.more} · 진행목표 탭에서 전체 보기` : "",
     action: studyActionOf(d), next: nextOf(d, tree, today),
