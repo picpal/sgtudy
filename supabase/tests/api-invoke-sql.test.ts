@@ -100,7 +100,17 @@ cases("api invoke 0035", db, [
     assertEquals(c.data.viewer.nickname, "민수");
     assertEquals(c.data.currentRoundId, await nodeId(q, "aws", "EC2·S3"));
     assert(c.data.nodes.length > 0);
-    assertEquals((await call(q, t, "curriculum_get", { study: "spring" })).error.code, "ROOM_NOT_FOUND");   // 비공개 방 외부인
+    // 〔리뷰 I1〕 못 읽는 방(비공개 spring)의 slug 는 없는 slug 와 구별되지 않는다(존재 숨김) · 감사 행에 그 방 id 없음
+    const hidden = await call(q, t, "curriculum_get", { study: "spring" });
+    const none = await call(q, t, "curriculum_get", { study: "no-such-slug" });
+    assertEquals([hidden.ok, hidden.error.code, hidden.error.message], [false, "STUDY_NOT_FOUND", none.error.message]);
+    assertEquals(Object.keys(hidden.error.details), Object.keys(none.error.details));
+    assertEquals((await call(q, t, "personal_create_many", { study: "spring", goals: [{ title: "x" }] })).error.code, "STUDY_NOT_FOUND");
+    assertEquals((await call(q, t, "curriculum_plan_preview", { study: "spring", plan: { schema: "sgtudy.plan/v1", ops: [] } })).error.code, "STUDY_NOT_FOUND");
+    const spring = await roomId(q, "spring");
+    assertEquals((await q("select 1 from public.api_audit where room_id = $1::bigint", [spring])).length, 0);
+    await expectFail(q("select public.api_resolve_study($1::uuid, 'spring')", [await uidOf(q, "민수")]), "STUDY_NOT_FOUND");
+    assertEquals((await one(q, "select public.api_resolve_study($1::uuid, 'spring') as s", [await uidOf(q, "철수")])).s, "spring");   // 멤버(철수)는 그대로
   } },
   { name: "〔C#8〕 fileCounts: 붙은 READY NODE_DOC 만 실제 개수 — 미연결·삭제·개인 목표 노드 제외", run: async (q) => {
     const aws = await roomId(q, "aws");
@@ -162,6 +172,7 @@ cases("api invoke 0035", db, [
     assertEquals(audit.map((x) => x.room), Array(3).fill(await roomId(q, "aws")));
     assertEquals([audit[1].summary.replayed, audit[2].summary.replayed], [undefined, true]);
     assertEquals(audit[0].summary.summary.created, 1);
+    assertEquals([audit[1].summary.createdIds, "refs" in audit[1].summary], [a.data.createdIds, false]);   // 〔리뷰 m2〕 사용자 라벨(refs) 대신 id
   } },
   { name: "apply: 남의 previewId·없는 previewId → {ok:false, PREVIEW_NOT_FOUND} + 감사", run: async (q) => {
     const t = await tokenFor(q, "민수");
@@ -270,8 +281,7 @@ cases("api invoke 0035", db, [
     const t = await tokenFor(q, "지은");
     const t0 = performance.now();
     const r = await call(q, t, "personal_create_many", { study: "aws", round: 3, goals: Array.from({ length: 20 }, (_, i) => ({ title: "목표 " + i })) });
-    const ms = Math.round(performance.now() - t0);
-    console.log(`personal_create_many 20개: ${ms}ms (PGlite)`);
+    assert(performance.now() - t0 < 5000, "20개가 PGlite 에서 5초 넘게 걸린다(측정 54ms)");
     assertEquals([r.data.count, r.data.remaining], [20, 0]);
     assertEquals((await call(q, t, "personal_create_many", { study: "aws", round: 3, goals: [{ title: "21번째" }] })).error.code, "PERSONAL_LIMIT_EXCEEDED");
   } },
@@ -306,21 +316,26 @@ cases("api invoke 0035", db, [
     const d = await src("personal_delete_many");
     assert(d.indexOf("personal_room(") >= 0 && d.indexOf("personal_room(") < d.indexOf("public.submissions") && d.indexOf("personal_room(") < d.indexOf("owner_id"));
   } },
-  { name: "〔D16〕 personal_delete_many: 내 것만 · 남의 것 섞이면 전부 실패", run: async (q) => {
+  { name: "〔D16·리뷰 m1〕 personal_delete_many: 내 것만 지운다 · 남의 목표 id 는 없는 id 와 같게 skipped(존재 숨김)", run: async (q) => {
     const t = await tokenFor(q, "지은");
     const c = await call(q, t, "personal_create_many", { study: "aws", round: 2, goals: [{ title: "지울 것 1" }, { title: "지울 것 2" }] });
     const mine = c.data.createdIds as string[];
     const other = await tokenFor(q, "철수");   // aws ACTIVE 멤버
     const o = await call(q, other, "personal_create_many", { study: "aws", round: 2, goals: [{ title: "철수 것" }] });
-    const mixed = await call(q, t, "personal_delete_many", { study: "aws", ids: [mine[0], o.data.createdIds[0]] });
-    assertEquals([mixed.ok, mixed.error.code], [false, "NOT_OWNER"]);
-    assertEquals((await q("select 1 from public.goal_nodes where id = $1::bigint", [mine[0]])).length, 1);
+    const theirs = o.data.createdIds[0] as string;
+    const mixed = await call(q, t, "personal_delete_many", { study: "aws", ids: [mine[0], theirs] });
+    assertEquals([mixed.ok, mixed.data.deleted, mixed.data.skipped], [true, 1, [theirs]]);
+    assertEquals((await q("select 1 from public.goal_nodes where id = $1::bigint", [theirs])).length, 1);   // 남의 것은 그대로
+    assertEquals((await call(q, t, "personal_delete_many", { study: "aws", ids: ["999999999"] })).data,
+                 { deleted: 0, skipped: ["999999999"] });                                                   // 없는 id 와 같은 응답 모양
+    const d0 = await call(q, t, "personal_delete_many", { study: "aws", ids: [theirs] });
+    assertEquals(d0.data, { deleted: 0, skipped: [theirs] });
     const team = await call(q, t, "personal_delete_many", { study: "aws", ids: [await nodeId(q, "aws", "VPC 실습")] });   // 팀 노드 = 이 방의 개인 목표 아님
     assertEquals([team.ok, team.data.deleted, team.data.skipped.length], [true, 0, 1]);
     const d = await call(q, t, "personal_delete_many", { study: "aws", ids: mine });
-    assertEquals([d.ok, d.data.deleted], [true, 2]);
+    assertEquals([d.ok, d.data.deleted, d.data.skipped], [true, 1, [mine[0]]]);   // mine[0] 은 위에서 지워짐
     const au = await one(q, "select summary from public.api_audit where op = 'personal_delete_many' order by id desc limit 1");
-    assertEquals([au.summary.ids, au.summary.deleted], [mine, 2]);
+    assertEquals([au.summary.ids, au.summary.deleted], [mine, 1]);
   } },
   { name: "〔C#1·#13〕 제출 있는 목표: 실제로 완료(제출)한 뒤 삭제 → NODE_HAS_SUBMISSIONS · 목표·제출 그대로", run: async (q) => {
     const t = await tokenFor(q, "지은");
@@ -397,12 +412,14 @@ cases("api invoke 0035", db, [
     const all = await q(`select p.proname from pg_proc p join pg_namespace s on s.oid = p.pronamespace
                          where s.nspname = 'public' and p.prosrc ilike '%sgtudy.api_uid%' order by 1`);
     assertEquals(all.map((f) => f.proname), ["api_authenticate", "current_user_id"]);   // 읽는 곳 1 · 쓰는 곳 1
+    // 〔리뷰 m3〕 함수 속성 SET sgtudy.api_uid(=proconfig) 로 심는 길도 없다
+    assertEquals((await q(`select p.proname from pg_proc p where p.proconfig::text ilike '%sgtudy.api_uid%'`)).length, 0);
   } },
-  { name: "api_invoke 속성: security definer · search_path '' · statement_timeout 15s", run: async (q) => {
+  { name: "〔리뷰 I2〕 api_invoke 속성: security definer · search_path '' 만 — 효과 없는 함수 statement_timeout 은 두지 않는다(실제 상한 = 호출 역할 anon 3s)", run: async (q) => {
     const p = await one(q, `select p.prosecdef, p.proconfig from pg_proc p join pg_namespace s on s.oid = p.pronamespace
                             where s.nspname = 'public' and p.proname = 'api_invoke'`);
     assertEquals(p.prosecdef, true);
-    assertEquals([...(p.proconfig as string[])].sort(), ['search_path=""', "statement_timeout=15s"]);
+    assertEquals([...(p.proconfig as string[])], ['search_path=""']);
   } },
   { name: "〔C#9·N6〕 응답 계약 스냅숏(src/lib/mcp/__fixtures__/api-contract.json)", run: async (q) => {
     const data = await contractData(q);
@@ -563,6 +580,7 @@ Deno.test("마이그레이션 원문: sgtudy.api_uid 를 set_config 하는 곳�
     const sql = await Deno.readTextFile(new URL(e.name, dir));
     if (/set_config\(\s*'sgtudy\.api_uid'\s*,\s*t\.user_id/i.test(sql)) hits.push(e.name);
     else if (/set_config\(\s*'sgtudy\.api_uid'/i.test(sql)) hits.push(`${e.name}:OTHER`);
+    if (/\bset\s+(local\s+|session\s+)?"?sgtudy\.api_uid"?\s*(=|to\b)/i.test(sql)) hits.push(`${e.name}:SET`);   // 〔리뷰 m3〕 SET [LOCAL] · 함수 속성 SET
   }
   assertEquals(hits, ["0033_api_tokens.sql"]);
 });

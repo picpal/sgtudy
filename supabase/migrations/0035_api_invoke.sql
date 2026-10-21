@@ -86,7 +86,8 @@ end $$;
 
 -- 〔D16〕 내 개인 목표만, 제출 있는 것은 거부(웹 personal_delete 보다 엄격), 원자
 -- 〔C#1〕 방 잠금이 먼저: 제출 경로(submission_target·personal_complete)도 같은 room_lock 을 잡으므로 검사 뒤 제출이 끼지 못한다
--- 〔C#10〕 id 중복 제거 · 이 방의 개인 목표가 아닌 id(이미 지워짐 포함)는 skipped(재호출 멱등)
+-- 〔C#10〕 id 중복 제거 · 이 방의 내 개인 목표가 아닌 id(이미 지워짐·남의 목표·팀 노드)는 모두 skipped(재호출 멱등).
+--   남의 목표를 NOT_OWNER 로 구분하지 않는다 — 존재를 드러내지 않게(0014 personal_get 의 존재 숨김과 같은 뜻)
 create or replace function public.personal_delete_many(p_slug text, p_ids jsonb) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -109,11 +110,9 @@ begin
   select array_agg(x order by x) into v_ids                                   -- ② 형식 오류는 22P02 → VALIDATION_FAILED
   from (select distinct (e #>> '{}')::bigint as x from jsonb_array_elements(p_ids) e) z;
   foreach v_id in array v_ids loop                                           -- ③ 전부 검사(아무것도 지우기 전에)
-    select * into n from public.goal_nodes x where x.id = v_id and x.room_id = r.id and x.task_type = 'PERSONAL';
+    select * into n from public.goal_nodes x
+    where x.id = v_id and x.room_id = r.id and x.task_type = 'PERSONAL' and x.owner_id = v_uid;
     if not found then v_skip := v_skip || to_jsonb(v_id::text); continue; end if;
-    if n.owner_id is distinct from v_uid then
-      perform public.fail('NOT_OWNER', '본인 개인 목표만 지울 수 있어요', jsonb_build_object('nodeId', v_id::text));
-    end if;
     if exists (select 1 from public.submissions s where s.node_id = n.id) then
       perform public.fail('NODE_HAS_SUBMISSIONS', '완료(제출)한 목표는 AI 로 지울 수 없어요. 웹에서 지워 주세요', jsonb_build_object('nodeId', v_id::text));
     end if;
@@ -204,14 +203,15 @@ begin
   return jsonb_build_object('today', to_char(v_today, 'YYYY-MM-DD'), 'items', v_items);
 end $$;
 
--- 〔D14〕 study(slug 또는 제목 일부) → slug. ① slug 정확 일치(내 스터디가 아니어도 — 공개 방 읽기는 호출 RPC 가 판정)
+-- 〔D14〕 study(slug 또는 제목 일부) → slug. ① slug 정확 일치 — 내 스터디가 아니어도 읽을 수 있는 방(room_readable: 공개 방 등)만.
+--   못 읽는 방의 slug 는 없는 slug 와 똑같이 아래로 흘러 STUDY_NOT_FOUND(존재 숨김 — 웹 RPC 의 ROOM_NOT_FOUND 관례와 같은 뜻)
 -- ② 내 스터디(api_studies 범위, 종료 제외) 제목에 대소문자 무시 부분 일치가 1개 ③ 비었으면 내 진행·모집 스터디가 1개일 때 그것.
 -- 0개 STUDY_NOT_FOUND, 2개 이상 STUDY_AMBIGUOUS(details.candidates [{slug,title}] ≤10) — 추측하지 않는다
 create or replace function public.api_resolve_study(p_uid uuid, p_text text) returns text
 language plpgsql stable security definer set search_path = '' as $$
 declare v_t text := nullif(trim(coalesce(p_text, '')), ''); v_c jsonb;
 begin
-  if v_t is not null and exists (select 1 from public.rooms where slug = v_t) then return v_t; end if;
+  if v_t is not null and exists (select 1 from public.rooms x where x.slug = v_t and public.room_readable(x.id, p_uid)) then return v_t; end if;
   select coalesce(jsonb_agg(jsonb_build_object('slug', x ->> 'slug', 'title', x ->> 'title') order by o), '[]'::jsonb) into v_c
   from jsonb_array_elements(public.api_studies(p_uid, false) -> 'items') with ordinality y(x, o)
   where (v_t is null and x ->> 'status' in ('active', 'recruit', 'draft'))
@@ -233,12 +233,14 @@ end $$;
 -- 신원: token 이 있으면 PAT(로그인 세션이 함께 있으면 API_AUTH_CONFLICT), 없으면 로그인 세션(auth.uid()) — source SESSION|OAUTH.
 -- 잠금 순서(Global Constraints): (토큰 행 — api_authenticate) → 사용자(api_user_lock / api_rate_check) → 방(room_lock) → 초안.
 --   〔C#7·N3〕 apply 는 사용자 → 초안의 방을 잠근 뒤에 replay 를 판정하고 그 다음 api_rate_check(replay 는 적용 한도 제외).
--- 〔C#12〕 감사 보장 범위 = 업무 오류. exception when others 는 query_canceled(57014 — statement_timeout 15s·클라이언트 취소)·
+-- 실행 시간 상한: 함수 속성 statement_timeout 은 이미 시작된 문장의 타이머를 다시 걸지 않아 효과가 없다 → 두지 않는다.
+--   실제 상한은 PostgREST 호출 역할의 statement_timeout(Supabase 기본 anon 3s · authenticated 8s — 로컬에서 확인, 호스티드는 배포 전 확인). PAT 경로(anon 키) = 3s.
+-- 〔C#12〕 감사 보장 범위 = 업무 오류. exception when others 는 query_canceled(57014 — 역할 statement_timeout·클라이언트 취소)·
 --   assert_failure 를 잡지 않는다 → 그때는 트랜잭션 전체(감사 행 포함)가 롤백된다. 의도된 범위 밖(감사 = 업무 결과 기록):
 --   라우트가 TIMEOUT 을 받으면 토큰 없이 운영 로그를 남긴다(Task 8). 취소된 트랜잭션에서 더 실행하지 않으려고 query_canceled 는 잡지 않는다.
 -- 감사 insert 는 레이트리밋 집계와 같은 트랜잭션(사용자 잠금 유지 중) — 커밋 뒤 다음 대기자가 이 행까지 센다. 요약에 토큰 원문은 없다.
 create or replace function public.api_invoke(p_token text, p_op text, p_args jsonb default '{}'::jsonb) returns jsonb
-language plpgsql security definer set search_path = '' set statement_timeout = '15s' as $$
+language plpgsql security definer set search_path = '' as $$
 declare
   t        public.api_tokens;
   v_args   jsonb := coalesce(p_args, '{}'::jsonb);
@@ -330,7 +332,7 @@ begin
     values (t.id, v_uid, v_source, p_op, v_room, v_dry, v_ok, case when not v_ok then left(v_err, 40) end,
             case when p_op like 'curriculum_plan_%' then (select x from (select coalesce(v_data ->> 'previewId', v_args ->> 'previewId') as x) z
                                                            where x ~ '^pv_[0-9a-f]{12}$') end,   -- 입력 그대로 싣지 않는다(형식 맞는 것만)
-            case when p_op like 'curriculum_plan_%' then jsonb_strip_nulls(jsonb_build_object('summary', v_data -> 'summary', 'refs', v_data -> 'refs',
+            case when p_op like 'curriculum_plan_%' then jsonb_strip_nulls(jsonb_build_object('summary', v_data -> 'summary', 'createdIds', v_data -> 'createdIds',   -- refs(사용자 라벨) 대신 id
                                                            'replayed', v_data -> 'replayed', 'undoOf', v_data -> 'undoOf'))
                  when p_op = 'personal_create_many' then jsonb_strip_nulls(jsonb_build_object('createdIds', v_data -> 'createdIds'))
                  when p_op = 'personal_delete_many' then jsonb_strip_nulls(jsonb_build_object(   -- 사용자 입력은 숫자 id 모양만(제목·자유 문자열 없음)
