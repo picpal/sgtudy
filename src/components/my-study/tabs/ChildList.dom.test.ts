@@ -29,3 +29,24 @@ describe("ChildList 빠른 추가 닫기 포커스", () => {
     host.remove();
   });
 });
+
+// 회차 편집 화면도 같은 QuickAdd — Safari 순서(mousedown 이 버튼에 포커스를 주지 않음)로 '지정' 을 눌러도 닫히지 않는다
+describe("ChildList 빠른 추가 공통/지정 전환", () => {
+  it("빈 입력에서 '지정' 을 마우스로 눌러도 입력이 남고 유형이 바뀐다", () => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(MeProvider, { me: null } as Parameters<typeof MeProvider>[0], createElement(ChildList, { parent: round, onOpen: () => {}, edit }))));
+    act(() => host.querySelector<HTMLButtonElement>(`[data-add-task="${round.id}"]`)!.click());
+    const input = host.querySelector<HTMLInputElement>("input")!;
+    input.focus();
+    const des = () => Array.from(host.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent === "지정")!;
+    act(() => {
+      if (des().dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }))) input.blur();
+    });
+    act(() => des().click());
+    expect(host.querySelector("input")).not.toBeNull();
+    expect(des().getAttribute("aria-pressed")).toBe("true");
+    act(() => root.unmount());
+    host.remove();
+  });
+});

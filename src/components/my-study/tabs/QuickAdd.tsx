@@ -85,7 +85,9 @@ export function QuickAdd({
       <span className={indentCls} style={{ "--d": indent } as React.CSSProperties} />
       {personal && <TypeBadge type="개인" />}
       {!personal && (
-        <span className="shrink-0">
+        // 마우스로 유형을 눌러도 포커스는 입력에 둔다 — Safari·macOS Firefox 는 버튼에 포커스를 주지 않아
+        // 입력의 blur 가 relatedTarget=null 로 와서(줄 밖으로 나간 것처럼) 빈 입력이 닫혀 버렸다. 키보드(Tab·Space)는 그대로
+        <span className="shrink-0" onMouseDown={(e) => e.preventDefault()}>
           <Seg<TaskType> label="추가할 과제 유형" value={type} onChange={(v) => { setType(v); input.current?.focus(); }} options={[["공통", "공통"], ["지정", "지정"]]} />
         </span>
       )}
