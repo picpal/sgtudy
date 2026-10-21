@@ -37,7 +37,9 @@ const LINE_PX = 22;
  * 댓글 입력창 (§6.3·§6.4) — 평범한 textarea(모바일·IME 단순) + `@` 멤버 자동완성(MentionPicker).
  * 고른 멤버는 입력창에 `@닉네임` 으로 보이고 picks 에 기록 → 등록 때 toTokens 가 `<@uuid>` 로 바꾼다(공백 있는 닉네임도 안전).
  * 키: Enter 줄바꿈 · Cmd/Ctrl+Enter 등록 · 후보가 열려 있으면 ↑↓ 이동, Enter·Tab 선택, Esc 닫기.
- * 한글 조합 중(isComposing·229)에는 이 키들을 처리하지 않는다 — 조합 확정 Enter 가 선택·등록으로 새지 않게
+ * 한글 조합 중(isComposing·229)에는 이 키들을 처리하지 않는다 — 조합 확정 Enter 가 선택·등록으로 새지 않게.
+ * (Android Gboard 는 모든 키를 229 로 보내 ↑↓/Enter 선택이 안 된다 — 모바일은 탭이 주 경로라 그대로 둔다)
+ * 조합 중에 후보를 마우스·탭으로 고르면 조합을 먼저 끝내고(blur → compositionend) 그 확정 글로 넣는다 — 조합 도중 value 를 바꾸면 Safari·iOS 에서 음절이 겹친다
  */
 export function CommentComposer({ members, meId, initial, draftKey = null, submitLabel, onSubmit, onCancel, label, autoFocus = false, ref }: Props) {
   const [text, setText] = useState(() => initial?.text ?? (draftKey ? (readCommentDraft(draftStore(), draftKey)?.text ?? "") : ""));
@@ -52,6 +54,16 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
   const [live, setLive] = useState("");
   const area = useRef<HTMLTextAreaElement>(null);
   const nextCaret = useRef<number | null>(null);
+  // 한글 조합 중인가 · 조합 중에 누른 후보(조합이 끝나면 넣는다)
+  const composing = useRef(false);
+  const pendingPick = useRef<MentionMember | null>(null);
+  // 등록 요청 중에 이어 친 글 — 응답 뒤 보낸 만큼만 지운다
+  const textRef = useRef(text);
+  useEffect(() => {
+    textRef.current = text;
+  });
+  // 입력창이 화면 위쪽에 붙어 있으면 후보를 아래로 연다(위로 잘리지 않게)
+  const [below, setBelow] = useState(false);
   const ids = useId();
   const listId = `${ids}-list`;
 
@@ -108,14 +120,21 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
     return !now.includes(userId) && now.length >= COMMENT_LIMITS.mentionsMax;
   };
 
-  const choose = (m: MentionMember) => {
-    if (!q) return;
-    if (wouldOverflow(m.userId)) {
-      setErr("한 댓글에서 10명까지 부를 수 있어요");
-      setDismissed(q.start);
+  /** value·caret 기준으로 질의를 다시 찾아 m 을 넣는다 — 조합이 끝난 DOM 값으로도 부른다 */
+  const chooseFrom = (value: string, pos: number, m: MentionMember) => {
+    const qq = activeQuery(value, pos);
+    if (!qq) {
+      setText(value);
+      setCaret(pos);
+      area.current?.focus();
       return;
     }
-    const r = insertMention(text, q, m.nickname);
+    if (wouldOverflow(m.userId)) {
+      setErr("한 댓글에서 10명까지 부를 수 있어요");
+      setDismissed(qq.start);
+      return;
+    }
+    const r = insertMention(value, qq, m.nickname);
     addPick({ userId: m.userId, nickname: m.nickname });
     nextCaret.current = r.caret;
     setText(r.text);
@@ -123,6 +142,34 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
     setErr(null);
     area.current?.focus();
   };
+  const choose = (m: MentionMember) => chooseFrom(text, caret, m);
+  /** 후보 누름(마우스·탭) — 조합 중이면 조합을 끝낸 뒤(compositionend) 넣는다. 끝 이벤트가 안 오면 잠시 뒤 DOM 값으로 */
+  const pickByPointer = (m: MentionMember) => {
+    const el = area.current;
+    if (!composing.current || !el) return choose(m);
+    pendingPick.current = m;
+    el.blur(); // 브라우저가 조합을 확정한다
+    window.setTimeout(() => {
+      if (pendingPick.current !== m) return;
+      composing.current = false;
+      flushPick();
+    }, 300);
+  };
+  const flushPick = () => {
+    const m = pendingPick.current;
+    const el = area.current;
+    if (!m || !el) return;
+    pendingPick.current = null;
+    chooseFrom(el.value, el.selectionStart ?? el.value.length, m);
+  };
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const r = area.current?.getBoundingClientRect();
+    if (!r) return;
+    // 위 공간이 후보 창(최대 264px)보다 좁고 아래가 더 넓으면 아래로
+    setBelow(r.top < 280 && window.innerHeight - r.bottom > r.top);
+  }, [open]);
 
   useImperativeHandle(ref, () => ({
     reply: (p) => {
@@ -154,15 +201,19 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
     }
     setErr(null);
     setBusy(true);
+    const sent = text;
     const ok = await onSubmit(tokens);
     setBusy(false);
     if (!ok) return;
-    // 새 댓글은 비우고 입력창에 남는다(이어 쓰기). 수정 모드는 부모가 닫는다
+    // 새 댓글은 비우고 입력창에 남는다(이어 쓰기). 수정 모드는 부모가 닫는다.
+    // 요청 중에 이어 친 글은 남긴다 — 보낸 앞부분만 잘라 낸다
     if (!initial) {
-      if (draftKey) clearCommentDraft(draftStore(), draftKey);
-      setText("");
-      setPicks([]);
-      setCaret(0);
+      const cur = textRef.current;
+      const rest = cur === sent ? "" : cur.startsWith(sent) ? cur.slice(sent.length).replace(/^\s+/, "") : cur;
+      if (draftKey && rest === "") clearCommentDraft(draftStore(), draftKey);
+      setText(rest);
+      if (rest === "") setPicks([]);
+      setCaret(rest.length);
       setPreview(false);
       setLive("댓글을 등록했어요");
       area.current?.focus();
@@ -212,7 +263,8 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
             id={listId}
             role="listbox"
             aria-label="부를 멤버"
-            className="absolute inset-x-0 bottom-[calc(100%+6px)] z-20 m-0 flex max-h-[min(40vh,264px)] list-none flex-col overflow-y-auto rounded-[14px] border border-line bg-surface p-[6px] shadow-[0_12px_32px_rgba(27,34,48,.16)]"
+            data-below={below || undefined}
+            className={`absolute inset-x-0 ${below ? "top-[calc(100%+6px)]" : "bottom-[calc(100%+6px)]"} z-20 m-0 flex max-h-[min(40vh,264px)] list-none flex-col overflow-y-auto rounded-[14px] border border-line bg-surface p-[6px] shadow-[0_12px_32px_rgba(27,34,48,.16)]`}
           >
             {cands.map((m, i) => (
               <li
@@ -222,7 +274,7 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
                 aria-selected={i === at}
                 // 입력창 포커스를 지킨다 — 누르는 순간 blur 되면 캐럿·질의가 흔들린다
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => choose(m)}
+                onClick={() => pickByPointer(m)}
                 onMouseMove={() => i !== at && setActive(i)}
                 className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-[10px] px-3 text-[14px] font-medium text-ink ${i === at ? "bg-bg" : ""}`}
               >
@@ -253,7 +305,14 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
           }}
           onSelect={syncCaret}
           onClick={syncCaret}
-          onCompositionEnd={syncCaret}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+            if (pendingPick.current) flushPick();
+            else syncCaret();
+          }}
           onBlur={() => setDismissed(q?.start ?? null)}
           onFocus={() => setDismissed(null)}
           onKeyDown={onKey}

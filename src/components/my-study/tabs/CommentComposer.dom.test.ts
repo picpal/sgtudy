@@ -197,7 +197,7 @@ describe("CommentComposer — 임시 저장·답글·수정 모드", () => {
     typeIn("@");
     key("Enter");
     typeIn("@김 하나 다음에 봐요");
-    expect(JSON.parse(localStorage.getItem(k)!)).toEqual({ text: "@김 하나 다음에 봐요", picks: [{ userId: uid(2), nickname: "김 하나" }] });
+    expect(JSON.parse(localStorage.getItem(k)!)).toEqual({ text: "@김 하나 다음에 봐요", picks: [{ userId: uid(2), nickname: "김 하나" }], at: expect.any(Number) });
     act(() => root!.unmount());
     document.body.innerHTML = "";
     const { onSubmit } = mount({ draftKey: k });
@@ -235,5 +235,74 @@ describe("CommentComposer — 임시 저장·답글·수정 모드", () => {
     key("Escape");
     act(() => btn("취소").click());
     expect(onCancel).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("CommentComposer — 리뷰 후속", () => {
+  it("M9: 한글 조합 중에 후보를 누르면 조합을 끝낸 뒤(compositionend) 확정 글로 한 번만 넣는다", () => {
+    mount();
+    typeIn("@하");
+    const el = area();
+    act(() => el.focus());
+    act(() => {
+      el.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    });
+    const blur = vi.spyOn(el, "blur");
+    const opt = [...host.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => optText(o) === "하나둘")!;
+    act(() => opt.click());
+    expect(blur).toHaveBeenCalled(); // 조합을 확정시킨다
+    expect(area().value).toBe("@하"); // 조합 중에는 value 를 바꾸지 않는다
+    // 브라우저가 조합을 확정 — 확정 글자("하나")로 끝난다
+    typeIn("@하나");
+    act(() => {
+      el.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+    });
+    expect(area().value).toBe("@하나둘 ");
+  });
+  it("M9: compositionend 가 오지 않으면 잠시 뒤 DOM 값으로 넣는다", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    mount();
+    typeIn("@하");
+    act(() => {
+      area().dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+    });
+    const opt = [...host.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => optText(o) === "하나둘")!;
+    act(() => opt.click());
+    expect(area().value).toBe("@하");
+    act(() => vi.advanceTimersByTime(350));
+    expect(area().value).toBe("@하나둘 ");
+    vi.useRealTimers();
+  });
+  it("M8: 등록 요청 중에 이어 친 글은 응답 뒤에도 남는다(보낸 앞부분만 지운다)", async () => {
+    let resolve: (ok: boolean) => void = () => {};
+    const onSubmit = vi.fn(() => new Promise<boolean>((r) => (resolve = r)));
+    mount({ onSubmit, draftKey: "k" });
+    typeIn("첫 댓글");
+    await act(async () => btn("등록").click());
+    typeIn("첫 댓글 그리고 다음");
+    await act(async () => resolve(true));
+    expect(area().value).toBe("그리고 다음");
+    expect(JSON.parse(localStorage.getItem("k")!).text).toBe("그리고 다음");
+  });
+  it("후보 창 — 입력창이 화면 위쪽이면 아래로, 아니면 위로 연다", () => {
+    mount();
+    const rect = vi.spyOn(area(), "getBoundingClientRect");
+    rect.mockReturnValue({ top: 40, bottom: 100, left: 0, right: 300, width: 300, height: 60, x: 0, y: 40, toJSON: () => ({}) });
+    typeIn("@");
+    expect(listbox()!.dataset.below).toBe("true");
+    expect(listbox()!.className).toContain("top-[calc(100%+6px)]");
+    typeIn("");
+    rect.mockReturnValue({ top: 600, bottom: 660, left: 0, right: 300, width: 300, height: 60, x: 0, y: 600, toJSON: () => ({}) });
+    typeIn("@");
+    expect(listbox()!.dataset.below).toBeUndefined();
+    expect(listbox()!.className).toContain("bottom-[calc(100%+6px)]");
+  });
+  it("M14: 14일 지난 임시 저장은 읽지 않고 지운다", async () => {
+    const { readCommentDraft, DRAFT_TTL_MS } = await import("../commentDraft");
+    localStorage.setItem("old", JSON.stringify({ text: "옛 글", picks: [], at: 1000 }));
+    expect(readCommentDraft(localStorage, "old", 1000 + DRAFT_TTL_MS + 1)).toBeNull();
+    expect(localStorage.getItem("old")).toBeNull();
+    localStorage.setItem("new", JSON.stringify({ text: "새 글", picks: [], at: 1000 }));
+    expect(readCommentDraft(localStorage, "new", 2000)).toEqual({ text: "새 글", picks: [] });
   });
 });
