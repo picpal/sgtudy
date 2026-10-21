@@ -25,11 +25,14 @@ export function useExamEditor(slug: string, nodeId: string, toast: (m: ToastMsg)
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [fieldErr, setFieldErr] = useState<ExamFieldErr | null>(null);
-  // 같은 틱의 두 번째 클릭도 막는 동기 표시 + await 뒤에 읽는 지금 초안
-  const busy = useRef(false);
+  // 진행 중인 저장·발행 — 그 사이 또 부르면(위쪽 [저장] 등) 끝나기를 기다렸다가 이어서 한다(조용히 실패하지 않게).
+  // draftRef·baseRef = await 뒤에 읽는 지금 값(applyView 가 렌더 전에 먼저 맞춘다)
+  const inflight = useRef<Promise<boolean> | null>(null);
   const draftRef = useRef(draft);
+  const baseRef = useRef(base);
   useEffect(() => {
     draftRef.current = draft;
+    baseRef.current = base;
   });
   const toastRef = useRef(toast);
   const changedRef = useRef(onChanged);
@@ -41,6 +44,8 @@ export function useExamEditor(slug: string, nodeId: string, toast: (m: ToastMsg)
   /** 서버 응답으로 바꾼다. sent = 보낸 초안 — 그 사이 또 고쳤으면 고친 초안은 남긴다(저장 버튼이 다시 켜진다) */
   const applyView = useCallback((v: ExamView, sent?: ExamDraft) => {
     const next = toDraft(v);
+    baseRef.current = next;
+    if (sent === undefined || draftRef.current === sent) draftRef.current = next;
     setView(v);
     setBase(next);
     setDraft((cur) => (sent === undefined || cur === sent ? next : cur));
@@ -89,18 +94,27 @@ export function useExamEditor(slug: string, nodeId: string, toast: (m: ToastMsg)
     [reload],
   );
 
-  /** [문제 저장] — 클라이언트 검사 뒤 exam_put. 성공이면 true (바뀐 게 없으면 보내지 않고 true) */
-  const save = useCallback(async (): Promise<boolean> => {
-    if (busy.current) return false;
+  /** 한 번에 하나 — 진행 중이면 끝난 뒤 task 를 다시 부른다 */
+  const serial = useCallback((task: () => Promise<boolean>, again: () => Promise<boolean>): Promise<boolean> => {
+    if (inflight.current) return inflight.current.then(again, again);
+    const p = task().finally(() => {
+      inflight.current = null;
+    });
+    inflight.current = p;
+    return p;
+  }, []);
+
+  /** [문제 저장] — 클라이언트 검사 뒤 exam_put. 성공이면 true (바뀐 게 없으면 보내지 않고 true). 저장·발행 중이면 끝난 뒤에 */
+  const saveRef = useRef<() => Promise<boolean>>(() => Promise.resolve(false));
+  const saveNow = useCallback(async (): Promise<boolean> => {
     const sent = draftRef.current;
-    if (!draftDirty(sent, base)) return true;
+    if (!draftDirty(sent, baseRef.current)) return true;
     const bad = validateDraft(sent);
     if (bad) {
       setFieldErr(bad);
       toastRef.current({ text: at(bad), tone: "bad" });
       return false;
     }
-    busy.current = true;
     setSaving(true);
     try {
       applyView(await putExam(slug, nodeId, sent), sent);
@@ -111,23 +125,24 @@ export function useExamEditor(slug: string, nodeId: string, toast: (m: ToastMsg)
       await fail(e);
       return false;
     } finally {
-      busy.current = false;
       setSaving(false);
     }
-  }, [base, slug, nodeId, applyView, fail]);
+  }, [slug, nodeId, applyView, fail]);
+  const save = useCallback((): Promise<boolean> => serial(saveNow, () => saveRef.current()), [serial, saveNow]);
+  useEffect(() => {
+    saveRef.current = save;
+  });
 
   /** [발행]·[초안으로]. 발행 전 고친 문항이 있으면 먼저 저장한다(저장한 문항으로 발행된다) */
-  const publish = useCallback(
+  const publishNow = useCallback(
     async (on: boolean): Promise<boolean> => {
-      if (busy.current) return false;
-      if (on && draftDirty(draftRef.current, base) && !(await save())) return false;
-      busy.current = true;
       setPublishing(true);
       try {
         // 발행은 문항을 바꾸지 않는다 — 초안은 그대로 둔다(초안으로 되돌리기 전에 고친 문항이 있어도 버리지 않게)
         const v = await publishExam(slug, nodeId, on);
+        baseRef.current = toDraft(v);
         setView(v);
-        setBase(toDraft(v));
+        setBase(baseRef.current);
         toastRef.current({ text: on ? "발행했어요 · 팀원에게 알림을 보냈어요" : "초안으로 되돌렸어요 · 팀원에게는 다시 보이지 않아요", tone: "ok" });
         changedRef.current?.();
         return true;
@@ -135,18 +150,26 @@ export function useExamEditor(slug: string, nodeId: string, toast: (m: ToastMsg)
         await fail(e);
         return false;
       } finally {
-        busy.current = false;
         setPublishing(false);
       }
     },
-    [base, save, slug, nodeId, fail],
+    [slug, nodeId, fail],
+  );
+  const publish = useCallback(
+    async (on: boolean): Promise<boolean> => {
+      if (inflight.current) return false; // 확인 상자 버튼은 진행 중 비활성 — 겹친 누름은 버린다
+      if (on && draftDirty(draftRef.current, baseRef.current) && !(await save())) return false;
+      return serial(() => publishNow(on), () => Promise.resolve(false));
+    },
+    [save, serial, publishNow],
   );
 
   /** 저장하지 않은 문항 수정을 버린다(떠나기 확인의 "버리기") */
   const discard = useCallback(() => {
-    setDraft(base);
+    draftRef.current = baseRef.current;
+    setDraft(baseRef.current);
     setFieldErr(null);
-  }, [base]);
+  }, []);
 
   /** 초안을 통째로 바꾼다 — AI 탭의 JSON 가져오기 등(Task 8). 잠겼으면 바꾸지 않고 false */
   const replace = useCallback(

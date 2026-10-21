@@ -43,6 +43,8 @@ export function ExamQuestionForm({ q, i, count, locked, lockId, err, dispatch }:
   const bad = (f: string) => (err?.field === f ? true : undefined);
   const lockProps = locked ? { "aria-disabled": true, "aria-describedby": lockId, readOnly: true } : {};
   const errId = `exam-q-${i}-err`;
+  // JSON 가져오기 등으로 범위 밖 배점이 들어오면 빈 칸이 아니라 그 값과 이유를 보인다(저장은 검사에서 막힌다)
+  const pointsOk = Number.isInteger(q.points) && q.points >= EXAM_LIMITS.pointsMin && q.points <= EXAM_LIMITS.pointsMax;
 
   return (
     <li className="flex flex-col gap-3 rounded-[14px] border border-line-2 bg-surface p-3" aria-label={`${no}번 문항`}>
@@ -50,7 +52,7 @@ export function ExamQuestionForm({ q, i, count, locked, lockId, err, dispatch }:
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[14px] font-bold text-ink">{no}.</span>
         <Listbox label={`${no}번 문항 유형`} value={q.type} options={TYPE_OPTIONS} onChange={(v) => dispatch({ type: "patch", i, patch: { type: v as ExamQType } })} disabled={locked} describedBy={locked ? lockId : undefined} className="w-[132px]" align="left" />
-        <Listbox label={`${no}번 문항 배점`} prefix="배점" value={String(q.points)} options={POINT_OPTIONS} onChange={(v) => dispatch({ type: "patch", i, patch: { points: Number(v) } })} disabled={locked} describedBy={locked ? lockId : undefined} className="w-[112px]" align="left" />
+        <Listbox label={`${no}번 문항 배점`} prefix="배점" value={String(q.points)} options={pointsOk ? POINT_OPTIONS : [{ value: String(q.points), label: `${q.points}점` }, ...POINT_OPTIONS]} onChange={(v) => dispatch({ type: "patch", i, patch: { points: Number(v) } })} disabled={locked} describedBy={locked ? lockId : undefined} className="w-[112px]" align="left" />
         {!locked && (
           <div className="ml-auto flex items-center">
             <button type="button" aria-label={`${no}번 문항 위로`} disabled={i === 0} onClick={() => dispatch({ type: "move", i, dir: -1 })} className={iconBtn}>
@@ -65,6 +67,11 @@ export function ExamQuestionForm({ q, i, count, locked, lockId, err, dispatch }:
           </div>
         )}
       </div>
+      {!pointsOk && (
+        <p role="status" className="m-0 -mt-1 text-[12px] font-semibold text-warn">
+          배점 {q.points}점 · {EXAM_LIMITS.pointsMin}~{EXAM_LIMITS.pointsMax}점만 돼요
+        </p>
+      )}
 
       <label className={label}>
         문제

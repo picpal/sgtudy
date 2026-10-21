@@ -41,11 +41,11 @@ const flush = () =>
   act(async () => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
   });
-const mount = async (v: ExamView, summary: ExamSummary = SUMMARY, ref?: React.Ref<ExamEditorHandle>) => {
+const mount = async (v: ExamView, summary: ExamSummary = SUMMARY, ref?: React.Ref<ExamEditorHandle>, assignees = 4) => {
   m.fetch.mockResolvedValue(v);
   host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
-  act(() => root!.render(createElement(ExamEditor, { slug: "aws", nodeId: "311", summary, assignees: 4, toast, onDirty, onChanged, ref })));
+  act(() => root!.render(createElement(ExamEditor, { slug: "aws", nodeId: "311", summary, assignees, toast, onDirty, onChanged, ref })));
   await flush();
 };
 const button = (text: string) => Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.trim() === text);
@@ -168,10 +168,11 @@ describe("ExamEditor — 발행", () => {
     expect(host.textContent).toContain("문항을 하나 이상 넣어야 발행할 수 있어요");
   });
 
-  it("[발행] → InlineConfirm '팀원 4명에게 알림이 가요' → publishExam(true) · 머리 줄 발행됨", async () => {
+  it("[발행] → InlineConfirm '담당 팀원에게 알림이 가요'(수는 서버가 정한다) → publishExam(true) · 머리 줄 발행됨", async () => {
     await mount(view());
     act(() => button("발행")!.click());
-    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain("팀원 4명에게 알림이 가요");
+    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain("담당 팀원에게 알림이 가요");
+    expect(host.querySelector('[role="alertdialog"]')!.textContent).not.toMatch(/\d+명/);
     m.publish.mockResolvedValue(view({ status: "published" }));
     const confirm = host.querySelector('[role="alertdialog"]')!.querySelectorAll("button")[1];
     await act(async () => confirm.click());
@@ -226,5 +227,50 @@ describe("ExamEditor — handle (EditView 의 [저장]·떠나기 확인)", () =
     await act(async () => void (ok = await ref.current!.save()));
     expect(ok).toBe(true);
     expect(m.put).not.toHaveBeenCalled();
+  });
+});
+
+describe("ExamEditor — 리뷰 보완(minor)", () => {
+  it("담당자 0명 — 발행 확인이 '알림은 가지 않아요'", async () => {
+    await mount(view(), SUMMARY, undefined, 0);
+    act(() => button("발행")!.click());
+    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain("담당자가 아직 없어 알림은 가지 않아요");
+  });
+
+  it("문항 삭제 뒤 포커스 — 다음 카드의 삭제 버튼이 아니라 앞 카드의 문제 칸, 다 지우면 머리말", async () => {
+    await mount(view());
+    act(() => byLabel<HTMLButtonElement>("2번 문항 삭제")!.click());
+    expect(host.querySelectorAll("ol > li")).toHaveLength(3);
+    expect(document.activeElement).toBe(host.querySelectorAll("ol > li")[0].querySelector("textarea"));
+    for (let k = 0; k < 3; k++) act(() => byLabel<HTMLButtonElement>("1번 문항 삭제")!.click());
+    expect(document.activeElement?.tagName).toBe("H3");
+    expect(document.activeElement?.textContent).toBe("문제");
+  });
+
+  it("50문항 — 추가 버튼 비활성 + 이유", async () => {
+    await mount(view({ questions: Array.from({ length: 50 }, (_, k) => ({ ...QS[2], id: String(k), ord: k })) }));
+    expect(button("+ 객관식")!.disabled).toBe(true);
+    expect(host.textContent).toContain("문항은 50개까지예요");
+  });
+
+  it("범위 밖 배점 — 빈 칸 대신 값과 이유", async () => {
+    await mount(view({ questions: [{ ...QS[2], points: 15 }] }));
+    expect(lbBtn("1번 문항 배점")!.getAttribute("aria-label")).toBe("1번 문항 배점: 15점");
+    expect(host.textContent).toContain("배점 15점 · 1~10점만 돼요");
+  });
+
+  it("[문제 저장] 중에 handle.save(위쪽 [저장]) — 실패로 끝나지 않고 기다렸다가 true", async () => {
+    const ref = createRef<ExamEditorHandle>();
+    await mount(view(), SUMMARY, ref);
+    act(() => host.querySelectorAll<HTMLInputElement>('input[name="exam-q-0-answer"]')[1].click());
+    let done!: (v: ExamView) => void;
+    m.put.mockReturnValue(new Promise<ExamView>((r) => (done = r)));
+    act(() => button("문제 저장")!.click());
+    let second: Promise<boolean> | undefined;
+    act(() => void (second = ref.current!.save()));
+    await act(async () => done(view({ questions: QS.map((q, k) => (k === 0 ? { ...q, answer: 1 } : q)) })));
+    await flush();
+    expect(await second).toBe(true);
+    expect(m.put).toHaveBeenCalledTimes(1);
   });
 });

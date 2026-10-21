@@ -64,16 +64,34 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
   const unpublishLocked = !!view?.exam.locked;
   const globalErr = fieldErr && fieldErr.index < 0 ? fieldErr : null;
 
+  const full = draft.questions.length >= EXAM_LIMITS.questions;
+  // 문항을 지우면 그 자리에 다음 카드의 🗑 이 오지 않게 — 앞 카드(없으면 새 첫 카드)의 문제 칸, 다 지웠으면 머리말로 포커스
+  const sec = useRef<HTMLElement>(null);
+  const headRef = useRef<HTMLHeadingElement>(null);
+  const [refocus, setRefocus] = useState<number | null>(null);
+  useEffect(() => {
+    if (refocus === null) return;
+    const cards = sec.current?.querySelectorAll<HTMLElement>("ol > li");
+    const target = cards && cards.length > 0 ? cards[Math.min(Math.max(refocus - 1, 0), cards.length - 1)].querySelector("textarea") : null;
+    (target ?? headRef.current)?.focus();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 한 번 옮기고 끈다
+    setRefocus(null);
+  }, [refocus]);
+  const dispatch: typeof ed.dispatch = (a) => {
+    ed.dispatch(a);
+    if (a.type === "remove" && !locked) setRefocus(a.i);
+  };
+
   const doPublish = async (on: boolean) => {
     const ok = await ed.publish(on);
     if (ok) setAsk(null);
   };
 
   return (
-    <section aria-labelledby={`exam-head-${nodeId}`} className="flex flex-col gap-3 border-t border-line-2 pt-4" data-exam-editor="">
+    <section ref={sec} aria-labelledby={`exam-head-${nodeId}`} className="flex flex-col gap-3 border-t border-line-2 pt-4" data-exam-editor="">
       {/* 머리 줄 — 문제 · 초안/발행됨 · n문항 · m점 · [발행]/[초안으로] */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <h3 id={`exam-head-${nodeId}`} className="m-0 text-[15px] font-bold text-ink">
+        <h3 ref={headRef} tabIndex={-1} id={`exam-head-${nodeId}`} className="m-0 outline-none text-[15px] font-bold text-ink">
           문제
         </h3>
         <span role="status" className="min-w-0 text-[13px] font-medium text-ink-2">
@@ -98,7 +116,8 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
       )}
       {ask === "publish" && (
         <InlineConfirm
-          text={`팀원 ${assignees}명에게 알림이 가요${dirty ? " · 고친 문항을 먼저 저장해요" : ""}`}
+          // 받는 사람은 서버가 정한다(담당자 − 나 − 알림을 끈 사람) — 정확한 수를 말하지 않는다
+          text={`${assignees > 0 ? "담당 팀원에게 알림이 가요" : "담당자가 아직 없어 알림은 가지 않아요"}${dirty ? " · 고친 문항을 먼저 저장해요" : ""}`}
           onCancel={() => setAsk(null)}
           actions={[{ label: dirty ? "저장하고 발행" : "발행", tone: "primary", onClick: () => void doPublish(true), disabled: busy }]}
         />
@@ -140,7 +159,7 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
               ) : (
                 <ol aria-label="문항" className="m-0 flex list-none flex-col gap-3 p-0">
                   {draft.questions.map((q, i) => (
-                    <ExamQuestionForm key={i} q={q} i={i} count={draft.questions.length} locked={locked} lockId={locked ? lockId : undefined} err={fieldErr && fieldErr.index === i ? fieldErr : null} dispatch={ed.dispatch} />
+                    <ExamQuestionForm key={i} q={q} i={i} count={draft.questions.length} locked={locked} lockId={locked ? lockId : undefined} err={fieldErr && fieldErr.index === i ? fieldErr : null} dispatch={dispatch} />
                   ))}
                 </ol>
               )}
@@ -148,8 +167,9 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
               {!locked && (
                 <div role="group" aria-label="문항 추가" className="flex flex-wrap items-center gap-2">
                   <span className="text-[12px] font-semibold text-ink-3">문항 추가</span>
+                  {full && <span className="text-[12px] font-medium text-muted">문항은 {EXAM_LIMITS.questions}개까지예요</span>}
                   {QTYPES.map((t) => (
-                    <button key={t} type="button" disabled={draft.questions.length >= EXAM_LIMITS.questions} onClick={() => ed.dispatch({ type: "add", qtype: t })} className="inline-flex h-11 items-center rounded-[22px] border border-dashed border-line-3 bg-surface px-4 text-[13px] font-semibold text-ink-2 disabled:opacity-50">
+                    <button key={t} type="button" disabled={full} onClick={() => ed.dispatch({ type: "add", qtype: t })} className="inline-flex h-11 items-center rounded-[22px] border border-dashed border-line-3 bg-surface px-4 text-[13px] font-semibold text-ink-2 disabled:opacity-50">
                       + {QTYPE_KO[t]}
                     </button>
                   ))}
