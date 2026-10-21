@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, toggleMinePatch, toggleOthersPatch } from "./state";
+import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editReturn, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, toggleMinePatch, toggleOthersPatch } from "./state";
 
 describe("goLeafPatch", () => {
   it("opens the task detail view instead of an inline row", () =>
@@ -21,6 +21,14 @@ describe("modeSwitchPatch", () => {
   it("list stays list", () => expect(modeSwitchPatch(INITIAL_STATE, "edit")).toMatchObject({ curMode: "edit", editSel: null, viewSel: null }));
   it("temp (optimistic) items are not carried over", () =>
     expect(modeSwitchPatch({ ...INITIAL_STATE, curMode: "edit", editSel: "1.new0" }, "view")).toMatchObject({ viewSel: null }));
+  it("상세에서 편집으로 — 들어온 곳(editFrom)은 상세", () => expect(modeSwitchPatch({ ...INITIAL_STATE, viewSel: "7" }, "edit")).toMatchObject({ editFrom: "view" }));
+  it("목록에서 편집 모드로 — 들어온 곳은 아직 없다", () => expect(modeSwitchPatch(INITIAL_STATE, "edit")).toMatchObject({ editFrom: null }));
+});
+
+describe("editReturn — 편집 화면 [저장] 뒤 돌아갈 곳", () => {
+  it("편집 목록에서 열었으면 목록", () => expect(editReturn({ ...INITIAL_STATE, editFrom: "list" })).toEqual({ sel: null }));
+  it("보기 상세에서 열었으면 같은 항목의 보기 상세", () => expect(editReturn({ ...INITIAL_STATE, editFrom: "view" })).toEqual({ mode: "view" }));
+  it("모르면(새로고침·링크 진입) 같은 항목의 보기 상세", () => expect(editReturn(INITIAL_STATE)).toEqual({ mode: "view" }));
 });
 
 describe("진행목표·간트 필터 칩 — 두 칩은 서로 끈다", () => {

@@ -101,7 +101,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
       else update({ ...modeSwitchPatch(S, to.mode) });
     }
     else if ("add" in to) {
-      update({ leave: null });
+      // 목록에서 "회차 추가" 로 연 편집 화면 — [저장] 하면 목록으로
+      update((p) => ({ leave: null, editFrom: p.editSel === null ? "list" : p.editFrom }));
       // 구조 변경은 즉시 RPC (낙관적 임시 노드 → 응답 Curriculum 으로 교체)
       void api.create(to.add);
     } else if ("tab" in to) update({ tab: to.tab, calPick: null, confirm: false, leave: null, saved: "" });
@@ -113,7 +114,8 @@ export function CurriculumTab({ tree, S, update, api, canEdit, isLeader, period,
         router.push(to.href);
       }
     } else if ("view" in to) update({ viewSel: to.view, viewFocus: null, confirm: false, leave: null, saved: "" });
-    else update({ editSel: to.sel, quickAdd: null, confirm: false, leave: null, saved: "" });
+    // 목록에서 연 편집 화면은 [저장] 하면 목록으로 — 편집 화면 안에서 다른 항목으로 옮길 때는 처음 들어온 곳을 그대로 둔다
+    else update((p) => ({ editSel: to.sel, editFrom: to.sel === null ? null : p.editSel === null ? "list" : p.editFrom, quickAdd: null, confirm: false, leave: null, saved: "" }));
   };
   // 편집 모드는 권한을 다시 확인한 뒤에 연다 — 화면을 연 뒤 권한을 거뒀을 수 있다 (시나리오 QA #10)
   async function enterEdit() {

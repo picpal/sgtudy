@@ -47,7 +47,8 @@ export type CurriculumApi = {
   recheckEdit: () => Promise<boolean>;
 };
 
-export type SaveOpts = { shift?: boolean; onFiles?: (f: FileMeta[]) => void; skipFiles?: boolean };
+/** onSaved: 저장에 성공하면 그 안내 문구(S.saved 와 같은 글) — 저장하고 화면을 떠나는 호출자가 토스트로 보여 준다 */
+export type SaveOpts = { shift?: boolean; onFiles?: (f: FileMeta[]) => void; skipFiles?: boolean; onSaved?: (text: string) => void };
 
 export const dropKey = <T,>(rec: Record<string, T>, key: string) => {
   const { [key]: _omit, ...rest } = rec; // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -183,6 +184,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         if (!steps.includes("node")) {
           toast(null);
           update({ saved: "저장했어요" });
+          opts.onSaved?.("저장했어요");
           return true;
         }
       }
@@ -191,7 +193,9 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         setCur(cur);
         // 태그가 실제로 바뀌었는지 여기서는 알 수 없다 → "다시 골랐어요" 문구는 쓰지 않는다 (Q1-17). 이전 오류 토스트는 닫는다 (Q2-09)
         toast(null);
-        update((p) => ({ ov: dropFields(p.ov), saved: shiftedText(cur.shifted) }));
+        const text = shiftedText(cur.shifted);
+        update((p) => ({ ov: dropFields(p.ov), saved: text }));
+        opts.onSaved?.(text);
         router.refresh(); // 자동 태그가 바뀌었을 수 있다(D9)
         return true;
       } catch (e) {

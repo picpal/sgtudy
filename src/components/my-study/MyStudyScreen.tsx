@@ -221,7 +221,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         target.id === null
           ? { ...(backTab.current ? { tab: backTab.current } : {}), editSel: null, viewSel: null, confirm: false, leave: null, saved: "" }
           : target.mode === "edit"
-            ? { tab: "curriculum", curMode: "edit", editSel: target.id, viewSel: null, confirm: false, leave: null, saved: "" }
+            ? { tab: "curriculum", curMode: "edit", editSel: target.id, editFrom: overView.current ? "view" : "list", viewSel: null, confirm: false, leave: null, saved: "" }
             : { tab: "curriculum", curMode: "view", viewSel: target.id, editSel: null, confirm: false, leave: null, saved: "" },
       );
     };

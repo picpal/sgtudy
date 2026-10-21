@@ -139,16 +139,22 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
     onDone();
   };
 
-  const save = async () => {
+  // stay: [임시저장] — 저장하고 폼에 머문다. 아니면 [저장] — 저장하고 상세로 돌아간다(바뀐 게 없으면 저장 없이)
+  const save = async (stay = false) => {
     if (!title || badDates || saving) return;
     if (uploading) {
       toast({ text: "파일을 올리는 중이에요", tone: "bad" });
       return;
     }
     if (!dirty) {
-      onDone();
+      if (!stay) onDone();
       return;
     }
+    const finish = () => {
+      if (stay) return setNote(""); // 회차 이동 미리보기는 저장됐다 — 지운다
+      keep.current = true;
+      onDone();
+    };
     const sent = filesChanged ? fileIds : null;
     const steps = saveSteps(patchEmpty, sent ?? undefined);
     setSaving(true);
@@ -165,17 +171,13 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
         }
         if (!steps.includes("node")) {
           toast({ text: "저장했어요", tone: "ok" });
-          keep.current = true;
-          onDone();
+          finish();
           return;
         }
       }
       const to = patch.roundId ? roots.find((r) => r.id === patch.roundId) : null;
       const cur = await api.updatePersonal(n.id, patch, to ? `${to.label ?? to.title}로 옮겼어요` : "저장했어요", steps[0] === "files" ? "첨부 파일은 저장했어요 · " : "");
-      if (cur) {
-        keep.current = true;
-        onDone();
-      }
+      if (cur) finish();
     } finally {
       setSaving(false);
     }
@@ -261,9 +263,13 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
       <p className="m-0 text-[12px] text-muted">
         유형·담당자는 없어요 · 기간은 방 기간({rangeShort(period.start, period.end, today)}) 안에서 정해 주세요
       </p>
-      <div className="flex justify-end gap-2">
+      {/* 취소 · 임시저장(저장하고 머문다) · 저장(저장하고 상세로) — 390 에서 한 줄, 넘치면(올리는 중 문구) 줄바꿈 */}
+      <div className="flex flex-wrap justify-end gap-2">
         <button type="button" onClick={cancel} className="h-11 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">
           취소
+        </button>
+        <button type="button" onClick={() => void save(true)} disabled={!title || badDates || saving || uploading || !dirty} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50">
+          임시저장
         </button>
         <button type="submit" disabled={!title || badDates || saving || uploading} aria-busy={saving || undefined} className="h-11 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
           {uploading ? "파일을 올리는 중이에요" : "저장"}

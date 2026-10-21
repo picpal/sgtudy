@@ -238,3 +238,65 @@ describe("PersonalForm 첨부 파일", () => {
     expect(host.querySelector("form")).not.toBeNull();
   });
 });
+
+describe("PersonalForm [임시저장]·[저장]", () => {
+  const typeTitle = (v: string) => {
+    const title = host.querySelector<HTMLInputElement>("form input[type=text]")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, v);
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const formButtons = () => Array.from(host.querySelectorAll("form button")).map((b) => b.textContent?.trim()).filter((t) => ["취소", "임시저장", "저장"].includes(t ?? ""));
+
+  it("버튼 순서 — 취소 · 임시저장 · 저장", async () => {
+    await openEdit();
+    expect(formButtons()).toEqual(["취소", "임시저장", "저장"]);
+  });
+
+  it("[임시저장] — 저장하고 폼에 머문다", async () => {
+    await openEdit();
+    typeTitle("고친 제목");
+    await act(async () => button("임시저장").click());
+    await flush();
+    expect(updatePersonal).toHaveBeenCalledWith("32", expect.objectContaining({ title: "고친 제목" }), "저장했어요", "");
+    expect(host.querySelector("form")).not.toBeNull();
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("[저장] — 저장하고 상세로 돌아간다", async () => {
+    await openEdit();
+    typeTitle("고친 제목");
+    await act(async () => button("저장").click());
+    await flush();
+    expect(updatePersonal).toHaveBeenCalledTimes(1);
+    expect(host.querySelector("form")).toBeNull();
+  });
+
+  it("[저장] 실패 — 폼에 머문다", async () => {
+    updatePersonal.mockResolvedValue(null);
+    await openEdit();
+    typeTitle("고친 제목");
+    await act(async () => button("저장").click());
+    await flush();
+    expect(host.querySelector("form")).not.toBeNull();
+  });
+
+  it("바뀐 것 없음 — [임시저장] 비활성, [저장] 은 저장 없이 상세로", async () => {
+    await openEdit();
+    expect(button("임시저장").disabled).toBe(true);
+    await act(async () => button("저장").click());
+    await flush();
+    expect(updatePersonal).not.toHaveBeenCalled();
+    expect(host.querySelector("form")).toBeNull();
+  });
+
+  it("올리는 중 — [임시저장]·[저장] 둘 다 비활성", async () => {
+    m.upload.mockReturnValue(new Promise(() => {}));
+    await openEdit();
+    typeTitle("고친 제목");
+    await pick("a.pdf");
+    expect(button("임시저장").disabled).toBe(true);
+    expect(button("파일을 올리는 중이에요").disabled).toBe(true);
+  });
+});

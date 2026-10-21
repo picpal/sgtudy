@@ -14,7 +14,7 @@ import { Seg } from "../bits";
 import { dropFieldOv, isDirty, isPersonal, leafLocks, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
 import { NODE_FILE_HINT, sameIds } from "../nodeFiles";
 import { designatedHint, moveNote, movedPeriod, reorderIndex, roundOf, roundOptions, sameShiftAsk, shiftAskOf, shiftAskText, type ShiftAsk } from "../rounds";
-import { patchOv, type Leave, type ScreenState, type Update } from "../state";
+import { editReturn, patchOv, type Leave, type ScreenState, type Update } from "../state";
 import type { RoomStatus } from "../submission";
 import { dropKey, type CurriculumApi } from "../useCurriculumApi";
 import { useNodeFileUploads } from "../useNodeFileUploads";
@@ -225,9 +225,14 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   const [shiftAsk, setShiftAsk] = useState<{ ask: ShiftAsk; then: typeof S.leave } | null>(null);
   const doSave = async (shift: boolean, then: typeof S.leave) => {
     setShiftAsk(null);
-    if (await api.save(n, S.ov, { shift, onFiles: setSavedFiles, skipFiles: savedFiles === null })) {
+    let text = "저장했어요";
+    if (await api.save(n, S.ov, { shift, onFiles: setSavedFiles, skipFiles: savedFiles === null, onSaved: (t) => (text = t) })) {
       update({ fresh: null });
-      if (then) go(then);
+      if (then) {
+        // 화면을 떠나면 막대의 저장 문구(S.saved)가 사라진다 — 토스트로 알린다
+        toast({ text, tone: "ok" });
+        go(then);
+      }
     } else if (then) update({ leave: null });
   };
   const trySave = (then: typeof S.leave) => {
@@ -238,6 +243,14 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     } else void doSave(false, then);
   };
   const leaveSave = () => trySave(S.leave);
+  // [저장] = 저장한 뒤 편집에 들어오기 전 화면으로(상세·목록, 모르면 같은 항목 상세). 바뀐 게 없으면 저장 없이 돌아간다.
+  // 이동은 go — request 가 아니라 "저장하지 않은 수정" 확인을 거치지 않는다(성공하면 수정은 이미 지워졌다). [임시저장] = 저장하고 머문다
+  const saveAndReturn = () => {
+    if (dirty) return trySave(editReturn(S));
+    // 저장한 적 없는 새 회차도 [저장] 을 눌렀으면 남긴다 (예전 "저장" 이 fresh 를 지운 것과 같게 — 빈 회차 정리 대상에서 뺀다)
+    if (S.fresh === id) update({ fresh: null });
+    go(editReturn(S));
+  };
   // 확인을 띄운 뒤 날짜를 또 바꿨거나 다른 이동 확인(S.leave)이 떴으면 그 질문은 낡았다 — 숨기고 다시 "저장" 으로 묻는다 (최종 리뷰 Minor 4)
   const askShown = shiftAsk && !S.leave && sameShiftAsk(shiftAsk.ask, shiftAskOf(n, nodes)) ? shiftAsk : null;
   const leaveDiscard = () => {
@@ -262,7 +275,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     <section ref={view} aria-labelledby="edit-view-title" onKeyDown={onKey} className="flex scroll-mt-0 flex-col">
       {/* 고정 막대 — 편집 화면은 문서가 스크롤된다(한 페이지 스크롤). 화면 위쪽에 붙어 저장·삭제가 잘리지 않는다 */}
       <div ref={bar} className="sticky top-0 z-[2] -mx-1 flex flex-col gap-2 border-b border-line-2 bg-surface px-1 pb-3 pt-3">
-        <div className="flex items-center gap-2">
+        {/* 좁은 화면(390)에서 버튼이 한 줄에 다 안 들어가면(보관 해제·올리는 중 문구) 오른쪽 버튼 묶음째 다음 줄로 — 가로 스크롤 없음 */}
+        <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={back} className="inline-flex h-11 shrink-0 items-center gap-[6px] rounded-[22px] border border-line-3 bg-surface pl-3 pr-4 text-[14px] font-semibold text-ink">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M19 12H5M11 6l-6 6 6 6" />
@@ -273,18 +287,23 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             항목 편집 · {kind} {n.title}
           </h2>
           {path("flex-1 max-sm:hidden")}
-          <span className="flex-1 sm:hidden" />
           {n.temp && <span className="shrink-0 text-[12px] text-muted max-sm:hidden">서버에 만드는 중…</span>}
-          {/* 상위 보관으로 함께 숨겨진 항목은 자기 보관이 아니라 해제할 대상이 없다 → 버튼을 숨긴다 */}
-          {/* 확인 상자가 떠 있는 동안은 숨긴다 — 빨간 "삭제" 가 두 개 보이지 않게 (Q2-22) */}
-          {!n.archivedByParent && !S.confirm && (
-            <button ref={removeBtn} type="button" disabled={n.temp} onClick={askRemove} className="h-11 shrink-0 rounded-[22px] border border-[#EBC3BD] bg-surface px-4 text-[14px] font-semibold text-warn disabled:opacity-50">
-              {removeLabel}
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {/* 상위 보관으로 함께 숨겨진 항목은 자기 보관이 아니라 해제할 대상이 없다 → 버튼을 숨긴다 */}
+            {/* 확인 상자가 떠 있는 동안은 숨긴다 — 빨간 "삭제" 가 두 개 보이지 않게 (Q2-22) */}
+            {!n.archivedByParent && !S.confirm && (
+              <button ref={removeBtn} type="button" disabled={n.temp} onClick={askRemove} className="h-11 shrink-0 rounded-[22px] border border-[#EBC3BD] bg-surface px-4 text-[14px] font-semibold text-warn disabled:opacity-50 max-sm:px-3">
+                {removeLabel}
+              </button>
+            )}
+            {/* [임시저장] = 저장하고 머문다(보조), [저장] = 저장하고 들어오기 전 화면으로(주). 올리는 중엔 둘 다 막는다 (리뷰 M-1) */}
+            <button type="button" disabled={n.temp || !!askShown || up.uploading || !dirty} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50 max-sm:px-3">
+              임시저장
             </button>
-          )}
-          <button type="button" disabled={n.temp || !!askShown || up.uploading} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50">
-            {up.uploading ? "파일을 올리는 중이에요" : "저장"}
-          </button>
+            <button type="button" disabled={n.temp || !!askShown || up.uploading} onClick={saveAndReturn} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50 max-sm:px-4">
+              {up.uploading ? "파일을 올리는 중이에요" : "저장"}
+            </button>
+          </div>
         </div>
         {S.saved && (
           <div role="status" className="rounded-[10px] bg-mint-soft px-3 py-2 text-[13px] font-semibold text-mint-deep">
