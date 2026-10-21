@@ -9,6 +9,7 @@ import { kstToday } from "@/lib/kst";
 import { routes } from "@/lib/routes";
 import { MeProvider } from "@/lib/me";
 import { TodayProvider } from "@/lib/today";
+import { IosNoInputZoom } from "@/components/ui/IosNoInputZoom";
 import "./globals.css";
 
 const plex = IBM_Plex_Sans_KR({
@@ -68,6 +69,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ko" className={`${plex.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
+        <IosNoInputZoom />
         <MeProvider me={me} myStudyHref={myStudyHref}>
           <TodayProvider today={today}>{children}</TodayProvider>
         </MeProvider>
