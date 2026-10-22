@@ -8,7 +8,7 @@ import { addDays } from "@/lib/date";
 import { dateShort, rangeShort } from "@/lib/api/format";
 import { useToday } from "@/lib/today";
 import { samePage } from "@/lib/leaveGuard";
-import { allParentsClosed, findNode, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
+import { allParentsClosed, allParentsOpen, ancestorIds, findNode, listClosed, overallPct, personalStats, removePlan, unassignedCount, visibleNodes, type ItemScope, type Tree, type TreeNode } from "../model";
 import { editUnsaved, modeSwitchPatch, toggleMinePatch, toggleOthersPatch, viewBackLabel, viewBackPatch, type CurMode, type Leave, type ScreenState, type Update } from "../state";
 import { designatedHint, dropPlan, movedPlan, roundOf, rowMoves, withAddRows, withEmptyRounds, withPersonalAddRows, type RowMove } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
@@ -74,7 +74,9 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
   const isEdit = canEdit && S.curMode === "edit";
   // 보기 범위 — 편집 모드엔 개인 목표 없음·필터 없음. 보기 모드는 칩("내 것만"·"팀원 목표"; 둘은 서로 끈다)
   const scope: ItemScope = { meId, mineOnly: !isEdit && S.mineOnly, others: !isEdit && S.othersPersonal && !S.mineOnly, isEdit, isLeader };
-  const rows = visibleNodes(tree.roots, S.closed, scope);
+  // 끝난 회차는 기본 접힘(고른 적 없을 때) — 보기·편집 목록이 같은 값을 쓴다. 간트는 S.closed 그대로
+  const closed = listClosed(tree.roots, S.closed, today);
+  const rows = visibleNodes(tree.roots, closed, scope);
   const canAddPersonal = !isEdit && !!personal?.canAdd;
   // 준비중 방은 개인 목표를 아직 못 만든다(서버 canAdd: 모집·진행만) — "＋ 내 목표 추가" 자리에 이유 안내 (Q3-3)
   const draftNote = !isEdit && roomStatus === "draft";
@@ -95,7 +97,14 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
 
   // 목록 행의 삭제 확인이 열린 항목 (아래 목록 삭제)
   const [ask, setAsk] = useState<string | null>(null);
-  const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !p.closed[id] } }));
+  const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !listClosed(tree.roots, p.closed, today)[id] } }));
+  // 상세·편집으로 연 항목(딥링크·보드·알림 포함)이 접힌 회차 안이면 그 회차·묶음을 펼쳐 둔다 — 목록으로 돌아오면 그 자리가 보이게
+  const openId = isEdit ? S.editSel : S.viewSel;
+  useEffect(() => {
+    const ids = ancestorIds(tree.nodes, openId).filter((id) => listClosed(tree.roots, S.closed, today)[id]);
+    if (ids.length) update((p) => ({ closed: { ...p.closed, ...Object.fromEntries(ids.map((id) => [id, false])) } }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 연 항목이 바뀔 때만
+  }, [openId]);
   // 목적지로 바로 이동 — 미저장 수정 확인(leave)을 거친 뒤에도 여기로 온다
   const setPersonalUnsaved = useCallback((id: string | null) => update(id ? { personalUnsaved: id } : { personalUnsaved: null, leave: null }), [update]);
   const go = (to: Leave) => {
@@ -187,8 +196,8 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
   const drag = useRowDrag(onDrop);
   // 놓을 수 없는 자리(자기·하위·보관·제자리)에는 표시선을 그리지 않는다
   const hint = isEdit && drag.dragging && drag.over && dropPlan(tree.nodes, drag.dragging, drag.over.id, drag.over.half) ? drag.over : null;
-  const listed = isEdit ? withAddRows(rows, tree.roots, S.closed) : withPersonalAddRows(rows, tree.roots, S.closed, canAddPersonal || draftNote, meId);
-  const entries = scope.mineOnly ? withEmptyRounds(listed, S.closed) : listed;
+  const listed = isEdit ? withAddRows(rows, tree.roots, closed) : withPersonalAddRows(rows, tree.roots, closed, canAddPersonal || draftNote, meId);
+  const entries = scope.mineOnly ? withEmptyRounds(listed, closed) : listed;
   // "＋ 내 목표 추가" → 그 자리가 빠른 추가 입력 (한 번에 하나 — S.quickAdd 를 편집 목록과 함께 쓴다)
   const openPAdd = (id: string) => update({ quickAdd: pKey(id) });
   // 닫으면 그 자리 "＋ 내 목표 추가" 로 — 버튼이 다시 그려진 뒤(effect, /tasks 와 같은 훅)
@@ -309,7 +318,7 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
             </Chip>
           </div>
         )}
-        <PillButton onClick={() => update({ closed: {} })}>모두 펼치기</PillButton>
+        <PillButton onClick={() => update({ closed: allParentsOpen(tree.nodes) })}>모두 펼치기</PillButton>
         <PillButton onClick={() => update({ closed: allParentsClosed(tree.nodes) })}>모두 접기</PillButton>
         {canEdit && <Seg<CurMode> label="보기 모드" value={S.curMode} onChange={setMode} options={[["view", "보기"], ["edit", "편집"]]} />}
       </div>
@@ -375,7 +384,7 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
                 </InfoRow>
               );
             const n = entry.n;
-            const open = !S.closed[n.id];
+            const open = !closed[n.id];
             const plan = removePlan(n);
             return (
               <div key={n.id}>

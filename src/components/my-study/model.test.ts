@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AWS, CHULSU, JIEUN, REF_DAY } from "./fixtures";
-import { CODE_LABEL, EMPTY_OVERRIDES, boardColumn, buildTree, leafLocks, codeLabel, descendantCount, dropFieldOv, dropSentFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope, type LeafNode } from "./model";
+import { CODE_LABEL, EMPTY_OVERRIDES, boardColumn, buildTree, leafLocks, listClosed, codeLabel, descendantCount, dropFieldOv, dropSentFieldOv, ganttRange, inScope, isDirty, memberStats, myCode, overallPct, periodWarnings, personalStats, removePlan, thisRoundId, roundStatus, stripFieldOv, unassignedCount, visibleNodes, type ItemScope, type LeafNode } from "./model";
 
 describe("buildTree archive bookkeeping (final batch)", () => {
   it("subAll counts submissions under archived children; sub does not", () => {
@@ -415,5 +415,13 @@ describe("boardColumn — 예정 · 진행중 · 지연 · 제출", () => {
 
   it("같은 과제라도 범위마다 다르다 — 팀은 지연이어도 내가 제출했으면 내 칸반은 제출 완료", () => {
     expect([boardColumn(leaf("11"), false, CHULSU), boardColumn(leaf("11"), true, CHULSU)]).toEqual(["late", "done"]);
+  });
+});
+
+describe("listClosed — 끝난 회차 기본 접힘", () => {
+  const roots = [{ id: "r1", e: "2026-10-07" }, { id: "r2", e: "2026-10-12" }, { id: "r3", e: "2026-10-20" }] as unknown as Parameters<typeof listClosed>[0];
+  it("종료일 < 오늘만 접고, 고른 값이 우선", () => {
+    expect(listClosed(roots, {}, "2026-10-12")).toEqual({ r1: true });
+    expect(listClosed(roots, { r1: false, r3: true }, "2026-10-12")).toEqual({ r1: false, r3: true });
   });
 });

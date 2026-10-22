@@ -328,6 +328,29 @@ export function visibleNodes(roots: ParentNode[], closed: Record<string, boolean
   return out;
 }
 
+/** 진행목표 목록의 실제 접힘 — 사용자가 고른 값(closed: 펼침 false · 접힘 true)이 우선, 고른 적 없으면 끝난 회차(종료일 < 오늘)만 접는다 */
+export function listClosed(roots: ParentNode[], closed: Record<string, boolean>, today: string): Record<string, boolean> {
+  const c: Record<string, boolean> = {};
+  for (const r of roots) if (r.e < today) c[r.id] = true;
+  return { ...c, ...closed };
+}
+
+/** 모두 펼치기 — 끝난 회차 기본 접힘보다 앞서도록 펼침을 값으로 적는다 */
+export function allParentsOpen(nodes: TreeNode[]): Record<string, boolean> {
+  const c: Record<string, boolean> = {};
+  nodes.forEach((n) => {
+    if (!n.leaf) c[n.id] = false;
+  });
+  return c;
+}
+
+/** 그 노드를 품은 묶음·회차 id (가까운 것부터) */
+export function ancestorIds(nodes: TreeNode[], id: string | null): string[] {
+  const out: string[] = [];
+  for (let n = findNode(nodes, id); n?.parentId; n = findNode(nodes, n.parentId)) out.push(n.parentId);
+  return out;
+}
+
 export function allParentsClosed(nodes: TreeNode[]): Record<string, boolean> {
   const c: Record<string, boolean> = {};
   nodes.forEach((n) => {
