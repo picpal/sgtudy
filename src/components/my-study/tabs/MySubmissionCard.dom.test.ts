@@ -10,21 +10,26 @@ const html = (p: Parameters<typeof MySubmissionCardView>[0]) => { const d = docu
 describe("MySubmissionCardView", () => {
   it("submitted: badge, meta, 44px 수정하기", () => {
     const d = html({ state: { kind: "submitted" }, badge: { status: "done", text: "기한내 제출" }, mine: sub, composer: null, onEdit: () => {}, onOpenFile: () => {} });
-    expect(d.querySelector("h3")?.textContent).toBe("내 제출");
+    expect(d.querySelector("h2")?.textContent).toBe("과제 제출");
     expect(d.textContent).toContain("기한내 제출");
     expect(d.textContent).toContain("처음 제출 10.12(월) 12:00");
     const b = Array.from(d.querySelectorAll("button")).find((x) => x.textContent === "수정하기")!;
     expect(b.className).toMatch(/h-11|min-h-11/);
   });
-  it("is a tinted panel region (not a bordered card) — h3 labels it, sub line says what to do here", () => {
+  it("is its own top-level card region — h2 「과제 제출」 labels it, sub line says what to do here", () => {
     const d = html({ state: { kind: "compose" }, badge: { status: "open", text: "제출 전 · D-3" }, mine: null, composer: null, onEdit: () => {}, onOpenFile: () => {}, sub: "이 과제의 제출물을 여기에 올려요 · 마감 10.18(일)" });
     const s = d.querySelector("section")!;
     expect(s.getAttribute("aria-labelledby")).toBe("my-sub-title");
-    expect(s.querySelector("#my-sub-title")?.tagName).toBe("H3");
-    expect(s.className).toContain("bg-bg-main");
-    expect(s.className).not.toMatch(/(^|\s)border(\s|$)/);
+    expect(s.querySelector("#my-sub-title")?.tagName).toBe("H2");
+    expect(s.querySelector("#my-sub-title")?.textContent).toBe("과제 제출");
+    // 방 화면 본문 카드와 같은 카드 모양
+    expect(s.className).toContain("rounded-[20px] bg-surface px-7");
     expect(s.textContent).toContain("마감 10.18(일)");
     expect(s.textContent).toContain("제출 전 · D-3");
+  });
+  it("개인 목표는 「목표 완료」 — 완료 현황·기한내 완료 말과 맞춘다", () => {
+    const d = html({ state: { kind: "compose" }, badge: { status: "open", text: "완료 전 · D-3" }, mine: null, composer: null, onEdit: () => {}, onOpenFile: () => {}, personal: true });
+    expect(d.querySelector("h2")?.textContent).toBe("목표 완료");
   });
   it("readonly shows the note and no edit button", () => {
     const d = html({ state: { kind: "readonly", note: "보관된 과제라 제출·수정할 수 없어요" }, badge: { status: "done", text: "기한내 제출" }, mine: sub, composer: null, onEdit: () => {}, onOpenFile: () => {} });

@@ -1,8 +1,10 @@
 "use client";
 
 import type { ReactNode, Ref } from "react";
+import { createPortal } from "react-dom";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import type { TaskStatus } from "@/lib/types";
+import { useSubmitSlot } from "../submitSlot";
 
 export const BADGE_TONE: Record<TaskStatus, string> = {
   done: "bg-[#E3F5EC] text-[#1A7F55]",
@@ -13,7 +15,7 @@ export const BADGE_TONE: Record<TaskStatus, string> = {
 };
 
 type Props = {
-  /** 머리 h3 의 id — section 이 aria-labelledby 로 가리킨다 */
+  /** 머리 h2 의 id — section 이 aria-labelledby 로 가리킨다 */
   id: string;
   title: string;
   /** 머리 아래 한 줄 — "여기서 제출해요 · 마감 10.18(일)" */
@@ -21,13 +23,15 @@ type Props = {
   icon: "submit" | "exam";
   badge?: { status: TaskStatus; text: string } | null;
   headingRef?: Ref<HTMLHeadingElement>;
-  children: ReactNode;
+  children?: ReactNode;
 };
 
-/** 과제 상세의 "내가 하는 곳" — 위 과제 설명(평면)과 나뉘는 옅은 면. 카드 안 카드를 만들지 않도록 테두리 없이 면 색으로만 구분 */
+/** 과제 상세의 "내가 하는 곳" — 본문 카드(과제 · 제출 현황 · 댓글) 아래 형제 카드. 방 화면이 연 자리(submitSlot)로 포털해 그린다.
+ *  React 트리는 그대로라 작성 상태·나가기 확인·포커스 ref 가 상세 화면과 함께 산다 */
 export function SubmitPanel({ id, title, sub, icon, badge, headingRef, children }: Props) {
-  return (
-    <section aria-labelledby={id} data-submit-panel className="flex min-w-0 flex-col gap-4 rounded-[16px] bg-bg-main px-3 py-4 @[560px]:p-6">
+  const slot = useSubmitSlot();
+  const card = (
+    <section aria-labelledby={id} data-submit-panel className="flex min-w-0 flex-col gap-5 rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:px-4 max-sm:pb-7 max-sm:pt-5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full bg-mint-soft text-mint">
           {icon === "submit" ? (
@@ -45,9 +49,9 @@ export function SubmitPanel({ id, title, sub, icon, badge, headingRef, children 
           )}
         </span>
         <div className="flex min-w-0 flex-[1_1_160px] flex-col">
-          <h3 id={id} ref={headingRef} tabIndex={-1} className="m-0 scroll-mt-20 text-[16px] font-bold text-ink outline-none">
+          <h2 id={id} ref={headingRef} tabIndex={-1} className="m-0 scroll-mt-4 text-[18px] font-bold text-ink outline-none">
             {title}
-          </h3>
+          </h2>
           {sub && <p className="m-0 text-[12px] text-muted">{sub}</p>}
         </div>
         {badge && (
@@ -60,4 +64,7 @@ export function SubmitPanel({ id, title, sub, icon, badge, headingRef, children 
       {children}
     </section>
   );
+  // 자리가 아직 붙기 전(null)에는 그리지 않는다 — 제자리에 그렸다 옮기면 작성 화면이 다시 마운트된다
+  if (slot === undefined) return card;
+  return slot ? createPortal(card, slot) : null;
 }

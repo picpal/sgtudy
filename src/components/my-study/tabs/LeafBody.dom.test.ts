@@ -22,11 +22,11 @@ describe("LeafBody (before task_get resolves)", () => {
     expect(d.textContent).toContain("하나");
   });
   it("shows a busy skeleton for my card", () => expect(doc().querySelector('[aria-busy="true"]')).not.toBeNull());
-  it("splits task info (top) and the '내 제출' panel (below) — status list sits after the panel, outside it", () => {
+  it("without a slot host the '과제 제출' card renders in place, status list outside it", () => {
     const d = doc();
     const panel = d.querySelector<HTMLElement>("section[data-submit-panel]")!;
     expect(panel.getAttribute("aria-labelledby")).toBe("my-sub-title");
-    expect(panel.querySelector("h3#my-sub-title")?.textContent).toBe("내 제출");
+    expect(panel.querySelector("h2#my-sub-title")?.textContent).toBe("과제 제출");
     expect(panel.textContent).toContain("이 과제의 제출물을 여기에 올려요");
     expect(panel.querySelector('[aria-busy="true"]')).not.toBeNull();
     const status = d.querySelector("#submissions")!;

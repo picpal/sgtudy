@@ -110,19 +110,19 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
   const stamp = v?.attempt?.status === "submitted" ? submittedLine(v.attempt) : null;
   // 결과 목록: 정오(results)나 정답 키가 왔을 때만 — after_deadline 마감 전 제출이면 점수 카드만
   const showList = mode === "result" && !!v && (!!v.attempt?.results || qs.some((q) => "answer" in q));
-  // 담당이 아니면 "내 응시" 면 없이 안내 한 줄만 — 제출 현황 위에
+  // 담당이 아니면 시험 응시 카드 없이 안내 한 줄만 — 제출 현황 위에
   const outside = v?.viewer.reason === "not_assignee";
   const panel = t.loading || (!v && !!t.error) || (!!v && (mode === "take" || mode === "result" || (!!info && !outside)));
 
-  // 위: 내 응시 면(내 제출 면과 같은 자리·모양) · 아래: 제출 현황 · 결과(편집자)
+  // 시험 응시 카드(과제 제출 카드와 같은 자리·모양)는 본문 카드 아래로 포털 — 여기 남는 건 제출 현황 · 결과(편집자)
   return (
     <div className="flex flex-col gap-6">
       {panel && (
-        <SubmitPanel id="my-exam-title" title="내 응시" sub={examPanelSub(v?.node.endDate ?? n.e)} icon="exam" badge={v ? examBadgeOf(v) : null}>
+        <SubmitPanel id="my-exam-title" title="시험 응시" sub={examPanelSub(v?.node.endDate ?? n.e)} icon="exam" badge={v ? examBadgeOf(v) : null}>
           {t.loading && (
             <div aria-busy="true" aria-label="시험 불러오는 중" className="flex flex-col gap-3">
               <div className="h-5 w-24 rounded-[6px] bg-line-2" />
-              <div className="h-[120px] rounded-[10px] bg-surface" />
+              <div className="h-[120px] rounded-[10px] bg-surface-3" />
             </div>
           )}
           {!v && t.error && (
@@ -135,7 +135,7 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
           )}
 
           {v && info && !outside && (
-            <p role="note" className="m-0 rounded-[12px] bg-surface px-[14px] py-[10px] text-[13px] text-ink-3">
+            <p role="note" className="m-0 rounded-[12px] bg-surface-2 px-[14px] py-[10px] text-[13px] text-ink-3">
               {info}
             </p>
           )}
@@ -154,11 +154,11 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
                   answered={done}
                   current={current}
                   onJump={jump}
-                  className="sticky top-[max(84px,calc(50vh-200px))] hidden max-h-[min(400px,calc(100vh-100px))] w-[220px] shrink-0 overflow-y-auto rounded-[14px] bg-surface p-3 @[880px]:flex"
+                  className="sticky top-[max(16px,calc(50vh-200px))] hidden max-h-[min(400px,calc(100vh-100px))] w-[220px] shrink-0 overflow-y-auto rounded-[14px] border border-line bg-surface-2 p-3 @[880px]:flex"
                 />
               </div>
               {/* 하단 고정 막대 — DetailView 위 막대(sticky top-0)와 같은 방식. 문항 목록이 끝나면 따라 올라간다 */}
-              <div className="sticky bottom-0 z-[2] -mx-3 flex flex-col gap-2 border-t border-line bg-bg-main px-3 py-2 @[560px]:-mx-6 @[560px]:px-6">
+              <div className="sticky bottom-0 z-[2] -mx-7 flex flex-col gap-2 border-t border-line-2 bg-surface px-7 py-2 max-[901px]:-mx-4 max-[901px]:px-4">
                 {navOpen && !ask && <ExamNav id="exam-nav-sheet" variant="sheet" answered={done} current={current} onJump={jump} className="max-h-[40vh] overflow-y-auto pb-1 pt-1 @[880px]:hidden" />}
             {ask ? (
                   <InlineConfirm
@@ -208,11 +208,11 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
           {v && mode === "result" && (
             <div ref={examRef} tabIndex={-1} aria-label="시험 결과" className="flex flex-col gap-5 outline-none">
               {sum?.headline && (
-                <div className="flex flex-col gap-1 rounded-[14px] bg-surface px-[14px] py-3">
-                  <h4 className="m-0 flex flex-wrap items-baseline gap-x-2 text-[15px] font-bold text-ink">
+                <div className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface-2 px-[14px] py-3">
+                  <h3 className="m-0 flex flex-wrap items-baseline gap-x-2 text-[15px] font-bold text-ink">
                     <span>내 결과</span>
                     <span className="text-[17px]">{sum.headline}</span>
-                  </h4>
+                  </h3>
                   {stamp && <p className="m-0 text-[13px] text-ink-3">{stamp}</p>}
                   {sum.sub && <p className="m-0 text-[13px] text-ink-2">{sum.sub}</p>}
                 </div>
@@ -230,13 +230,12 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
         </SubmitPanel>
       )}
 
-      {v && info && outside && (
-        <p role="note" className="m-0 text-[13px] text-muted">
-          {info}
-        </p>
-      )}
-
-      <div className="border-t border-line-2 pt-5">
+      <div className="flex flex-col gap-3 border-t border-line-2 pt-5">
+        {v && info && outside && (
+          <p role="note" className="m-0 text-[13px] text-muted">
+            {info}
+          </p>
+        )}
         <SubmissionStatusList rows={rows} sub={tk ? tk.submitted : n.sub} asg={tk ? tk.assigned : n.asg} note={note} archived={n.archived} headingRef={statusRef} onOpenFile={() => {}} expandable={false} />
       </div>
 

@@ -7,6 +7,7 @@ import type { ExamAttempt, ExamQuestion, ExamView, ExamViewerReason } from "@/li
 import { MeProvider } from "@/lib/me";
 import { EMPTY_OVERRIDES, buildTree, type LeafNode } from "../model";
 import { AWS, REF_DAY } from "../fixtures";
+import { SubmitSlotProvider } from "../submitSlot";
 import { ExamSection } from "./ExamSection";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -360,7 +361,7 @@ describe("ExamSection — 저장 순서(Fix round 1)", () => {
 describe("ExamSection — 결과", () => {
   it("공개(after_submit) → 점수 카드 · 정오 · 내 답/정답 · 해설 <details>", async () => {
     await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
-    expect(host.querySelector("h4")?.textContent).toContain("4/5점 (80%) · 3/4 문항 정답");
+    expect(host.querySelector("h3")?.textContent).toContain("4/5점 (80%) · 3/4 문항 정답");
     expect(host.textContent).toContain("제출 · 기한 내");
     expect(host.textContent).toContain("✓ 정답");
     expect(host.textContent).toContain("✗ 오답");
@@ -383,13 +384,13 @@ describe("ExamSection — 결과", () => {
   });
 });
 
-describe("ExamSection — 구역(내 응시 면 · 제출 현황)", () => {
+describe("ExamSection — 구역(시험 응시 카드 · 제출 현황)", () => {
   const panel = () => host.querySelector<HTMLElement>("section[data-submit-panel]");
-  it("응시 가능 → '내 응시' 면(h3, aria-labelledby) 안에 문항·제출 막대, 제출 현황은 면 밖 아래", async () => {
+  it("응시 가능 → '시험 응시' 카드(h2, aria-labelledby) 안에 문항·제출 막대, 제출 현황은 카드 밖", async () => {
     await mount(view());
     const p = panel()!;
     expect(p.getAttribute("aria-labelledby")).toBe("my-exam-title");
-    expect(p.querySelector("h3#my-exam-title")?.textContent).toBe("내 응시");
+    expect(p.querySelector("h2#my-exam-title")?.textContent).toBe("시험 응시");
     expect(p.textContent).toContain("응시 전 · D-5");
     expect(p.textContent).toContain("마감 10.21(수)");
     expect(p.querySelector('[aria-label="시험 문항"]')).not.toBeNull();
@@ -397,12 +398,12 @@ describe("ExamSection — 구역(내 응시 면 · 제출 현황)", () => {
     expect(p.contains(status)).toBe(false);
     expect(p.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
-  it("제출 뒤 결과 → 면 배지 '기한내 제출', 결과 머리는 h4", async () => {
+  it("제출 뒤 결과 → 카드 배지 '기한내 제출', 결과 머리는 h3", async () => {
     await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
     expect(panel()!.textContent).toContain("기한내 제출");
-    expect(panel()!.querySelector("h4")?.textContent).toContain("내 결과");
+    expect(panel()!.querySelector("h3")?.textContent).toContain("내 결과");
   });
-  it("담당 아님 → 내 응시 면 없이 안내 한 줄", async () => {
+  it("담당 아님 → 시험 응시 카드 없이 안내 한 줄", async () => {
     await mount(view({ reason: "not_assignee", questions: null }));
     expect(panel()).toBeNull();
     expect(host.querySelector("[role=note]")?.textContent).toContain("담당 과제가 아니에요");
@@ -462,5 +463,27 @@ describe("ExamSection — 문항 이동", () => {
   it("결과 화면에는 문항 이동이 없다", async () => {
     await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
     expect(host.querySelector('nav[aria-label="문항 이동"]')).toBeNull();
+  });
+});
+
+describe("ExamSection — 본문 카드 아래 자리로", () => {
+  it("시험 응시 카드는 자리로 포털, 제출 현황은 제자리 · 문항 이동도 자리 안에서 스크롤·포커스", async () => {
+    m.fetch.mockResolvedValue(view());
+    host = document.body.appendChild(document.createElement("div"));
+    const slot = document.body.appendChild(document.createElement("div"));
+    root = createRoot(host);
+    const body = createElement(ExamSection, { n: leaf, slug: "aws", roomStatus: "active", focus: null, onFocused: () => {}, onSubmitted, toast, viewerPending: false, onUnsavedChange: onUnsaved });
+    act(() => root!.render(createElement(SubmitSlotProvider, { value: slot }, createElement(MeProvider, { me: null } as Parameters<typeof MeProvider>[0], body))));
+    await flush();
+    expect(host.querySelector("section[data-submit-panel]")).toBeNull();
+    expect(host.querySelector("#submissions")).not.toBeNull();
+    const card = slot.querySelector("section[data-submit-panel]")!;
+    expect(card.querySelector("h2")?.textContent).toBe("시험 응시");
+    act(() => card.querySelector<HTMLButtonElement>('nav[aria-label="문항 이동"] button[aria-label^="3번"]')!.click());
+    expect(document.activeElement?.id).toBe("exam-q-3");
+    act(() => root!.unmount());
+    root = null;
+    expect(slot.childElementCount).toBe(0);
+    slot.remove();
   });
 });

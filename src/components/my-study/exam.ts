@@ -40,7 +40,7 @@ export function takeNote(v: ExamView, personalQuiet: boolean): string | null {
   }
 }
 
-/** 내 응시 면 머리 배지 — 내 제출 배지(myBadgeOf)와 같은 말. 담당이 아니거나 아직 풀 수 없는 상태(발행 전·스터디 대기·보관)는 없음 */
+/** 시험 응시 카드 머리 배지 — 과제 제출 배지(myBadgeOf)와 같은 말. 담당이 아니거나 아직 풀 수 없는 상태(발행 전·스터디 대기·보관)는 없음 */
 export function examBadgeOf(v: ExamView): { status: TaskStatus; text: string } | null {
   const a = v.attempt;
   if (a?.status === "submitted") return a.isLate ? { status: "late", text: "지각 제출" } : { status: "done", text: "기한내 제출" };
@@ -52,7 +52,7 @@ export function examBadgeOf(v: ExamView): { status: TaskStatus; text: string } |
   return null;
 }
 
-/** 내 응시 면 머리 아래 한 줄 */
+/** 시험 응시 카드 머리 아래 한 줄 */
 export const examPanelSub = (end: string): string => `문제를 풀고 여기서 제출해요 · 마감 ${md(end)}(${weekdayKo(end)})`;
 
 const pctOf = (score: number, max: number) => (max > 0 ? Math.round((score / max) * 100) : 0);

@@ -42,6 +42,7 @@ import { NoticeTab, type NoticeViewer } from "./tabs/NoticeTab";
 import { NoticePopup } from "./NoticePopup";
 import { useCurriculumApi } from "./useCurriculumApi";
 import { RoomArchivedProvider } from "./roomArchived";
+import { SubmitSlotProvider } from "./submitSlot";
 
 const CONFIRM_TEXT: Record<JoinCardAction, { title: string; body: string; label: string }> = {
   leave: { title: "참가를 취소할까요?", body: "모집 기간에는 다시 참가할 수 있어요. 지정 과제 담당에서도 빠져요.", label: "참가 취소" },
@@ -73,6 +74,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const router = useRouter();
   const isLeader = detail.me?.state === "leader";
   const [cur, setCur] = useState(curriculum);
+  // 본문 카드 아래 「과제 제출」 카드 자리 — 붙으면(콜백 ref) 상세가 그 안으로 포털한다
+  const [submitSlot, setSubmitSlot] = useState<HTMLDivElement | null>(null);
   // 커리큘럼 편집 — 그룹장 + 그룹장이 권한을 준 팀원. node_* 응답의 myPermissions 로 갱신된다(거둬지면 false)
   const canEdit = canEditCurriculumOf({ myPermissions: cur.myPermissions, me: detail.me });
   // 알림 링크 ?task={nodeId}(D8): 그 리프가 이 방 커리큘럼에 있으면 커리큘럼 탭 + 리프 열림으로 시작(goLeafPatch 가 tab 을 curriculum 으로 바꾼다)
@@ -476,34 +479,40 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
           {/* ≤900 content-start: 내용이 화면보다 짧을 때 줄바꿈된 줄들이 남는 높이를 나눠 갖지 않게 — 접힌 목록 아래 빈 공간 방지 */}
           <div className="flex w-full flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
             <StudySidebar selected={detail.slug} groups={groups} collapsed={openItem !== null} />
-            <main className="min-w-0 flex-[999_1_640px] self-stretch rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:px-4 max-sm:pb-7 max-sm:pt-5">
-              {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}
-              <div className="flex flex-wrap items-start gap-7 @container">
-                <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
-                  <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} noticeUnread={noticeUnread} />
-                  {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} today={today} onGoCurriculum={() => update({ tab: "curriculum" })} onOpenTask={goLeaf} periodWarning={periodWarning(editRounds)} />}
-                  {S.tab === "notice" && <NoticeTab slug={detail.slug} S={S} update={update} viewer={noticeViewer} ended={detail.status === "ended"} onUnread={setNoticeUnread} toast={setToast} reload={noticeReload} />}
-                  {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} onViewBack={viewBack} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
-                  {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
-                  {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
-                  {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
-                </section>
-                {S.tab === "overview" && (
-                  <JoinInfoCard
-                    room={room}
-                    tree={savedTree}
-                    onMyTasks={() => {
-                      update({ tab: "board", bMode: "mine", calPick: null });
-                      setTabJump((n) => n + 1);
-                    }}
-                    goLeaf={goLeaf}
-                    onCancel={setConfirm}
-                    busy={busy}
-                    admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} tree={savedTree} roundId={personalRoundId} onShowOthers={showOthers}
-                      leave={detail.status === "active" && !detail.archived ? { today, leaderDoesTasks: detail.leaderDoesTasks, leaveRequestCount: detail.leaveRequestCount ?? 0 } : undefined} /></> : undefined}
-                  />
-                )}
-              </div>
+            {/* 본문 카드 + 그 아래 형제 카드 자리(과제 상세의 「과제 제출」·「시험 응시」 — submitSlot). 둘 다 main 안이라 랜드마크는 하나 */}
+            <main className="flex min-w-0 flex-[999_1_640px] flex-col gap-4 self-stretch">
+              <SubmitSlotProvider value={submitSlot}>
+                <div className="min-w-0 flex-1 rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:px-4 max-sm:pb-7 max-sm:pt-5">
+                  {/* 참가 정보 카드가 아래로 떨어지는 폭(<788)은 JoinInfoCard 가 컨테이너 쿼리로 처리한다 */}
+                  <div className="flex flex-wrap items-start gap-7 @container">
+                    <section aria-label="스터디 정보" className="min-w-0 flex-[999_1_460px]">
+                      <StudyHeaderInfo room={room} tab={S.tab} onTab={(t) => update((p) => tabPatch(p, t, canEdit))} onShare={share} more={more} noticeUnread={noticeUnread} />
+                      {S.tab === "overview" && <OverviewTab room={room} tree={savedTree} roundId={personalRoundId} today={today} onGoCurriculum={() => update({ tab: "curriculum" })} onOpenTask={goLeaf} periodWarning={periodWarning(editRounds)} />}
+                      {S.tab === "notice" && <NoticeTab slug={detail.slug} S={S} update={update} viewer={noticeViewer} ended={detail.status === "ended"} onUnread={setNoticeUnread} toast={setToast} reload={noticeReload} />}
+                      {S.tab === "curriculum" && <CurriculumTab tree={tree} S={S} update={update} onViewBack={viewBack} api={api} canEdit={canEdit} isLeader={isLeader} period={{ start: detail.startDate, end: detail.endDate }} slug={detail.slug} roomStatus={detail.archived ? "ended" : detail.status} viewerPending={detail.me?.state === "pending"} toast={setToast} personal={cur.personal} periodWarning={periodWarning} />}
+                      {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
+                      {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
+                      {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
+                    </section>
+                    {S.tab === "overview" && (
+                      <JoinInfoCard
+                        room={room}
+                        tree={savedTree}
+                        onMyTasks={() => {
+                          update({ tab: "board", bMode: "mine", calPick: null });
+                          setTabJump((n) => n + 1);
+                        }}
+                        goLeaf={goLeaf}
+                        onCancel={setConfirm}
+                        busy={busy}
+                        admin={isLeader ? <><LeaderPanel detail={detail} toast={setToast} /><MemberAdminCard slug={detail.slug} members={detail.members} meId={me?.id ?? ""} toast={setToast} tree={savedTree} roundId={personalRoundId} onShowOthers={showOthers}
+                          leave={detail.status === "active" && !detail.archived ? { today, leaderDoesTasks: detail.leaderDoesTasks, leaveRequestCount: detail.leaveRequestCount ?? 0 } : undefined} /></> : undefined}
+                      />
+                    )}
+                  </div>
+                </div>
+              </SubmitSlotProvider>
+              <div ref={setSubmitSlot} className="@container empty:hidden" />
             </main>
           </div>
           <Toast msg={toast} onClose={closeToast} />

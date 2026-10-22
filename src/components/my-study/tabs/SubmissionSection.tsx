@@ -7,7 +7,7 @@ import type { FileMeta, Submission } from "@/lib/api/types";
 import { useHashTarget } from "@/lib/hashTarget";
 import { useMe } from "@/lib/me";
 import { CODE_STATUS, type LeafNode } from "../model";
-import { focusTargetOf, myBadgeOf, myCardStateOf, notAssignedText, panelSubOf, showAllSubmitted, statusRows, type RoomStatus, type StatusRow } from "../submission";
+import { focusTargetOf, myBadgeOf, myCardStateOf, notAssignedText, panelSubOf, panelTitleOf, showAllSubmitted, statusRows, type RoomStatus, type StatusRow } from "../submission";
 import { useTaskDetail } from "../useTaskDetail";
 import { useRoomArchived } from "../roomArchived";
 import { MySubmissionCard } from "./MySubmissionCard";
@@ -32,7 +32,7 @@ export type SubmissionSectionProps = {
   quietNotAssigned?: boolean;
 };
 
-/** 과제 상세의 제출 영역 — 전원 제출 배너 · 내 제출 카드 · 제출 현황 (스펙 §2.1) */
+/** 과제 상세의 제출 영역 — 과제 제출 카드(아래 형제 카드로 포털) · 전원 제출 배너 · 제출 현황 (스펙 §2.1) */
 export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, onUploadingChange, isLeader = false, quietNotAssigned = false }: SubmissionSectionProps) {
   const meId = useMe()?.id ?? null;
   const { detail, error, loading, refetch, setMine } = useTaskDetail(slug, n.id);
@@ -90,19 +90,20 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
   };
 
   const panelSub = panelSubOf(personal, detail?.node.endDate ?? n.e);
-  // 위: 내 제출 면(불러오는 중·실패도 같은 면 안에서) · 아래: 담당자별 제출 현황(구분선 아래 따로)
+  const panelTitle = panelTitleOf(personal);
+  // 과제 제출 카드(불러오는 중·실패도 같은 카드 안에서)는 본문 카드 아래 형제 카드로 포털된다 — 여기 남는 건 담당자별 제출 현황
   return (
     <div className="flex flex-col gap-6">
       {loading && (
-        <SubmitPanel id="my-sub-title" title="내 제출" sub={panelSub} icon="submit">
-          <div aria-busy="true" aria-label="내 제출 불러오는 중" className="flex flex-col gap-3">
+        <SubmitPanel id="my-sub-title" title={panelTitle} sub={panelSub} icon="submit">
+          <div aria-busy="true" aria-label={`${panelTitle} 불러오는 중`} className="flex flex-col gap-3">
             <div className="h-5 w-24 rounded-[6px] bg-line-2" />
-            <div className="h-[120px] rounded-[10px] bg-surface" />
+            <div className="h-[120px] rounded-[10px] bg-surface-3" />
           </div>
         </SubmitPanel>
       )}
       {!detail && error && (
-        <SubmitPanel id="my-sub-title" title="내 제출" sub={panelSub} icon="submit">
+        <SubmitPanel id="my-sub-title" title={panelTitle} sub={panelSub} icon="submit">
           <div role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
             <span className="min-w-0 flex-[1_1_200px]">제출 정보를 불러오지 못했어요</span>
             <button type="button" onClick={refetch} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">

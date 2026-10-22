@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode, type Ref } from "react";
 import type { ToastMsg } from "@/components/ui/Toast";
 import type { FileMeta, Submission, TaskDetail } from "@/lib/api/types";
 import type { TaskStatus } from "@/lib/types";
-import { lateNote, metaLine, type MyCardState } from "../submission";
+import { lateNote, metaLine, panelTitleOf, type MyCardState } from "../submission";
 import { useSubmissionComposer } from "../useSubmissionComposer";
 import { DraftNotice, SubmissionComposer } from "./SubmissionComposer";
 import { SubmissionView } from "./SubmissionView";
@@ -27,7 +27,7 @@ type ViewProps = {
   sub?: string | null;
 };
 
-/** 내 제출 카드 표시 (훅 없음) — 스펙 §2.2 */
+/** 과제 제출 카드 표시 (훅 없음) — 스펙 §2.2 */
 export function MySubmissionCardView({ state, badge, mine, composer, notice, onEdit, onOpenFile, headingRef, personal = false, sub }: ViewProps) {
   const saved = mine && (
     <div className="flex flex-col gap-3">
@@ -60,7 +60,7 @@ export function MySubmissionCardView({ state, badge, mine, composer, notice, onE
       </>
     );
   return (
-    <SubmitPanel id="my-sub-title" title="내 제출" sub={sub} icon="submit" badge={badge} headingRef={headingRef}>
+    <SubmitPanel id="my-sub-title" title={panelTitleOf(personal)} sub={sub} icon="submit" badge={badge} headingRef={headingRef}>
       {notice}
       {body}
     </SubmitPanel>
@@ -84,7 +84,7 @@ type Props = {
   sub?: string | null;
 };
 
-/** 내 제출 카드 — 작성 가능(compose/submitted)일 때만 작성 훅을 쓴다 */
+/** 과제 제출 카드 — 작성 가능(compose/submitted)일 때만 작성 훅을 쓴다 */
 export function MySubmissionCard(p: Props) {
   if (p.state.kind === "compose" || p.state.kind === "submitted") return <EditableCard {...p} />;
   return <MySubmissionCardView state={p.state} badge={p.badge} mine={p.detail.mySubmission} composer={null} onEdit={() => {}} onOpenFile={p.onOpenFile} headingRef={p.headingRef} personal={p.personal} sub={p.sub} />;

@@ -155,7 +155,10 @@ export function myBadgeOf(d: TaskDetail): { status: TaskStatus; text: string } {
   return { status: "open", text: `${personal ? "완료 전" : "제출 전"} · ${dday(d.today, endDate)}` };
 }
 
-/** 내 제출 면 머리 아래 한 줄 — 여기서 무엇을 하는지 + 마감 */
+/** 제출 카드 제목 — 개인 목표는 "완료" 말(완료 현황 · 기한내 완료 · 저장하면 완료로 표시)과 맞춘다 */
+export const panelTitleOf = (personal: boolean): string => (personal ? "목표 완료" : "과제 제출");
+
+/** 제출 카드 머리 아래 한 줄 — 여기서 무엇을 하는지 + 마감 */
 export const panelSubOf = (personal: boolean, end: string): string => `${personal ? "완료한 내용을 여기에 남겨요" : "이 과제의 제출물을 여기에 올려요"} · 마감 ${md(end)}(${weekdayKo(end)})`;
 
 /** "모든 담당자가 제출했어요" 배너 — 1인 개인 목표에는 뜻이 없다 */

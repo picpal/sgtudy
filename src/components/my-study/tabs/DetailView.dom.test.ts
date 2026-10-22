@@ -105,7 +105,7 @@ describe("DetailView 시험 리프 머리", () => {
     expect(root.querySelector("[data-exam-badge]")?.textContent).toBe("시험");
     expect(root.textContent).toContain("· 4문항 5점");
     expect(root.querySelector('[aria-label="시험 불러오는 중"]')).not.toBeNull();
-    expect(root.querySelector('[aria-label="내 제출 불러오는 중"]')).toBeNull();
+    expect(root.querySelector('[aria-label="과제 제출 불러오는 중"]')).toBeNull();
   });
   it("편집자 아닌 사람의 초안 요약(상태만): 수 없음 · 초안 배지", () => {
     const root = render(exam({ status: "draft" }), CHULSU, false);
