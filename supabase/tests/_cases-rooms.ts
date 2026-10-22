@@ -867,6 +867,8 @@ export const ROOM_CASES: Case[] = [
         "notice_create(text,jsonb)", "notice_update(text,bigint,jsonb)", "notice_delete(text,bigint)",
         // 0041: 회차·과제 댓글(내부 comment_*·8인자 notify_publish 는 GRANT 없음)
         "comment_list(text,bigint,bigint,bigint)", "comment_create(text,bigint,text)", "comment_update(text,bigint,text)", "comment_delete(text,bigint)",
+        // 0044: 의견 보내기(내부 feedback_* 헬퍼는 GRANT 없음)
+        "feedback_submit(text,text,jsonb)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

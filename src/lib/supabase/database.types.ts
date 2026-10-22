@@ -456,6 +456,51 @@ export type Database = {
           },
         ]
       }
+      feedback: {
+        Row: {
+          context: Json
+          created_at: string
+          id: number
+          kind: string
+          message: string
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          context?: Json
+          created_at?: string
+          id?: never
+          kind: string
+          message: string
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          context?: Json
+          created_at?: string
+          id?: never
+          kind?: string
+          message?: string
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       files: {
         Row: {
           attached_at: string | null
@@ -1762,6 +1807,14 @@ export type Database = {
         }
         Returns: Json
       }
+      comment_mention_keys: {
+        Args: { p_comment: number; p_uids: string[] }
+        Returns: string[]
+      }
+      comment_mention_model: {
+        Args: { c: Database["public"]["Tables"]["node_comments"]["Row"] }
+        Returns: Json
+      }
       comment_notify: {
         Args: {
           c: Database["public"]["Tables"]["node_comments"]["Row"]
@@ -2032,6 +2085,13 @@ export type Database = {
         Args: { p_code: string; p_detail: string; p_hint?: Json }
         Returns: undefined
       }
+      feedback_limits: { Args: never; Returns: Json }
+      feedback_rate_check: { Args: { p_uid: string }; Returns: undefined }
+      feedback_submit: {
+        Args: { p_context?: Json; p_kind: string; p_message: string }
+        Returns: Json
+      }
+      feedback_validate_context: { Args: { p_ctx: Json }; Returns: undefined }
       file_discard: { Args: { p_file: string }; Returns: Json }
       file_json: {
         Args: { p_file: Database["public"]["Tables"]["files"]["Row"] }
