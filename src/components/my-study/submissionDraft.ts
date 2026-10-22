@@ -20,11 +20,15 @@ export function readDraft(store: Store, key: string): Draft | null {
   }
 }
 
-export function writeDraft(store: Store, key: string, d: Draft): void {
+/** 쓰기 — 저장소가 없거나 가득 차면 false (나가기 확인의 [임시저장]은 실패를 알리고 머문다) */
+export function writeDraft(store: Store, key: string, d: Draft): boolean {
+  if (!store) return false;
   try {
-    store?.setItem(key, JSON.stringify(d));
+    store.setItem(key, JSON.stringify(d));
+    return true;
   } catch {
-    /* 저장소 없음·가득 참 — 없어도 동작 */
+    /* 저장소 없음·가득 참 — 자동 임시본은 없어도 동작 */
+    return false;
   }
 }
 
@@ -37,6 +41,12 @@ export function clearDraft(store: Store, key: string): void {
 }
 
 const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** 작성 내용이 기준(저장된 제출 · 이어 쓴 임시본)과 다른가 — 본문은 앞뒤 공백을 빼고 본다. 기준이 없으면 공백 아닌 내용이 하나라도 있을 때 true */
+export function contentDiffers(c: { body: string; links: string[]; fileIds: string[] }, base: { body: string; links: string[]; fileIds: string[] } | null): boolean {
+  if (!base) return c.body.trim() !== "" || c.links.length > 0 || c.fileIds.length > 0;
+  return c.body.trim() !== base.body.trim() || !sameList(c.links, base.links) || !sameList(c.fileIds, base.fileIds);
+}
 
 /** 임시본이 저장된 제출과 다른가 — 저장본이 없으면 내용이 하나라도 있을 때 true */
 export function draftDiffers(d: Draft, saved: Saved | null): boolean {

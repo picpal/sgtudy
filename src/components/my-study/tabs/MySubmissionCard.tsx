@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
 import type { ToastMsg } from "@/components/ui/Toast";
 import type { FileMeta, Submission, TaskDetail } from "@/lib/api/types";
 import type { TaskStatus } from "@/lib/types";
@@ -67,6 +67,9 @@ export function MySubmissionCardView({ state, badge, mine, composer, notice, onE
   );
 }
 
+/** 나가기 전에 물을 작성 내용 — 상세 화면의 나가기 확인이 [임시저장]·[버리기] 로 쓴다 */
+export type SubmitDraft = { uploading: boolean; keep: () => boolean; discard: () => void };
+
 type Props = {
   detail: TaskDetail;
   nodeId: string;
@@ -80,6 +83,8 @@ type Props = {
   headingRef?: Ref<HTMLHeadingElement>;
   /** 파일을 올리는 중인지 — 상세 나가기 확인용 (스펙 §2.8) */
   onUploadingChange?: (uploading: boolean) => void;
+  /** 작성 중 바뀐 내용이 있으면 그 손잡이, 없으면 null */
+  onDraftChange?: (d: SubmitDraft | null) => void;
   personal?: boolean;
   sub?: string | null;
 };
@@ -90,7 +95,7 @@ export function MySubmissionCard(p: Props) {
   return <MySubmissionCardView state={p.state} badge={p.badge} mine={p.detail.mySubmission} composer={null} onEdit={() => {}} onOpenFile={p.onOpenFile} headingRef={p.headingRef} personal={p.personal} sub={p.sub} />;
 }
 
-function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch, onOpenFile, toast, headingRef, onUploadingChange, personal = false, sub }: Props) {
+function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch, onOpenFile, toast, headingRef, onUploadingChange, onDraftChange, personal = false, sub }: Props) {
   const [editing, setEditing] = useState(false);
   const c = useSubmissionComposer({
     nodeId,
@@ -110,6 +115,17 @@ function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch
   const mine = detail.mySubmission;
   // 제출 전이면 작성 화면이 바로 열린다. 제출 뒤에는 [수정하기] 또는 남은 임시본 [이어 쓰기]
   const composing = state.kind === "compose" || editing;
+  // 작성 화면에 물을 내용이 있으면 상세 화면에 알린다 — [임시저장]·[버리기] 는 그때의 작성 상태로
+  const cur = useRef(c);
+  useEffect(() => {
+    cur.current = c;
+  });
+  const draftOpen = composing && c.unsaved;
+  useEffect(() => {
+    if (!onDraftChange) return;
+    onDraftChange(draftOpen ? { uploading: c.uploading, keep: () => cur.current.keepDraft(), discard: () => cur.current.cancel() } : null);
+  }, [draftOpen, c.uploading, onDraftChange]);
+  useEffect(() => () => onDraftChange?.(null), [onDraftChange]);
   const late = detail.today > detail.node.endDate;
   const edit = () => {
     c.reset();

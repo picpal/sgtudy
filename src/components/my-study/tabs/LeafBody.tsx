@@ -10,8 +10,8 @@ import { SubmissionSection, type SubmissionSectionProps } from "./SubmissionSect
 export function LeafBody(p: SubmissionSectionProps & { canRemoveFiles?: boolean; onExamUnsavedChange?: (unsaved: boolean) => void }) {
   const { canRemoveFiles = false, onExamUnsavedChange, ...sub } = p;
   const { n } = sub;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 시험은 파일을 올리지 않는다
-  const { onUploadingChange, ...exam } = sub;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 시험은 파일을 올리지 않고, 답은 자동 저장이라 나가기 확인도 따로(onUnsavedChange)
+  const { onUploadingChange, onDraftChange, ...exam } = sub;
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-5">

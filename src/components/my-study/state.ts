@@ -46,7 +46,7 @@ export type ScreenState = {
   uploading: string | null;
   /** 시험 문항을 고치고 [문제 저장] 하지 않은 편집 항목 id — ov 밖의 수정이라 uploading 과 같이 떠나기 전에 묻는다 (EditView 가 맞춘다, 0037) */
   examDirty: string | null;
-  /** 개인 목표 편집 폼에 저장하지 않은 수정·올리는 중인 파일이 있는 목표 id — 보기 모드라 ov 에 없다. 탭·뒤로 가기 전에 묻는다 (DetailView 가 맞춘다) */
+  /** 보기 상세에 저장하지 않은 것이 있는 항목 id — 개인 목표 편집 폼의 수정·올리는 중인 파일, 또는 과제 제출 카드의 제출하지 않은 작성 내용. 보기 모드라 ov 에 없다. 탭·뒤로 가기 전에 묻는다 (DetailView 가 맞춘다) */
   personalUnsaved: string | null;
   /** 공지 탭에 펼친 공지 id (아코디언, D14) */
   noticeOpen: string | null;

@@ -23,6 +23,7 @@ import { CommentSection } from "./CommentSection";
 import type { MentionMember } from "./CommentComposer";
 import { InlineConfirm } from "./InlineConfirm";
 import { LeafBody } from "./LeafBody";
+import type { SubmitDraft } from "./MySubmissionCard";
 import { NodeAttachments } from "./NodeAttachments";
 import { PersonalForm } from "./PersonalForm";
 import { PersonalSection } from "./PersonalSection";
@@ -140,6 +141,49 @@ function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActio
 }
 
 /** 보기 모드 상세 — 목록 자리를 쓰는 읽기 전용 화면 (?tab=curriculum&item=). 회차는 기간·진척·설명·과제 목록, 과제는 설명·담당자별 상태 */
+/**
+ * 뒤로 가기 보류 — active 인 동안 같은 주소 기록을 하나 쌓아 둔다. 뒤로 가기로 그 기록이 빠지면 다시 쌓고 onHeld(묻기).
+ * 돌려준 unwind(then): 쌓아 둔 기록을 먼저 걷고 then — 화면 안 이동(← 연 곳·탭·링크)이 그 기록에 걸리지 않게. active 가 풀리면(제출·취소) 조용히 걷는다
+ */
+function useBackHold(active: boolean, onHeld: () => void): (then: () => void) => void {
+  const entry = useRef(false);
+  const after = useRef<(() => void) | null>(null);
+  const held = useRef(onHeld);
+  useEffect(() => {
+    held.current = onHeld;
+  });
+  useEffect(() => {
+    if (active && !entry.current) {
+      window.history.pushState(null, "", window.location.href);
+      entry.current = true;
+    } else if (!active && entry.current && !after.current) {
+      after.current = () => {};
+      window.history.back();
+    }
+  }, [active]);
+  useEffect(() => {
+    const onPop = () => {
+      if (!entry.current) return;
+      const then = after.current;
+      if (then) {
+        after.current = null;
+        entry.current = false;
+        then();
+        return;
+      }
+      window.history.pushState(null, "", window.location.href);
+      held.current();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  return (then) => {
+    if (!entry.current) return then();
+    after.current = then;
+    window.history.back();
+  };
+}
+
 export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진행목표", onEdit, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, isLeader, quietNotAssigned, roots, period, personal, api, onUnsavedChange, pendingLeave, members = [] }: Props) {
   const today = useToday();
   const meId = useMe()?.id ?? null;
@@ -160,11 +204,18 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
   const onUploadingChange = useCallback((u: boolean) => setFormUploading(u), []);
   const formUnsaved = formDirty || formUploading;
   const pnId = n.leaf && n.personal ? n.id : null;
+  // 과제 제출(·목표 완료) 카드에 제출하지 않은 작성 내용 — 나가기 전에 [임시저장]·[버리기]·[계속 쓰기] 로 묻는다
+  const [subDraft, setSubDraft] = useState<SubmitDraft | null>(null);
+  const onDraftChange = useCallback((d: SubmitDraft | null) => setSubDraft(d), []);
+  const [subAsk, setSubAsk] = useState<(() => void) | null>(null);
+  const [subErr, setSubErr] = useState(false);
+  // 탭 전환·브라우저 뒤로 가기는 방 화면이 이 항목을 막고(personalUnsaved) 아래 확인으로 보낸다 — 개인 목표 편집 폼과 같은 길
+  const blockId = editing && formUnsaved ? pnId : subDraft ? n.id : null;
   useEffect(() => {
-    if (!onUnsavedChange || !pnId || !editing || !formUnsaved) return;
-    onUnsavedChange(pnId);
+    if (!onUnsavedChange || !blockId) return;
+    onUnsavedChange(blockId);
     return () => onUnsavedChange(null);
-  }, [onUnsavedChange, pnId, editing, formUnsaved]);
+  }, [onUnsavedChange, blockId]);
   const [unsaved, setUnsaved] = useState<(() => void) | null>(null);
   // 개인 목표 편집 폼에 저장 안 한 수정 → 헤더 메뉴·⋯ 메뉴 등 앱 안 링크도 아래 "저장하지 않은 수정이 있어요" 로 보류 (최종 리뷰 Minor 8)
   const router = useRouter();
@@ -175,6 +226,16 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
       return true;
     });
   }, [editing, formUnsaved, router]);
+  const hasSubDraft = !!subDraft;
+  // 브라우저 뒤로 가기(앱 안 이동이라 beforeunload 가 없다) — 공지 작성 폼과 같은 방식으로 같은 주소 기록을 하나 쌓아 두고, 빠지면 다시 쌓고 묻는다
+  const unwind = useBackHold(hasSubDraft, () => setSubAsk(() => () => window.history.back()));
+  useEffect(() => {
+    if (!hasSubDraft) return;
+    return setLeaveGuard((href) => {
+      setSubAsk(() => () => router.push(href));
+      return true;
+    });
+  }, [hasSubDraft, router]);
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   // 소유자 코드가 체크·토스트 "되돌리기" 등 제출 카드 밖에서 바뀌면 제출 카드(task_get)를 새로 받는다 — LeafBody 를 다시 마운트.
@@ -209,11 +270,12 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
   const [leave, setLeave] = useState<(() => void) | null>(null);
   const guard = (go: () => void) => {
     if (editing && formUnsaved) setUnsaved(() => go);
+    else if (subDraft) setSubAsk(() => go);
     else if (uploading || examUnsaved) setLeave(() => go);
     else go();
   };
   const onKey = (e: KeyboardEvent<HTMLElement>) => {
-    if (e.key !== "Escape" || e.defaultPrevented || unsaved || leave || asking) return;
+    if (e.key !== "Escape" || e.defaultPrevented || unsaved || leave || subAsk || asking) return;
     const t = e.target as HTMLElement;
     // 편집 폼: 설명 편집기·날짜 선택기 안의 Esc 는 그쪽 몫, 나머지는 [← 연 곳] 과 같다(미저장이면 묻는다)
     if (editing) {
@@ -340,6 +402,53 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
         </div>
       )}
 
+      {subDraft && (subAsk || (pendingLeave && !editing)) && (
+        <div className="flex flex-col gap-2 pt-3">
+          <InlineConfirm
+            text={subDraft.uploading ? "파일을 올리는 중이에요 · 임시저장하면 올리던 파일은 빠져요" : "제출하지 않은 작성 내용이 있어요"}
+            cancelLabel="계속 쓰기"
+            onCancel={() => {
+              setSubErr(false);
+              if (subAsk) setSubAsk(null);
+              else pendingLeave?.cancel();
+            }}
+            actions={[
+              {
+                label: "버리기",
+                tone: "danger",
+                onClick: () => {
+                  const go = subAsk ?? pendingLeave?.go ?? (() => {});
+                  setSubAsk(null);
+                  setSubErr(false);
+                  subDraft.discard();
+                  unwind(go);
+                },
+              },
+              {
+                label: "임시저장",
+                tone: "primary",
+                onClick: () => {
+                  // 이 기기에 임시본으로 남기고 나간다 — 다시 열면 [이어 쓰기]. 못 쓰면 머문다
+                  if (!subDraft.keep()) {
+                    setSubErr(true);
+                    return;
+                  }
+                  const go = subAsk ?? pendingLeave?.go ?? (() => {});
+                  setSubAsk(null);
+                  setSubErr(false);
+                  unwind(go);
+                },
+              },
+            ]}
+          />
+          {subErr && (
+            <p role="alert" className="m-0 text-[13px] font-medium text-warn">
+              임시저장하지 못했어요 · 계속 쓰거나 버리고 나가 주세요
+            </p>
+          )}
+        </div>
+      )}
+
       {(unsaved || (pendingLeave && editing && formUnsaved)) && (
         <div className="pt-3">
           <InlineConfirm
@@ -457,6 +566,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
               toast={toast}
               viewerPending={viewerPending}
               onUploadingChange={setUploading}
+              onDraftChange={onDraftChange}
               onExamUnsavedChange={setExamUnsaved}
               isLeader={isLeader}
               quietNotAssigned={quietNotAssigned}

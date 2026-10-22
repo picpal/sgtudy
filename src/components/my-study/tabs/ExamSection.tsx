@@ -17,7 +17,7 @@ import type { SubmissionSectionProps } from "./SubmissionSection";
 import { SubmissionStatusList } from "./SubmissionStatusList";
 import { SubmitPanel } from "./SubmitPanel";
 
-export type ExamSectionProps = Omit<SubmissionSectionProps, "onUploadingChange"> & {
+export type ExamSectionProps = Omit<SubmissionSectionProps, "onUploadingChange" | "onDraftChange"> & {
   /** 저장하지 못한 답이 있다 — 상세 화면이 나가기 전에 묻는다(올리는 중 파일과 같은 경로) */
   onUnsavedChange?: (unsaved: boolean) => void;
 };

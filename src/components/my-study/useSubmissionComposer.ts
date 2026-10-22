@@ -9,7 +9,7 @@ import type { Submission, TaskDetail } from "@/lib/api/types";
 import { uploadAttachment, uploadErrorText, type UploadFailure } from "@/lib/api/upload";
 import { routes } from "@/lib/routes";
 import { addLink as addLinkRule, checkFile, emptyAllowed, objectKey, isPersonalDetail, savedToast, submitBlocker, submitErrorAction, submitLabel, withPendingLink } from "./submission";
-import { clearDraft, draftDiffers, draftKey, readDraft, writeDraft, type Draft } from "./submissionDraft";
+import { clearDraft, contentDiffers, draftDiffers, draftKey, readDraft, writeDraft, type Draft } from "./submissionDraft";
 import { fromSaved, readyIds, removePlanOf, slotsLeft, uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
 
 /* 작성 상태 · 업로드 큐 · 이 기기 임시 저장 · 제출 (스펙 §2.3·§2.7·§2.8).
@@ -44,6 +44,7 @@ const subscribeOnline = (cb: () => void) => {
     window.removeEventListener("offline", cb);
   };
 };
+const baseOf = (s: Submission | null) => (s ? { body: s.bodyMd, links: s.links, fileIds: s.files.map((f) => f.id) } : null);
 const isFailure = (e: unknown): e is UploadFailure => typeof e === "object" && e !== null && "status" in e && typeof (e as UploadFailure).status === "number";
 
 export type Composer = ReturnType<typeof useSubmissionComposer>;
@@ -68,7 +69,8 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
   });
   // 사용자가 손댄 뒤에만 임시본을 쓴다 (열자마자 남은 임시본을 덮어쓰지 않게)
   const [dirty, setDirty] = useState(false);
-  const [writePending, setWritePending] = useState(false);
+  // "바뀐 것" 의 기준 — 저장된 제출, [이어 쓰기] 로 연 임시본이면 그 임시본 (나가기 확인)
+  const [base, setBase] = useState(() => baseOf(mine));
   const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true);
 
   const rowsRef = useRef(rows);
@@ -79,10 +81,7 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
   const savedIds = useMemo(() => new Set((mine?.files ?? []).map((f) => f.id)), [mine]);
 
   // 남은 임시본은 [이어 쓰기]·[버리기] 로 고를 때까지 지킨다 — 손댔다고 덮어쓰면 안내만 사라지고 내용이 없어진다
-  const touch = () => {
-    setDirty(true);
-    setWritePending(true);
-  };
+  const touch = () => setDirty(true);
   const setBody = (v: string) => {
     setBodyRaw(v);
     touch();
@@ -206,31 +205,37 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
   };
   const typeLink = (v: string) => {
     setLinkInput(v);
+    touch();
     if (linkError?.index === null) setLinkError(null);
   };
 
-  /* ---------- 이 기기 임시 저장 (500ms 디바운스) ---------- */
+  /* ---------- 이 기기 임시 저장 (500ms 디바운스) — 사고(탭 닫힘·새로고침) 대비 안전망. 나가기 확인을 대신하지 않는다 ---------- */
   const readyFiles = useMemo(() => rows.filter((r) => r.status === "ready" && r.meta).map((r) => r.meta!), [rows]);
+  const readyKey = readyFiles.map((f) => f.id).join(",");
+  const changed = contentDiffers({ body, links, fileIds: readyKey ? readyKey.split(",") : [] }, base);
   useEffect(() => {
     if (!dirty || pending) return;
     const t = setTimeout(() => {
-      writeDraft(store(), key, { body, links, files: readyFiles, at: new Date().toISOString() });
-      setWritePending(false);
+      // 공백뿐이거나 기준과 같으면 임시본을 남기지 않는다
+      if (changed) writeDraft(store(), key, { body, links, files: readyFiles, at: new Date().toISOString() });
+      else clearDraft(store(), key);
     }, 500);
     return () => clearTimeout(t);
-  }, [dirty, pending, body, links, readyFiles, key]);
+  }, [dirty, pending, changed, body, links, readyFiles, key]);
 
   const uploading = rows.some((r) => r.status === "uploading");
-  // 올리는 중이거나 임시본이 아직 안 써졌을 때만 새로고침·닫기를 묻는다
+  /** 나가기 전에 물을 것이 있나 — 손댔고, 기준과 다르거나(본문 공백 무시) 입력칸에 링크가 남았거나 올리는 중 */
+  const unsaved = dirty && (changed || linkInput.trim() !== "" || uploading);
+  // 새로고침·닫기 → 브라우저 확인
   useEffect(() => {
-    if (!uploading && !writePending) return;
+    if (!unsaved) return;
     const h = (e: BeforeUnloadEvent) => {
       e.preventDefault();
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", h);
     return () => window.removeEventListener("beforeunload", h);
-  }, [uploading, writePending]);
+  }, [unsaved]);
 
   /** 서버 값(또는 임시본)으로 작성 화면을 채운다 — [수정하기]·[이어 쓰기]·[취소] */
   const load = (src: { body: string; links: string[]; files: Draft["files"] }) => {
@@ -249,9 +254,9 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
   const resume = () => {
     if (!pending) return;
     load(pending);
+    setBase({ body: pending.body, links: pending.links, fileIds: pending.files.map((f) => f.id) });
     setPending(null);
     setDirty(true);
-    setWritePending(true);
   };
   const dropDraft = () => {
     clearDraft(store(), key);
@@ -264,12 +269,14 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
     clearDraft(store(), key);
     setPending(null);
     setDirty(false);
-    setWritePending(false);
+    setBase(baseOf(mine));
   };
+  /** 나가기 확인 [임시저장] — 지금 내용을 이 기기 임시본으로 바로 쓴다(입력칸의 유효한 링크 포함). 못 쓰면 false */
+  const keepDraft = (): boolean => writeDraft(store(), key, { body, links: withPendingLink(linkInput, links).links, files: readyFiles, at: new Date().toISOString() });
   const reset = () => {
     load(fromMine());
     setDirty(false);
-    setWritePending(false);
+    setBase(baseOf(mine));
   };
 
   /* ---------- 제출 ---------- */
@@ -298,7 +305,7 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
       clearDraft(store(), key);
       setPending(null);
       setDirty(false);
-      setWritePending(false);
+      setBase(baseOf(sub));
       toast({ text: savedToast(!!mine, sub.isLate, personal), tone: "ok" });
       onSaved(sub);
     } catch (e) {
@@ -326,6 +333,9 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
     mine,
     /** 이 화면에서 무언가 바꿨다 — 수정 취소 전에 묻는다 (Q1-11) */
     dirty,
+    /** 나가기 전에 물을 것이 있다 (공백뿐·기준과 같음은 아니다) */
+    unsaved,
+    keepDraft,
     body,
     setBody,
     links,

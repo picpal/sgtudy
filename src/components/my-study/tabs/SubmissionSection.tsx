@@ -10,7 +10,7 @@ import { CODE_STATUS, type LeafNode } from "../model";
 import { focusTargetOf, myBadgeOf, myCardStateOf, notAssignedText, panelSubOf, panelTitleOf, showAllSubmitted, statusRows, type RoomStatus, type StatusRow } from "../submission";
 import { useTaskDetail } from "../useTaskDetail";
 import { useRoomArchived } from "../roomArchived";
-import { MySubmissionCard } from "./MySubmissionCard";
+import { MySubmissionCard, type SubmitDraft } from "./MySubmissionCard";
 import { SubmissionStatusList } from "./SubmissionStatusList";
 import { SubmitPanel } from "./SubmitPanel";
 
@@ -27,13 +27,15 @@ export type SubmissionSectionProps = {
   /** 승인 대기자 — 다른 사람 제출물을 볼 수 없다 */
   viewerPending: boolean;
   onUploadingChange: (uploading: boolean) => void;
+  /** 과제 제출 작성 중 바뀐 내용 — 상세 화면의 나가기 확인 */
+  onDraftChange?: (d: SubmitDraft | null) => void;
   isLeader?: boolean;
   /** 과제를 하지 않는 그룹장 — "담당 과제가 아니에요" 안내 생략 */
   quietNotAssigned?: boolean;
 };
 
 /** 과제 상세의 제출 영역 — 과제 제출 카드(아래 형제 카드로 포털) · 전원 제출 배너 · 제출 현황 (스펙 §2.1) */
-export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, onUploadingChange, isLeader = false, quietNotAssigned = false }: SubmissionSectionProps) {
+export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, onUploadingChange, onDraftChange, isLeader = false, quietNotAssigned = false }: SubmissionSectionProps) {
   const meId = useMe()?.id ?? null;
   const { detail, error, loading, refetch, setMine } = useTaskDetail(slug, n.id);
   const mineRef = useRef<HTMLHeadingElement>(null);
@@ -128,6 +130,7 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
           toast={toast}
           headingRef={mineRef}
           onUploadingChange={onUploadingChange}
+          onDraftChange={onDraftChange}
         />
       )}
       <div className="flex flex-col gap-3 border-t border-line-2 pt-5">
