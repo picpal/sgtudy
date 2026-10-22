@@ -7,6 +7,7 @@ import { putExam } from "@/lib/api/exam";
 import { fetchCurriculum, recheckCurriculumEdit, nodeArchive, nodeCreate, nodeDelete, nodeMove, nodeUpdate, patchOf } from "@/lib/api/my-study";
 import { personalArchive, personalComplete, personalCreate, personalDelete, personalUpdate, type PersonalPatch } from "@/lib/api/personal";
 import { setNodeFiles } from "@/lib/api/nodeFiles";
+import { bumpProgress } from "@/lib/progressStale";
 import type { Curriculum, FileMeta, MeState, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { isUrlItem } from "./editUrl";
@@ -35,8 +36,11 @@ export type CurriculumApi = {
   save: (n: TreeNode, ov: Overrides, opts?: SaveOpts) => Promise<boolean>;
   /** node_move 후 dates(서브트리의 바뀌는 기간, movedPlan)를 노드마다 node_update 로 맞춘다. okText = 성공 토스트. 옮겨졌으면 true */
   move: (id: string, parentId: string, index?: number, dates?: DatePlan, okText?: string) => Promise<boolean>;
-  /** 커리큘럼만 다시 받는다 — 제출 뒤 보드·간트·개요의 사람별 코드 갱신. 실패는 조용히 */
+  /** 커리큘럼만 다시 받는다. 실패는 조용히 */
   refresh: () => Promise<void>;
+  /** 제출·시험 제출 성공 뒤 — 커리큘럼(목록·보드·간트의 사람별 코드·n/총)과 서버 props(개요 회차 수·이번 회차 사람별 상태)를 다시 받고,
+   *  다른 화면(내 과제·뒤로 가기로 되살아날 이 화면)이 다음 마운트에 다시 받게 표시한다 */
+  submitted: () => void;
   /* 개인 목표 (0014) — 낙관적 처리 없이 응답 Curriculum 으로 교체, 실패는 fail 경로(서버 문구 토스트) */
   /** 회차에 내 목표 추가(기간 = 서버 기본: 회차 기간). 성공하면 true */
   createPersonal: (roundId: string, title: string) => Promise<boolean>;
@@ -261,6 +265,11 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   const discard = useCallback((id: string) => void nodeDelete(slug, id).catch(() => {}), [slug]);
 
   const refresh = useCallback(() => fetchCurriculum(slug).then(setCur, () => {}), [slug, setCur]);
+  const submitted = useCallback(() => {
+    bumpProgress();
+    void refresh();
+    router.refresh();
+  }, [refresh, router]);
 
   // 개인 목표 RPC 공통 — 응답으로 교체 + 성공 토스트. 실패는 fail
   const personal = useCallback(
@@ -268,6 +277,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       try {
         const cur = await call();
         setCur(cur);
+        bumpProgress(); // 완료·추가는 내 과제·다시 마운트될 화면의 진척을 바꾼다
         toast(ok);
         return cur;
       } catch (e) {
@@ -315,5 +325,5 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
     return r.allowed;
   }, [slug, me, setCur, toast, update, router]);
 
-  return { create, remove, discard, archive, save, move, refresh, createPersonal, completePersonal, updatePersonal, archivePersonal, removePersonal, recheckEdit };
+  return { create, remove, discard, archive, save, move, refresh, submitted, createPersonal, completePersonal, updatePersonal, archivePersonal, removePersonal, recheckEdit };
 }

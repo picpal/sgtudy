@@ -43,6 +43,7 @@ import { NoticePopup } from "./NoticePopup";
 import { useCurriculumApi } from "./useCurriculumApi";
 import { RoomArchivedProvider } from "./roomArchived";
 import { SubmitSlotProvider } from "./submitSlot";
+import { progressChangedSince, progressScope } from "@/lib/progressStale";
 
 const CONFIRM_TEXT: Record<JoinCardAction, { title: string; body: string; label: string }> = {
   leave: { title: "참가를 취소할까요?", body: "모집 기간에는 다시 참가할 수 있어요. 지정 과제 담당에서도 빠져요.", label: "참가 취소" },
@@ -117,6 +118,13 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // 이 화면의 key(page.tsx: task·tab) — 이탈 가드가 "같은 화면 주소" 를 같은 규칙으로 판정한다 (E 리뷰 minor 1)
   useEffect(() => setScreenKey({ tab: initialTab, task: initialLeaf ?? "" }), [initialTab, initialLeaf]);
   const api = useCurriculumApi(detail.slug, setCur, update, setToast, detail.me);
+  // 브라우저 뒤로·앞으로 가기로 되살아난 화면은 그때의 서버 props(커리큘럼·방 정보)로 시작한다 — 그 뒤 제출·완료가 있었으면 한 번 다시 받는다
+  useEffect(() => {
+    if (!progressChangedSince(progressScope.room(detail.slug))) return;
+    void api.refresh();
+    router.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 때 한 번
+  }, []);
   // 같은 화면에서 알림(#applications · #leave-requests)을 누르면 Next 는 화면을 그대로 둔다 — 다른 탭에 있었으면 개요로 (시나리오 QA #8)
   const onAnnounce = useCallback(
     (h: string) => (OVERVIEW_ANCHORS as readonly string[]).includes(h) && update((p) => tabPatch(p, "overview", canEdit)),

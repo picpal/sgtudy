@@ -9,6 +9,7 @@ import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
 import { fetchMyTasks, personalComplete, personalCreate } from "@/lib/api/personal";
+import { bumpProgress, progressChangedSince, progressScope } from "@/lib/progressStale";
 import type { MeTaskItem, MeTasks } from "@/lib/api/types";
 import { md, weekdayKo } from "@/lib/date";
 import { routes } from "@/lib/routes";
@@ -94,6 +95,15 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
     const next = await fetchMyTasks();
     if (seq.accept(id)) setData(next);
   };
+  // 브라우저 뒤로 가기로 되살아난 화면은 그때의 목록으로 시작한다 — 그 뒤 제출·완료가 있었으면 한 번 다시 받는다
+  useEffect(() => {
+    if (!progressChangedSince(progressScope.tasks)) return;
+    const id = seq.next();
+    fetchMyTasks().then((next) => {
+      if (seq.accept(id)) setData(next);
+    }, () => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 때 한 번
+  }, []);
   // 폼을 닫으면 머리 버튼으로, 이미 없으면 제목으로 — 지금 DOM 기준으로 바로 옮긴다(rAF 는 창이 가려지면 멈춘다)
   const closeForm = () => {
     setFormOpen(false);
@@ -107,6 +117,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
     try {
       try {
         await personalComplete(it.slug, it.id, done);
+        bumpProgress();
       } catch (e) {
         setToast({ text: personalErrorText(toApiError(e)), tone: "bad" });
         return;
@@ -132,6 +143,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
     try {
       try {
         await personalCreate(slug, roundId, title);
+        bumpProgress();
       } catch (e) {
         setToast({ text: personalErrorText(toApiError(e)), tone: "bad" });
         return false;

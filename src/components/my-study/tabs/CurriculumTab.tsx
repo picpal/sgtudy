@@ -275,7 +275,7 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
           roomStatus={roomStatus}
           focus={S.viewFocus}
           onFocused={() => update({ viewFocus: null })}
-          onSubmitted={() => void api.refresh()}
+          onSubmitted={api.submitted}
           toast={toast}
           viewerPending={viewerPending}
           isLeader={isLeader}
