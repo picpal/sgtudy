@@ -405,7 +405,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
       {subDraft && (subAsk || (pendingLeave && !editing)) && (
         <div className="flex flex-col gap-2 pt-3">
           <InlineConfirm
-            text={subDraft.uploading ? "파일을 올리는 중이에요 · 임시저장하면 올리던 파일은 빠져요" : "제출하지 않은 작성 내용이 있어요"}
+            text={subDraft.uploading ? "파일을 올리는 중이에요 · 이 기기에 임시저장하면 올리던 파일은 빠져요" : "제출하지 않은 작성 내용이 있어요"}
             cancelLabel="계속 쓰기"
             onCancel={() => {
               setSubErr(false);
@@ -425,7 +425,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
                 },
               },
               {
-                label: "임시저장",
+                label: "이 기기에 임시저장",
                 tone: "primary",
                 onClick: () => {
                   // 이 기기에 임시본으로 남기고 나간다 — 다시 열면 [이어 쓰기]. 못 쓰면 머문다

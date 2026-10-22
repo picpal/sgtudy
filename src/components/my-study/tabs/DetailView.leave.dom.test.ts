@@ -80,7 +80,7 @@ describe("과제 제출 작성 중 나가기 확인", () => {
     back();
     expect(onBack).not.toHaveBeenCalled();
     expect(confirmBox()?.textContent).toContain("제출하지 않은 작성 내용이 있어요");
-    expect(["계속 쓰기", "버리기", "임시저장"].every((t) => btn(t))).toBe(true);
+    expect(["계속 쓰기", "버리기", "이 기기에 임시저장"].every((t) => btn(t))).toBe(true);
   });
   it("[계속 쓰기] → 머문다", () => {
     mount(true);
@@ -95,7 +95,7 @@ describe("과제 제출 작성 중 나가기 확인", () => {
     mount(true);
     vi.spyOn(window.history, "back").mockImplementation(() => window.dispatchEvent(new PopStateEvent("popstate")));
     back();
-    act(() => btn("임시저장")!.click());
+    act(() => btn("이 기기에 임시저장")!.click());
     expect(draft.keep).toHaveBeenCalled();
     expect(draft.discard).not.toHaveBeenCalled();
     expect(onBack).toHaveBeenCalled();
@@ -104,7 +104,7 @@ describe("과제 제출 작성 중 나가기 확인", () => {
     draft.keep = vi.fn(() => false);
     mount(true);
     back();
-    act(() => btn("임시저장")!.click());
+    act(() => btn("이 기기에 임시저장")!.click());
     expect(onBack).not.toHaveBeenCalled();
     expect(host.querySelector("[role=alert]")?.textContent).toContain("임시저장하지 못했어요");
     expect(confirmBox()).not.toBeNull();
@@ -137,7 +137,7 @@ describe("과제 제출 작성 중 나가기 확인", () => {
     expect(e.preventDefault).toHaveBeenCalled();
     expect(confirmBox()).not.toBeNull();
     vi.spyOn(window.history, "back").mockImplementation(() => window.dispatchEvent(new PopStateEvent("popstate")));
-    act(() => btn("임시저장")!.click());
+    act(() => btn("이 기기에 임시저장")!.click());
     expect(m.push).toHaveBeenCalledWith("/tasks");
   });
   it("브라우저 뒤로 가기 → 기록을 다시 쌓고 묻는다 · [버리기] 면 쌓은 기록을 걷고 한 번 더 뒤로", () => {
