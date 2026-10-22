@@ -212,16 +212,19 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
   /* ---------- 이 기기 임시 저장 (500ms 디바운스) — 사고(탭 닫힘·새로고침) 대비 안전망. 나가기 확인을 대신하지 않는다 ---------- */
   const readyFiles = useMemo(() => rows.filter((r) => r.status === "ready" && r.meta).map((r) => r.meta!), [rows]);
   const readyKey = readyFiles.map((f) => f.id).join(",");
-  const changed = contentDiffers({ body, links, fileIds: readyKey ? readyKey.split(",") : [] }, base);
+  const content = { body, links, fileIds: readyKey ? readyKey.split(",") : [] };
+  const changed = contentDiffers(content, base);
+  // 임시본을 남길지는 서버 저장본과 견준다 — [이어 쓰기]로 연 임시본을 고치지 않았다고 지우면 그 글이 사라진다
+  const unsent = contentDiffers(content, baseOf(mine));
   useEffect(() => {
     if (!dirty || pending) return;
     const t = setTimeout(() => {
-      // 공백뿐이거나 기준과 같으면 임시본을 남기지 않는다
-      if (changed) writeDraft(store(), key, { body, links, files: readyFiles, at: new Date().toISOString() });
+      // 공백뿐이거나 저장본과 같으면 임시본을 남기지 않는다
+      if (unsent) writeDraft(store(), key, { body, links, files: readyFiles, at: new Date().toISOString() });
       else clearDraft(store(), key);
     }, 500);
     return () => clearTimeout(t);
-  }, [dirty, pending, changed, body, links, readyFiles, key]);
+  }, [dirty, pending, unsent, body, links, readyFiles, key]);
 
   const uploading = rows.some((r) => r.status === "uploading");
   /** 나가기 전에 물을 것이 있나 — 손댔고, 기준과 다르거나(본문 공백 무시) 입력칸에 링크가 남았거나 올리는 중 */

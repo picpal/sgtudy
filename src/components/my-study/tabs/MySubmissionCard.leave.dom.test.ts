@@ -95,12 +95,15 @@ describe("과제 제출 작성 — 나가기 전에 물을 내용(onDraftChange)
     setVal(body(), "회고 고침");
     expect(last).not.toBeNull();
   });
-  it("임시본을 [이어 쓰기]로 열고 더 고치지 않았으면 묻지 않는다", () => {
+  it("임시본을 [이어 쓰기]로 열고 더 고치지 않았으면 묻지 않는다 — 임시본은 지우지 않는다", async () => {
     localStorage.setItem(KEY, JSON.stringify({ body: "어제 쓴 글", links: [], files: [], at: "2026-10-15T00:00:00Z" }));
     mount();
     act(() => button("이어 쓰기")!.click());
     expect(body().value).toBe("어제 쓴 글");
     expect(last).toBeNull();
+    // 고치지 않았어도 임시본은 그대로 남는다(자동 저장이 지우지 않는다)
+    await tick();
+    expect(JSON.parse(localStorage.getItem(KEY)!).body).toBe("어제 쓴 글");
     setVal(body(), "어제 쓴 글 + 오늘");
     expect(last).not.toBeNull();
   });
