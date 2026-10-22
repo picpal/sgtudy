@@ -9,6 +9,7 @@ import { signOut } from "@/lib/api/me";
 import { useMe, useMyStudyHref } from "@/lib/me";
 import { AVATAR_PAL } from "@/lib/palette";
 import { anonAuthLinks } from "./headerAuth";
+import { FeedbackButton } from "./FeedbackButton";
 import { routes } from "@/lib/routes";
 
 // 현재 쿼리(?invite= 등)를 returnTo 에 싣기 위해 읽는다. useSearchParams 는 정적 화면(404 등)에서 Suspense 를 요구해 피한다.
@@ -198,6 +199,8 @@ export function AppHeader({ active, children, bell }: Props) {
       {children && <div className="flex min-w-0 max-[901px]:order-9 max-[901px]:w-full [&>*]:max-[901px]:flex-auto">{children}</div>}
       {me ? (
         <>
+          {/* 의견 보내기(0044) — 벨 왼쪽. 로그인했을 때만(스펙 D1). 390 폭에서도 로고와 한 줄(스펙 D2) */}
+          <FeedbackButton />
           {bell}
           <div ref={menuRef} className="relative">
             <button

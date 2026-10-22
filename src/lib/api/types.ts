@@ -505,3 +505,10 @@ export type CommentPage = {
 };
 /** comment_create·comment_update 응답 */
 export type CommentSaved = { comment: CommentDto; people: CommentPeople };
+
+// ───────── 의견 보내기 (0044) ─────────
+export type FeedbackKind = "BUG" | "IDEA" | "QUESTION" | "OTHER";
+/** 화면이 붙이는 정보(스펙 D5) — 사용자 id 는 서버가 auth.uid() 로 붙인다 */
+export type FeedbackContext = { path: string; room?: string; userAgent: string; viewport: string; appVersion: string };
+/** feedback_submit 응답 */
+export type FeedbackSaved = { id: string; createdAt: string };
