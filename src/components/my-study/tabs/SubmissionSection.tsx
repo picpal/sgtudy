@@ -7,11 +7,12 @@ import type { FileMeta, Submission } from "@/lib/api/types";
 import { useHashTarget } from "@/lib/hashTarget";
 import { useMe } from "@/lib/me";
 import { CODE_STATUS, type LeafNode } from "../model";
-import { focusTargetOf, myBadgeOf, myCardStateOf, notAssignedText, showAllSubmitted, statusRows, type RoomStatus, type StatusRow } from "../submission";
+import { focusTargetOf, myBadgeOf, myCardStateOf, notAssignedText, panelSubOf, showAllSubmitted, statusRows, type RoomStatus, type StatusRow } from "../submission";
 import { useTaskDetail } from "../useTaskDetail";
 import { useRoomArchived } from "../roomArchived";
 import { MySubmissionCard } from "./MySubmissionCard";
 import { SubmissionStatusList } from "./SubmissionStatusList";
+import { SubmitPanel } from "./SubmitPanel";
 
 export type SubmissionSectionProps = {
   n: LeafNode;
@@ -88,29 +89,27 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
     onSubmitted();
   };
 
+  const panelSub = panelSubOf(personal, detail?.node.endDate ?? n.e);
+  // 위: 내 제출 면(불러오는 중·실패도 같은 면 안에서) · 아래: 담당자별 제출 현황(구분선 아래 따로)
   return (
-    <div className="flex flex-col gap-4">
-      {detail && showAllSubmitted(detail) && (
-        <div role="status" className="flex items-center gap-2 rounded-[12px] border border-[#BFE6D4] bg-[#E3F5EC] px-[14px] py-3 text-[13px] font-semibold text-[#1A7F55]">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M5 12.5l4.5 4.5L19 7.5" />
-          </svg>
-          모든 담당자가 제출했어요
-        </div>
-      )}
+    <div className="flex flex-col gap-6">
       {loading && (
-        <div aria-busy="true" aria-label="내 제출 불러오는 중" className="flex flex-col gap-3 rounded-[14px] border border-line bg-surface p-[14px]">
-          <div className="h-5 w-24 rounded-[6px] bg-line-2" />
-          <div className="h-[120px] rounded-[10px] bg-surface-3" />
-        </div>
+        <SubmitPanel id="my-sub-title" title="내 제출" sub={panelSub} icon="submit">
+          <div aria-busy="true" aria-label="내 제출 불러오는 중" className="flex flex-col gap-3">
+            <div className="h-5 w-24 rounded-[6px] bg-line-2" />
+            <div className="h-[120px] rounded-[10px] bg-surface" />
+          </div>
+        </SubmitPanel>
       )}
       {!detail && error && (
-        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-[12px] border border-line bg-surface-3 px-[14px] py-2 text-[13px] text-ink-2">
-          <span className="min-w-0 flex-[1_1_200px]">제출 정보를 불러오지 못했어요</span>
-          <button type="button" onClick={refetch} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">
-            다시 시도
-          </button>
-        </div>
+        <SubmitPanel id="my-sub-title" title="내 제출" sub={panelSub} icon="submit">
+          <div role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
+            <span className="min-w-0 flex-[1_1_200px]">제출 정보를 불러오지 못했어요</span>
+            <button type="button" onClick={refetch} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">
+              다시 시도
+            </button>
+          </div>
+        </SubmitPanel>
       )}
       {detail && card && meId && card.kind !== "hidden" && (
         <MySubmissionCard
@@ -121,6 +120,7 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
           state={card}
           badge={myBadgeOf(detail)}
           personal={personal}
+          sub={panelSub}
           onSaved={saved}
           onRefetch={refetch}
           onOpenFile={openFile}
@@ -129,8 +129,18 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
           onUploadingChange={onUploadingChange}
         />
       )}
-      {detail && card?.kind === "hidden" && !quietNotAssigned && <p className="m-0 text-[13px] text-muted">{notAssignedText(personal)}</p>}
-      <SubmissionStatusList rows={rows} sub={sub} asg={asg} note={note} archived={n.archived} personal={personal} headingRef={statusRef} onOpenFile={openFile} />
+      <div className="flex flex-col gap-3 border-t border-line-2 pt-5">
+        {detail && card?.kind === "hidden" && !quietNotAssigned && <p className="m-0 text-[13px] text-muted">{notAssignedText(personal)}</p>}
+        {detail && showAllSubmitted(detail) && (
+          <div role="status" className="flex items-center gap-2 rounded-[12px] border border-[#BFE6D4] bg-[#E3F5EC] px-[14px] py-3 text-[13px] font-semibold text-[#1A7F55]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+            모든 담당자가 제출했어요
+          </div>
+        )}
+        <SubmissionStatusList rows={rows} sub={sub} asg={asg} note={note} archived={n.archived} personal={personal} headingRef={statusRef} onOpenFile={openFile} />
+      </div>
     </div>
   );
 }

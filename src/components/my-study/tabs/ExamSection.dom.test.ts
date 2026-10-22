@@ -360,7 +360,7 @@ describe("ExamSection — 저장 순서(Fix round 1)", () => {
 describe("ExamSection — 결과", () => {
   it("공개(after_submit) → 점수 카드 · 정오 · 내 답/정답 · 해설 <details>", async () => {
     await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
-    expect(host.querySelector("h3")?.textContent).toContain("4/5점 (80%) · 3/4 문항 정답");
+    expect(host.querySelector("h4")?.textContent).toContain("4/5점 (80%) · 3/4 문항 정답");
     expect(host.textContent).toContain("제출 · 기한 내");
     expect(host.textContent).toContain("✓ 정답");
     expect(host.textContent).toContain("✗ 오답");
@@ -380,5 +380,31 @@ describe("ExamSection — 결과", () => {
     expect(host.querySelector("details")).toBeNull();
     expect(host.textContent).not.toContain("✓ 정답");
     expect(host.textContent).not.toContain("IAM 정책 평가 순서로");
+  });
+});
+
+describe("ExamSection — 구역(내 응시 면 · 제출 현황)", () => {
+  const panel = () => host.querySelector<HTMLElement>("section[data-submit-panel]");
+  it("응시 가능 → '내 응시' 면(h3, aria-labelledby) 안에 문항·제출 막대, 제출 현황은 면 밖 아래", async () => {
+    await mount(view());
+    const p = panel()!;
+    expect(p.getAttribute("aria-labelledby")).toBe("my-exam-title");
+    expect(p.querySelector("h3#my-exam-title")?.textContent).toBe("내 응시");
+    expect(p.textContent).toContain("응시 전 · D-5");
+    expect(p.textContent).toContain("마감 10.21(수)");
+    expect(p.querySelector('[aria-label="시험 문항"]')).not.toBeNull();
+    const status = host.querySelector("#submissions")!;
+    expect(p.contains(status)).toBe(false);
+    expect(p.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("제출 뒤 결과 → 면 배지 '기한내 제출', 결과 머리는 h4", async () => {
+    await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
+    expect(panel()!.textContent).toContain("기한내 제출");
+    expect(panel()!.querySelector("h4")?.textContent).toContain("내 결과");
+  });
+  it("담당 아님 → 내 응시 면 없이 안내 한 줄", async () => {
+    await mount(view({ reason: "not_assignee", questions: null }));
+    expect(panel()).toBeNull();
+    expect(host.querySelector("[role=note]")?.textContent).toContain("담당 과제가 아니에요");
   });
 });

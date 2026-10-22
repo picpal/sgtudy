@@ -5,7 +5,7 @@ import { useHashTarget } from "@/lib/hashTarget";
 import { useMe } from "@/lib/me";
 import type { ExamView } from "@/lib/api/types";
 import { CODE_STATUS } from "../model";
-import { questionResult, resultSummary, submitAsk, submittedLine, takeNote } from "../exam";
+import { examBadgeOf, examPanelSub, questionResult, resultSummary, submitAsk, submittedLine, takeNote } from "../exam";
 import { statusRows, type StatusRow } from "../submission";
 import { useExamTake, type ExamSaveState } from "../useExamTake";
 import { useTaskDetail } from "../useTaskDetail";
@@ -14,6 +14,7 @@ import { ExamResults } from "./ExamResults";
 import { InlineConfirm } from "./InlineConfirm";
 import type { SubmissionSectionProps } from "./SubmissionSection";
 import { SubmissionStatusList } from "./SubmissionStatusList";
+import { SubmitPanel } from "./SubmitPanel";
 
 export type ExamSectionProps = Omit<SubmissionSectionProps, "onUploadingChange"> & {
   /** 저장하지 못한 답이 있다 — 상세 화면이 나가기 전에 묻는다(올리는 중 파일과 같은 경로) */
@@ -94,99 +95,115 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
   const stamp = v?.attempt?.status === "submitted" ? submittedLine(v.attempt) : null;
   // 결과 목록: 정오(results)나 정답 키가 왔을 때만 — after_deadline 마감 전 제출이면 점수 카드만
   const showList = mode === "result" && !!v && (!!v.attempt?.results || qs.some((q) => "answer" in q));
+  // 담당이 아니면 "내 응시" 면 없이 안내 한 줄만 — 제출 현황 위에
+  const outside = v?.viewer.reason === "not_assignee";
+  const panel = t.loading || (!v && !!t.error) || (!!v && (mode === "take" || mode === "result" || (!!info && !outside)));
 
+  // 위: 내 응시 면(내 제출 면과 같은 자리·모양) · 아래: 제출 현황 · 결과(편집자)
   return (
-    <div className="flex flex-col gap-5">
-      {t.loading && (
-        <div aria-busy="true" aria-label="시험 불러오는 중" className="flex flex-col gap-3 rounded-[14px] border border-line bg-surface p-[14px]">
-          <div className="h-5 w-24 rounded-[6px] bg-line-2" />
-          <div className="h-[120px] rounded-[10px] bg-surface-3" />
-        </div>
-      )}
-      {!v && t.error && (
-        <div role="alert" className="flex flex-wrap items-center gap-2 rounded-[12px] border border-line bg-surface-3 px-[14px] py-2 text-[13px] text-ink-2">
-          <span className="min-w-0 flex-[1_1_200px]">시험을 불러오지 못했어요</span>
-          <button type="button" onClick={t.refetch} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">
-            다시 시도
-          </button>
-        </div>
+    <div className="flex flex-col gap-6">
+      {panel && (
+        <SubmitPanel id="my-exam-title" title="내 응시" sub={examPanelSub(v?.node.endDate ?? n.e)} icon="exam" badge={v ? examBadgeOf(v) : null}>
+          {t.loading && (
+            <div aria-busy="true" aria-label="시험 불러오는 중" className="flex flex-col gap-3">
+              <div className="h-5 w-24 rounded-[6px] bg-line-2" />
+              <div className="h-[120px] rounded-[10px] bg-surface" />
+            </div>
+          )}
+          {!v && t.error && (
+            <div role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
+              <span className="min-w-0 flex-[1_1_200px]">시험을 불러오지 못했어요</span>
+              <button type="button" onClick={t.refetch} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">
+                다시 시도
+              </button>
+            </div>
+          )}
+
+          {v && info && !outside && (
+            <p role="note" className="m-0 rounded-[12px] bg-surface px-[14px] py-[10px] text-[13px] text-ink-3">
+              {info}
+            </p>
+          )}
+
+          {v && mode === "take" && (
+            <div ref={examRef} tabIndex={-1} aria-label="시험 문항" className="flex flex-col outline-none">
+              <ol className="m-0 flex list-none flex-col gap-6 p-0 pb-5">
+                {qs.map((q, i) => (
+                  <ExamQuestionView key={q.id} mode="take" q={q} no={i + 1} mine={t.answers[q.id] ?? null} onChange={(a) => t.setAnswer(q.id, a)} disabled={t.submitting} />
+                ))}
+              </ol>
+              {/* 하단 고정 막대 — DetailView 위 막대(sticky top-0)와 같은 방식. 문항 목록이 끝나면 따라 올라간다 */}
+              <div className="sticky bottom-0 z-[2] -mx-3 flex flex-col gap-2 border-t border-line bg-bg-main px-3 py-2 @[560px]:-mx-6 @[560px]:px-6">
+                {ask ? (
+                  <InlineConfirm
+                    text={submitAsk(total - t.answered)}
+                    onCancel={() => setAsk(false)}
+                    actions={[{ label: t.submitting ? "제출 중…" : "제출", tone: "primary", disabled: t.submitting, onClick: () => void submit() }]}
+                  />
+                ) : (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <p className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-x-[6px] text-[13px] text-ink-2" aria-live="polite">
+                      <span>
+                        <b className="font-bold text-ink">
+                          {t.answered}/{total}
+                        </b>{" "}
+                        답함
+                      </span>
+                      {SAVE_TEXT[t.save] && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span className={failed ? "font-semibold text-warn" : ""}>{SAVE_TEXT[t.save]}</span>
+                        </>
+                      )}
+                      {failed && (
+                        <button type="button" onClick={t.retry} className="inline-flex min-h-11 items-center rounded-[8px] px-2 text-[13px] font-semibold text-ink underline underline-offset-2">
+                          다시 시도
+                        </button>
+                      )}
+                    </p>
+                    <button type="button" disabled={t.submitting} onClick={() => setAsk(true)} className="h-11 shrink-0 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white disabled:opacity-50">
+                      제출하기
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {v && mode === "result" && (
+            <div ref={examRef} tabIndex={-1} aria-label="시험 결과" className="flex flex-col gap-5 outline-none">
+              {sum?.headline && (
+                <div className="flex flex-col gap-1 rounded-[14px] bg-surface px-[14px] py-3">
+                  <h4 className="m-0 flex flex-wrap items-baseline gap-x-2 text-[15px] font-bold text-ink">
+                    <span>내 결과</span>
+                    <span className="text-[17px]">{sum.headline}</span>
+                  </h4>
+                  {stamp && <p className="m-0 text-[13px] text-ink-3">{stamp}</p>}
+                  {sum.sub && <p className="m-0 text-[13px] text-ink-2">{sum.sub}</p>}
+                </div>
+              )}
+              {showList && (
+                <ol className="m-0 flex list-none flex-col gap-6 p-0">
+                  {qs.map((q, i) => {
+                    const r = questionResult(q, v.attempt);
+                    return <ExamQuestionView key={q.id} mode="result" q={q} no={i + 1} mine={r.mine} correct={r.correct} earned={r.earned} />;
+                  })}
+                </ol>
+              )}
+            </div>
+          )}
+        </SubmitPanel>
       )}
 
-      {v && info && (
-        <p role="note" className="m-0 rounded-[12px] bg-surface-2 px-[14px] py-[10px] text-[13px] text-ink-3">
+      {v && info && outside && (
+        <p role="note" className="m-0 text-[13px] text-muted">
           {info}
         </p>
       )}
 
-      {v && mode === "take" && (
-        <div ref={examRef} tabIndex={-1} aria-label="시험 문항" className="flex flex-col outline-none">
-          <ol className="m-0 flex list-none flex-col gap-6 p-0 pb-5">
-            {qs.map((q, i) => (
-              <ExamQuestionView key={q.id} mode="take" q={q} no={i + 1} mine={t.answers[q.id] ?? null} onChange={(a) => t.setAnswer(q.id, a)} disabled={t.submitting} />
-            ))}
-          </ol>
-          {/* 하단 고정 막대 — DetailView 위 막대(sticky top-0)와 같은 방식. 문항 목록이 끝나면 따라 올라간다 */}
-          <div className="sticky bottom-0 z-[2] -mx-1 flex flex-col gap-2 border-t border-line-2 bg-surface px-1 py-2">
-            {ask ? (
-              <InlineConfirm
-                text={submitAsk(total - t.answered)}
-                onCancel={() => setAsk(false)}
-                actions={[{ label: t.submitting ? "제출 중…" : "제출", tone: "primary", disabled: t.submitting, onClick: () => void submit() }]}
-              />
-            ) : (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <p className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-x-[6px] text-[13px] text-ink-2" aria-live="polite">
-                  <span>
-                    <b className="font-bold text-ink">
-                      {t.answered}/{total}
-                    </b>{" "}
-                    답함
-                  </span>
-                  {SAVE_TEXT[t.save] && (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <span className={failed ? "font-semibold text-warn" : ""}>{SAVE_TEXT[t.save]}</span>
-                    </>
-                  )}
-                  {failed && (
-                    <button type="button" onClick={t.retry} className="inline-flex min-h-11 items-center rounded-[8px] px-2 text-[13px] font-semibold text-ink underline underline-offset-2">
-                      다시 시도
-                    </button>
-                  )}
-                </p>
-                <button type="button" disabled={t.submitting} onClick={() => setAsk(true)} className="h-11 shrink-0 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white disabled:opacity-50">
-                  제출하기
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {v && mode === "result" && (
-        <div ref={examRef} tabIndex={-1} aria-label="시험 결과" className="flex flex-col gap-5 outline-none">
-          {sum?.headline && (
-            <div className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface-2 px-[14px] py-3">
-              <h3 className="m-0 flex flex-wrap items-baseline gap-x-2 text-[15px] font-bold text-ink">
-                <span>내 결과</span>
-                <span className="text-[17px]">{sum.headline}</span>
-              </h3>
-              {stamp && <p className="m-0 text-[13px] text-ink-3">{stamp}</p>}
-              {sum.sub && <p className="m-0 text-[13px] text-ink-2">{sum.sub}</p>}
-            </div>
-          )}
-          {showList && (
-            <ol className="m-0 flex list-none flex-col gap-6 p-0">
-              {qs.map((q, i) => {
-                const r = questionResult(q, v.attempt);
-                return <ExamQuestionView key={q.id} mode="result" q={q} no={i + 1} mine={r.mine} correct={r.correct} earned={r.earned} />;
-              })}
-            </ol>
-          )}
-        </div>
-      )}
-
-      <SubmissionStatusList rows={rows} sub={tk ? tk.submitted : n.sub} asg={tk ? tk.assigned : n.asg} note={note} archived={n.archived} headingRef={statusRef} onOpenFile={() => {}} expandable={false} />
+      <div className="border-t border-line-2 pt-5">
+        <SubmissionStatusList rows={rows} sub={tk ? tk.submitted : n.sub} asg={tk ? tk.assigned : n.asg} note={note} archived={n.archived} headingRef={statusRef} onOpenFile={() => {}} expandable={false} />
+      </div>
 
       {/* 그룹장·편집자만 — 점수는 본인과 편집자만 본다(D7). 발행 전에는 응시가 없다 */}
       {v?.viewer.canEdit && v.exam.status === "published" && <ExamResults slug={slug} nodeId={n.id} toast={toast} refreshKey={`${v.attempt?.status ?? ""}:${tk?.submitted ?? ""}`} />}

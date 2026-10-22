@@ -16,6 +16,16 @@ describe("MySubmissionCardView", () => {
     const b = Array.from(d.querySelectorAll("button")).find((x) => x.textContent === "수정하기")!;
     expect(b.className).toMatch(/h-11|min-h-11/);
   });
+  it("is a tinted panel region (not a bordered card) — h3 labels it, sub line says what to do here", () => {
+    const d = html({ state: { kind: "compose" }, badge: { status: "open", text: "제출 전 · D-3" }, mine: null, composer: null, onEdit: () => {}, onOpenFile: () => {}, sub: "이 과제의 제출물을 여기에 올려요 · 마감 10.18(일)" });
+    const s = d.querySelector("section")!;
+    expect(s.getAttribute("aria-labelledby")).toBe("my-sub-title");
+    expect(s.querySelector("#my-sub-title")?.tagName).toBe("H3");
+    expect(s.className).toContain("bg-bg-main");
+    expect(s.className).not.toMatch(/(^|\s)border(\s|$)/);
+    expect(s.textContent).toContain("마감 10.18(일)");
+    expect(s.textContent).toContain("제출 전 · D-3");
+  });
   it("readonly shows the note and no edit button", () => {
     const d = html({ state: { kind: "readonly", note: "보관된 과제라 제출·수정할 수 없어요" }, badge: { status: "done", text: "기한내 제출" }, mine: sub, composer: null, onEdit: () => {}, onOpenFile: () => {} });
     expect(d.textContent).toContain("보관된 과제라");

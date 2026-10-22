@@ -1,7 +1,8 @@
 import type { ApiError } from "@/lib/api/errors";
 import type { ExamDraft, ExamDraftQuestion } from "@/lib/api/exam";
 import type { ExamAttempt, ExamBrief, ExamDifficulty, ExamQType, ExamQuestion, ExamResults, ExamReveal, ExamSummary, ExamView } from "@/lib/api/types";
-import { md } from "@/lib/date";
+import { dday, md, weekdayKo } from "@/lib/date";
+import type { TaskStatus } from "@/lib/types";
 import { notAssignedText, stampKst } from "./submission";
 
 /* 회차 시험 순수 로직 (스펙 2026-10-21-round-exam-design §4). React·Supabase 무관 */
@@ -38,6 +39,21 @@ export function takeNote(v: ExamView, personalQuiet: boolean): string | null {
     default: return null;
   }
 }
+
+/** 내 응시 면 머리 배지 — 내 제출 배지(myBadgeOf)와 같은 말. 담당이 아니거나 아직 풀 수 없는 상태(발행 전·스터디 대기·보관)는 없음 */
+export function examBadgeOf(v: ExamView): { status: TaskStatus; text: string } | null {
+  const a = v.attempt;
+  if (a?.status === "submitted") return a.isLate ? { status: "late", text: "지각 제출" } : { status: "done", text: "기한내 제출" };
+  if (!v.viewer.isAssignee) return null;
+  const late = v.today > v.node.endDate;
+  if (v.viewer.canTake) return late ? { status: "missed", text: "미제출 · 마감 지남" } : { status: "open", text: `응시 전 · ${dday(v.today, v.node.endDate)}` };
+  if (v.viewer.reason === "not_started") return { status: "planned", text: "예정" };
+  if (v.viewer.reason === "closed") return { status: "missed", text: "미제출 · 마감 지남" };
+  return null;
+}
+
+/** 내 응시 면 머리 아래 한 줄 */
+export const examPanelSub = (end: string): string => `문제를 풀고 여기서 제출해요 · 마감 ${md(end)}(${weekdayKo(end)})`;
 
 const pctOf = (score: number, max: number) => (max > 0 ? Math.round((score / max) * 100) : 0);
 
