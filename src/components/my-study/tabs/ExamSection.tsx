@@ -5,10 +5,11 @@ import { useHashTarget } from "@/lib/hashTarget";
 import { useMe } from "@/lib/me";
 import type { ExamView } from "@/lib/api/types";
 import { CODE_STATUS } from "../model";
-import { examBadgeOf, examPanelSub, questionResult, resultSummary, submitAsk, submittedLine, takeNote } from "../exam";
+import { examBadgeOf, examPanelSub, isAnswered, questionResult, resultSummary, submitAsk, submittedLine, takeNote } from "../exam";
 import { statusRows, type StatusRow } from "../submission";
 import { useExamTake, type ExamSaveState } from "../useExamTake";
 import { useTaskDetail } from "../useTaskDetail";
+import { ExamNav, useCurrentQuestion } from "./ExamNav";
 import { ExamQuestionView } from "./ExamQuestionView";
 import { ExamResults } from "./ExamResults";
 import { InlineConfirm } from "./InlineConfirm";
@@ -42,6 +43,8 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
   const [ask, setAsk] = useState(false);
   const examRef = useRef<HTMLDivElement>(null);
   const statusRef = useRef<HTMLHeadingElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
+  const [navOpen, setNavOpen] = useState(false);
   const v = t.view;
   const mode = v ? examMode(v) : null;
 
@@ -90,6 +93,18 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
 
   const qs = v?.questions ? [...v.questions].sort((a, b) => a.ord - b.ord) : [];
   const total = qs.length;
+  const [current, setCurrent] = useCurrentQuestion(listRef, mode === "take" ? total : 0);
+  const done = qs.map((q) => isAnswered(t.answers[q.id]));
+  // 문항 이동: 그 문항 머리로 스크롤(동작 줄이기면 바로) + 포커스. 좁은 화면 판은 닫는다
+  const jump = (i: number) => {
+    const li = listRef.current?.querySelector<HTMLElement>(`[data-qi="${i}"]`);
+    if (!li) return;
+    const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    li.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" });
+    document.getElementById(`exam-q-${qs[i].id}`)?.focus({ preventScroll: true });
+    setCurrent(i);
+    setNavOpen(false);
+  };
   const info = v ? takeNote(v, quietNotAssigned) : null;
   const sum = v && mode === "result" ? resultSummary(v) : null;
   const stamp = v?.attempt?.status === "submitted" ? submittedLine(v.attempt) : null;
@@ -127,14 +142,25 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
 
           {v && mode === "take" && (
             <div ref={examRef} tabIndex={-1} aria-label="시험 문항" className="flex flex-col outline-none">
-              <ol className="m-0 flex list-none flex-col gap-6 p-0 pb-5">
-                {qs.map((q, i) => (
-                  <ExamQuestionView key={q.id} mode="take" q={q} no={i + 1} mine={t.answers[q.id] ?? null} onChange={(a) => t.setAnswer(q.id, a)} disabled={t.submitting} />
-                ))}
-              </ol>
+              {/* 넓으면(@880) 오른쪽에 문항 이동이 붙어 따라온다 — 내용을 가리지 않게 칸을 따로 둔다. 좁으면 하단 막대의 [문항 이동] 판 */}
+              <div className="flex items-start gap-6">
+                <ol ref={listRef} className="m-0 flex min-w-0 flex-1 list-none flex-col gap-6 p-0 pb-5">
+                  {qs.map((q, i) => (
+                    <ExamQuestionView key={q.id} mode="take" q={q} no={i + 1} mine={t.answers[q.id] ?? null} onChange={(a) => t.setAnswer(q.id, a)} disabled={t.submitting} />
+                  ))}
+                </ol>
+                <ExamNav
+                  variant="side"
+                  answered={done}
+                  current={current}
+                  onJump={jump}
+                  className="sticky top-[max(84px,calc(50vh-200px))] hidden max-h-[min(400px,calc(100vh-100px))] w-[220px] shrink-0 overflow-y-auto rounded-[14px] bg-surface p-3 @[880px]:flex"
+                />
+              </div>
               {/* 하단 고정 막대 — DetailView 위 막대(sticky top-0)와 같은 방식. 문항 목록이 끝나면 따라 올라간다 */}
               <div className="sticky bottom-0 z-[2] -mx-3 flex flex-col gap-2 border-t border-line bg-bg-main px-3 py-2 @[560px]:-mx-6 @[560px]:px-6">
-                {ask ? (
+                {navOpen && !ask && <ExamNav id="exam-nav-sheet" variant="sheet" answered={done} current={current} onJump={jump} className="max-h-[40vh] overflow-y-auto pb-1 pt-1 @[880px]:hidden" />}
+            {ask ? (
                   <InlineConfirm
                     text={submitAsk(total - t.answered)}
                     onCancel={() => setAsk(false)}
@@ -161,6 +187,15 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
                         </button>
                       )}
                     </p>
+                    <button
+                      type="button"
+                      aria-expanded={navOpen}
+                      aria-controls="exam-nav-sheet"
+                      onClick={() => setNavOpen((o) => !o)}
+                      className="h-11 shrink-0 cursor-pointer rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink hover:bg-surface-2 @[880px]:hidden"
+                    >
+                      문항 이동
+                    </button>
                     <button type="button" disabled={t.submitting} onClick={() => setAsk(true)} className="h-11 shrink-0 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white disabled:opacity-50">
                       제출하기
                     </button>

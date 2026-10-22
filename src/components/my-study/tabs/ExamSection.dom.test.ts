@@ -81,7 +81,7 @@ const tickSave = async () => {
   });
   await flush();
 };
-const bar = () => host.querySelector(".sticky")!.textContent ?? "";
+const bar = () => host.querySelector(".sticky.bottom-0")!.textContent ?? "";
 
 beforeEach(() => {
   Element.prototype.scrollIntoView = () => {};
@@ -270,7 +270,7 @@ const radio = (k: number) => host.querySelectorAll<HTMLInputElement>("input[type
 describe("ExamSection — 저장 순서(Fix round 1)", () => {
   it("하단 막대에 가리지 않게 — 포커스가 가는 모든 입력에 scroll-mb-20", async () => {
     await mount(view());
-    const focusables = Array.from(host.querySelectorAll<HTMLElement>("ol input, ol button"));
+    const focusables = Array.from(host.querySelectorAll<HTMLElement>("li[data-qi] input, li[data-qi] button"));
     expect(focusables.length).toBe(2 + 3 + 2 + 1);
     for (const el of focusables) expect(el.className).toContain("scroll-mb-20");
   });
@@ -406,5 +406,61 @@ describe("ExamSection — 구역(내 응시 면 · 제출 현황)", () => {
     await mount(view({ reason: "not_assignee", questions: null }));
     expect(panel()).toBeNull();
     expect(host.querySelector("[role=note]")?.textContent).toContain("담당 과제가 아니에요");
+  });
+});
+
+describe("ExamSection — 문항 이동", () => {
+  const nav = () => host.querySelector<HTMLElement>('nav[aria-label="문항 이동"]')!;
+  const cells = () => Array.from(nav().querySelectorAll("button"));
+  it("번호 칸 — aria-label 답함/안 답함 · 지금 문항 aria-current · n/총 답함", async () => {
+    await mount(view({ attempt: { status: "in_progress", answers: { "2": [1] }, score: null, maxScore: null, correctCount: null, submittedAt: null, isLate: null, results: null } }));
+    expect(cells().map((b) => b.getAttribute("aria-label"))).toEqual(["1번 문항 · 안 답함", "2번 문항 · 답함", "3번 문항 · 안 답함", "4번 문항 · 안 답함"]);
+    expect(cells()[0].getAttribute("aria-current")).toBe("step");
+    expect(cells().filter((b) => b.hasAttribute("aria-current")).length).toBe(1);
+    expect(nav().textContent).toContain("1/4 답함");
+    expect(cells()[0].className).toContain("cursor-pointer");
+  });
+  it("답을 고르면 그 칸이 바로 '답함'", async () => {
+    m.save.mockResolvedValue({ savedAt: "x", answered: 1, total: 4 });
+    await mount(view());
+    act(() => host.querySelectorAll<HTMLInputElement>("input[type=radio]")[0].click());
+    expect(cells()[0].getAttribute("aria-label")).toBe("1번 문항 · 답함");
+    expect(nav().textContent).toContain("1/4 답함");
+    await tickSave();
+  });
+  it("칸을 누르면 그 문항으로 스크롤 + 머리에 포커스 + aria-current 이동 (동작 줄이기 → 바로)", async () => {
+    await mount(view());
+    const calls: [string | undefined, ScrollIntoViewOptions | boolean | undefined][] = [];
+    Element.prototype.scrollIntoView = function (this: Element, o?: ScrollIntoViewOptions | boolean) {
+      calls.push([(this as HTMLElement).dataset.qi, o]);
+    };
+    act(() => cells()[2].click());
+    expect(calls).toEqual([["2", { behavior: "smooth", block: "start" }]]);
+    expect(document.activeElement?.id).toBe("exam-q-3");
+    expect(cells()[2].getAttribute("aria-current")).toBe("step");
+    expect(cells()[0].hasAttribute("aria-current")).toBe(false);
+
+    const mm = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: q.includes("reduce") })) as unknown as typeof window.matchMedia;
+    act(() => cells()[1].click());
+    window.matchMedia = mm;
+    expect(calls[1]).toEqual(["1", { behavior: "auto", block: "start" }]);
+  });
+  it("좁은 화면 하단 막대 [문항 이동] — 판을 열고, 고르면 닫힌다", async () => {
+    await mount(view());
+    const toggle = button("문항 이동")!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    act(() => toggle.click());
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const sheet = host.querySelector<HTMLElement>("#exam-nav-sheet")!;
+    expect(sheet.getAttribute("aria-label")).toBe("문항 이동");
+    expect(sheet.querySelector("button")!.className).toContain("h-11");
+    act(() => sheet.querySelectorAll("button")[3].click());
+    expect(host.querySelector("#exam-nav-sheet")).toBeNull();
+    expect(document.activeElement?.id).toBe("exam-q-4");
+  });
+  it("결과 화면에는 문항 이동이 없다", async () => {
+    await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
+    expect(host.querySelector('nav[aria-label="문항 이동"]')).toBeNull();
   });
 });

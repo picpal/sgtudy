@@ -37,8 +37,9 @@ export function ExamQuestionView(p: Props) {
   const pts = res && res.correct === false && res.earned !== null ? `(${res.earned}/${q.points}점)` : `(${q.points}점)`;
 
   return (
-    <li role="group" aria-labelledby={headId} className="flex flex-col gap-2">
-      <div id={headId} className="flex flex-col gap-1">
+    // data-qi·scroll-mt: 문항 이동(ExamNav)이 찾아 상단 고정 막대 아래로 스크롤한다. 머리는 이동 뒤 포커스 자리
+    <li role="group" aria-labelledby={headId} data-qi={no - 1} className="flex scroll-mt-24 flex-col gap-2">
+      <div id={headId} tabIndex={-1} className="flex flex-col gap-1 outline-none">
         <p className="m-0 flex flex-wrap items-center gap-x-[6px] text-[13px] font-semibold text-ink-3">
           <span className="font-bold text-ink">{no}.</span>
           {verdict && <span className={res?.correct ? "text-[#1A7F55]" : "text-warn"}>{verdict}</span>}
