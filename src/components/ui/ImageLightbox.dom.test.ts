@@ -266,4 +266,10 @@ describe("ImageLightbox — 바깥 Esc 처리와 겹치지 않는다", () => {
     expect(dialog()).toBeNull();
     expect(outer).not.toHaveBeenCalled();
   });
+  it("바탕은 완전 불투명 — 투명도 접미사(/95 등)가 없다", () => {
+    mount();
+    const host = document.querySelector<HTMLElement>("[data-image-lightbox]")!;
+    expect(host.className).toMatch(/bg-\[#0b0f17\]/);
+    expect(host.className).not.toMatch(/bg-\S*\/\d+/);
+  });
 });

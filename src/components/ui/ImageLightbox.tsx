@@ -236,7 +236,7 @@ export function ImageLightbox({ items, index, onIndex, onClose, onDownload, onRe
   return createPortal(
     // 바탕은 처음부터 불투명 — 화면 전체에 opacity 페이드를 걸면 첫 프레임들(또는 탭이 가려져 애니메이션이 멈춘 동안)에
     // 반투명 그림 너머로 본문 그림이 겹쳐 보였다. z 는 상단 sticky 막대·토스트(z-50)보다 위
-    <div data-image-lightbox className="fixed inset-0 z-[70] isolate overscroll-contain bg-[#0b0f17]/95">
+    <div data-image-lightbox className="fixed inset-0 z-[70] isolate overscroll-contain bg-[#0b0f17]">
       <div
         ref={box}
         role="dialog"

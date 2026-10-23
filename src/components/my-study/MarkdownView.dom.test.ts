@@ -76,13 +76,13 @@ describe("MarkdownView 그림 — resolver 있음 (A4 · 스펙 §6 렌더)", ()
     expect(h).toMatch(/<img src="[^"]*v\?token=1"[^>]*class="block[^"]*bg-white/);
   });
   it("문단에 그림 하나뿐이면 블록, 글과 섞이면 인라인 (D6)", () => {
-    expect(html("![](attachment:a.png)", resolver())).toMatch(/<p class="m-0"><img [^>]*class="block /);
+    expect(html("![](attachment:a.png)", resolver())).toMatch(/<p class="m-0"><span[^>]*><img [^>]*class="block /);
     expect(html("글 ![](attachment:a.png)", resolver())).toMatch(/<img [^>]*class="inline-block /);
   });
   it("글 사이 그림은 줄 높이 안의 작은 그림, 목록 항목에 그림 하나뿐이면 블록 (B · 디자인 우려)", () => {
     expect(html("글 ![](attachment:a.png) 글", resolver())).toMatch(/<img [^>]*class="inline-block h-\[1\.5em\]/);
     expect(html("| x |\n| - |\n| 표 ![](attachment:a.png) |", resolver())).toMatch(/class="inline-block h-\[1\.5em\]/);
-    expect(html("- ![](attachment:a.png)", resolver())).toMatch(/^<div[^>]*><p class="m-0"><img [^>]*class="block /);
+    expect(html("- ![](attachment:a.png)", resolver())).toMatch(/^<div[^>]*><p class="m-0"><span[^>]*><img [^>]*class="block /);
     expect(html("글 ![](attachment:wait.png)", resolver())).toContain("h-[1.5em] w-[2.5em]");
   });
   it("글 사이 「찾을 수 없어요」 상자는 줄 높이를 벌리지 않는다(min-h 없음), 블록은 44px", () => {
@@ -91,10 +91,25 @@ describe("MarkdownView 그림 — resolver 있음 (A4 · 스펙 §6 렌더)", ()
     expect(inline).not.toContain("min-h-11");
     expect(html("![](attachment:nope.png)", resolver())).toMatch(/<span class="flex min-h-11[^"]*">그림을 찾을 수 없어요/);
   });
+  it("로드 전에는 img 숨김(opacity-0, alt 유지)+스켈레톤, load 뒤에는 스켈레톤이 사라지고 img 가 보인다", () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    act(() => root.render(createElement(MarkdownView, { src: "![구성도](attachment:a.png)", images: resolver({ open: () => {} }) })));
+    const img = host.querySelector("img")!;
+    expect(host.querySelector("[data-img-skeleton]")?.className).toMatch(/bg-line-2 motion-safe:animate-pulse/);
+    expect(img.className).toContain("opacity-0");
+    expect(img.getAttribute("alt")).toBe("구성도");
+    act(() => void img.dispatchEvent(new Event("load")));
+    expect(host.querySelector("[data-img-skeleton]")).toBeNull();
+    expect(img.className).not.toContain("opacity-0");
+    act(() => root.unmount());
+    host.remove();
+  });
   it("open 이 있으면 버튼 안(크게 보기), 없으면 버튼 없음", () => {
     expect(html("![](attachment:a.png)", resolver())).not.toContain("<button");
     const h = html("![](attachment:a.png)", resolver({ open: () => {} }));
-    expect(h).toMatch(/<button type="button"[^>]*><img [^>]*><span class="sr-only">크게 보기<\/span><\/button>/);
+    expect(h).toMatch(/<button type="button"[^>]*><img [^>]*><span data-img-skeleton[^>]*><\/span><span class="sr-only">크게 보기<\/span><\/button>/);
   });
   it("없는 이름 → 「그림을 찾을 수 없어요」, 받는 중 → 스켈레톤", () => {
     expect(html("![](attachment:nope.png)", resolver())).toContain("그림을 찾을 수 없어요 · nope.png");
@@ -131,22 +146,22 @@ describe("MarkdownView 그림만 든 목록 항목 → 목록 밖 블록 그림 
     const h = html("- ![](attachment:a.png)", resolver({ open: () => {} }));
     expect(h).not.toContain("<li");
     expect(h).not.toContain("<ul");
-    expect(h).toMatch(/<p class="m-0"><button type="button" class="relative block/);
+    expect(h).toMatch(/<p class="m-0"><button type="button" class="block rounded-\[10px\] relative/);
   });
   it("목록 중간의 그림 항목은 목록을 나눈다 — ol 번호는 쓴 그대로 이어진다", () => {
     const h = html("1. 가\n2. ![](attachment:a.png)\n3. 다\n4. 라", resolver());
-    expect(h).toMatch(/<ol class="m-0 pl-5 list-decimal"><li>가<\/li><\/ol><p class="m-0"><img [^>]*class="block [^>]*><\/p><ol start="3"[^>]*><li>다<\/li><li>라<\/li><\/ol>/);
+    expect(h).toMatch(/<ol class="m-0 pl-5 list-decimal"><li>가<\/li><\/ol><p class="m-0"><span[^>]*><img [^>]*class="block [^>]*><span data-img-skeleton[^>]*><\/span><\/span><\/p><ol start="3"[^>]*><li>다<\/li><li>라<\/li><\/ol>/);
     const u = html("- 가\n- ![](attachment:a.png)\n- 다", resolver());
     expect(u.match(/<ul /g)).toHaveLength(2);
-    expect(u).not.toMatch(/<li><img/);
+    expect(u).not.toMatch(/<li><span[^>]*><img/);
   });
   it("하위 목록 안의 그림 항목도 블록(부모 항목 안), 하위 목록이 딸린 그림 항목·글 섞인 항목은 그대로", () => {
-    expect(html("- 가\n  - ![](attachment:a.png)", resolver())).toMatch(/<li>가<div class="mt-\[2px\] flex flex-col gap-\[2px\]"><p class="m-0"><img /);
-    expect(html("- 글 ![](attachment:a.png)", resolver())).toMatch(/<li>글 <img [^>]*class="inline-block/);
-    expect(html("- ![](attachment:a.png)\n  - 아래", resolver())).toMatch(/<li><img [^>]*class="block /);
+    expect(html("- 가\n  - ![](attachment:a.png)", resolver())).toMatch(/<li>가<div class="mt-\[2px\] flex flex-col gap-\[2px\]"><p class="m-0"><span[^>]*><img /);
+    expect(html("- 글 ![](attachment:a.png)", resolver())).toMatch(/<li>글 <span[^>]*><img [^>]*class="inline-block/);
+    expect(html("- ![](attachment:a.png)\n  - 아래", resolver())).toMatch(/<li><span[^>]*><img [^>]*class="block /);
   });
   it("단독 줄 그림은 이미 블록 (권장 문법)", () => {
-    expect(html("글\n\n![](attachment:a.png)\n\n글", resolver())).toMatch(/<p class="m-0">글<\/p><p class="m-0"><img [^>]*class="block /);
+    expect(html("글\n\n![](attachment:a.png)\n\n글", resolver())).toMatch(/<p class="m-0">글<\/p><p class="m-0"><span[^>]*><img [^>]*class="block /);
   });
 });
 

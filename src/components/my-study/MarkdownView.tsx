@@ -90,15 +90,18 @@ function AttachedImg({ s, name, images, block }: { s: ImgToken; name: string; im
       }}
       onError={onError}
       style={sized ? blockBox(r.fileId) : undefined}
-      className={`${block ? "block h-auto max-h-[min(560px,70vh)] max-w-full rounded-[10px]" : INLINE_IMG} object-contain ${r.svg ? "bg-white" : ""} ${loaded ? "" : block ? `${sized ? "" : "min-h-40 min-w-40 "}bg-surface-2 motion-safe:animate-pulse` : "min-w-[2.5em] bg-surface-2 motion-safe:animate-pulse"}`}
+      className={`${block ? "block h-auto max-h-[min(560px,70vh)] max-w-full rounded-[10px]" : INLINE_IMG} object-contain ${r.svg ? "bg-white" : ""} ${loaded ? "" : `${block ? (sized ? "" : "min-h-40 min-w-40 ") : "min-w-[2.5em] "}opacity-0`}`}
     />
   );
-  if (!images.open) return img;
+  // 불러오는 동안 img 는 자리만 차지하고(opacity-0 — 깨진 아이콘·대체 글자가 안 보이게) 그 위에 스켈레톤을 깐다
+  const skeleton = loaded ? null : <span data-img-skeleton aria-hidden="true" className={`absolute inset-0 bg-line-2 motion-safe:animate-pulse ${block ? "rounded-[10px]" : "rounded-[4px]"}`} />;
+  if (!images.open) return <span className={block ? "relative block max-w-full" : "relative inline-block max-w-full align-middle leading-none"}>{img}{skeleton}</span>;
   const open = images.open;
   const id = r.fileId;
   return (
-    <button type="button" onClick={() => open(id)} className={`${block ? "relative block rounded-[10px]" : "inline-block rounded-[4px] align-middle leading-none"} max-w-full cursor-zoom-in p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint`}>
+    <button type="button" onClick={() => open(id)} className={`${block ? "block rounded-[10px]" : "inline-block rounded-[4px] align-middle leading-none"} relative max-w-full cursor-zoom-in p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint`}>
       {img}
+      {skeleton}
       <span className="sr-only">크게 보기</span>
       {/* 「눌러서 확대」 — 손가락으로 쓰는 화면만(마우스는 돋보기 커서). 블록 그림에만, 작게 */}
       {block && loaded && (
