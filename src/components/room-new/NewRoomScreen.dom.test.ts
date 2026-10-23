@@ -114,7 +114,8 @@ describe("인터뷰 흐름", () => {
     const draft = { title: "AWS SAA", intro: "소개", startDate: "2026-10-26", endDate: "2027-01-17", maxMembers: 6, minMembers: 4, isPublic: true, joinMode: "approval", rulesMd: "- 규칙", tags: [{ slug: "aws", label: "AWS", tone: "mint" }] };
     fetchMock.mockImplementationOnce(() => json(200, turn({ say: "정리했어요.", draft, ask: null, missing: [], done: true })));
     const host = await mount(true, "ai");
-    await act(async () => byText(host, "미리보기로")!.click());
+    // 끝나면 로컬 질문(회차 초안) — 아니요 → 미리보기(회차 요청 없음)
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((b) => b.textContent === "아니요, 미리보기로")!.click());
     expect(q(host, '[role="tab"][aria-selected="true"]')!.textContent).toBe("직접 입력");
     expect(q<HTMLInputElement>(host, 'input[name="title"]')!.value).toBe("AWS SAA");
     expect(q<HTMLInputElement>(host, 'input[name="maxMembers"]')!.value).toBe("6");

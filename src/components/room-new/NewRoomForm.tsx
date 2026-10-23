@@ -15,8 +15,10 @@ import { clampCp, firstErrorKey, maxEndDate, revalidateOnChange, serverFieldErro
 /**
  * 방 만들기 폼 — 값(values·tags)은 밖(NewRoomScreen)이 들고 있다. AI 인터뷰와 같은 상태를 공유해 모드를 오가도 값이 남는다(D13).
  * banner: 폼 위 안내(인터뷰로 채운 초안 등). initialMore: 「더 설정하기」 를 펼친 채 시작. initialFocus: 처음 포커스할 칸 이름(없으면 제목)
+ * beforeSubmit: [방 만들기] 바로 위(회차 초안·바로 모집). afterCreate: 방을 만든 뒤 회차 적용·모집 시작 — 돌려준 note 를 이동 주소에 붙인다.
+ * afterCreate 가 실패해도 방은 만들어졌으니 반드시 편집 화면으로 간다(2단계 D22·Review Focus 1)
  */
-export function NewRoomForm({ values: v, tags, onChange, onTagsChange, banner, initialMore = false, initialFocus }: {
+export function NewRoomForm({ values: v, tags, onChange, onTagsChange, banner, initialMore = false, initialFocus, beforeSubmit, afterCreate, submitLabel = "방 만들기" }: {
   values: NewRoomValues;
   tags: TagItem[];
   onChange: (v: NewRoomValues) => void;
@@ -24,6 +26,9 @@ export function NewRoomForm({ values: v, tags, onChange, onTagsChange, banner, i
   banner?: ReactNode;
   initialMore?: boolean;
   initialFocus?: string;
+  beforeSubmit?: ReactNode;
+  afterCreate?: (slug: string) => Promise<string | null>;
+  submitLabel?: string;
 }) {
   const router = useRouter();
   const today = useToday();
@@ -74,7 +79,8 @@ export function NewRoomForm({ values: v, tags, onChange, onTagsChange, banner, i
       });
       // 새로 쓴 태그(사전에 없는 라벨)는 room_create 가 받지 않는다 — 만든 뒤 전체 목록으로 한 번 더 저장. 실패해도 방은 만들어졌으니 넘어간다(방 설정에서 다시 고칠 수 있다)
       if (toPutArgs(tags).freeLabels.length) await putRoomTags(room.slug, tags).catch(() => undefined);
-      router.push(routes.myStudyEdit(room.slug));
+      const note = afterCreate ? await Promise.resolve(room.slug).then(afterCreate).catch(() => "rounds-skipped") : null;
+      router.push(note ? `${routes.myStudyEdit(room.slug)}&note=${encodeURIComponent(note)}` : routes.myStudyEdit(room.slug));
       router.refresh();
     } catch (err) {
       const a = toApiError(err);
@@ -119,8 +125,9 @@ export function NewRoomForm({ values: v, tags, onChange, onTagsChange, banner, i
         </div>
       )}
 
+      {beforeSubmit}
       {serverError && <p role="alert" className="m-0 text-[13px] text-warn">{serverError}</p>}
-      <button type="submit" disabled={busy} className="flex h-12 items-center justify-center rounded-[24px] bg-navy text-[15px] font-semibold text-white disabled:bg-slate-soft disabled:text-muted">{busy ? "만드는 중…" : "방 만들기"}</button>
+      <button type="submit" disabled={busy} className="flex min-h-12 items-center justify-center rounded-[24px] bg-navy px-4 text-[15px] font-semibold text-white disabled:bg-slate-soft disabled:text-muted">{busy ? "만드는 중…" : submitLabel}</button>
     </form>
   );
 }

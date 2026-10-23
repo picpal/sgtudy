@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL, isDirty, reduce, toMessages } from "./state";
+import { INITIAL, isDirty, reduce, toMessages, userLines } from "./state";
 
 const res = { say: "언제 시작할까요?", patch: {}, draft: {}, ask: { field: "startDate" as const, kind: "single" as const }, missing: ["startDate" as const], dropped: [], done: false, turn: 1, turnsLeft: 12 };
 
@@ -22,5 +22,40 @@ describe("인터뷰 상태 리듀서", () => {
   });
   it("409 AI_TURN_LIMIT 는 limit 을 켠다", () => {
     expect(reduce(INITIAL, { type: "fail", err: { error: "AI_TURN_LIMIT", message: "m", status: 409 } }).limit).toBe(true);
+  });
+});
+
+describe("회차·모집 로컬 질문 (2단계 D33·D36)", () => {
+  const done = { ...res, done: true, ask: null, missing: [] };
+  it("style 칩 답을 기억 · done 이면 asking · 예 → busy → recruitAsking → 답 → settled", () => {
+    let s = reduce(INITIAL, { type: "send", text: "매주 과제, 시험", answer: { field: "style", value: "weekly-task,exam" } });
+    expect(s.style).toEqual(["weekly-task", "exam"]);
+    s = reduce(s, { type: "send", text: "x", answer: { field: "extra", value: "y" } });
+    expect(s.style).toEqual(["weekly-task", "exam"]); // 다른 칩 답은 덮지 않는다
+    s = reduce(s, { type: "turn", res });
+    expect(s.rounds).toBe("idle");
+    s = reduce(s, { type: "turn", res: done });
+    expect(s.rounds).toBe("asking");
+    s = reduce(s, { type: "roundsStart" });
+    expect(s.rounds).toBe("busy");
+    s = reduce(s, { type: "roundsFail", err: { error: "AI_UNAVAILABLE", message: "m", status: 503 } });
+    expect([s.rounds, s.roundsError?.status]).toEqual(["error", 503]);
+    s = reduce(s, { type: "roundsStart" });
+    expect([s.rounds, s.roundsError]).toEqual(["busy", null]);
+    s = reduce(s, { type: "roundsDone" });
+    expect(s.rounds).toBe("recruitAsking");
+    s = reduce(s, { type: "recruitAnswer", yes: false });
+    expect([s.rounds, s.openRecruit]).toEqual(["settled", false]);
+    // 답한 뒤 대화를 이어 가도 다시 묻지 않는다
+    expect(reduce(s, { type: "turn", res: done }).rounds).toBe("settled");
+  });
+  it("아니요 → settled · 모집은 안 물음(null)", () => {
+    const s = reduce(reduce(INITIAL, { type: "turn", res: done }), { type: "roundsSkip" });
+    expect([s.rounds, s.openRecruit]).toEqual(["settled", null]);
+  });
+  it("userLines: user 줄만 뒤에서 12개", () => {
+    let s = INITIAL;
+    for (let i = 0; i < 15; i++) s = reduce(reduce(s, { type: "send", text: `u${i}`, answer: null }), { type: "turn", res });
+    expect(userLines(s)).toEqual(Array.from({ length: 12 }, (_, i) => `u${i + 3}`));
   });
 });

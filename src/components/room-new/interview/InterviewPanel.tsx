@@ -2,22 +2,37 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type Dispatch } from "react";
-import type { Draft, Field } from "@/lib/ai/schema";
+import { isYmd } from "@/lib/ai/normalize";
+import type { RoundsResponse } from "@/lib/ai/rounds/schema";
+import { splitRounds } from "@/lib/ai/rounds/schedule";
+import type { Ask, Draft, Field } from "@/lib/ai/schema";
+import { openRecruitNote } from "@/lib/api/leader";
 import { routes } from "@/lib/routes";
 import { clampCp, cpLength } from "../validate";
-import { postTurn } from "./api";
+import { postRounds, postTurn } from "./api";
 import { DraftCard } from "./DraftCard";
 import { MultiChips, OtherInput, otherLabel, SingleChips } from "./Chips";
 import { useFollowBottom } from "./follow";
-import { toMessages, type Action, type InterviewState } from "./state";
+import { toMessages, userLines, type Action, type InterviewState } from "./state";
 
-/* AI 인터뷰 대화(§9) — 말풍선 + 칩 + 입력. 방은 만들지 않는다: 끝나면 [미리보기로] 가 수동 폼으로 넘긴다(D11) */
+/* AI 인터뷰 대화(§9) — 말풍선 + 칩 + 입력. 방은 만들지 않는다: 끝나면 [미리보기로] 가 수동 폼으로 넘긴다(D11).
+   끝난 뒤 로컬 질문 두 개(2단계 D33·D36, AI 호출 없음): 회차 초안을 잡을까요? → (잡았으면) 바로 모집할까요? → 미리보기 */
 
 const INPUT_MAX = 500;
 /** 건너뛰기가 되는 질문(필수가 아닌 칸) */
 const OPTIONAL: readonly Field[] = ["style", "extra", "minMembers", "leaderDoesTasks", "descriptionMd", "rulesMd", "tags"];
+/** 로컬 질문 칩 — SingleChips 모양을 빌린다(field 는 쓰이지 않음) */
+const localAsk = (yes: string, no: string): Ask => ({ field: "extra", kind: "single", options: [{ label: yes, value: "yes" }, { label: no, value: "no" }] });
+const ROUNDS_ASK = localAsk("네, 잡아 주세요", "아니요, 미리보기로");
+const RECRUIT_ASK = localAsk("네, 바로 모집 시작", "아니요, 나중에 할게요");
+const md = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
+/** 회차 질문 말 — 서버와 같은 분할로 몇 회차인지 미리 알린다 */
+export function roundsQuestion(start: string, end: string): string {
+  const s = splitRounds(start, end);
+  return `회차 초안도 자동으로 잡아 드릴까요? ${md(start)}~${md(end)} 을 ${s.rounds.length}${s.cadenceDays === 7 ? "주차" : "회차"}로 나누고 제목·목표·과제를 채워요.`;
+}
 
-export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinish, onManual, onBudgetExceeded }: {
+export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinish, onManual, onBudgetExceeded, onRounds, onRecruitPref }: {
   state: InterviewState;
   dispatch: Dispatch<Action>;
   /** 지금 폼 값으로 만든 초안(채운 칸만) */
@@ -27,6 +42,10 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
   onFinish: () => void;
   onManual: () => void;
   onBudgetExceeded: (message: string) => void;
+  /** 회차 초안을 받았다 — 미리보기 섹션에 둔다 */
+  onRounds: (data: RoundsResponse) => void;
+  /** 바로 모집 시작 답 — 미리보기 체크 초기값 */
+  onRecruitPref: (yes: boolean) => void;
 }) {
   const router = useRouter();
   const [text, setText] = useState("");
@@ -59,7 +78,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
   useEffect(() => inputRef.current?.focus(), []);
 
   const send = (say: string, answer: { field: Field; value: string } | null = null) => {
-    if (state.busy || !say.trim()) return;
+    if (state.busy || state.rounds === "busy" || !say.trim()) return;
     forceFollow(); // 직접 보낸 순간엔 위로 올려 보고 있었어도 맨 아래로
     const messages = [...toMessages(state), { role: "user" as const, text: clampCp(say.trim(), INPUT_MAX) }];
     dispatch({ type: "send", text: messages.at(-1)!.text, answer });
@@ -73,12 +92,37 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
     void run(toMessages(state), state.lastAnswer);
   };
 
-  const { ask, busy, error, done, limit } = state;
+  const askRounds = async () => {
+    forceFollow();
+    dispatch({ type: "roundsStart" });
+    const r = await postRounds({ draft, userLines: userLines(state), style: state.style });
+    if (r.ok) {
+      onRounds(r.data);
+      dispatch({ type: "roundsDone" });
+      return;
+    }
+    if (r.err.status === 401) return router.push(routes.login(`${routes.createRoom()}?mode=ai`));
+    dispatch({ type: "roundsFail", err: r.err });
+  };
+  const skipRounds = () => {
+    dispatch({ type: "roundsSkip" });
+    onFinish();
+  };
+  const answerRecruit = (yes: boolean) => {
+    dispatch({ type: "recruitAnswer", yes });
+    onRecruitPref(yes);
+    onFinish();
+  };
+
+  const { ask, busy, error, done, limit, rounds, roundsError } = state;
+  // 회차를 물을 수 있는가 — 제목·기간이 있어야 서버가 나눈다(없으면 이론상 불가지만 바로 미리보기로, §7)
+  const canRounds = done && !!draft.title && isYmd(draft.startDate) && isYmd(draft.endDate);
+  const roundsBusy = rounds === "busy";
   const closed = limit || done;
   const showChips = !!ask && !busy && !error && !closed;
   const canSkip = !!ask && OPTIONAL.includes(ask.field);
   // 말 추가·생각 중·칩 도착·오류·직접 입력 열기 때마다 맨 아래(칩까지)를 입력 막대 위에 보이게 — 하단 근처일 때만
-  const forceFollow = useFollowBottom(endRef, barRef, `${state.lines.length}|${busy}|${showChips}|${!!error}|${done}|${other}`);
+  const forceFollow = useFollowBottom(endRef, barRef, `${state.lines.length}|${busy}|${showChips}|${!!error}|${done}|${other}|${rounds}`);
 
   return (
     <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start lg:gap-6">
@@ -131,7 +175,41 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
           </div>
         )}
 
-        {done && (
+        {/* 로컬 질문 — 대화(lines)에 넣지 않는다(서버로 다시 가지 않게). 바뀌는 말을 읽어 주도록 자리는 늘 있다 */}
+        <div aria-live="polite" className="flex flex-col gap-2 empty:hidden">
+          {canRounds && !busy && rounds === "asking" && (
+            <>
+              <p className="m-0 max-w-[85%] self-start whitespace-pre-wrap break-words rounded-[16px] bg-surface-2 px-4 py-3 text-[15px] leading-[1.55] text-ink">
+                <span className="sr-only">AI: </span>{roundsQuestion(draft.startDate!, draft.endDate!)}
+              </p>
+              <SingleChips key="rounds" ask={ROUNDS_ASK} onPick={(_, v) => (v === "yes" ? void askRounds() : skipRounds())} />
+            </>
+          )}
+          {roundsBusy && (
+            <p aria-busy="true" className="m-0 self-start rounded-[16px] bg-surface-2 px-4 py-3 text-[14px] text-muted">회차를 잡는 중… 10~40초 걸려요</p>
+          )}
+          {rounds === "recruitAsking" && (
+            <>
+              <p className="m-0 max-w-[85%] self-start whitespace-pre-wrap break-words rounded-[16px] bg-surface-2 px-4 py-3 text-[15px] leading-[1.55] text-ink">
+                <span className="sr-only">AI: </span>회차 초안을 잡았어요. 방을 만들면서 바로 모집도 시작할까요? {openRecruitNote({ isPublic: draft.isPublic ?? true, joinMode: draft.joinMode ?? "direct" })}
+              </p>
+              <SingleChips key="recruit" ask={RECRUIT_ASK} onPick={(_, v) => answerRecruit(v === "yes")} />
+            </>
+          )}
+        </div>
+        {rounds === "error" && roundsError && (
+          <div role="alert" className="flex flex-col gap-2 self-start rounded-[16px] border border-line bg-surface px-4 py-3">
+            <p className="m-0 text-[14px] text-warn">{roundsError.message}</p>
+            <div className="flex flex-wrap gap-2">
+              {roundsRetryable(roundsError) && (
+                <button type="button" onClick={() => void askRounds()} className="h-11 rounded-[22px] border border-line-3 px-4 text-[14px] font-semibold text-ink-2">다시 시도</button>
+              )}
+              <button type="button" onClick={skipRounds} className="h-11 rounded-[22px] bg-navy px-4 text-[14px] font-semibold text-white">그냥 미리보기로</button>
+            </div>
+          </div>
+        )}
+
+        {done && (!canRounds || rounds === "settled") && (
           <button type="button" onClick={onFinish} className="flex h-12 items-center justify-center self-start rounded-[24px] bg-navy px-6 text-[15px] font-semibold text-white">
             미리보기로
           </button>
@@ -159,12 +237,12 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
                   if (e.key === "Enter" && e.nativeEvent.isComposing) e.preventDefault(); // 한글 조합 중 Enter 는 보내지 않는다
                 }}
                 placeholder={done ? "바꿀 항목이 있으면 적어 주세요" : "답을 적어 주세요"}
-                disabled={busy}
+                disabled={busy || roundsBusy}
                 aria-describedby="interview-count"
                 enterKeyHint="send"
                 className="h-12 min-w-0 flex-1 rounded-[12px] border border-line-3 bg-surface px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE] disabled:bg-surface-2"
               />
-              <button type="submit" disabled={busy || !text.trim()} className="h-12 shrink-0 rounded-[24px] bg-navy px-5 text-[15px] font-semibold text-white disabled:bg-slate-soft disabled:text-muted">보내기</button>
+              <button type="submit" disabled={busy || roundsBusy || !text.trim()} className="h-12 shrink-0 rounded-[24px] bg-navy px-5 text-[15px] font-semibold text-white disabled:bg-slate-soft disabled:text-muted">보내기</button>
             </form>
           )}
           <div className="flex flex-wrap items-center gap-x-3">
@@ -179,6 +257,10 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
     </div>
   );
 }
+
+/** 회차 초안 다시 시도가 의미 있는가 — 오늘 몫을 다 썼거나 전체 예산이 닫혔으면 아니다 */
+const roundsRetryable = (e: { error: string; details?: Record<string, unknown> }) =>
+  e.error !== "AI_BUDGET_EXCEEDED" && !(e.error === "RATE_LIMITED" && (e.details?.window === "rounds" || e.details?.window === "day"));
 
 /** 오류 말풍선 버튼 — 잠시 후 다시(카운트다운)·다시 시도·직접 입력으로 이어서(초안 유지) */
 function RetryRow({ seconds, canRetry, onRetry, onManual, onFinish }: { seconds: number; canRetry: boolean; onRetry: () => void; onManual: () => void; onFinish?: () => void }) {

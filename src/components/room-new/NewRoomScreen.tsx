@@ -6,13 +6,18 @@ import { AppHeader } from "@/components/ui/AppHeader";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NotificationBell } from "@/components/ui/NotificationBell";
 import { PageBody } from "@/components/ui/PageBody";
+import type { RoundsResponse } from "@/lib/ai/rounds/schema";
 import type { Draft } from "@/lib/ai/schema";
+import { applyRoundsPlan, tryOpenRecruit, withOnly } from "@/lib/api/plan";
 import { changedKeys, draftKeys, fromNewRoomValues, toNewRoomValues, toTagItems, type FilledKey } from "@/lib/ai/toForm";
 import { useToday } from "@/lib/today";
 import { useLeaveConfirm } from "@/lib/useLeaveConfirm";
+import { postRounds } from "./interview/api";
 import { InterviewPanel } from "./interview/InterviewPanel";
-import { INITIAL, isDirty, reduce } from "./interview/state";
+import { INITIAL, isDirty, reduce, userLines } from "./interview/state";
 import { NewRoomForm } from "./NewRoomForm";
+import { RecruitNowField } from "./RecruitNowField";
+import { includedStats, RoundsDraftSection } from "./RoundsDraftSection";
 import type { TagItem } from "./tags";
 import { EMPTY_VALUES, firstErrorKey, validateNewRoom, type NewRoomValues } from "./validate";
 
@@ -36,6 +41,12 @@ export function NewRoomScreen({ aiEnabled, initialMode }: { aiEnabled: boolean; 
   const [banner, setBanner] = useState<string | null>(null);
   const [focusField, setFocusField] = useState<string | undefined>();
   const tabsId = useId();
+  // 회차 초안(2단계) — 받은 때의 기간을 함께 둔다. 폼에서 기간을 바꾸면 stale(적용 안 함, [다시 생성] 안내)
+  const [rounds, setRounds] = useState<{ data: RoundsResponse; start: string; end: string } | null>(null);
+  const [excluded, setExcluded] = useState<ReadonlySet<number>>(new Set());
+  const [regen, setRegen] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
+  // 바로 모집 시작(D37) — 회차 초안이 있으면 켜진 채, 인터뷰에서 "아니요" 면 꺼진 채
+  const [openRecruit, setOpenRecruit] = useState(true);
 
   const addFilled = (keys: FilledKey[]) => setFilled((s) => (keys.every((k) => s.has(k)) ? s : new Set([...s, ...keys])));
   const onFormChange = (next: NewRoomValues) => {
@@ -60,6 +71,39 @@ export function NewRoomScreen({ aiEnabled, initialMode }: { aiEnabled: boolean; 
     setMode("manual");
   };
   const onFinish = () => toManual("AI 인터뷰로 채운 초안이에요 · 확인하고 만들어 주세요");
+  const onRounds = (data: RoundsResponse) => {
+    setRounds({ data, start: values.startDate, end: values.endDate });
+    setExcluded(new Set());
+    setRegen({ busy: false, error: null });
+  };
+  const regenerate = async () => {
+    setRegen({ busy: true, error: null });
+    const r = await postRounds({ draft, userLines: userLines(interview), style: interview.style });
+    if (r.ok) onRounds(r.data);
+    else setRegen({ busy: false, error: r.err.message });
+  };
+  const toggleRound = (i: number) => setExcluded((s) => {
+    const n = new Set(s);
+    if (!n.delete(i)) n.add(i);
+    return n;
+  });
+  const stale = !!rounds && (rounds.start !== values.startDate || rounds.end !== values.endDate);
+  const inc = rounds && !stale ? includedStats(rounds.data, excluded) : null;
+  // 모집 시작은 말단 과제(과제·시험 리프)가 1개 이상 함께 적용될 때만(ROOM_NO_LEAF_TASK)
+  const canRecruit = !!inc && inc.leaves > 0;
+  const recruitNow = openRecruit && canRecruit;
+  const withRounds = !!inc && inc.rounds > 0;
+  const submitLabel = withRounds ? `방 만들기 · 회차 ${inc.rounds}개${recruitNow ? " · 바로 모집" : " 함께"}` : "방 만들기";
+  // 방이 만들어진 뒤: 회차 적용 → (적용됐고 켰으면) 모집 시작. 결과는 note — 편집 화면이 토스트로 알린다
+  const afterCreate = withRounds
+    ? async (slug: string) => {
+        const r = await applyRoundsPlan(slug, withOnly(rounds!.data.plan, excluded));
+        if (r !== "applied") return r;
+        if (!recruitNow) return null;
+        const o = await tryOpenRecruit(slug);
+        return o === "applied" ? null : o;
+      }
+    : undefined;
   const onBudgetExceeded = (message: string) => {
     setAiHidden(true); // 이번 방문 동안 세그먼트를 숨긴다(§10)
     toManual(message);
@@ -87,6 +131,14 @@ export function NewRoomScreen({ aiEnabled, initialMode }: { aiEnabled: boolean; 
       initialMore={moreOpen}
       initialFocus={focusField}
       banner={banner && <p role="status" className="m-0 rounded-[12px] bg-[#F5FBF9] px-4 py-3 text-[14px] font-semibold text-mint">{banner}</p>}
+      submitLabel={submitLabel}
+      afterCreate={afterCreate}
+      beforeSubmit={
+        <>
+          {rounds && <RoundsDraftSection data={rounds.data} excluded={excluded} onToggle={toggleRound} stale={stale} busy={regen.busy} error={regen.error} onRegenerate={() => void regenerate()} />}
+          <RecruitNowField checked={recruitNow} disabled={!canRecruit} onChange={setOpenRecruit} isPublic={values.isPublic} joinMode={values.joinMode} />
+        </>
+      }
     />
   );
 
@@ -118,6 +170,8 @@ export function NewRoomScreen({ aiEnabled, initialMode }: { aiEnabled: boolean; 
                   onFinish={onFinish}
                   onManual={() => toManual(null)}
                   onBudgetExceeded={onBudgetExceeded}
+                  onRounds={onRounds}
+                  onRecruitPref={setOpenRecruit}
                 />
               )}
             </div>
