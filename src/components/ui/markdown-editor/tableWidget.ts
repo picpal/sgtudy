@@ -5,7 +5,7 @@
 import { EditorView, WidgetType } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
-import { parseInline } from "@/lib/markdown/inline";
+import { imgLabel, parseInline } from "@/lib/markdown/inline";
 import { parseGfmTable, serializeGfmTable, insertRow, deleteRow, insertColumn, deleteColumn, setAlign, seqColumns, setSeqColumn, renumberSeq } from "@/lib/markdown/gfmTable";
 import type { TableModel, Align } from "@/lib/markdown/gfmTable";
 import { mod, shift } from "./platform";
@@ -19,6 +19,8 @@ export function renderCell(cell: HTMLElement, raw: string): void {
     if (i > 0) cell.appendChild(document.createElement("br"));
     for (const s of parseInline(line)) {
       if (s.t === "text") { cell.appendChild(document.createTextNode(s.v)); continue; }
+      // 그림은 셀에서 불러오지 않는다 — 자리표시 글자(md-images 스펙 §5)
+      if (s.t === "img") { cell.appendChild(document.createTextNode(`[그림: ${imgLabel(s)}]`)); continue; }
       const el = document.createElement(s.t === "b" ? "strong" : s.t === "i" ? "em" : s.t === "s" ? "del" : s.t === "code" ? "code" : "a");
       el.textContent = s.v;
       if (s.t === "a") { (el as HTMLAnchorElement).href = s.href; el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer nofollow"); }

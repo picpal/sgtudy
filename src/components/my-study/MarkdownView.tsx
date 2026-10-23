@@ -1,7 +1,8 @@
 "use client";
 
 import { createElement, Fragment } from "react";
-import { headingTag, parseInline, parseMarkdown, type MdBlock } from "./markdown";
+import { imgLabel } from "@/lib/markdown/inline";
+import { headingTag, parseInline, parseMarkdown, type MdBlock, type MdInline } from "./markdown";
 
 /** 줄바꿈(\n)을 <br> 로 — 표 셀(<br>)·문단 안 줄바꿈 */
 function Lines({ text }: { text: string }) {
@@ -17,6 +18,14 @@ function Lines({ text }: { text: string }) {
   );
 }
 
+/** 그림 토큰 — 외부 그림은 불러오지 않고 링크로(D2), 첨부 그림은 풀 노드가 없으면 자리표시 글자(D4) */
+function Img({ s }: { s: Extract<MdInline, { t: "img" }> }) {
+  if (s.src.kind === "external") {
+    return <a href={s.src.href} target="_blank" rel="noopener noreferrer nofollow" className="text-mint underline">그림 링크: {imgLabel(s)}</a>;
+  }
+  return <span className="text-muted">[그림: {imgLabel(s)}]</span>;
+}
+
 export function Inline({ text }: { text: string }) {
   return (
     <>
@@ -26,6 +35,7 @@ export function Inline({ text }: { text: string }) {
         : s.t === "s" ? <del key={i} className="text-muted">{s.v}</del>
         : s.t === "code" ? <code key={i} className="rounded-[5px] bg-surface-2 px-[5px] py-px text-[13px]">{s.v}</code>
         : s.t === "a" ? <a key={i} href={s.href} target="_blank" rel="noopener noreferrer nofollow" className="text-mint underline">{s.v}</a>
+        : s.t === "img" ? <Img key={i} s={s} />
         : <Fragment key={i}>{s.v}</Fragment>,
       )}
     </>
