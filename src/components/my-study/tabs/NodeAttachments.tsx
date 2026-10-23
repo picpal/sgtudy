@@ -62,7 +62,7 @@ export function NodeAttachmentsView({ files, onOpen, onRemove, busy = null, remo
         {files.map((f) => (
           <li key={f.id} className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] border border-line px-3 py-1">
             {preview && isImageMime(f.contentType) ? <Thumb f={f} preview={preview} /> : <span className={BADGE}>{fileBadge(f.contentType)}</span>}
-            <span className="flex min-w-0 flex-[1_1_180px] flex-col">
+            <span className="flex min-w-0 flex-[1_1_120px] flex-col">
               <span className="text-[14px] text-ink [overflow-wrap:anywhere]">{f.name}</span>
               <span className="text-[12px] text-muted">{sizeText(f.size)}</span>
             </span>

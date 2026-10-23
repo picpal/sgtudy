@@ -52,16 +52,18 @@ export function ImageLightbox({ items, index, onIndex, onClose, onDownload, onRe
     const j = i + d;
     if (j >= 0 && j < n) onIndex(j);
   };
+  // Esc·←/→ — 처리하면 기본 동작을 막는다(defaultPrevented 를 보는 바깥 Esc 처리가 다시 반응하지 않게)
+  const onNavKey = (e: { key: string; defaultPrevented: boolean; preventDefault: () => void }) => {
+    if (e.defaultPrevented) return false;
+    if (e.key === "Escape") onClose();
+    else if (e.key === "ArrowLeft" || e.key === "ArrowRight") go(e.key === "ArrowLeft" ? -1 : 1);
+    else return false;
+    e.preventDefault();
+    return true;
+  };
+  // 포커스가 상자 밖일 때(드물다) 대비 — 상자 안 키는 아래 onKeyDown 이 먼저 처리한다
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        e.preventDefault();
-        go(e.key === "ArrowLeft" ? -1 : 1);
-      }
-    };
+    const onKey = (e: KeyboardEvent) => void onNavKey(e);
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   });
@@ -107,7 +109,11 @@ export function ImageLightbox({ items, index, onIndex, onClose, onDownload, onRe
         role="dialog"
         aria-modal="true"
         aria-label={`${cur.name} (${i + 1}/${n})`}
-        onKeyDown={onTrapKey}
+        onKeyDown={(e) => {
+          // 포털이어도 React 이벤트는 연 화면(보기 상세)으로 올라간다 — 거기 Esc(← 연 곳)가 같이 돌지 않게 여기서 멈춘다
+          if (onNavKey(e)) e.stopPropagation();
+          else onTrapKey(e);
+        }}
         onClick={(e) => {
           // 그림·버튼 밖(바탕)만 닫는다
           if (swiped.current) swiped.current = false;

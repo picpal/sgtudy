@@ -145,3 +145,20 @@ describe("ImageLightbox (스펙 §4.3)", () => {
     expect(dialog()?.getAttribute("aria-label")).toBe("a.png (1/3)");
   });
 });
+
+describe("ImageLightbox — 바깥 Esc 처리와 겹치지 않는다", () => {
+  it("상자 안 Esc 는 연 화면의 onKeyDown(React 포털 버블)까지 가지 않는다", () => {
+    const outer = vi.fn();
+    function Host() {
+      const [open, setOpen] = useState(true);
+      return createElement("section", { onKeyDown: (e: { key: string }) => outer(e.key) }, open && createElement(ImageLightbox, { items: ITEMS, index: 0, onIndex: () => {}, onClose: () => setOpen(false), onDownload: () => {} }));
+    }
+    const host = document.body.appendChild(document.createElement("div"));
+    root = createRoot(host);
+    act(() => root!.render(createElement(Host)));
+    key("ArrowRight");
+    key("Escape");
+    expect(dialog()).toBeNull();
+    expect(outer).not.toHaveBeenCalled();
+  });
+});
