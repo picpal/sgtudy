@@ -869,6 +869,8 @@ export const ROOM_CASES: Case[] = [
         "comment_list(text,bigint,bigint,bigint)", "comment_create(text,bigint,text)", "comment_update(text,bigint,text)", "comment_delete(text,bigint)",
         // 0044: 의견 보내기(내부 feedback_* 헬퍼는 GRANT 없음)
         "feedback_submit(text,text,jsonb)",
+        // 0046: 오답노트(내부 wrong_note_* 헬퍼는 GRANT 없음)
+        "wrong_note_list(text)", "wrong_note_mine()", "wrong_note_practice(text,jsonb)", "wrong_note_master(text,bigint,boolean)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

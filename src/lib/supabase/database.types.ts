@@ -341,6 +341,74 @@ export type Database = {
           },
         ]
       }
+      exam_practice: {
+        Row: {
+          correct_count: number
+          last_answer: Json | null
+          last_correct: boolean | null
+          last_practiced_at: string | null
+          mastered_at: string | null
+          node_id: number
+          question_id: number
+          updated_at: string
+          user_id: string
+          wrong_count: number
+        }
+        Insert: {
+          correct_count?: number
+          last_answer?: Json | null
+          last_correct?: boolean | null
+          last_practiced_at?: string | null
+          mastered_at?: string | null
+          node_id: number
+          question_id: number
+          updated_at?: string
+          user_id: string
+          wrong_count?: number
+        }
+        Update: {
+          correct_count?: number
+          last_answer?: Json | null
+          last_correct?: boolean | null
+          last_practiced_at?: string | null
+          mastered_at?: string | null
+          node_id?: number
+          question_id?: number
+          updated_at?: string
+          user_id?: string
+          wrong_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_practice_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
+            referencedColumns: ["node_id"]
+          },
+          {
+            foreignKeyName: "exam_practice_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "exam_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_practice_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_practice_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exam_questions: {
         Row: {
           answer: Json
@@ -3297,6 +3365,65 @@ export type Database = {
       }
       task_get: { Args: { p_node: number; p_slug: string }; Returns: Json }
       task_node_json: { Args: { p_node: number; p_uid: string }; Returns: Json }
+      wrong_note_has_exam: { Args: { p_room: number }; Returns: boolean }
+      wrong_note_list: { Args: { p_slug: string }; Returns: Json }
+      wrong_note_master: {
+        Args: { p_on: boolean; p_question: number; p_slug: string }
+        Returns: Json
+      }
+      wrong_note_mine: { Args: never; Returns: Json }
+      wrong_note_ord: { Args: { p_node: number }; Returns: number[] }
+      wrong_note_practice: {
+        Args: { p_answers: Json; p_slug: string }
+        Returns: Json
+      }
+      wrong_note_practice_json: {
+        Args: { p: Database["public"]["Tables"]["exam_practice"]["Row"] }
+        Returns: Json
+      }
+      wrong_note_room: {
+        Args: { p_slug: string; p_uid: string }
+        Returns: {
+          archived_at: string | null
+          cover_file_id: string | null
+          created_at: string
+          description_md: string
+          end_date: string
+          ended_at: string | null
+          id: number
+          intro: string
+          join_mode: string
+          leader_does_tasks: boolean
+          leader_id: string
+          max_members: number
+          member_count: number
+          min_members: number | null
+          recruit_until: string | null
+          rules_md: string
+          slug: string
+          start_date: string
+          started_at: string | null
+          status: string
+          title: string
+          updated_at: string
+          visibility: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "rooms"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      wrong_note_rounds: {
+        Args: { p_room: number; p_uid: string }
+        Returns: Json
+      }
+      wrong_note_target: {
+        Args: { p_question: number; p_room: number; p_uid: string }
+        Returns: Record<string, unknown>
+      }
+      wrong_note_totals: { Args: { p_rounds: Json }; Returns: Json }
     }
     Enums: {
       [_ in never]: never
