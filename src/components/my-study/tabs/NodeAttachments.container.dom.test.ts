@@ -84,6 +84,8 @@ describe("NodeAttachments container", () => {
 
 describe("NodeDescription — 설명 그림과 첨부 목록이 한 목록 (md-images §4.1)", () => {
   const img = (id: string, name: string, contentType = "image/png"): FileMeta => ({ id, name, contentType, size: 1, status: "ready" });
+  /** 설명 속 그림(첨부 목록 썸네일 제외) */
+  const descImgs = () => Array.from(host.querySelectorAll("img")).filter((i) => !i.closest("li"));
   it("목록을 한 번 받고, 이미지만 서명해 설명 그림으로 — 같은 이름은 마지막 것", async () => {
     act(() => root.unmount());
     api.fetchNodeFilesOrEmpty.mockReset().mockResolvedValue([img("old", "v.png"), f("doc"), img("new", "v.png"), img("s", "s.svg", "image/svg+xml")]);
@@ -95,9 +97,11 @@ describe("NodeDescription — 설명 그림과 첨부 목록이 한 목록 (md-i
     expect(api.fetchNodeFilesOrEmpty).toHaveBeenCalledTimes(1);
     expect(api.nodeImageUrls).toHaveBeenCalledTimes(1);
     expect(api.nodeImageUrls.mock.calls[0][0].map((x: FileMeta) => x.id)).toEqual(["old", "new", "s"]);
-    const srcs = Array.from(host.querySelectorAll("img")).map((i) => i.getAttribute("src"));
+    const srcs = descImgs().map((i) => i.getAttribute("src"));
     expect(srcs).toEqual(["https://sb.test/sign/new", "https://sb.test/sign/s"]);
-    expect(host.querySelector("img[src$='/s']")?.className).toContain("bg-white");
+    expect(descImgs()[1].className).toContain("bg-white");
+    // 첨부 목록 썸네일도 같은 서명 URL — 서명은 한 번
+    expect(Array.from(host.querySelectorAll("li img")).map((i) => i.getAttribute("src"))).toEqual(["https://sb.test/sign/old", "https://sb.test/sign/new", "https://sb.test/sign/s"]);
     expect(host.textContent).toContain("그림을 찾을 수 없어요 · doc.pdf");
     expect(host.querySelector("h3")?.textContent).toBe("첨부 파일 4");
   });
@@ -109,10 +113,31 @@ describe("NodeDescription — 설명 그림과 첨부 목록이 한 목록 (md-i
     await act(async () => root.render(createElement(NodeDescription, { nodeId: "9", desc: "![](attachment:a.png)", emptyText: "", canRemove: false, toast: vi.fn() })));
     await flush();
     await flush();
-    expect(host.querySelector("img")?.getAttribute("src")).toBe("https://sb.test/old");
-    await act(async () => void host.querySelector("img")!.dispatchEvent(new Event("error")));
+    expect(descImgs()[0].getAttribute("src")).toBe("https://sb.test/old");
+    await act(async () => void descImgs()[0].dispatchEvent(new Event("error")));
     await flush();
     expect(api.nodeImageUrls).toHaveBeenCalledTimes(2);
-    expect(host.querySelector("img")?.getAttribute("src")).toBe("https://sb.test/new");
+    expect(descImgs()[0].getAttribute("src")).toBe("https://sb.test/new");
+    expect(host.querySelector("li img")?.getAttribute("src")).toBe("https://sb.test/new");
+  });
+  it("설명 그림·썸네일을 누르면 라이트박스 하나 — 그 파일부터, 첨부 목록 순서로 넘긴다 (B3·D16)", async () => {
+    act(() => root.unmount());
+    api.fetchNodeFilesOrEmpty.mockReset().mockResolvedValue([img("a", "a.png"), f("doc"), img("b", "b.png")]);
+    api.nodeImageUrls.mockReset().mockImplementation(async (l: FileMeta[]) => new Map(l.map((x) => [x.id, `https://sb.test/${x.id}`])));
+    root = createRoot(host);
+    await act(async () => root.render(createElement(NodeDescription, { nodeId: "9", desc: "본문 ![](attachment:b.png)", emptyText: "", canRemove: false, toast: vi.fn() })));
+    await flush();
+    await flush();
+    const dlg = () => document.querySelector('[role="dialog"]');
+    await act(async () => void descImgs()[0].closest("button")!.click());
+    expect(dlg()?.getAttribute("aria-label")).toBe("b.png (2/2)");
+    expect(document.querySelectorAll('[role="dialog"]').length).toBe(1);
+    await act(async () => void document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true })));
+    expect(dlg()?.getAttribute("aria-label")).toBe("a.png (1/2)");
+    await act(async () => void document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(dlg()).toBeNull();
+    await act(async () => void host.querySelector<HTMLButtonElement>('button[aria-label="a.png 크게 보기"]')!.click());
+    expect(dlg()?.getAttribute("aria-label")).toBe("a.png (1/2)");
+    await act(async () => void document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
   });
 });

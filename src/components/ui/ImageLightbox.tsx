@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "./useFocusTrap";
 
-export type LightboxItem = { id: string; name: string; /** 「84 KB」 */ sizeLabel: string; /** inline 서명 URL — 없으면(서명 실패) 실패 상자 */ url: string | null; svg: boolean };
+export type LightboxItem = { id: string; name: string; /** 「84 KB」 */ sizeLabel: string; /** inline 서명 URL — undefined 면 받는 중, null 이면(서명 실패) 실패 상자 */ url?: string | null; svg: boolean };
 
 type Props = {
   items: LightboxItem[];
@@ -98,7 +98,7 @@ export function ImageLightbox({ items, index, onIndex, onClose, onDownload, onRe
   };
 
   if (!cur) return null;
-  const failed = !cur.url || broken.has(cur.url);
+  const failed = cur.url === null || (!!cur.url && broken.has(cur.url));
   const label = `${i + 1}/${n} ${cur.name}`;
   return createPortal(
     <div data-image-lightbox className="fixed inset-0 z-50 overscroll-contain bg-black/85 motion-safe:animate-[lightbox-fade_.15s_ease-out]">
@@ -135,19 +135,19 @@ export function ImageLightbox({ items, index, onIndex, onClose, onDownload, onRe
             </div>
           ) : (
             <>
-              {!loaded.has(cur.url!) && <span aria-hidden="true" className="absolute h-8 w-8 rounded-full border-[3px] border-white/30 border-t-white motion-safe:animate-spin" />}
+              {!(cur.url && loaded.has(cur.url)) && <span aria-hidden="true" className="absolute h-8 w-8 rounded-full border-[3px] border-white/30 border-t-white motion-safe:animate-spin" />}
               {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다(스펙 D17) */}
-              <img
+              {cur.url && <img
                 key={cur.url}
                 data-lb-keep
-                src={cur.url!}
+                src={cur.url}
                 alt={cur.name}
                 decoding="async"
                 draggable={false}
                 onLoad={() => setLoaded((s) => new Set(s).add(cur.url!))}
                 onError={() => onError(cur)}
                 className={`max-h-[calc(100dvh-136px)] max-w-[calc(100vw-32px)] select-none object-contain ${cur.svg ? "rounded-[8px] bg-white p-4" : ""}`}
-              />
+              />}
             </>
           )}
           {n > 1 && (

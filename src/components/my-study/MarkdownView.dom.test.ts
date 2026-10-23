@@ -79,6 +79,18 @@ describe("MarkdownView 그림 — resolver 있음 (A4 · 스펙 §6 렌더)", ()
     expect(html("![](attachment:a.png)", resolver())).toMatch(/<p class="m-0"><img [^>]*class="block /);
     expect(html("글 ![](attachment:a.png)", resolver())).toMatch(/<img [^>]*class="inline-block /);
   });
+  it("글 사이 그림은 줄 높이 안의 작은 그림, 목록 항목에 그림 하나뿐이면 블록 (B · 디자인 우려)", () => {
+    expect(html("글 ![](attachment:a.png) 글", resolver())).toMatch(/<img [^>]*class="inline-block h-\[1\.5em\]/);
+    expect(html("| x |\n| - |\n| 표 ![](attachment:a.png) |", resolver())).toMatch(/class="inline-block h-\[1\.5em\]/);
+    expect(html("- ![](attachment:a.png)", resolver())).toMatch(/<li><img [^>]*class="block /);
+    expect(html("글 ![](attachment:wait.png)", resolver())).toContain("h-[1.5em] w-[2.5em]");
+  });
+  it("글 사이 「찾을 수 없어요」 상자는 줄 높이를 벌리지 않는다(min-h 없음), 블록은 44px", () => {
+    const inline = html("앞 ![](attachment:nope.png) 뒤", resolver());
+    expect(inline).toMatch(/<span class="rounded-\[6px\][^"]*">그림을 찾을 수 없어요 · nope.png/);
+    expect(inline).not.toContain("min-h-11");
+    expect(html("![](attachment:nope.png)", resolver())).toMatch(/<span class="flex min-h-11[^"]*">그림을 찾을 수 없어요/);
+  });
   it("open 이 있으면 버튼 안(크게 보기), 없으면 버튼 없음", () => {
     expect(html("![](attachment:a.png)", resolver())).not.toContain("<button");
     const h = html("![](attachment:a.png)", resolver({ open: () => {} }));

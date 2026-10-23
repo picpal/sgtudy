@@ -5,14 +5,52 @@ import type { ToastMsg } from "@/components/ui/Toast";
 import { fetchNodeFiles, setNodeFiles } from "@/lib/api/nodeFiles";
 import { fileUrl } from "@/lib/api/submission";
 import type { FileMeta } from "@/lib/api/types";
+import { isImageMime, isSvgMime } from "@/lib/files/imageMime";
 import { fileBadge } from "../nodeFiles";
 import { sizeText } from "../submission";
 import { InlineConfirm } from "./InlineConfirm";
 
-type ViewProps = { files: FileMeta[]; onOpen: (f: FileMeta) => void; onRemove?: (f: FileMeta) => void; busy?: string | null; /** 빼기 요청 중 — 모든 [빼기] 비활성 */ removing?: boolean; headingRef?: Ref<HTMLHeadingElement> };
+export type AttachmentPreview = {
+  /** 그림 파일 id → inline 서명 URL(null = 서명 실패). 없는 id 는 아직 받는 중 */
+  thumbs: ReadonlyMap<string, string | null>;
+  onPreview: (f: FileMeta) => void;
+  /** 썸네일을 못 불러왔다(서명 만료) — 한 번 다시 서명 */
+  onThumbError?: (id: string) => void;
+};
+type ViewProps = { files: FileMeta[]; onOpen: (f: FileMeta) => void; onRemove?: (f: FileMeta) => void; busy?: string | null; /** 빼기 요청 중 — 모든 [빼기] 비활성 */ removing?: boolean; headingRef?: Ref<HTMLHeadingElement>; preview?: AttachmentPreview };
+
+const BADGE = "shrink-0 rounded-[6px] bg-surface-2 px-[6px] py-[2px] text-[11px] font-bold text-ink-3";
+
+/** 그림 줄의 56×56 썸네일 버튼 — 누르면 라이트박스(D13). URL 이 아직 없거나 못 불러오면 IMG 배지 */
+function Thumb({ f, preview }: { f: FileMeta; preview: AttachmentPreview }) {
+  const url = preview.thumbs.get(f.id);
+  const [bad, setBad] = useState<ReadonlySet<string>>(new Set());
+  const retried = useRef(false);
+  if (!url || bad.has(url)) return <span className={BADGE}>{fileBadge(f.contentType)}</span>;
+  const svg = isSvgMime(f.contentType);
+  return (
+    <button type="button" aria-label={`${f.name} 크게 보기`} onClick={() => preview.onPreview(f)} className={`h-14 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-[10px] border border-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint ${svg ? "bg-white" : "bg-surface-2"}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다(스펙 D17) */}
+      <img
+        src={url}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        onError={() => {
+          setBad((s) => new Set(s).add(url));
+          if (!retried.current && preview.onThumbError) {
+            retried.current = true;
+            preview.onThumbError(f.id);
+          }
+        }}
+        className={`h-full w-full ${svg ? "object-contain p-1" : "object-cover"}`}
+      />
+    </button>
+  );
+}
 
 /** 보기 상세의 "첨부 파일 n" 목록 — 0개면 아무것도 그리지 않는다 */
-export function NodeAttachmentsView({ files, onOpen, onRemove, busy = null, removing = false, headingRef }: ViewProps) {
+export function NodeAttachmentsView({ files, onOpen, onRemove, busy = null, removing = false, headingRef, preview }: ViewProps) {
   const id = useId();
   if (files.length === 0) return null;
   return (
@@ -23,7 +61,7 @@ export function NodeAttachmentsView({ files, onOpen, onRemove, busy = null, remo
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {files.map((f) => (
           <li key={f.id} className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 rounded-[10px] border border-line px-3 py-1">
-            <span className="shrink-0 rounded-[6px] bg-surface-2 px-[6px] py-[2px] text-[11px] font-bold text-ink-3">{fileBadge(f.contentType)}</span>
+            {preview && isImageMime(f.contentType) ? <Thumb f={f} preview={preview} /> : <span className={BADGE}>{fileBadge(f.contentType)}</span>}
             <span className="flex min-w-0 flex-[1_1_180px] flex-col">
               <span className="text-[14px] text-ink [overflow-wrap:anywhere]">{f.name}</span>
               <span className="text-[12px] text-muted">{sizeText(f.size)}</span>
@@ -47,7 +85,7 @@ export function NodeAttachmentsView({ files, onOpen, onRemove, busy = null, remo
 }
 
 /** 컨테이너 — 목록은 useNodeFiles 가 마운트 뒤 한 번 받아 설명 그림과 같이 쓴다. 서버가 볼 권한을 판단하므로 받은 것만 그린다 */
-export function NodeAttachments({ nodeId, files, setFiles, canRemove, toast }: { nodeId: string; files: FileMeta[]; setFiles: (l: FileMeta[]) => void; canRemove: boolean; toast: (m: ToastMsg) => void }) {
+export function NodeAttachments({ nodeId, files, setFiles, canRemove, toast, preview }: { nodeId: string; files: FileMeta[]; setFiles: (l: FileMeta[]) => void; canRemove: boolean; toast: (m: ToastMsg) => void; preview?: AttachmentPreview }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [asking, setAsking] = useState<FileMeta | null>(null);
   const open = async (f: FileMeta) => {
@@ -102,7 +140,7 @@ export function NodeAttachments({ nodeId, files, setFiles, canRemove, toast }: {
       <div ref={status} role="status" aria-live="polite" tabIndex={-1} className="sr-only outline-none">
         {said}
       </div>
-      <NodeAttachmentsView files={files} busy={busy} removing={removing} headingRef={heading} onOpen={(f) => void open(f)} onRemove={canRemove ? setAsking : undefined} />
+      <NodeAttachmentsView files={files} busy={busy} removing={removing} headingRef={heading} preview={preview} onOpen={(f) => void open(f)} onRemove={canRemove ? setAsking : undefined} />
       {asking && <InlineConfirm text="이 파일을 목표에서 뺄까요? 팀원에게는 알리지 않아요" onCancel={cancel} actions={[{ label: "빼기", tone: "danger", onClick: () => void remove(asking) }]} />}
     </div>
   );

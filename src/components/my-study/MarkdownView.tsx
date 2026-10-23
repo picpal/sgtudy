@@ -31,7 +31,12 @@ export type ImageResolver = {
 };
 
 type ImgToken = Extract<MdInline, { t: "img" }>;
-const BOX = "items-center rounded-[10px] border border-dashed border-line-dash px-3 text-[13px] text-muted";
+// 못 찾음·실패 상자 — 블록은 44px 상자, 글 사이(인라인)는 줄 높이를 벌리지 않는 글자 크기 테두리
+const BOX_BLOCK = "flex min-h-11 items-center rounded-[10px] border border-dashed border-line-dash px-3 text-[13px] text-muted";
+const BOX_INLINE = "rounded-[6px] border border-dashed border-line-dash px-[5px] text-[12px] text-muted [box-decoration-break:clone]";
+// 글 사이 그림은 줄 높이 안의 작은 그림(누르면 라이트박스) — 원본 크기로 그리면 줄이 커진다
+const INLINE_IMG = "inline-block h-[1.5em] w-auto max-w-[8em] rounded-[4px] align-middle";
+const INLINE_SKELETON = "inline-block h-[1.5em] w-[2.5em] rounded-[4px] bg-surface-2 align-middle motion-safe:animate-pulse";
 
 /** 첨부 그림 하나 — 로딩 스켈레톤 → 그림, 못 불러오면 한 번 다시 서명하고 그래도 안 되면 실패 상자 (D5·D6·D14) */
 function AttachedImg({ s, name, images, block }: { s: ImgToken; name: string; images: ImageResolver; block: boolean }) {
@@ -39,10 +44,10 @@ function AttachedImg({ s, name, images, block }: { s: ImgToken; name: string; im
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [retried, setRetried] = useState<string | null>(null);
   const [broken, setBroken] = useState<string | null>(null);
-  const display = block ? "flex" : "inline-flex";
-  if (r.state === "loading") return <span aria-hidden="true" className={`${block ? "block w-full" : "inline-block w-40 align-middle"} h-40 rounded-[10px] bg-surface-2 motion-safe:animate-pulse`} />;
-  if (r.state === "missing") return <span className={`${display} min-h-11 ${BOX}`}>그림을 찾을 수 없어요 · {name}</span>;
-  if (broken === r.fileId) return <span className={`${display} min-h-11 ${BOX}`}>그림을 불러올 수 없어요 · {name}</span>;
+  const box = block ? BOX_BLOCK : BOX_INLINE;
+  if (r.state === "loading") return <span aria-hidden="true" className={block ? "block h-40 w-full rounded-[10px] bg-surface-2 motion-safe:animate-pulse" : INLINE_SKELETON} />;
+  if (r.state === "missing") return <span className={box}>그림을 찾을 수 없어요 · {name}</span>;
+  if (broken === r.fileId) return <span className={box}>그림을 불러올 수 없어요 · {name}</span>;
   const loaded = loadedUrl === r.url;
   const onError = () => {
     if (retried === r.fileId) setBroken(r.fileId);
@@ -60,14 +65,14 @@ function AttachedImg({ s, name, images, block }: { s: ImgToken; name: string; im
       decoding="async"
       onLoad={() => setLoadedUrl(r.url)}
       onError={onError}
-      className={`${block ? "block" : "inline-block align-middle"} max-h-[min(560px,70vh)] max-w-full rounded-[10px] object-contain ${r.svg ? "bg-white" : ""} ${loaded ? "" : "min-h-40 min-w-40 bg-surface-2 motion-safe:animate-pulse"}`}
+      className={`${block ? "block max-h-[min(560px,70vh)] max-w-full rounded-[10px]" : INLINE_IMG} object-contain ${r.svg ? "bg-white" : ""} ${loaded ? "" : block ? "min-h-40 min-w-40 bg-surface-2 motion-safe:animate-pulse" : "min-w-[2.5em] bg-surface-2 motion-safe:animate-pulse"}`}
     />
   );
   if (!images.open) return img;
   const open = images.open;
   const id = r.fileId;
   return (
-    <button type="button" onClick={() => open(id)} className={`${block ? "block" : "inline-block align-middle"} max-w-full cursor-zoom-in rounded-[10px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint`}>
+    <button type="button" onClick={() => open(id)} className={`${block ? "block rounded-[10px]" : "inline-block rounded-[4px] align-middle leading-none"} max-w-full cursor-zoom-in p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint`}>
       {img}
       <span className="sr-only">크게 보기</span>
     </button>
@@ -81,6 +86,18 @@ function Img({ s, images, block = false }: { s: ImgToken; images?: ImageResolver
   }
   if (!images) return <span className="text-muted">[그림: {imgLabel(s)}]</span>;
   return <AttachedImg s={s} name={s.src.name} images={images} block={block} />;
+}
+
+/** 그림 하나뿐인 글(문단·목록 항목)이면 그 토큰 — 블록 그림으로 그린다(D6). 표 셀은 글 사이 그림처럼 작게 */
+function soleImg(text: string): ImgToken | null {
+  const only = parseInline(text.trim());
+  return only.length === 1 && only[0].t === "img" ? only[0] : null;
+}
+
+/** 목록 항목 글 — 그림 하나뿐이면 블록 그림 */
+function ItemText({ text, images }: { text: string; images?: ImageResolver }) {
+  const img = soleImg(text);
+  return img ? <Img s={img} images={images} block /> : <Lines text={text} images={images} />;
 }
 
 export function Inline({ text, images }: { text: string; images?: ImageResolver }) {
@@ -123,7 +140,7 @@ function ListBlock({ b, level, images }: { b: Extract<MdBlock, { type: "ul" | "o
               </span>
               <span className={it.done ? "text-muted line-through" : undefined}>
                 <span className="sr-only">{it.done ? "완료: " : "할 일: "}</span>
-                <Lines text={it.text} images={images} />
+                <ItemText text={it.text} images={images} />
               </span>
             </div>
             {sub(it)}
@@ -137,7 +154,7 @@ function ListBlock({ b, level, images }: { b: Extract<MdBlock, { type: "ul" | "o
     <List start={b.type === "ol" ? b.start : undefined} className={`m-0 pl-5 ${b.type === "ul" ? UL_STYLE[Math.min(level, 3)] : "list-decimal"}`}>
       {b.items.map((it, j) => (
         <li key={j}>
-          <Lines text={it.text} images={images} />
+          <ItemText text={it.text} images={images} />
           {sub(it)}
         </li>
       ))}
@@ -155,8 +172,8 @@ function Block({ b, images }: { b: MdBlock; images?: ImageResolver }) {
     }
     case "p": {
       // 문단에 그림 하나뿐이면 블록 그림(D6)
-      const only = parseInline(b.lines.join("\n").trim());
-      if (only.length === 1 && only[0].t === "img") return <p className="m-0"><Img s={only[0]} images={images} block /></p>;
+      const img = soleImg(b.lines.join("\n"));
+      if (img) return <p className="m-0"><Img s={img} images={images} block /></p>;
       return <p className="m-0"><Lines text={b.lines.join("\n")} images={images} /></p>;
     }
     case "ul":

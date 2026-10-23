@@ -11,7 +11,8 @@ type Listed = { node: string; files: FileMeta[] | null };
 /**
  * 보기 상세 한 노드의 첨부 목록 + 설명 속 그림 resolver (md-images 스펙 §4.1).
  * 설명(MarkdownView)과 첨부 목록(NodeAttachments)이 같은 목록·같은 서명 URL 을 쓴다 — fetch 는 마운트 뒤 한 번.
- * 그림 URL 은 이미지 파일만 inline 서명(1시간). 같은 이름이 여럿이면 목록의 마지막(= 가장 늦게 붙은 것, D5)
+ * 그림 URL 은 이미지 파일만 inline 서명(1시간). 같은 이름이 여럿이면 목록의 마지막(= 가장 늦게 붙은 것, D5).
+ * 썸네일·설명 그림·라이트박스가 같은 서명 URL 을 쓰고, 라이트박스는 openId 하나로 연다(B3)
  */
 export function useNodeFiles(nodeId: string) {
   const [listed, setListed] = useState<Listed>({ node: nodeId, files: null });
@@ -54,6 +55,17 @@ export function useNodeFiles(nodeId: string) {
   }, [files, urls, sign]);
 
   const setFiles = useCallback((l: FileMeta[]) => setListed({ node: nodeId, files: l }), [nodeId]);
+  // 라이트박스로 연 파일 — 노드가 바뀌면 닫힌다
+  const [opened, setOpened] = useState<{ node: string; id: string } | null>(null);
+  const openId = opened?.node === nodeId ? opened.id : null;
+  const setOpenId = useCallback((id: string | null) => setOpened(id ? { node: nodeId, id } : null), [nodeId]);
+  const refresh = useCallback(
+    (fileId: string) => {
+      const f = files?.find((x) => x.id === fileId);
+      if (f) void sign([f]);
+    },
+    [files, sign],
+  );
 
   const resolver = useMemo<ImageResolver>(
     () => ({
@@ -66,13 +78,11 @@ export function useNodeFiles(nodeId: string) {
         // 서명을 못 받은 그림(경로 없음·Storage 오류)은 없는 것과 같게 보인다
         return url ? { state: "ok", fileId: f.id, url, svg: isSvgMime(f.contentType) } : { state: "missing" };
       },
-      refresh(fileId) {
-        const f = files?.find((x) => x.id === fileId);
-        if (f) void sign([f]);
-      },
+      open: setOpenId,
+      refresh,
     }),
-    [files, urls, sign],
+    [files, urls, setOpenId, refresh],
   );
 
-  return { files: files ?? [], setFiles, resolver };
+  return { files: files ?? [], setFiles, resolver, urls, refresh, openId, setOpenId };
 }
