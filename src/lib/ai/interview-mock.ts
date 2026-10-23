@@ -122,7 +122,7 @@ export const mockCallModel: CallModel = async ({ state }) => {
   // 다음 단계: 바꿀 항목 요청 → 필수 빈 칸(권장 순서) → 진행 방식 → 추가 요청 → 요약
   const filled = { ...draft, ...patch };
   const answered = (f: string) =>
-    f === "maxMembers" ? patch.maxMembers !== undefined && patch.maxMembers >= 2 && patch.maxMembers <= 100 : f === "isPublic" ? patch.isPublic !== undefined : f in patch;
+    f === "maxMembers" ? patch.maxMembers != null && patch.maxMembers >= 2 && patch.maxMembers <= 100 : f === "isPublic" ? patch.isPublic !== undefined : f in patch;
   const firstMissing = missing.find((f) => !answered(f));
   if (!next) {
     if (firstMissing) next = FIELD_STAGE[firstMissing] ?? "topic";

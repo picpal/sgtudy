@@ -17,34 +17,43 @@ export type RequiredField = (typeof REQUIRED_FIELDS)[number];
 export const ACCESS_VALUES = ["public-direct", "public-approval", "private"] as const;
 export const STYLE_VALUES = ["weekly-task", "proof", "meeting", "presentation", "exam", "other"] as const;
 
-/** 모델 출력(구조화 출력, output_config.format). 값의 범위는 여기서 보지 않는다 — normalizePatch 가 자르고 버린다(D10) */
+/**
+ * 모델 출력 스키마. OpenAI Structured Outputs strict 모드는 모든 키가 required 여야 해서 선택 값은 nullable(null = 이번에 안 바꿈).
+ * 값의 범위는 여기서 보지 않는다 — normalizePatch 가 자르고 버린다(D10)
+ */
+const nullable = <T extends z.ZodType>(t: T) => t.nullable();
 export const ModelTurn = z.object({
   say: z.string(),
   patch: z.object({
-    title: z.string().optional(),
-    intro: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    maxMembers: z.number().int().optional(),
-    minMembers: z.number().int().nullable().optional(),
-    isPublic: z.boolean().optional(),
-    joinMode: z.enum(["direct", "approval"]).optional(),
-    descriptionMd: z.string().optional(),
-    rulesMd: z.string().optional(),
-    leaderDoesTasks: z.boolean().optional(),
-    tags: z.array(z.string()).optional(),
+    title: nullable(z.string()),
+    intro: nullable(z.string()),
+    startDate: nullable(z.string()),
+    endDate: nullable(z.string()),
+    maxMembers: nullable(z.number().int()),
+    minMembers: nullable(z.number().int()),
+    isPublic: nullable(z.boolean()),
+    joinMode: nullable(z.enum(["direct", "approval"])),
+    descriptionMd: nullable(z.string()),
+    rulesMd: nullable(z.string()),
+    leaderDoesTasks: nullable(z.boolean()),
+    tags: nullable(z.array(z.string())),
   }),
   ask: z
     .object({
       field: Field,
       kind: z.enum(["single", "multi", "text", "date", "number"]),
-      options: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
-      allowOther: z.enum(["text", "date", "number"]).optional(),
+      options: nullable(z.array(z.object({ label: z.string(), value: z.string() }))),
+      allowOther: nullable(z.enum(["text", "date", "number"])),
     })
     .nullable(),
   done: z.boolean(),
 });
-export type ModelTurn = z.infer<typeof ModelTurn>;
+/** 서버가 응답을 검사하는 판 — 빠진 키는 null 과 같게 본다(목·테스트가 키를 생략해도 된다) */
+export const ModelTurnIn = ModelTurn.extend({
+  patch: ModelTurn.shape.patch.partial(),
+  ask: ModelTurn.shape.ask.unwrap().partial({ options: true, allowOther: true }).nullable(),
+});
+export type ModelTurn = z.infer<typeof ModelTurnIn>;
 
 /** 초안 태그 — 사전 태그는 slug, 자유 라벨은 label 만 (room-new/tags.ts TagItem 과 같은 모양) */
 export type DraftTag = { slug?: string; label: string; tone?: string };

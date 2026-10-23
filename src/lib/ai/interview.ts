@@ -1,17 +1,16 @@
-import type { MessageParam } from "@anthropic-ai/sdk/resources/messages";
 import { clampCp } from "@/components/room-new/validate";
 import { defaultAsk, sanitizeAsk } from "./chips";
 import { computeMissing, deriveAnswer, mergeDraft, normalizeDraft, normalizePatch, stripControl, type TagDict } from "./normalize";
-import { buildMessages, systemPrompt } from "./prompt";
-import { MAX_MESSAGES, ModelTurn, SAY_MAX, type Draft, type Dropped, type Field, type InterviewRequest, type RequiredField, type TurnResponse } from "./schema";
+import { buildMessages, systemPrompt, type ChatInput } from "./prompt";
+import { MAX_MESSAGES, ModelTurnIn, SAY_MAX, type Draft, type Dropped, type Field, type InterviewRequest, type RequiredField, type TurnResponse } from "./schema";
 
 /* 인터뷰 한 턴(§5.3) — 순수 로직. 모델 호출은 주입(callModel)이라 테스트·목 모드는 대본을 끼운다. I/O·키 없음 */
 
 export type Usage = { in: number; out: number; cached: number };
-/** 모델 호출 — 실제는 client.ts(anthropicCallModel), 로컬·테스트는 interview-mock.ts */
+/** 모델 호출 — 실제는 client.ts(openaiCallModel), 로컬·테스트는 interview-mock.ts */
 export type CallModel = (input: {
   system: string;
-  messages: MessageParam[];
+  messages: ChatInput[];
   /** 목 대본용 — 실제 호출은 쓰지 않는다 */
   state: { draft: Draft; missing: RequiredField[]; today: string; lastUser: string | null; lastAssistant: string | null; answer: { field: Field; value: string } | null };
 }) => Promise<{ ok: true; turn: unknown; usage: Usage; model: string } | { ok: false; status?: number }>;
@@ -43,12 +42,14 @@ export async function runTurn(req: InterviewRequest, deps: { callModel: CallMode
     state: { draft: draft1, missing: missing1, today, lastUser, lastAssistant, answer: req.answer ?? null },
   });
   if (!res.ok) return { ok: false, error: "AI_UNAVAILABLE", status: res.status };
-  const parsed = ModelTurn.safeParse(res.turn);
+  const parsed = ModelTurnIn.safeParse(res.turn);
   if (!parsed.success) return { ok: false, error: "AI_UNAVAILABLE" };
   const m = parsed.data;
 
   // 3) 모델 patch 정규화(D10) → 4) 완료는 서버가 판정(D11)
-  const fromModel = normalizePatch(m.patch, draft1, today, tagDict);
+  // null = 이번에 안 바꿈(strict 스키마) — 정규화 전에 뺀다
+  const modelPatch = Object.fromEntries(Object.entries(m.patch).filter(([, v]) => v !== null && v !== undefined));
+  const fromModel = normalizePatch(modelPatch, draft1, today, tagDict);
   const draft = mergeDraft(draft1, fromModel.patch);
   const missing = computeMissing(draft, today);
   const done = m.done && missing.length === 0;

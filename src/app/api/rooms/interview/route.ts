@@ -1,5 +1,5 @@
 import { ApiException, rpc, type Db } from "@/lib/api/errors";
-import { anthropicCallModel } from "@/lib/ai/client";
+import { openaiCallModel } from "@/lib/ai/client";
 import { aiInterviewEnabled, aiMock } from "@/lib/ai/env";
 import { failJson, MAX_INTERVIEW_BODY, MSG, sameOrigin } from "@/lib/ai/http";
 import { isStart, runTurn, turnLimitExceeded } from "@/lib/ai/interview";
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
   }
 
   const t0 = Date.now();
-  const r = await runTurn(input, { callModel: aiMock() ? mockCallModel : anthropicCallModel, today: kstToday(), tagDict: await loadTagDict() });
+  const r = await runTurn(input, { callModel: aiMock() ? mockCallModel : openaiCallModel, today: kstToday(), tagDict: await loadTagDict() });
   const ms = Date.now() - t0;
   if (!r.ok) {
     log({ ms, status: r.status ?? "error" });

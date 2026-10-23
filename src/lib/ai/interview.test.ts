@@ -19,6 +19,13 @@ describe("runTurn", () => {
     expect([...r.body.draft.title!].length).toBe(60);
     expect(r.body.dropped.map((d) => d.field).sort()).toEqual(["maxMembers", "startDate", "tags"]);
   });
+  it("strict 출력의 null 은 '안 바꿈' — 기존 값을 지우지 않는다", async () => {
+    const nulls = { title: null, intro: null, startDate: null, endDate: null, maxMembers: null, minMembers: null, isPublic: null, joinMode: null, descriptionMd: null, rulesMd: null, leaderDoesTasks: null, tags: null };
+    const r = await runTurn(req({ draft: { title: "유지", minMembers: 3, maxMembers: 6 } }), { callModel: model({ patch: { ...nulls, intro: "새 소개" }, ask: { field: "startDate", kind: "single", options: null, allowOther: null } }), today: TODAY, tagDict: DICT });
+    if (!r.ok) throw new Error();
+    expect(r.body.draft).toEqual({ title: "유지", intro: "새 소개", minMembers: 3, maxMembers: 6 });
+    expect(r.body.ask?.options?.length).toBeGreaterThan(0); // options null → 기본 칩
+  });
   it("done:true 인데 missing 이 있으면 false + 첫 빈 칸 기본 칩", async () => {
     const r = await runTurn(req(), { callModel: model({ done: true }), today: TODAY, tagDict: DICT });
     if (!r.ok) throw new Error();

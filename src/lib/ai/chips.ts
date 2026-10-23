@@ -91,7 +91,7 @@ const FIXED_KIND: Partial<Record<Field, Ask["kind"]>> = { startDate: "single", d
 const OTHER: Partial<Record<Field, Ask["allowOther"]>> = { startDate: "date", endDate: "date", durationWeeks: "number", maxMembers: "number", minMembers: "number" };
 
 /** 모델 ask → 화면에 그릴 ask. 옵션 ≤6 · 라벨 ≤30cp · 값 검증, 남는 게 없으면 기본 칩 */
-export function sanitizeAsk(ask: { field: Field; kind: Ask["kind"]; options?: ChipOption[]; allowOther?: Ask["allowOther"] } | null, draft: Draft, today: string): Ask | null {
+export function sanitizeAsk(ask: { field: Field; kind: Ask["kind"]; options?: ChipOption[] | null; allowOther?: Ask["allowOther"] | null } | null, draft: Draft, today: string): Ask | null {
   if (!ask) return null;
   const field = ask.field === "isPublic" || ask.field === "joinMode" ? "access" : ask.field;
   const fallback = defaultChips(field, today);
