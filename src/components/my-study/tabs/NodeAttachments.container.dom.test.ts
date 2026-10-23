@@ -5,10 +5,10 @@ import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import type { FileMeta } from "@/lib/api/types";
 
-const api = vi.hoisted(() => ({ fetchNodeFiles: vi.fn(), fetchNodeFilesOrEmpty: vi.fn(), setNodeFiles: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchNodeFiles: vi.fn(), fetchNodeFilesOrEmpty: vi.fn(), setNodeFiles: vi.fn(), nodeImageUrls: vi.fn() }));
 vi.mock("@/lib/api/nodeFiles", () => api);
 vi.mock("@/lib/api/submission", () => ({ fileUrl: vi.fn() }));
-import { NodeAttachments } from "./NodeAttachments";
+import { NodeDescription } from "./NodeDescription";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const f = (id: string): FileMeta => ({ id, name: `${id}.pdf`, contentType: "application/pdf", size: 1, status: "ready" });
@@ -24,7 +24,8 @@ beforeEach(async () => {
   document.body.appendChild(host);
   root = createRoot(host);
   api.fetchNodeFilesOrEmpty.mockResolvedValue([f("a"), f("b")]);
-  await act(async () => root.render(createElement(NodeAttachments, { nodeId: "1", canRemove: true, toast: vi.fn() })));
+  api.nodeImageUrls.mockImplementation(async (l: FileMeta[]) => new Map(l.map((x) => [x.id, `https://sb.test/sign/${x.id}`])));
+  await act(async () => root.render(createElement(NodeDescription, { nodeId: "1", desc: "", emptyText: "설명 없음", canRemove: true, toast: vi.fn() })));
   await flush();
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
@@ -78,5 +79,40 @@ describe("NodeAttachments container", () => {
     expect(btns.every((b) => b.disabled)).toBe(true);
     await act(async () => done([f("b")]));
     expect(api.setNodeFiles).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("NodeDescription — 설명 그림과 첨부 목록이 한 목록 (md-images §4.1)", () => {
+  const img = (id: string, name: string, contentType = "image/png"): FileMeta => ({ id, name, contentType, size: 1, status: "ready" });
+  it("목록을 한 번 받고, 이미지만 서명해 설명 그림으로 — 같은 이름은 마지막 것", async () => {
+    act(() => root.unmount());
+    api.fetchNodeFilesOrEmpty.mockReset().mockResolvedValue([img("old", "v.png"), f("doc"), img("new", "v.png"), img("s", "s.svg", "image/svg+xml")]);
+    api.nodeImageUrls.mockClear();
+    root = createRoot(host);
+    await act(async () => root.render(createElement(NodeDescription, { nodeId: "9", desc: "![](attachment:v.png)\n\n![](attachment:s.svg)\n\n![](attachment:doc.pdf)", emptyText: "", canRemove: false, toast: vi.fn() })));
+    await flush();
+    await flush();
+    expect(api.fetchNodeFilesOrEmpty).toHaveBeenCalledTimes(1);
+    expect(api.nodeImageUrls).toHaveBeenCalledTimes(1);
+    expect(api.nodeImageUrls.mock.calls[0][0].map((x: FileMeta) => x.id)).toEqual(["old", "new", "s"]);
+    const srcs = Array.from(host.querySelectorAll("img")).map((i) => i.getAttribute("src"));
+    expect(srcs).toEqual(["https://sb.test/sign/new", "https://sb.test/sign/s"]);
+    expect(host.querySelector("img[src$='/s']")?.className).toContain("bg-white");
+    expect(host.textContent).toContain("그림을 찾을 수 없어요 · doc.pdf");
+    expect(host.querySelector("h3")?.textContent).toBe("첨부 파일 4");
+  });
+  it("그림이 깨지면 그 파일만 다시 서명", async () => {
+    act(() => root.unmount());
+    api.fetchNodeFilesOrEmpty.mockReset().mockResolvedValue([img("a", "a.png")]);
+    api.nodeImageUrls.mockReset().mockResolvedValueOnce(new Map([["a", "https://sb.test/old"]])).mockResolvedValueOnce(new Map([["a", "https://sb.test/new"]]));
+    root = createRoot(host);
+    await act(async () => root.render(createElement(NodeDescription, { nodeId: "9", desc: "![](attachment:a.png)", emptyText: "", canRemove: false, toast: vi.fn() })));
+    await flush();
+    await flush();
+    expect(host.querySelector("img")?.getAttribute("src")).toBe("https://sb.test/old");
+    await act(async () => void host.querySelector("img")!.dispatchEvent(new Event("error")));
+    await flush();
+    expect(api.nodeImageUrls).toHaveBeenCalledTimes(2);
+    expect(host.querySelector("img")?.getAttribute("src")).toBe("https://sb.test/new");
   });
 });

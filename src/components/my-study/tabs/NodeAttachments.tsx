@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type Ref } from "react";
 import type { ToastMsg } from "@/components/ui/Toast";
-import { fetchNodeFiles, fetchNodeFilesOrEmpty, setNodeFiles } from "@/lib/api/nodeFiles";
+import { fetchNodeFiles, setNodeFiles } from "@/lib/api/nodeFiles";
 import { fileUrl } from "@/lib/api/submission";
 import type { FileMeta } from "@/lib/api/types";
 import { fileBadge } from "../nodeFiles";
@@ -46,20 +46,10 @@ export function NodeAttachmentsView({ files, onOpen, onRemove, busy = null, remo
   );
 }
 
-/** 컨테이너 — 마운트 후(effect)에만 불러온다. 서버가 볼 권한을 판단하므로 받은 것만 그린다 */
-export function NodeAttachments({ nodeId, canRemove, toast }: { nodeId: string; canRemove: boolean; toast: (m: ToastMsg) => void }) {
-  const [files, setFiles] = useState<FileMeta[]>([]);
+/** 컨테이너 — 목록은 useNodeFiles 가 마운트 뒤 한 번 받아 설명 그림과 같이 쓴다. 서버가 볼 권한을 판단하므로 받은 것만 그린다 */
+export function NodeAttachments({ nodeId, files, setFiles, canRemove, toast }: { nodeId: string; files: FileMeta[]; setFiles: (l: FileMeta[]) => void; canRemove: boolean; toast: (m: ToastMsg) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [asking, setAsking] = useState<FileMeta | null>(null);
-  useEffect(() => {
-    let live = true;
-    fetchNodeFilesOrEmpty(nodeId)
-      .then((l) => live && setFiles(l))
-      .catch(() => live && setFiles([]));
-    return () => {
-      live = false;
-    };
-  }, [nodeId]);
   const open = async (f: FileMeta) => {
     setBusy(f.id);
     try {

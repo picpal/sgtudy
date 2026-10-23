@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "./errors";
-import { discardNodeFile, discardNodeUnattached, fetchNodeFiles, fetchNodeFilesOrEmpty, registerNodeFile, setNodeFiles } from "./nodeFiles";
+import { discardNodeFile, discardNodeUnattached, fetchNodeFiles, fetchNodeFilesOrEmpty, nodeImageUrls, registerNodeFile, setNodeFiles } from "./nodeFiles";
 
 const fake = (data: unknown = {}, error: unknown = null) => {
   const calls: [string, unknown][] = [];
@@ -37,5 +37,30 @@ describe("nodeFiles adapter (0030)", () => {
   it("fetchNodeFilesOrEmpty: NODE_NOT_FOUND → [], other errors throw", async () => {
     expect(await fetchNodeFilesOrEmpty("21", fake(null, P0001("NODE_NOT_FOUND")).client)).toEqual([]);
     await expect(fetchNodeFilesOrEmpty("21", fake(null, P0001("UNKNOWN")).client)).rejects.toBeTruthy();
+  });
+});
+
+describe("nodeImageUrls (md-images D14)", () => {
+  const client = (rows: { id: string; object_path: string }[], signed: { path: string | null; signedUrl: string; error: string | null }[]) => {
+    const calls: unknown[] = [];
+    const c = {
+      from: (t: string) => ({ select: (cols: string) => ({ in: (col: string, ids: string[]) => { calls.push(["from", t, cols, col, ids]); return Promise.resolve({ data: rows, error: null }); } }) }),
+      storage: { from: (b: string) => ({ createSignedUrls: (paths: string[], sec: number, opt?: unknown) => { calls.push(["sign", b, paths, sec, opt]); return Promise.resolve({ data: signed, error: null }); } }) },
+    } as unknown as Db;
+    return { c, calls };
+  };
+  it("경로를 한 번에 받아 1시간 inline 서명(download 없음) 한 번, 실패한 것은 빠진다", async () => {
+    const { c, calls } = client(
+      [{ id: "a", object_path: "n/1/2/a.png" }, { id: "b", object_path: "n/1/2/b.svg" }],
+      [{ path: "n/1/2/a.png", signedUrl: "https://s/a", error: null }, { path: "n/1/2/b.svg", signedUrl: "", error: "Object not found" }],
+    );
+    const m = await nodeImageUrls([{ id: "a" }, { id: "b" }], c);
+    expect([...m]).toEqual([["a", "https://s/a"]]);
+    expect(calls).toEqual([["from", "files", "id, object_path", "id", ["a", "b"]], ["sign", "attachments", ["n/1/2/a.png", "n/1/2/b.svg"], 3600, undefined]]);
+  });
+  it("빈 목록은 부르지 않는다", async () => {
+    const { c, calls } = client([], []);
+    expect((await nodeImageUrls([], c)).size).toBe(0);
+    expect(calls).toEqual([]);
   });
 });

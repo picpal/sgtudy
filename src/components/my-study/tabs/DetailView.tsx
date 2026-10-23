@@ -11,7 +11,6 @@ import { md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { useStickyOffset } from "@/lib/useStickyOffset";
-import { MarkdownView } from "../MarkdownView";
 import { ArchivedBadge, ExamBadge, TypeBadge } from "../bits";
 import { isExamDraft } from "../exam";
 import { roundStatus, type LeafNode, type ParentNode, type TreeNode } from "../model";
@@ -24,7 +23,7 @@ import type { MentionMember } from "./CommentComposer";
 import { InlineConfirm } from "./InlineConfirm";
 import { LeafBody } from "./LeafBody";
 import type { SubmitDraft } from "./MySubmissionCard";
-import { NodeAttachments } from "./NodeAttachments";
+import { NodeDescription } from "./NodeDescription";
 import { PersonalForm } from "./PersonalForm";
 import { PersonalSection } from "./PersonalSection";
 
@@ -580,8 +579,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
                   <b className="font-bold text-ink">{n.pct}%</b> · 제출 {n.sub}/{n.asg}
                 </span>
               </div>
-              {n.desc.trim() ? <MarkdownView src={n.desc} className="text-[14px] leading-[1.75]" /> : <p className="m-0 text-[13px] text-muted">{kind} 설명이 아직 없어요</p>}
-              <NodeAttachments nodeId={n.id} canRemove={false} toast={toast} />
+              <NodeDescription nodeId={n.id} desc={n.desc} emptyText={`${kind} 설명이 아직 없어요`} canRemove={false} toast={toast} />
               <ChildList parent={n} onOpen={onOpen} />
               {n.d === 0 && <PersonalSection round={n} meId={meId} isLeader={isLeader} roomStatus={roomStatus} personal={personal} api={api} onOpen={(id) => guard(() => onOpen(id))} />}
             </>
