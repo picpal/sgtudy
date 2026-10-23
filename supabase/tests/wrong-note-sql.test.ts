@@ -277,6 +277,7 @@ cases("wrong note 0046 · practice & master", db, [
     assertEquals((await failCode(practice(q, []), "VALIDATION_FAILED")).field, "answers");
     await failCode(practice(q, Array.from({ length: 51 }, () => ({ questionId: q1, answer: 0 }))), "VALIDATION_FAILED");
     await failCode(rpc(q, "public.wrong_note_practice('aws', '{}'::jsonb)"), "VALIDATION_FAILED");
+    assertEquals((await failCode(practice(q, [{ questionId: q1, answer: 0 }, { questionId: q1, answer: 1 }]), "VALIDATION_FAILED")).field, "answers");   // 같은 문항 두 번
     assertEquals((await failCode(practice(q, [{ questionId: Number(q1) as unknown as string, answer: 0 }]), "VALIDATION_FAILED")).field, "questionId");
     assertEquals((await failCode(practice(q, [{ questionId: q1, answer: 9 }]), "VALIDATION_FAILED")).questionId, q1);
     await failCode(practice(q, [{ questionId: q2, answer: "x" }]), "VALIDATION_FAILED");
@@ -321,15 +322,20 @@ cases("wrong note 0046 · practice & master", db, [
     await failCode(master(q, q1, true), "ROOM_NOT_FOUND");
     // 잠긴 시험(after_deadline 마감 전)
     const lockedNode = await published(q, { ...Q4, reveal: "after_deadline" }, "3주차 마감 시험");
-    const [l1] = await qids(q, lockedNode);
+    const [l1, , , l4] = await qids(q, lockedNode);
     await takeAs(q, "지은", lockedNode, JIEUN);
     assertEquals((await failCode(practice(q, [{ questionId: l1, answer: 0 }]), "WRONG_NOTE_LOCKED")).unlockDate, "2026-10-21");
     await failCode(master(q, l1, true), "WRONG_NOTE_LOCKED");
+    // 공개 전엔 맞힌 문항(4번)도 LOCKED — 코드 차이로 문항별 정오가 새지 않는다(D3)
+    await failCode(practice(q, [{ questionId: l4, answer: "IGW" }]), "WRONG_NOTE_LOCKED");
+    await failCode(master(q, l4, true), "WRONG_NOTE_LOCKED");
     // 묶음 안에 잠긴 문항이 하나라도 있으면 전부 롤백
     await failCode(practice(q, [{ questionId: q1, answer: 0 }, { questionId: l1, answer: 0 }]), "WRONG_NOTE_LOCKED");
     assertEquals((await one(q, "select count(*)::int as c from public.exam_practice where user_id = $1::uuid", [await uidOf(q, "지은")])).c, 0);
     await setToday(q, "2026-10-22");
     assertEquals((await practice(q, [{ questionId: l1, answer: 0 }])).results[l1].correct, true);
+    await failCode(practice(q, [{ questionId: l4, answer: "IGW" }]), "WRONG_NOTE_NOT_IN");   // 공개 뒤엔 맞힌 문항 = 노트에 없음
+    await failCode(master(q, l4, true), "WRONG_NOTE_NOT_IN");
     // 보관된 리프 = 노트에 없음
     await as(q, "민수");
     await q("select public.node_archive('aws', $1::bigint)", [lockedNode]);

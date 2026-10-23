@@ -36,17 +36,24 @@ export function useWrongNote(load: () => Promise<NoteStudy[]>, deps: readonly un
   const key = JSON.stringify([tick, ...deps]);
   const [doneKey, setDoneKey] = useState<string | null>(null);
   const asked = useRef<string | null>(null);
+  // 연습·외움 응답을 합친 횟수 — 그 전에 떠난 목록 요청의 응답은 합친 결과를 덮으니 버리고 한 번 더 받는다
+  const merged = useRef(0);
 
   useEffect(() => {
     if (!enabled || asked.current === key) return;
     asked.current = key;
     let live = true;
     let settled = false;
+    const at = merged.current;
     loadRef
       .current()
       .then((s) => {
         settled = true;
         if (!live) return;
+        if (merged.current !== at) {
+          setTick((t) => t + 1);
+          return;
+        }
         setStudies(s);
         setError(false);
         setDoneKey(key);
@@ -91,6 +98,7 @@ export function useWrongNote(load: () => Promise<NoteStudy[]>, deps: readonly un
     async (slug: string, answers: WrongNoteAnswer[]): Promise<PracticeOutcome> => {
       const r = await run(() => practiceWrongNote(slug, answers));
       if (!r.ok) return r;
+      merged.current += 1;
       setStudies((s) => (s ? mergePractice(s, r.v.results) : s));
       return { ok: true, results: r.v.results };
     },
@@ -101,6 +109,7 @@ export function useWrongNote(load: () => Promise<NoteStudy[]>, deps: readonly un
     async (slug: string, questionId: string, on: boolean): Promise<boolean> => {
       const r = await run(() => masterWrongNote(slug, questionId, on));
       if (!r.ok) return false;
+      merged.current += 1;
       setStudies((s) => (s ? setMastered(s, questionId, r.v.mastered) : s));
       toastRef.current(on ? { text: "외운 문제로 옮겼어요 · 「외운 문제 보기」로 되돌릴 수 있어요", tone: "ok" } : { text: "오답노트에 다시 넣었어요", tone: "ok" });
       return true;

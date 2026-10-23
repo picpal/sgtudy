@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ExamQuestion, WrongNoteItem } from "@/lib/api/types";
 import { MarkdownView } from "./MarkdownView";
 import { ExamQuestionView } from "./tabs/ExamQuestionView";
@@ -45,9 +45,21 @@ export function WrongNoteItemView({ it, run, inBatch, busy, fieldError, onStart,
   const q = it.question;
   const [reveal, setReveal] = useState(false);
   const badges = itemBadges(it);
+  // 누른 단추가 상태 전환으로 사라지면 포커스가 body 로 빠진다 — 같은 문항의 다음 컨트롤로(입력 = 첫 보기, 결과 = [한 번 더], 기본 = [다시 풀기])
+  const liRef = useRef<HTMLLIElement>(null);
+  const phase = run?.s ?? "idle";
+  const prev = useRef(phase);
+  useEffect(() => {
+    if (prev.current === phase) return;
+    prev.current = phase;
+    const a = document.activeElement;
+    if (a && a !== document.body) return;
+    const sel = phase === "take" ? "input, button[aria-pressed]" : phase === "done" ? '[data-focus="again"]' : '[data-focus="start"]';
+    liRef.current?.querySelector<HTMLElement>(sel)?.focus();
+  }, [phase]);
 
   return (
-    <li className="flex flex-col gap-2 border-t border-line-2 pt-4 first:border-t-0 first:pt-0" data-wn-item={q.id}>
+    <li ref={liRef} className="flex flex-col gap-2 border-t border-line-2 pt-4 first:border-t-0 first:pt-0" data-wn-item={q.id}>
       <p className="m-0 flex flex-wrap items-center gap-[6px]" aria-label="문항 상태">
         {badges.map((b) => (
           <span key={b.text} className={`rounded-[6px] px-[6px] py-[1px] text-[11px] font-bold ${BADGE[b.tone]}`}>
@@ -90,7 +102,7 @@ export function WrongNoteItemView({ it, run, inBatch, busy, fieldError, onStart,
       )}
       {!inBatch && run?.s === "done" && (
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={BTN} disabled={busy} onClick={onStart}>
+          <button type="button" className={BTN} disabled={busy} onClick={onStart} data-focus="again">
             한 번 더
           </button>
           <button type="button" className={BTN} disabled={busy} onClick={onClose}>
@@ -101,15 +113,15 @@ export function WrongNoteItemView({ it, run, inBatch, busy, fieldError, onStart,
       {!run && (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={BTN} disabled={busy} onClick={onStart}>
+            <button type="button" className={BTN} disabled={busy} onClick={onStart} data-focus="start">
               다시 풀기
             </button>
             {it.mastered ? (
-              <button type="button" className={BTN} disabled={busy} onClick={() => onMaster(false)}>
+              <button type="button" className={BTN} disabled={busy} onClick={() => onMaster(false)} data-focus="master">
                 다시 노트에
               </button>
             ) : (
-              <button type="button" className={BTN} disabled={busy} onClick={() => onMaster(true)}>
+              <button type="button" className={BTN} disabled={busy} onClick={() => onMaster(true)} data-focus="master">
                 외웠어요
               </button>
             )}

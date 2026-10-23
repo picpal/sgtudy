@@ -43,7 +43,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-type Opt = { studies?: NoteStudy[]; scope?: "room" | "all"; pending?: boolean; studyFilter?: string; practice?: (slug: string, a: { questionId: string; answer: unknown }[]) => PracticeOutcome };
+type Opt = { studies?: NoteStudy[]; scope?: "room" | "all"; pending?: boolean; studyFilter?: string; practice?: (slug: string, a: { questionId: string; answer: unknown }[]) => PracticeOutcome | Promise<PracticeOutcome> };
 function mount(o: Opt = {}) {
   const onPractice = vi.fn(async (slug: string, answers: { questionId: string; answer: unknown }[]): Promise<PracticeOutcome> => o.practice?.(slug, answers) ?? { ok: false });
   const onMaster = vi.fn<(slug: string, id: string, on: boolean) => Promise<boolean>>(async () => true);
@@ -287,5 +287,79 @@ describe("WrongNoteList — 외웠어요 (Task 6)", () => {
     await flush();
     expect(onMaster).toHaveBeenLastCalledWith("aws", "1", false);
     expect(text(itemEl(host, "1").querySelector("[aria-label='문항 상태']"))).toBe("오답");
+  });
+});
+
+describe("WrongNoteList — 포커스 (리뷰 2)", () => {
+  const OK = (_s: string, a: { questionId: string }[]): PracticeOutcome => ({ ok: true, results: Object.fromEntries(a.map((x) => [x.questionId, { correct: true, practice: P(true) }])) });
+  it("[다시 풀기] → 첫 보기 · [채점] → [한 번 더] · [한 번 더] → 첫 보기 · [취소] → [다시 풀기]", async () => {
+    const { host } = mount({ practice: OK });
+    click(btn(itemEl(host, "1"), "다시 풀기"));
+    expect(document.activeElement).toBe(itemEl(host, "1").querySelector("input[type='radio']"));
+    click(btn(itemEl(host, "1"), "채점"));
+    await flush();
+    expect(document.activeElement).toBe(btn(itemEl(host, "1"), "한 번 더"));
+    (document.activeElement as HTMLElement).blur();
+    click(btn(itemEl(host, "1"), "한 번 더"));
+    expect(document.activeElement).toBe(itemEl(host, "1").querySelector("input[type='radio']"));
+    (document.activeElement as HTMLElement).blur();
+    click(btn(itemEl(host, "1"), "취소"));
+    expect(document.activeElement).toBe(btn(itemEl(host, "1"), "다시 풀기"));
+  });
+
+  it("[외웠어요] 로 빠지면 다음 문항의 [다시 풀기] · 마지막이면 앞 문항 · [다시 노트에] 는 그 문항의 [외웠어요]", async () => {
+    const { host } = mount();
+    click(btn(itemEl(host, "1"), "외웠어요"));
+    await flush();
+    expect(document.activeElement).toBe(btn(itemEl(host, "2"), "다시 풀기"));
+    (document.activeElement as HTMLElement).blur();
+    click(btn(itemEl(host, "3"), "외웠어요"));
+    await flush();
+    expect(document.activeElement).toBe(btn(itemEl(host, "2"), "다시 풀기"));
+    (document.activeElement as HTMLElement).blur();
+    click([...host.querySelectorAll("label")].find((l) => text(l).includes("외운 문제"))!.querySelector("input"));
+    (document.activeElement as HTMLElement)?.blur?.();
+    click(btn(itemEl(host, "1"), "다시 노트에"));
+    await flush();
+    expect(document.activeElement).toBe(btn(itemEl(host, "1"), "외웠어요"));
+  });
+
+  it("묶음 채점 뒤 포커스는 막대의 [닫기]", async () => {
+    const { host } = mount({ practice: OK });
+    click(btn(host, "이 시험 다시 풀기"));
+    expect(document.activeElement).toBe(itemEl(host, "1").querySelector("input[type='radio']"));
+    (document.activeElement as HTMLElement).blur();
+    click(btn(host, "채점"));
+    await flush();
+    expect(document.activeElement).toBe(btn(host, "닫기"));
+  });
+});
+
+describe("WrongNoteList — 채점 중 필터 변경 (리뷰 4)", () => {
+  it("묶음 채점 응답 전에 필터로 문항이 빠지면 응답이 와도 묶음·결과를 되살리지 않는다", async () => {
+    let resolve!: (o: PracticeOutcome) => void;
+    const { host } = mount({ practice: () => new Promise<PracticeOutcome>((r) => (resolve = r)) });
+    click(btn(host, "이 시험 다시 풀기"));
+    click(btn(host, "채점"));
+    // 「다시 풀어 맞힘」 은 2번만 — 1·3번은 빠지고 입력도 버린다
+    click(btn(host.querySelector("[role='radiogroup']")!, "다시 풀어 맞힘"));
+    await act(async () => resolve({ ok: true, results: { "1": { correct: true, practice: P(true) }, "2": { correct: false, practice: P(false) }, "3": { correct: true, practice: P(true) } } }));
+    expect(text(host)).toContain("1문항 중 0 맞힘");
+    click(btn(host.querySelector("[role='radiogroup']")!, "전체"));
+    // 1·3번은 다시 풀기 상태가 아니다(입력·결과 없음) — 응답은 목록에만 합쳐졌다
+    expect(itemEl(host, "1").querySelector("input")).toBeNull();
+    expect(text(itemEl(host, "1"))).not.toContain("맞혔어요");
+  });
+
+  it("문항 하나 채점 응답 전에 필터로 빠지면 결과를 붙이지 않는다", async () => {
+    let resolve!: (o: PracticeOutcome) => void;
+    const { host } = mount({ practice: () => new Promise<PracticeOutcome>((r) => (resolve = r)) });
+    click(btn(itemEl(host, "1"), "다시 풀기"));
+    click(btn(itemEl(host, "1"), "채점"));
+    click(btn(host.querySelector("[role='radiogroup']")!, "다시 풀어 맞힘"));
+    await act(async () => resolve({ ok: true, results: { "1": { correct: true, practice: P(true) } } }));
+    // 응답은 목록에 합쳐져 1번이 「다시 풀어 맞힘」 이 됐지만, 다시 풀기 상태는 버렸으니 기본 화면
+    expect(btn(itemEl(host, "1"), "다시 풀기")).not.toBeNull();
+    expect(text(itemEl(host, "1"))).not.toContain("✓ 맞혔어요");
   });
 });

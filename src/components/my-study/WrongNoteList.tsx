@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { studyTone } from "@/components/tasks/tone";
 import type { WrongNoteExam, WrongNoteItem } from "@/lib/api/types";
@@ -44,6 +44,33 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   const [runs, setRuns] = useState<Record<string, Run>>({});
   const [batches, setBatches] = useState<Record<string, Batch>>({});
   const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
+  const rootRef = useRef<HTMLDivElement>(null);
+  // 외웠어요·다시 노트에 뒤 포커스 — 누른 단추가 사라져 body 로 빠지지 않게. [그 문항, 다음, 앞] 순서로 남아 있는 곳
+  const focusWant = useRef<string[] | null>(null);
+  const [focusTick, setFocusTick] = useState(0);
+  useEffect(() => {
+    const want = focusWant.current;
+    if (!want || !rootRef.current) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && !rootRef.current.contains(a)) return;
+    const root = rootRef.current;
+    const [self, ...others] = want;
+    const target =
+      root.querySelector<HTMLElement>(`[data-wn-item="${self}"] [data-focus="master"]`) ??
+      others.map((id) => root.querySelector<HTMLElement>(`[data-wn-item="${id}"] [data-focus="start"]`)).find(Boolean) ??
+      root.querySelector<HTMLElement>("[role=radio][aria-checked=true]");
+    if (!target) return;
+    target.focus();
+    focusWant.current = null;
+  }, [focusTick, studies]);
+  const master = async (slug: string, id: string, on: boolean) => {
+    const els = [...(rootRef.current?.querySelectorAll<HTMLElement>("[data-wn-item]") ?? [])];
+    const i = els.findIndex((e) => e.dataset.wnItem === id);
+    const near = [els[i + 1], els[i - 1]].flatMap((e) => (e?.dataset.wnItem ? [e.dataset.wnItem] : []));
+    if (!(await onMaster(slug, id, on))) return;
+    focusWant.current = [id, ...near];
+    setFocusTick((t) => t + 1);
+  };
 
   const live = useMemo(() => new Map(itemsOf(studies).map((it) => [it.question.id, it])), [studies]);
   // 다시 풀기 중인 문항은 시작할 때 모습으로 필터를 통과시킨다
@@ -97,8 +124,10 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
     const answer = run.st.answer;
     clearErr([id]);
     const o = await onPractice(slug, [{ questionId: id, answer }]);
-    if (o.ok && o.results[id]) setRun(id, { s: "done", answer, correct: o.results[id].correct });
-    else failed(o);
+    if (!o.ok || !o.results[id]) return failed(o);
+    // 그사이 필터를 바꿔 입력을 버렸으면(목록에서 빠짐) 결과도 버린다
+    const correct = o.results[id].correct;
+    setRuns((r) => (r[id]?.st.s === "take" ? { ...r, [id]: { ...r[id], st: { s: "done", answer, correct } } } : r));
   };
 
   const startBatch = (slug: string, ex: WrongNoteExam) => {
@@ -128,12 +157,18 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
     clearErr(b.ids);
     const o = await onPractice(b.slug, answers);
     if (!o.ok) return failed(o);
+    // 응답을 기다리는 사이 필터로 묶음이 줄거나 사라졌을 수 있다 — 지금 남은 묶음의 문항에만 반영한다
+    setBatches((all) => {
+      const cur = all[nodeId];
+      if (!cur) return all;
+      const kept = Object.fromEntries(Object.entries(o.results).filter(([id]) => cur.ids.includes(id)));
+      return { ...all, [nodeId]: { ...cur, summary: batchSummary(kept, cur.ids.length) } };
+    });
     setRuns((r) => {
       const next = { ...r };
-      for (const a of answers) if (next[a.questionId] && o.results[a.questionId]) next[a.questionId] = { ...next[a.questionId], st: { s: "done", answer: a.answer, correct: o.results[a.questionId].correct } };
+      for (const a of answers) if (next[a.questionId]?.st.s === "take" && o.results[a.questionId]) next[a.questionId] = { ...next[a.questionId], st: { s: "done", answer: a.answer, correct: o.results[a.questionId].correct } };
       return next;
     });
-    setBatches((all) => ({ ...all, [nodeId]: { ...b, summary: batchSummary(o.results, b.ids.length) } }));
   };
 
   if (empty && empty.text !== FILTER_EMPTY_TEXT) {
@@ -160,7 +195,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   };
 
   return (
-    <div className="mt-[18px] flex flex-col gap-4">
+    <div ref={rootRef} className="mt-[18px] flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         {line && <p className="m-0 text-[14px] font-semibold text-ink-2">{line}</p>}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -229,7 +264,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
                       onGrade={(id) => void gradeOne(vs.slug, id)}
                       onMaster={(id, on) => {
                         clearErr([id]);
-                        void onMaster(vs.slug, id, on);
+                        void master(vs.slug, id, on);
                       }}
                       onStartBatch={() => startBatch(vs.slug, ex)}
                       onGradeBatch={() => void gradeBatch(ex.nodeId)}
@@ -338,7 +373,8 @@ function ExamCard({ ex, live, runs, batch, fieldErr, busy, barInset, onRun, onGr
             )}
           </p>
           {batch.summary ? (
-            <button type="button" className={BTN} onClick={onEndBatch}>
+            // 채점하면 [채점] 이 사라진다 — 포커스가 body 로 빠지지 않게 [닫기] 로
+            <button type="button" className={BTN} onClick={onEndBatch} ref={(el) => void (el && (!document.activeElement || document.activeElement === document.body) && el.focus())}>
               닫기
             </button>
           ) : (

@@ -110,4 +110,28 @@ describe("WrongNoteTab", () => {
     expect(toast).toHaveBeenCalledWith({ text: "외운 문제로 옮겼어요 · 「외운 문제 보기」로 되돌릴 수 있어요", tone: "ok" });
     expect(host.textContent).toContain("전부 외웠어요");
   });
+
+  it("다시 받는 중에 연습 결과를 합쳤으면 늦게 온 목록은 버리고 한 번 더 받는다(리뷰 5)", async () => {
+    const { host } = await mount();
+    let late!: (v: WrongNote) => void;
+    api.fetchWrongNote.mockReturnValueOnce(new Promise((r) => (late = r)));
+    api.masterWrongNote.mockRejectedValue(new ApiException({ code: "WRONG_NOTE_NOT_IN", message: "오답노트에 없는 문항이에요" }));
+    click(btn(host, "외웠어요"));
+    await flush();
+    expect(api.fetchWrongNote).toHaveBeenCalledTimes(2);       // 다시 받기 시작(아직 응답 없음)
+    const done = { lastCorrect: true, correctCount: 1, wrongCount: 0, lastAnswer: true, lastAt: "2026-10-17T00:00:00.000Z" };
+    api.practiceWrongNote.mockResolvedValue({ results: { "1": { correct: true, practice: done } } });
+    click(btn(host, "다시 풀기"));
+    click(btn(host, "O"));
+    click(btn(host, "채점"));
+    await flush();
+    expect(host.textContent).toContain("다시 풀어 맞힘 1");
+    const fresh = VIEW();
+    fresh.rounds[0].exams[0].items![0].practice = done;
+    api.fetchWrongNote.mockResolvedValue(fresh);
+    await act(async () => late(VIEW()));                        // 연습 전 목록 — 버린다
+    await flush();
+    expect(api.fetchWrongNote).toHaveBeenCalledTimes(3);
+    expect(host.textContent).toContain("다시 풀어 맞힘 1");
+  });
 });

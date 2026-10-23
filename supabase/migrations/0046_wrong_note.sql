@@ -163,8 +163,9 @@ begin
 end $$;
 
 -- ───────── 4. 다시 풀기 (D6·D7·D14) ─────────
--- 연습 대상 관문(스펙 §4.3 1~3): 이 방 시험의 문항(NODE_NOT_FOUND) → 내 제출 응시에서 틀린 문항·보관 아닌 리프(WRONG_NOTE_NOT_IN —
--- 맞힘·남의 것·미제출·PENDING 은 모두 이 코드, 존재 숨김) → 정답 공개(exam_reveal_ok, WRONG_NOTE_LOCKED)
+-- 연습 대상 관문(스펙 §4.3 1~3): 이 방 시험의 문항(NODE_NOT_FOUND) → 내 제출 응시·보관 아닌 리프(WRONG_NOTE_NOT_IN —
+-- 남의 것·미제출·PENDING, 존재 숨김) → 정답 공개(exam_reveal_ok, WRONG_NOTE_LOCKED) → 틀린 문항(WRONG_NOTE_NOT_IN).
+-- 공개 판정을 정오보다 먼저 — 잠긴 시험에서 맞힌 문항(NOT_IN)·틀린 문항(LOCKED)이 다른 코드를 내면 공개 전 문항별 정오가 샌다(D3·D4)
 create or replace function public.wrong_note_target(p_room bigint, p_uid uuid, p_question bigint,
   out q public.exam_questions, out x public.exams, out n public.goal_nodes, out a public.exam_attempts)
 language plpgsql stable security definer set search_path = '' as $$
@@ -176,12 +177,14 @@ begin
   end if;
   select * into n from public.goal_nodes where id = x.node_id;
   select * into a from public.exam_attempts where node_id = x.node_id and user_id = p_uid and status = 'SUBMITTED';
-  if a.id is null or n.archived_at is not null
-     or not exists (select 1 from public.exam_answers e where e.attempt_id = a.id and e.question_id = q.id and e.is_correct = false) then
+  if a.id is null or n.archived_at is not null then
     perform public.fail('WRONG_NOTE_NOT_IN', '오답노트에 없는 문항이에요', jsonb_build_object('questionId', p_question::text));
   end if;
   if not public.exam_reveal_ok(x, n, a) then
     perform public.fail('WRONG_NOTE_LOCKED', '정답이 공개된 뒤에 다시 풀 수 있어요', jsonb_build_object('unlockDate', to_char(n.end_date, 'YYYY-MM-DD')));
+  end if;
+  if not exists (select 1 from public.exam_answers e where e.attempt_id = a.id and e.question_id = q.id and e.is_correct = false) then
+    perform public.fail('WRONG_NOTE_NOT_IN', '오답노트에 없는 문항이에요', jsonb_build_object('questionId', p_question::text));
   end if;
 end $$;
 
@@ -204,6 +207,10 @@ begin
   r := public.wrong_note_room(p_slug, v_uid);
   if p_answers is null or jsonb_typeof(p_answers) <> 'array' or jsonb_array_length(p_answers) not between 1 and 50 then
     perform public.fail('VALIDATION_FAILED', '한 번에 1~50문항을 채점할 수 있어요', '{"field":"answers"}'::jsonb);
+  end if;
+  -- 같은 문항이 두 번이면 카운트가 두 번 오르고 응답 키가 겹친다 — 거절
+  if (select count(distinct e ->> 'questionId') from jsonb_array_elements(p_answers) e) <> jsonb_array_length(p_answers) then
+    perform public.fail('VALIDATION_FAILED', '같은 문항이 두 번 들어 있어요', '{"field":"answers"}'::jsonb);
   end if;
   for it in select * from jsonb_array_elements(p_answers) loop
     if jsonb_typeof(it) <> 'object' or coalesce(jsonb_typeof(it -> 'questionId'), '') <> 'string' or (it ->> 'questionId') !~ '^[0-9]{1,18}$' then

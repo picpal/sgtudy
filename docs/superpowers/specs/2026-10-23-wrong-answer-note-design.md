@@ -145,14 +145,16 @@ type WrongNoteMine = {
 - 대상 방: `rooms r` × `room_members m(user_id = uid, status in ('ACTIVE','INACTIVE'))` ∪ `r.leader_id = uid`, `r.archived_at is null`. 정렬 = `me_studies` 와 같은 순서(그 함수의 `order by` 를 확인해 맞춘다). `tone` 은 `me_tasks.studies[].tone` 과 같은 식(`room_tone` 류 헬퍼가 있으면 그것).
 - 각 방의 `rounds`·`totals`·`hasExam` 은 **`wrong_note_list` 와 같은 내부 함수**(`wrong_note_rounds(p_room, p_uid)`·`wrong_note_totals`·`wrong_note_has_exam`)로 만든다 — `wrong_note_list` 는 관문 뒤 이 세 함수를 부르는 얇은 껍데기가 된다.
 - 멤버 자격 검사는 조인 조건이 대신한다(PENDING 행은 조인에서 빠진다). 비로그인은 `require_user`.
+- **의도한 차이**: DRAFT(모집 전) 방의 비그룹장 멤버와 보관된 방은 `wrong_note_list`(방 탭, `room_readable` 관문)로는 보이지만 `wrong_note_mine` 에서는 빠진다 — `/tasks` 는 `me_studies` 와 같은 "지금 다니는 방" 목록이고, 그 방들의 오답은 방 탭에서 본다.
 
 ### 4.3 `wrong_note_practice(p_slug text, p_answers jsonb) → jsonb` (authenticated, D6·D7·D14)
 
-입력 `[{questionId: string, answer: jsonb}]`, 길이 1~50(초과 `VALIDATION_FAILED`). 각 문항에 대해:
+입력 `[{questionId: string, answer: jsonb}]`, 길이 1~50(초과 `VALIDATION_FAILED`), 같은 `questionId` 두 번도 `VALIDATION_FAILED`(field `answers`). 각 문항에 대해:
 
 1. `q` ← `exam_questions`, `x`·`n` ← 그 시험(방 slug 와 일치, 아니면 `NODE_NOT_FOUND`).
-2. 내 제출 응시 `a`(`SUBMITTED`) 가 있고 `exam_answers(a.id, q.id).is_correct = false` — 아니면 **`WRONG_NOTE_NOT_IN`**("오답노트에 없는 문항이에요"). 맞힌 문항·남의 문항·미제출 시험은 모두 이 코드(존재 숨김).
-3. `exam_reveal_ok(x, n, a)` 거짓이면 **`WRONG_NOTE_LOCKED`**("정답이 공개된 뒤에 다시 풀 수 있어요", details `{unlockDate}`). 클라이언트가 잠긴 시험에 연습 UI 를 안 그리지만, 서버가 막는다.
+2. 내 제출 응시 `a`(`SUBMITTED`) 가 없거나 리프가 보관됐으면 **`WRONG_NOTE_NOT_IN`**("오답노트에 없는 문항이에요"). 남의 문항·미제출 시험은 이 코드(존재 숨김).
+3. `exam_reveal_ok(x, n, a)` 거짓이면 정오와 무관하게 **`WRONG_NOTE_LOCKED`**("정답이 공개된 뒤에 다시 풀 수 있어요", details `{unlockDate}`). 클라이언트가 잠긴 시험에 연습 UI 를 안 그리지만, 서버가 막는다.
+3-b. 마지막으로 `exam_answers(a.id, q.id).is_correct = false` 가 아니면(맞힌 문항) `WRONG_NOTE_NOT_IN`. **순서가 보안 조건**이다 — 공개 판정을 정오보다 뒤에 두면 잠긴 시험에서 맞힌 문항은 NOT_IN, 틀린 문항은 LOCKED 로 갈라져 공개 전 문항별 정오가 샌다(D3). `wrong_note_master` 도 같은 관문.
 4. `exam_answer_shape_ok(q, answer)` 거짓이면 `VALIDATION_FAILED`(details `{questionId}`). 답이 비어 있으면(`exam_is_answered` 거짓) 오답으로 채점(공식 채점과 동일).
 5. `exam_grade(q, answer)` → `correct`. `exam_practice` upsert: `last_correct`, `correct_count/wrong_count += 1`, `last_answer = exam_answer_canon`, `last_practiced_at = app_now()`. **`mastered_at` 은 건드리지 않는다**(외운 문항을 다시 풀어도 외움 상태 유지 — 사용자가 직접 되돌린다).
 6. 한 트랜잭션. 하나라도 실패하면 전부 롤백(묶음 채점이 반쯤 기록되지 않게).
