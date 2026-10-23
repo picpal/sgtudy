@@ -1,6 +1,6 @@
 import type { TurnErrorBody } from "./schema";
 
-/* /api/rooms/interview 의 HTTP 경계(D7) — 같은 출처만 · 본문 64KB · 오류 본문 {error, message, details?}(키·모델 원문 없음) */
+/* /api/rooms/interview·rounds 의 HTTP 경계(D7) — 같은 출처만 · 본문 64KB · 오류 본문 {error, message, details?}(키·모델 원문 없음) */
 
 export const MAX_INTERVIEW_BODY = 64 * 1024;
 
@@ -33,4 +33,7 @@ export const MSG = {
   VALIDATION_FAILED: "요청 모양이 올바르지 않아요",
   AI_TURN_LIMIT: "인터뷰가 길어졌어요 · 미리보기나 직접 입력으로 이어서 해 주세요",
   AI_UNAVAILABLE: "지금은 AI 응답이 어려워요 · 직접 입력으로 이어서 할 수 있어요",
+  ROUNDS_UNAVAILABLE: "회차 초안은 지금 어려워요 · 방만 먼저 만들고 진행목표에서 채울 수 있어요",
+  ROUNDS_LIMIT: "오늘은 회차 초안을 더 만들 수 없어요 · 방을 만든 뒤 진행목표에서 채울 수 있어요",
+  ROUNDS_NO_PERIOD: "제목과 기간을 먼저 정해 주세요",
 } as const;

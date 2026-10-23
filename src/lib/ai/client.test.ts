@@ -8,7 +8,7 @@ vi.mock("openai", () => {
   class OpenAI { static APIError = APIError; responses = { parse }; }
   return { default: OpenAI };
 });
-const { openaiCallModel } = await import("./client");
+const { openaiCallModel, openaiCallRounds } = await import("./client");
 const OpenAI = (await import("openai")).default as unknown as { APIError: new (s: number) => Error };
 
 const input = { system: "SYS", messages: [{ role: "user" as const, content: "hi" }], state: {} as never };
@@ -25,6 +25,8 @@ describe("openaiCallModel", () => {
     expect(body).toMatchObject({ model: "gpt-6-luna", instructions: "SYS", input: input.messages, reasoning: { effort: "low" }, max_output_tokens: 2048, store: false });
     expect(body.text.format).toMatchObject({ type: "json_schema", strict: true });
     expect(body.tools).toBeUndefined();
+    expect(body.prompt_cache_key).toBe("sgtudy-room-interview");
+    expect(parse.mock.calls[0][1]).toBeUndefined(); // 인스턴스 기본(20s · 재시도 1)
     expect(r).toEqual({ ok: true, turn: { say: "a" }, usage: { in: 900, out: 120, cached: 800 }, model: "gpt-6-luna" });
   });
   it("잘림(incomplete)·거절(output_parsed null) → 실패", async () => {
@@ -44,5 +46,24 @@ describe("openaiCallModel", () => {
     parse.mockResolvedValue({ status: "completed", output_parsed: { say: "a" } });
     await openaiCallModel(input);
     expect(parse.mock.calls[0][0].model).toBe("gpt-6-sol");
+  });
+});
+
+describe("openaiCallRounds", () => {
+  const rin = { system: "RSYS", messages: [{ role: "user" as const, content: "<schedule/>" }], state: {} as never };
+  it("strict 회차 포맷 · 12,000 상한 · 캐시 키 · 요청 옵션 timeout 50s · 재시도 0 · 사용량 매핑", async () => {
+    parse.mockResolvedValue({ status: "completed", output_parsed: { rounds: [] }, model: "gpt-6-luna", usage: { input_tokens: 3000, output_tokens: 2500, input_tokens_details: { cached_tokens: 1200 } } });
+    const r = await openaiCallRounds(rin);
+    const [body, opts] = parse.mock.calls[0];
+    expect(body).toMatchObject({ model: "gpt-6-luna", instructions: "RSYS", input: rin.messages, reasoning: { effort: "low" }, max_output_tokens: 12_000, store: false, prompt_cache_key: "sgtudy-room-rounds" });
+    expect(body.text.format).toMatchObject({ type: "json_schema", strict: true, name: "room_rounds_draft" });
+    expect(opts).toEqual({ timeout: 50_000, maxRetries: 0 });
+    expect(r).toEqual({ ok: true, output: { rounds: [] }, usage: { in: 3000, out: 2500, cached: 1200 }, model: "gpt-6-luna" });
+  });
+  it("잘림·API 오류 → 실패(상태 코드만)", async () => {
+    parse.mockResolvedValueOnce({ status: "incomplete", output_parsed: null });
+    expect(await openaiCallRounds(rin)).toEqual({ ok: false, status: 200 });
+    parse.mockRejectedValueOnce(new OpenAI.APIError(503));
+    expect(await openaiCallRounds(rin)).toEqual({ ok: false, status: 503 });
   });
 });
