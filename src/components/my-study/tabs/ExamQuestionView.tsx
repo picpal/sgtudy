@@ -14,6 +14,8 @@ type Props = {
   idScope?: string;
   /** 답 라벨 — 편집자가 남의 답안을 볼 땐 "답"(기본 "내 답") */
   mineLabel?: string;
+  /** 결과 모드의 해설을 펼친 채로 — 오답노트 다시 풀기 채점 뒤(기본 접힘) */
+  explanationOpen?: boolean;
 } & (
   | { mode: "take"; onChange: (answer: unknown) => void; disabled?: boolean }
   /** 결과: 정오·배점은 서버 results 가 있을 때만(after_deadline 마감 뒤 미제출이면 null) */
@@ -27,7 +29,7 @@ const row = "flex min-h-11 scroll-mb-20 items-center gap-3 rounded-[10px] border
 
 /** 시험 문항 1개 — 응시(라디오·체크·O/X 두 버튼·단답 칸) 또는 결과(내 답·정답·정오·해설). 서버가 보낸 키만 그린다 */
 export function ExamQuestionView(p: Props) {
-  const { q, no, mine, idScope, mineLabel = "내 답" } = p;
+  const { q, no, mine, idScope, mineLabel = "내 답", explanationOpen = false } = p;
   const headId = `exam-q-${idScope ? `${idScope}-` : ""}${q.id}`;
   const kind = q.type === "single" ? null : QTYPE_KO[q.type];
   const hasKey = "answer" in q;
@@ -56,7 +58,7 @@ export function ExamQuestionView(p: Props) {
       )}
 
       {res && "explanation" in q && (q.explanation ?? "").trim() !== "" && (
-        <details className="rounded-[10px] bg-surface-2 px-3 text-[13px]">
+        <details open={explanationOpen} className="rounded-[10px] bg-surface-2 px-3 text-[13px]">
           <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-ink-2">해설</summary>
           <div className="pb-3">
             <MarkdownView src={q.explanation!} className="text-[13px] leading-[1.7]" />

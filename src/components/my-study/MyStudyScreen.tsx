@@ -39,6 +39,7 @@ import { CalendarTab } from "./tabs/CalendarTab";
 import { MemberAdminCard } from "./tabs/MemberAdminCard";
 import { GanttTab } from "./tabs/GanttTab";
 import { NoticeTab, type NoticeViewer } from "./tabs/NoticeTab";
+import { WrongNoteTab } from "./tabs/WrongNoteTab";
 import { NoticePopup } from "./NoticePopup";
 import { useCurriculumApi } from "./useCurriculumApi";
 import { RoomArchivedProvider } from "./roomArchived";
@@ -501,6 +502,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                       {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                       {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                       {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
+                      {S.tab === "wrong" && <WrongNoteTab slug={detail.slug} viewerPending={detail.me?.state === "pending"} toast={setToast} />}
                     </section>
                     {S.tab === "overview" && (
                       <JoinInfoCard

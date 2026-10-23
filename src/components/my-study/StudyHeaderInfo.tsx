@@ -20,6 +20,7 @@ export const TABS: [TabId, string][] = [
   ["board", "보드"],
   ["calendar", "캘린더"],
   ["gantt", "간트"],
+  ["wrong", "오답노트"],
 ];
 
 const STATUS_BG: Record<RoomStatus, string> = { recruit: "#2F5BC2", active: "#0D7A64", ended: "#5B6675" };

@@ -96,7 +96,7 @@ describe("StudyHeaderInfo 공지 탭", () => {
   const tabs = (host: HTMLElement) => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
   it("탭 순서: 개요 · 공지 · 진행목표 …", () => {
     const { host } = mount();
-    expect(tabs(host).map((b) => b.textContent)).toEqual(["개요", "공지", "진행목표", "보드", "캘린더", "간트"]);
+    expect(tabs(host).map((b) => b.textContent)).toEqual(["개요", "공지", "진행목표", "보드", "캘린더", "간트", "오답노트"]);
   });
   it("안 읽은 공지 → 점 + aria-label, 없으면 점 없음", () => {
     const host = document.body.appendChild(document.createElement("div"));

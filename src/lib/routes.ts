@@ -51,7 +51,7 @@ export const routes = {
 } as const;
 
 /** 내 스터디 탭 키 — StudyHeaderInfo 의 TabId 가 이 목록에서 나온다(설정 "이전 페이지" from 검증이 같은 목록을 쓴다) */
-export const MY_STUDY_TABS = ["overview", "notice", "curriculum", "board", "calendar", "gantt"] as const;
+export const MY_STUDY_TABS = ["overview", "notice", "curriculum", "board", "calendar", "gantt", "wrong"] as const;
 export type MyStudyTab = (typeof MY_STUDY_TABS)[number];
 const isMyStudyTab = (v: string): v is MyStudyTab => (MY_STUDY_TABS as readonly string[]).includes(v);
 
