@@ -67,6 +67,8 @@ const flush = () =>
   act(async () => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
   });
+// 「시험 결과」 카드 머리(h2 · 요약 한 줄)
+const head = () => host.querySelector("section[data-results-panel] > div")?.textContent;
 const button = (text: string) => Array.from(host.querySelectorAll("button")).filter((b) => b.textContent?.trim() === text);
 const render = async (el: ReturnType<typeof createElement>) => {
   host = document.body.appendChild(document.createElement("div"));
@@ -106,10 +108,21 @@ describe("ExamResults", () => {
     return render(createElement(ExamResults, { slug: "aws", nodeId: "311", toast }));
   };
 
+  it("「시험 결과」 카드 — 자리 카드와 같은 머리(h2 · aria-labelledby · 아이콘), 소제목은 h3", async () => {
+    await mount();
+    const card = host.querySelector<HTMLElement>("section[data-results-panel]")!;
+    expect(card.getAttribute("aria-labelledby")).toBe("exam-results-311");
+    expect(card.querySelector("h2#exam-results-311")?.textContent).toBe("시험 결과");
+    expect(card.querySelector("span[aria-hidden] svg")).not.toBeNull();
+    expect(card.hasAttribute("data-submit-panel")).toBe(false);
+    expect(Array.from(card.querySelectorAll("h3")).map((h) => h.textContent)).toEqual(["문항별 정답률", "멤버"]);
+    expect(card.querySelector("h4")).toBeNull();
+  });
+
   it("요약 줄 · 문항별 정답률(ord 순, ProgressBar) · 2열 grid(sm) 1열 기본", async () => {
     await mount();
     expect(m.results).toHaveBeenCalledWith("aws", "311");
-    expect(host.querySelector("h3")?.textContent).toContain("3/4 제출 · 평균 3.7/5 · 최고 5");
+    expect(head()).toContain("3/4 제출 · 평균 3.7/5 · 최고 5");
     const rates = Array.from(host.querySelectorAll("ol > li")).map((li) => li.textContent);
     expect(rates).toEqual(["1.100%", "2.33%", "3.67%", "4.100%"]);
     const bars = host.querySelectorAll("[role=progressbar]");
@@ -122,8 +135,8 @@ describe("ExamResults", () => {
 
   it("정답률 null(제출 0명) → '—'", async () => {
     await mount({ ...RESULTS, submitted: 0, avg: null, max: null, questions: RESULTS.questions.map((q) => ({ ...q, correctRate: null })), members: [RESULTS.members[3]] });
-    expect(host.querySelector("h3")?.textContent).toContain("0/4 제출");
-    expect(host.querySelector("h3")?.textContent).not.toContain("평균");
+    expect(head()).toContain("0/4 제출");
+    expect(head()).not.toContain("평균");
     expect(host.querySelector("ol > li")?.textContent).toBe("1.—");
   });
 
@@ -196,7 +209,7 @@ describe("ExamResults", () => {
     expect(host.querySelector("[role=alert]")?.textContent).toContain("결과를 불러오지 못했어요");
     act(() => button("다시 시도")[0].click());
     await flush();
-    expect(host.querySelector("h3")?.textContent).toContain("3/4 제출");
+    expect(head()).toContain("3/4 제출");
   });
 });
 

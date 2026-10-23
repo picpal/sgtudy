@@ -520,7 +520,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                   </div>
                 </div>
               </SubmitSlotProvider>
-              <div ref={setSubmitSlot} className="@container empty:hidden" />
+              <div ref={setSubmitSlot} className="@container flex flex-col gap-4 empty:hidden" />
             </main>
           </div>
           <Toast msg={toast} onClose={closeToast} />

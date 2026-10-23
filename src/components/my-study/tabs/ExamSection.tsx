@@ -15,7 +15,7 @@ import { ExamResults } from "./ExamResults";
 import { InlineConfirm } from "./InlineConfirm";
 import type { SubmissionSectionProps } from "./SubmissionSection";
 import { SubmissionStatusList } from "./SubmissionStatusList";
-import { SubmitPanel } from "./SubmitPanel";
+import { SlotCard, SubmitSlotPortal } from "./SubmitPanel";
 
 export type ExamSectionProps = Omit<SubmissionSectionProps, "onUploadingChange" | "onDraftChange"> & {
   /** 저장하지 못한 답이 있다 — 상세 화면이 나가기 전에 묻는다(올리는 중 파일과 같은 경로) */
@@ -113,122 +113,127 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
   // 담당이 아니면 시험 응시 카드 없이 안내 한 줄만 — 제출 현황 위에
   const outside = v?.viewer.reason === "not_assignee";
   const panel = t.loading || (!v && !!t.error) || (!!v && (mode === "take" || mode === "result" || (!!info && !outside)));
+  // 그룹장·편집자만 — 점수는 본인과 편집자만 본다(D7). 발행 전에는 응시가 없다
+  const results = !!v?.viewer.canEdit && v.exam.status === "published";
 
-  // 시험 응시 카드(과제 제출 카드와 같은 자리·모양)는 본문 카드 아래로 포털 — 여기 남는 건 제출 현황 · 결과(편집자)
+  // 시험 응시 → 시험 결과(편집자) 카드는 한 포털에 묶어 본문 카드 아래 자리로 — 순서가 마운트 순서에 기대지 않는다. 여기 남는 건 제출 현황
   return (
     <div className="flex flex-col gap-6">
-      {panel && (
-        <SubmitPanel id="my-exam-title" title="시험 응시" sub={examPanelSub(v?.node.endDate ?? n.e)} icon="exam" badge={v ? examBadgeOf(v) : null}>
-          {t.loading && (
-            <div aria-busy="true" aria-label="시험 불러오는 중" className="flex flex-col gap-3">
-              <div className="h-5 w-24 rounded-[6px] bg-line-2" />
-              <div className="h-[120px] rounded-[10px] bg-surface-3" />
-            </div>
-          )}
-          {!v && t.error && (
-            <div role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
-              <span className="min-w-0 flex-[1_1_200px]">시험을 불러오지 못했어요</span>
-              <button type="button" onClick={t.refetch} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">
-                다시 시도
-              </button>
-            </div>
-          )}
-
-          {v && info && !outside && (
-            <p role="note" className="m-0 rounded-[12px] bg-surface-2 px-[14px] py-[10px] text-[13px] text-ink-3">
-              {info}
-            </p>
-          )}
-
-          {v && mode === "take" && (
-            <div ref={examRef} tabIndex={-1} aria-label="시험 문항" className="flex flex-col outline-none">
-              {/* 넓으면(@880) 오른쪽에 문항 이동이 붙어 따라온다 — 내용을 가리지 않게 칸을 따로 둔다. 좁으면 하단 막대의 [문항 이동] 판 */}
-              <div className="flex items-start gap-6">
-                <ol ref={listRef} className="m-0 flex min-w-0 flex-1 list-none flex-col gap-6 p-0 pb-5">
-                  {qs.map((q, i) => (
-                    <ExamQuestionView key={q.id} mode="take" q={q} no={i + 1} mine={t.answers[q.id] ?? null} onChange={(a) => t.setAnswer(q.id, a)} disabled={t.submitting} />
-                  ))}
-                </ol>
-                <ExamNav
-                  variant="side"
-                  answered={done}
-                  current={current}
-                  onJump={jump}
-                  className="sticky top-[max(16px,calc(50vh-200px))] hidden max-h-[min(400px,calc(100vh-100px))] w-[220px] shrink-0 overflow-y-auto rounded-[14px] border border-line bg-surface-2 p-3 @[880px]:flex"
-                />
+      <SubmitSlotPortal>
+        {panel && (
+          <SlotCard id="my-exam-title" title="시험 응시" sub={examPanelSub(v?.node.endDate ?? n.e)} icon="exam" badge={v ? examBadgeOf(v) : null}>
+            {t.loading && (
+              <div aria-busy="true" aria-label="시험 불러오는 중" className="flex flex-col gap-3">
+                <div className="h-5 w-24 rounded-[6px] bg-line-2" />
+                <div className="h-[120px] rounded-[10px] bg-surface-3" />
               </div>
-              {/* 하단 고정 막대 — DetailView 위 막대(sticky top-0)와 같은 방식. 문항 목록이 끝나면 따라 올라간다 */}
-              <div className="sticky bottom-0 z-[2] -mx-7 flex flex-col gap-2 border-t border-line-2 bg-surface px-7 py-2 max-[901px]:-mx-4 max-[901px]:px-4">
-                {navOpen && !ask && <ExamNav id="exam-nav-sheet" variant="sheet" answered={done} current={current} onJump={jump} className="max-h-[40vh] overflow-y-auto pb-1 pt-1 @[880px]:hidden" />}
-            {ask ? (
-                  <InlineConfirm
-                    text={submitAsk(total - t.answered)}
-                    onCancel={() => setAsk(false)}
-                    actions={[{ label: t.submitting ? "제출 중…" : "제출", tone: "primary", disabled: t.submitting, onClick: () => void submit() }]}
+            )}
+            {!v && t.error && (
+              <div role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
+                <span className="min-w-0 flex-[1_1_200px]">시험을 불러오지 못했어요</span>
+                <button type="button" onClick={t.refetch} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">
+                  다시 시도
+                </button>
+              </div>
+            )}
+
+            {v && info && !outside && (
+              <p role="note" className="m-0 rounded-[12px] bg-surface-2 px-[14px] py-[10px] text-[13px] text-ink-3">
+                {info}
+              </p>
+            )}
+
+            {v && mode === "take" && (
+              <div ref={examRef} tabIndex={-1} aria-label="시험 문항" className="flex flex-col outline-none">
+                {/* 넓으면(@880) 오른쪽에 문항 이동이 붙어 따라온다 — 내용을 가리지 않게 칸을 따로 둔다. 좁으면 하단 막대의 [문항 이동] 판 */}
+                <div className="flex items-start gap-6">
+                  <ol ref={listRef} className="m-0 flex min-w-0 flex-1 list-none flex-col gap-6 p-0 pb-5">
+                    {qs.map((q, i) => (
+                      <ExamQuestionView key={q.id} mode="take" q={q} no={i + 1} mine={t.answers[q.id] ?? null} onChange={(a) => t.setAnswer(q.id, a)} disabled={t.submitting} />
+                    ))}
+                  </ol>
+                  <ExamNav
+                    variant="side"
+                    answered={done}
+                    current={current}
+                    onJump={jump}
+                    className="sticky top-[max(16px,calc(50vh-200px))] hidden max-h-[min(400px,calc(100vh-100px))] w-[220px] shrink-0 overflow-y-auto rounded-[14px] border border-line bg-surface-2 p-3 @[880px]:flex"
                   />
-                ) : (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <p className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-x-[6px] text-[13px] text-ink-2" aria-live="polite">
-                      <span>
-                        <b className="font-bold text-ink">
-                          {t.answered}/{total}
-                        </b>{" "}
-                        답함
-                      </span>
-                      {SAVE_TEXT[t.save] && (
-                        <>
-                          <span aria-hidden="true">·</span>
-                          <span className={failed ? "font-semibold text-warn" : ""}>{SAVE_TEXT[t.save]}</span>
-                        </>
-                      )}
-                      {failed && (
-                        <button type="button" onClick={t.retry} className="inline-flex min-h-11 items-center rounded-[8px] px-2 text-[13px] font-semibold text-ink underline underline-offset-2">
-                          다시 시도
-                        </button>
-                      )}
-                    </p>
-                    <button
-                      type="button"
-                      aria-expanded={navOpen}
-                      aria-controls="exam-nav-sheet"
-                      onClick={() => setNavOpen((o) => !o)}
-                      className="h-11 shrink-0 cursor-pointer rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink hover:bg-surface-2 @[880px]:hidden"
-                    >
-                      문항 이동
-                    </button>
-                    <button type="button" disabled={t.submitting} onClick={() => setAsk(true)} className="h-11 shrink-0 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white disabled:opacity-50">
-                      제출하기
-                    </button>
+                </div>
+                {/* 하단 고정 막대 — DetailView 위 막대(sticky top-0)와 같은 방식. 문항 목록이 끝나면 따라 올라간다 */}
+                <div className="sticky bottom-0 z-[2] -mx-7 flex flex-col gap-2 border-t border-line-2 bg-surface px-7 py-2 max-[901px]:-mx-4 max-[901px]:px-4">
+                  {navOpen && !ask && <ExamNav id="exam-nav-sheet" variant="sheet" answered={done} current={current} onJump={jump} className="max-h-[40vh] overflow-y-auto pb-1 pt-1 @[880px]:hidden" />}
+              {ask ? (
+                    <InlineConfirm
+                      text={submitAsk(total - t.answered)}
+                      onCancel={() => setAsk(false)}
+                      actions={[{ label: t.submitting ? "제출 중…" : "제출", tone: "primary", disabled: t.submitting, onClick: () => void submit() }]}
+                    />
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <p className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-x-[6px] text-[13px] text-ink-2" aria-live="polite">
+                        <span>
+                          <b className="font-bold text-ink">
+                            {t.answered}/{total}
+                          </b>{" "}
+                          답함
+                        </span>
+                        {SAVE_TEXT[t.save] && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className={failed ? "font-semibold text-warn" : ""}>{SAVE_TEXT[t.save]}</span>
+                          </>
+                        )}
+                        {failed && (
+                          <button type="button" onClick={t.retry} className="inline-flex min-h-11 items-center rounded-[8px] px-2 text-[13px] font-semibold text-ink underline underline-offset-2">
+                            다시 시도
+                          </button>
+                        )}
+                      </p>
+                      <button
+                        type="button"
+                        aria-expanded={navOpen}
+                        aria-controls="exam-nav-sheet"
+                        onClick={() => setNavOpen((o) => !o)}
+                        className="h-11 shrink-0 cursor-pointer rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink hover:bg-surface-2 @[880px]:hidden"
+                      >
+                        문항 이동
+                      </button>
+                      <button type="button" disabled={t.submitting} onClick={() => setAsk(true)} className="h-11 shrink-0 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white disabled:opacity-50">
+                        제출하기
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {v && mode === "result" && (
+              <div ref={examRef} tabIndex={-1} aria-label="시험 결과" className="flex flex-col gap-5 outline-none">
+                {sum?.headline && (
+                  <div className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface-2 px-[14px] py-3">
+                    <h3 className="m-0 flex flex-wrap items-baseline gap-x-2 text-[15px] font-bold text-ink">
+                      <span>내 결과</span>
+                      <span className="text-[17px]">{sum.headline}</span>
+                    </h3>
+                    {stamp && <p className="m-0 text-[13px] text-ink-3">{stamp}</p>}
+                    {sum.sub && <p className="m-0 text-[13px] text-ink-2">{sum.sub}</p>}
                   </div>
                 )}
+                {showList && (
+                  <ol className="m-0 flex list-none flex-col gap-6 p-0">
+                    {qs.map((q, i) => {
+                      const r = questionResult(q, v.attempt);
+                      return <ExamQuestionView key={q.id} mode="result" q={q} no={i + 1} mine={r.mine} correct={r.correct} earned={r.earned} />;
+                    })}
+                  </ol>
+                )}
               </div>
-            </div>
-          )}
-
-          {v && mode === "result" && (
-            <div ref={examRef} tabIndex={-1} aria-label="시험 결과" className="flex flex-col gap-5 outline-none">
-              {sum?.headline && (
-                <div className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface-2 px-[14px] py-3">
-                  <h3 className="m-0 flex flex-wrap items-baseline gap-x-2 text-[15px] font-bold text-ink">
-                    <span>내 결과</span>
-                    <span className="text-[17px]">{sum.headline}</span>
-                  </h3>
-                  {stamp && <p className="m-0 text-[13px] text-ink-3">{stamp}</p>}
-                  {sum.sub && <p className="m-0 text-[13px] text-ink-2">{sum.sub}</p>}
-                </div>
-              )}
-              {showList && (
-                <ol className="m-0 flex list-none flex-col gap-6 p-0">
-                  {qs.map((q, i) => {
-                    const r = questionResult(q, v.attempt);
-                    return <ExamQuestionView key={q.id} mode="result" q={q} no={i + 1} mine={r.mine} correct={r.correct} earned={r.earned} />;
-                  })}
-                </ol>
-              )}
-            </div>
-          )}
-        </SubmitPanel>
-      )}
+            )}
+          </SlotCard>
+        )}
+        {results && <ExamResults slug={slug} nodeId={n.id} toast={toast} refreshKey={`${v.attempt?.status ?? ""}:${tk?.submitted ?? ""}`} />}
+      </SubmitSlotPortal>
 
       <div className="flex flex-col gap-3 border-t border-line-2 pt-5">
         {v && info && outside && (
@@ -238,9 +243,6 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
         )}
         <SubmissionStatusList rows={rows} sub={tk ? tk.submitted : n.sub} asg={tk ? tk.assigned : n.asg} note={note} archived={n.archived} headingRef={statusRef} onOpenFile={() => {}} expandable={false} />
       </div>
-
-      {/* 그룹장·편집자만 — 점수는 본인과 편집자만 본다(D7). 발행 전에는 응시가 없다 */}
-      {v?.viewer.canEdit && v.exam.status === "published" && <ExamResults slug={slug} nodeId={n.id} toast={toast} refreshKey={`${v.attempt?.status ?? ""}:${tk?.submitted ?? ""}`} />}
     </div>
   );
 }

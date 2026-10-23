@@ -7,6 +7,7 @@ import type { ToastMsg } from "@/components/ui/Toast";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { kstMd, questionResult, rateText, resultSummary, resultsHead, submittedLine } from "../exam";
 import { ExamQuestionView } from "./ExamQuestionView";
+import { SlotCard } from "./SubmitPanel";
 
 type Props = {
   slug: string;
@@ -16,7 +17,8 @@ type Props = {
   refreshKey?: string;
 };
 
-/** 그룹장·편집자 결과 보기 — 요약 · 문항별 정답률 · 멤버별 점수와 [답안 ▸](스펙 §4.5). 점수는 본인과 편집자만(D7) */
+/** 그룹장·편집자 결과 보기 — 「시험 결과」 카드(머리 한 줄에 요약) · 문항별 정답률 · 멤버별 점수와 [답안 ▸](스펙 §4.5). 점수는 본인과 편집자만(D7).
+ *  카드만 그린다 — 자리(submitSlot)로 보내는 건 ExamSection 이 「시험 응시」 카드와 한 포털에 묶어서 */
 export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
   const [data, setData] = useState<ExamResultsDto | null>(null);
   const [error, setError] = useState(false);
@@ -64,11 +66,7 @@ export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
   const qs = data ? [...data.questions].sort((a, b) => a.ord - b.ord) : [];
 
   return (
-    <section aria-labelledby={`exam-results-${nodeId}`} className="flex flex-col gap-4 rounded-[14px] border border-line bg-surface p-[14px]">
-      <h3 id={`exam-results-${nodeId}`} className="m-0 flex flex-wrap items-baseline gap-x-2 text-[15px] font-bold text-ink">
-        <span>결과</span>
-        {data && <span className="text-[13px] font-semibold text-ink-2">{resultsHead(data)}</span>}
-      </h3>
+    <SlotCard id={`exam-results-${nodeId}`} title="시험 결과" sub={data ? resultsHead(data) : null} icon="results">
 
       {!data && !error && <div aria-busy="true" aria-label="결과 불러오는 중" className="h-[96px] rounded-[10px] bg-surface-3" />}
       {!data && error && (
@@ -89,7 +87,7 @@ export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
       {data && (
         <>
           <div className="flex flex-col gap-2">
-            <h4 className="m-0 text-[13px] font-semibold text-ink-3">문항별 정답률</h4>
+            <h3 className="m-0 text-[13px] font-semibold text-ink-3">문항별 정답률</h3>
             <ol className="m-0 grid list-none grid-cols-1 gap-x-6 gap-y-2 p-0 sm:grid-cols-2">
               {qs.map((q, i) => (
                 <li key={q.id} className="flex min-h-11 items-center gap-3 text-[13px]">
@@ -102,7 +100,7 @@ export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
           </div>
 
           <div className="flex flex-col gap-1">
-            <h4 className="m-0 text-[13px] font-semibold text-ink-3">멤버</h4>
+            <h3 className="m-0 text-[13px] font-semibold text-ink-3">멤버</h3>
             <ul className="m-0 flex list-none flex-col p-0">
               {data.members.map((m) => {
                 const done = m.submittedAt != null;
@@ -141,7 +139,7 @@ export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
           </div>
         </>
       )}
-    </section>
+    </SlotCard>
   );
 }
 

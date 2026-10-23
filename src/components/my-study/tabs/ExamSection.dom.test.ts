@@ -12,8 +12,8 @@ import { ExamSection } from "./ExamSection";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const m = vi.hoisted(() => ({ fetch: vi.fn(), save: vi.fn(), submit: vi.fn(), task: vi.fn() }));
-vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: m.fetch, saveExamAnswer: m.save, submitExam: m.submit }));
+const m = vi.hoisted(() => ({ fetch: vi.fn(), save: vi.fn(), submit: vi.fn(), task: vi.fn(), results: vi.fn() }));
+vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: m.fetch, saveExamAnswer: m.save, submitExam: m.submit, fetchExamResults: m.results }));
 vi.mock("@/lib/api/submission", async (orig) => ({ ...(await orig<object>()), fetchTask: m.task }));
 
 const BASE: ExamQuestion[] = [
@@ -484,6 +484,68 @@ describe("ExamSection — 본문 카드 아래 자리로", () => {
     act(() => root!.unmount());
     root = null;
     expect(slot.childElementCount).toBe(0);
+    slot.remove();
+  });
+  // 편집자: 「시험 응시」 → 「시험 결과」 두 카드가 한 자리 안에서 이 순서로. 제출 현황은 본문 카드에 그대로
+  const editor = (o: O = {}): ExamView => {
+    const v = view(o);
+    return { ...v, viewer: { ...v.viewer, canEdit: true } };
+  };
+  const mountIn = async (slot: HTMLElement | null | undefined, v: ExamView) => {
+    m.fetch.mockResolvedValue(v);
+    m.results.mockReturnValue(new Promise(() => {}));
+    host = document.body.appendChild(document.createElement("div"));
+    root = createRoot(host);
+    const body = createElement(MeProvider, { me: null } as Parameters<typeof MeProvider>[0], createElement(ExamSection, { n: leaf, slug: "aws", roomStatus: "active", focus: null, onFocused: () => {}, onSubmitted, toast, viewerPending: false }));
+    act(() => root!.render(slot === undefined ? body : createElement(SubmitSlotProvider, { value: slot }, body)));
+    await flush();
+  };
+  const titles = (el: HTMLElement) => Array.from(el.querySelectorAll(":scope > section > div h2")).map((h) => h.textContent);
+
+  it("편집자 · 응시 대상 → 자리 안 순서 「시험 응시」 → 「시험 결과」, 본문엔 제출 현황만", async () => {
+    const slot = document.body.appendChild(document.createElement("div"));
+    await mountIn(slot, editor());
+    expect(titles(slot)).toEqual(["시험 응시", "시험 결과"]);
+    expect(slot.children[1].hasAttribute("data-results-panel")).toBe(true);
+    expect(slot.children[1].getAttribute("aria-labelledby")).toBe(`exam-results-${leaf.id}`);
+    expect(host.querySelector("section[data-results-panel]")).toBeNull();
+    expect(host.querySelector("#submissions")).not.toBeNull();
+    act(() => root!.unmount());
+    root = null;
+    expect(slot.childElementCount).toBe(0);
+    slot.remove();
+  });
+  it("편집자 · 응시 대상 아님 → 응시 카드 없이 「시험 결과」 혼자 자리에", async () => {
+    const slot = document.body.appendChild(document.createElement("div"));
+    await mountIn(slot, editor({ reason: "not_assignee", canTake: false, questions: null }));
+    expect(titles(slot)).toEqual(["시험 결과"]);
+    expect(host.querySelector("[role=note]")?.textContent).toContain("담당 과제가 아니에요");
+    slot.remove();
+  });
+  it("편집자 · 제출 뒤 결과 → 「시험 응시」(내 결과) 다음 「시험 결과」", async () => {
+    const slot = document.body.appendChild(document.createElement("div"));
+    await mountIn(slot, editor({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
+    expect(titles(slot)).toEqual(["시험 응시", "시험 결과"]);
+    expect(slot.children[0].querySelector("h3")?.textContent).toContain("내 결과");
+    slot.remove();
+  });
+  it("자리가 아직 없으면(null) 두 카드 다 그리지 않는다", async () => {
+    await mountIn(null, editor());
+    expect(host.querySelector("section[data-submit-panel]")).toBeNull();
+    expect(host.querySelector("section[data-results-panel]")).toBeNull();
+    expect(host.querySelector("#submissions")).not.toBeNull();
+  });
+  it("자리를 여는 화면이 없으면 제자리에 — 그래도 「시험 응시」 → 「시험 결과」 순서", async () => {
+    await mountIn(undefined, editor());
+    const exam = host.querySelector("section[data-submit-panel]")!;
+    const res = host.querySelector("section[data-results-panel]")!;
+    expect(exam.compareDocumentPosition(res) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("멤버(canEdit false)는 결과 카드가 없다", async () => {
+    const slot = document.body.appendChild(document.createElement("div"));
+    await mountIn(slot, view());
+    expect(titles(slot)).toEqual(["시험 응시"]);
+    expect(m.results).not.toHaveBeenCalled();
     slot.remove();
   });
 });
