@@ -7,7 +7,7 @@ import { DATE_NO_OVERFLOW_CLASS, FIELD_CLASS } from "../fields";
 /* 선택지 칩(D14·§9.1) — 단일 = radiogroup(roving tabindex, ←/→ 로 고르고 Enter·Space·클릭으로 보냄), 복수 = aria-pressed + [선택 완료],
    「직접」 = 같은 자리에 날짜·숫자 입력 + [확인]. 높이 44px, 값이 라벨에 보인다(색만으로 구분하지 않음) */
 
-const CHIP = "inline-flex min-h-11 items-center gap-1 rounded-[22px] border px-4 text-[14px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint disabled:opacity-50";
+const CHIP = "inline-flex min-h-11 scroll-mb-36 items-center gap-1 rounded-[22px] border px-4 text-[14px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint disabled:opacity-50";
 const OFF = "border-line-3 bg-surface text-ink-2";
 const ON = "border-mint bg-[#F5FBF9] text-mint";
 

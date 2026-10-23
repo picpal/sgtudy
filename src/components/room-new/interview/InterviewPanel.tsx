@@ -31,7 +31,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
   const [text, setText] = useState("");
   const [other, setOther] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const lastRef = useRef<HTMLLIElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(state.started);
 
   const run = async (messages: ReturnType<typeof toMessages>, answer: { field: Field; value: string } | null) => {
@@ -55,8 +55,9 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 1회
   }, []);
   useEffect(() => inputRef.current?.focus(), []);
+  // 새 말이 오면 입력 막대(섹션 끝)를 화면 아래에 맞춘다 — 막 나온 질문과 칩이 막대 위에 보이게
   useEffect(() => {
-    lastRef.current?.scrollIntoView?.({ block: "nearest" });
+    if (state.lines.length > 1) barRef.current?.scrollIntoView?.({ block: "end" });
   }, [state.lines.length]);
 
   const send = (say: string, answer: { field: Field; value: string } | null = null) => {
@@ -84,8 +85,8 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
       <section aria-label="AI 인터뷰" className="flex min-w-0 flex-col gap-3 lg:order-1">
         <p className="m-0 text-[12px] text-muted">대화는 저장되지 않고 AI 응답 생성에만 쓰여요.</p>
         <ol role="log" aria-live="polite" aria-relevant="additions" aria-label="인터뷰 대화" className="m-0 flex list-none flex-col gap-3 p-0">
-          {state.lines.map((l, i) => (
-            <li key={l.id} ref={i === state.lines.length - 1 ? lastRef : undefined} className={`flex ${l.role === "user" ? "justify-end" : "justify-start"}`}>
+          {state.lines.map((l) => (
+            <li key={l.id} className={`flex ${l.role === "user" ? "justify-end" : "justify-start"}`}>
               <span className="sr-only">{l.role === "user" ? "나: " : "AI: "}</span>
               {/* 텍스트 노드로만 — 마크다운·HTML 해석 없음(§6) */}
               <p className={`m-0 max-w-[85%] whitespace-pre-wrap break-words rounded-[16px] px-4 py-3 text-[15px] leading-[1.55] ${l.role === "user" ? "bg-navy text-white" : "bg-surface-2 text-ink"}`}>{l.text}</p>
@@ -115,7 +116,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
           <MultiChips key={state.lines.length} options={ask.options} onDone={(ps) => send(ps.map((p) => p.label).join(", "), { field: ask.field, value: ps.map((p) => p.value).join(",") })} />
         )}
         {showChips && ask.kind !== "multi" && (ask.options?.length || ask.allowOther) && (
-          <div className="flex flex-col gap-2">
+          <div className="flex scroll-mb-36 flex-col gap-2">
             {!other && !!ask.options?.length && <SingleChips key={state.lines.length} ask={ask} onPick={(label, value) => send(label, { field: ask.field, value })} />}
             {ask.allowOther && ask.allowOther !== "text" && !other && (
               <button type="button" onClick={() => setOther(true)} className="inline-flex min-h-11 items-center self-start rounded-[22px] border border-dashed border-line-3 px-4 text-[14px] font-semibold text-ink-2">
@@ -135,7 +136,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
         )}
 
         {/* 입력창 — 화면 아래에 붙는다(안쪽 스크롤 없음). 모바일 홈 막대 여백 */}
-        <div className="sticky bottom-0 z-[2] -mx-1 flex flex-col gap-2 border-t border-line-2 bg-surface px-1 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
+        <div ref={barRef} className="sticky bottom-0 z-[2] -mx-1 flex flex-col gap-2 border-t border-line-2 bg-surface px-1 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
           {!limit && (
             <form
               className="flex items-center gap-2"
