@@ -8,6 +8,7 @@ import { clampCp, cpLength } from "../validate";
 import { postTurn } from "./api";
 import { DraftCard } from "./DraftCard";
 import { MultiChips, OtherInput, otherLabel, SingleChips } from "./Chips";
+import { useFollowBottom } from "./follow";
 import { toMessages, type Action, type InterviewState } from "./state";
 
 /* AI 인터뷰 대화(§9) — 말풍선 + 칩 + 입력. 방은 만들지 않는다: 끝나면 [미리보기로] 가 수동 폼으로 넘긴다(D11) */
@@ -32,6 +33,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
   const [other, setOther] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLDivElement>(null);
   const startedRef = useRef(state.started);
 
   const run = async (messages: ReturnType<typeof toMessages>, answer: { field: Field; value: string } | null) => {
@@ -55,13 +57,10 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 1회
   }, []);
   useEffect(() => inputRef.current?.focus(), []);
-  // 새 말이 오면 입력 막대(섹션 끝)를 화면 아래에 맞춘다 — 막 나온 질문과 칩이 막대 위에 보이게
-  useEffect(() => {
-    if (state.lines.length > 1) barRef.current?.scrollIntoView?.({ block: "end" });
-  }, [state.lines.length]);
 
   const send = (say: string, answer: { field: Field; value: string } | null = null) => {
     if (state.busy || !say.trim()) return;
+    forceFollow(); // 직접 보낸 순간엔 위로 올려 보고 있었어도 맨 아래로
     const messages = [...toMessages(state), { role: "user" as const, text: clampCp(say.trim(), INPUT_MAX) }];
     dispatch({ type: "send", text: messages.at(-1)!.text, answer });
     setText("");
@@ -69,6 +68,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
     void run(messages, answer);
   };
   const retry = () => {
+    forceFollow();
     dispatch({ type: "retry" });
     void run(toMessages(state), state.lastAnswer);
   };
@@ -77,6 +77,8 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
   const closed = limit || done;
   const showChips = !!ask && !busy && !error && !closed;
   const canSkip = !!ask && OPTIONAL.includes(ask.field);
+  // 말 추가·생각 중·칩 도착·오류·직접 입력 열기 때마다 맨 아래(칩까지)를 입력 막대 위에 보이게 — 하단 근처일 때만
+  const forceFollow = useFollowBottom(endRef, barRef, `${state.lines.length}|${busy}|${showChips}|${!!error}|${done}|${other}`);
 
   return (
     <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start lg:gap-6">
@@ -116,7 +118,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
           <MultiChips key={state.lines.length} options={ask.options} onDone={(ps) => send(ps.map((p) => p.label).join(", "), { field: ask.field, value: ps.map((p) => p.value).join(",") })} />
         )}
         {showChips && ask.kind !== "multi" && (ask.options?.length || ask.allowOther) && (
-          <div className="flex scroll-mb-36 flex-col gap-2">
+          <div className="flex flex-col gap-2">
             {!other && !!ask.options?.length && <SingleChips key={state.lines.length} ask={ask} onPick={(label, value) => send(label, { field: ask.field, value })} />}
             {ask.allowOther && ask.allowOther !== "text" && !other && (
               <button type="button" onClick={() => setOther(true)} className="inline-flex min-h-11 items-center self-start rounded-[22px] border border-dashed border-line-3 px-4 text-[14px] font-semibold text-ink-2">
@@ -134,6 +136,8 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
             미리보기로
           </button>
         )}
+
+        <div ref={endRef} aria-hidden="true" className="-mt-3 h-0" />
 
         {/* 입력창 — 화면 아래에 붙는다(안쪽 스크롤 없음). 모바일 홈 막대 여백 */}
         <div ref={barRef} className="sticky bottom-0 z-[2] -mx-1 flex flex-col gap-2 border-t border-line-2 bg-surface px-1 pb-[max(8px,env(safe-area-inset-bottom))] pt-2">
