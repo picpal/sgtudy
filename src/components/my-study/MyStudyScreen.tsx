@@ -14,6 +14,7 @@ import { toApiError } from "@/lib/api/errors";
 import { canEditCurriculumOf, toSidebarGroups, toStudyRoom } from "@/lib/api/my-study";
 import { cancelApplication, leaveRoom } from "@/lib/api/room-view";
 import { cancelLeaveRequest, leaveErrorText, requestLeave } from "@/lib/api/leave";
+import { statusActionOf } from "@/lib/api/leader";
 import type { Curriculum, MeStudies, Notice, RoomDetail } from "@/lib/api/types";
 import { useMe } from "@/lib/me";
 import { routes } from "@/lib/routes";
@@ -31,6 +32,7 @@ import { StudySidebar } from "./StudySidebar";
 import { StudyHeaderInfo, type TabId } from "./StudyHeaderInfo";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { PeriodWarning } from "./tabs/PeriodWarning";
+import { DraftRecruitBanner } from "./DraftRecruitBanner";
 import { JoinInfoCard, type JoinCardAction } from "./tabs/JoinInfoCard";
 import { ReasonField } from "@/components/ui/ReasonField";
 import { CurriculumTab } from "./tabs/CurriculumTab";
@@ -467,8 +469,15 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // 서버가 준 노드(cur.nodes) 기준 — 화면 필터·편집 중 미저장 수정과 무관 (서버 PERIOD_OUTSIDE_ROOM·room_update 규칙과 같은 입력)
   const periodStatus = detail.archived || detail.status === "ended" ? null : detail.status;
   const gap = useMemo(() => (periodStatus ? roundsOutsidePeriod(cur.nodes, { start: detail.startDate, end: detail.endDate }) : null), [periodStatus, detail.startDate, detail.endDate, cur.nodes]);
+  // 준비중 방의 그룹장 — 「모집 시작」 막대(방을 만들고 곧바로 여기로 와 방 페이지의 모집 시작을 놓친다). 기간 경고와 같은 자리, 그 위에
+  const draft = isLeader && statusActionOf(detail) === "openRecruit";
   const periodWarning = (onEditRounds?: () => void) =>
-    gap && periodStatus && <PeriodWarning gap={gap} slug={detail.slug} roomStatus={periodStatus} canEdit={canEdit} isLeader={isLeader} onEditRounds={onEditRounds} toast={setToast} />;
+    (draft || (gap && periodStatus)) && (
+      <div className="flex flex-col gap-2">
+        {draft && <DraftRecruitBanner detail={detail} toast={setToast} />}
+        {gap && periodStatus && <PeriodWarning gap={gap} slug={detail.slug} roomStatus={periodStatus} canEdit={canEdit} isLeader={isLeader} onEditRounds={onEditRounds} toast={setToast} />}
+      </div>
+    );
   const editRounds = async () => {
     if (!(await api.recheckEdit())) return; // 권한 재확인 (시나리오 QA #10)
     update((p) => ({ tab: "curriculum", ...modeSwitchPatch({ ...p, viewSel: null }, "edit") }));

@@ -19,7 +19,6 @@ import {
   fetchApplications,
   fetchInvite,
   leaderErrorText,
-  openRecruit,
   openRecruitNote,
   rejectApplicant,
   rotateInvite,
@@ -35,6 +34,7 @@ import {
 import type { MembershipResult, RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { EndDateForm } from "./EndDateForm";
+import { openRecruitConfirm, useOpenRecruit } from "./useOpenRecruit";
 
 type Detail = Pick<RoomDetail, "today" | "slug" | "status" | "archived" | "isPublic" | "joinMode" | "pendingCount" | "invite" | "startDate" | "endDate"> & { recruit?: RoomDetail["recruit"]; stats?: Pick<RoomDetail["stats"], "unassignedCount"> };
 /** onDetail/onMembership: 화면이 RoomDetail 을 state 로 들고 있으면(방 화면) 응답으로 바로 교체. 어느 쪽이든 끝나면 router.refresh */
@@ -62,23 +62,22 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
     setEditEnd(false);
   };
 
+  const runOpenRecruit = useOpenRecruit(detail.slug, toast, onDetail); // 내 스터디 준비중 막대와 같은 동작
   const runStatus = async () => {
     if (!action || busy) return;
     setBusy(true);
     try {
       if (action === "openRecruit") {
-        const d = await openRecruit(detail.slug); // onDetail?.(await …) 로 쓰면 onDetail 이 없을 때 호출 자체가 빠진다
-        onDetail?.(d);
-        toast({ text: "모집을 시작했어요", tone: "ok" });
-      } else {
-        const d = await startRoom(detail.slug, { shift: early > 0 && shift === "shift" });
-        onDetail?.(d);
-        toast({ text: startDoneText(d), tone: "ok" });
+        await runOpenRecruit();
+        return;
       }
-      router.refresh(); // 상태 배지(준비중→모집중→진행중)·사이드바·탭 재동기화
+      const d = await startRoom(detail.slug, { shift: early > 0 && shift === "shift" });
+      onDetail?.(d);
+      toast({ text: startDoneText(d), tone: "ok" });
+      router.refresh(); // 상태 배지(모집중→진행중)·사이드바·탭 재동기화
     } catch (e) {
       const err = toApiError(e);
-      const b = action === "start" ? startBlockOf(err) : null;
+      const b = startBlockOf(err);
       if (b) {
         setBlock(b);
         setEditEnd(false);
@@ -228,15 +227,15 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
 
       <ConfirmDialog
         open={confirm !== null}
-        title={confirm === "open" ? "모집을 시작할까요?" : confirm === "start" ? "지금 스터디를 시작할까요?" : "초대 링크를 새로 만들까요?"}
+        title={confirm === "open" ? openRecruitConfirm(detail).title : confirm === "start" ? "지금 스터디를 시작할까요?" : "초대 링크를 새로 만들까요?"}
         body={
           confirm === "open"
-            ? `모집을 시작하면 ${openRecruitNote(detail)}. 모집중에도 방 설정에서 공개 여부·참가 방식을 바꿀 수 있어요.`
+            ? openRecruitConfirm(detail).body
             : confirm === "start"
               ? `${early > 0 ? `예정 시작일 ${mmdd(detail.startDate)}보다 ${early}일 일찍 시작해요. ` : ""}진행중이 되면 새 참가는 방 설정의 추가 모집·바로 참가로만 받고, 승인 대기 중인 신청은 만료돼요.`
               : "지금 링크는 더 이상 열리지 않아요. 이미 참가한 사람에게는 영향이 없어요."
         }
-        confirmLabel={confirm === "open" ? "모집 시작" : confirm === "start" ? "지금 시작" : "새 링크 만들기"}
+        confirmLabel={confirm === "open" ? openRecruitConfirm(detail).confirmLabel : confirm === "start" ? "지금 시작" : "새 링크 만들기"}
         busy={busy}
         onCancel={() => setConfirm(null)}
         onConfirm={() => void (confirm === "rotate" ? rotate() : runStatus())}
