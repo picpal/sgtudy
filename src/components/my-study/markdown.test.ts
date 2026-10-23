@@ -1,17 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { headingTag, parseInline, parseMarkdown } from "./markdown";
+import { headingTag, parseInline, parseMarkdown, type MdBlock } from "./markdown";
+
+const li = (text: string, sub: MdBlock[] = []) => ({ text, sub });
+const t = (text: string, done: boolean, sub: MdBlock[] = []) => ({ text, done, sub });
 
 describe("parseMarkdown (Q2-10) — 블록", () => {
   it("headings, paragraphs with line breaks, lists", () => {
     expect(parseMarkdown("## 소개\n**굵게** 테스트\n둘째 줄\n\n- 항목\n- 둘\n\n1. 하나\n2. 둘")).toEqual([
       { type: "h", level: 2, text: "소개" },
       { type: "p", lines: ["**굵게** 테스트", "둘째 줄"] },
-      { type: "ul", items: ["항목", "둘"] },
-      { type: "ol", items: ["하나", "둘"] },
+      { type: "ul", items: [li("항목"), li("둘")] },
+      { type: "ol", items: [li("하나"), li("둘")] },
     ]);
   });
   it("list right after a paragraph line starts a new block; # without space is text", () => {
-    expect(parseMarkdown("소개\n* a\n#태그")).toEqual([{ type: "p", lines: ["소개"] }, { type: "ul", items: ["a"] }, { type: "p", lines: ["#태그"] }]);
+    expect(parseMarkdown("소개\n* a\n#태그")).toEqual([{ type: "p", lines: ["소개"] }, { type: "ul", items: [li("a")] }, { type: "p", lines: ["#태그"] }]);
   });
   it("empty → []", () => expect(parseMarkdown("  \n")).toEqual([]));
 });
@@ -44,12 +47,12 @@ describe("parseMarkdown — 에디터가 만드는 블록", () => {
   });
   it("체크리스트는 목록과 따로 묶는다", () => {
     expect(parseMarkdown("- [ ] 할 일\n- [x] 끝남\n- 그냥")).toEqual([
-      { type: "task", items: [{ text: "할 일", done: false }, { text: "끝남", done: true }] },
-      { type: "ul", items: ["그냥"] },
+      { type: "task", items: [t("할 일", false), t("끝남", true)] },
+      { type: "ul", items: [li("그냥")] },
     ]);
   });
   it("인용은 안쪽을 다시 파싱", () => {
-    expect(parseMarkdown("> 참고\n> - 하나")).toEqual([{ type: "quote", blocks: [{ type: "p", lines: ["참고"] }, { type: "ul", items: ["하나"] }] }]);
+    expect(parseMarkdown("> 참고\n> - 하나")).toEqual([{ type: "quote", blocks: [{ type: "p", lines: ["참고"] }, { type: "ul", items: [li("하나")] }] }]);
   });
   it("코드 블록은 들여쓰기·마크다운을 그대로 둔다, 닫는 펜스가 없으면 끝까지", () => {
     expect(parseMarkdown("```ts\n  **x**\n```\n본문")).toEqual([{ type: "code", lang: "ts", text: "  **x**" }, { type: "p", lines: ["본문"] }]);
@@ -70,7 +73,41 @@ describe("parseInline — 취소선·밑줄 기울임", () => {
 
 describe("에디터와 같은 모양 (Q1-11)", () => {
   it("글자 없는 체크리스트 줄(- [ ])도 체크리스트 — 인용 안에서도", () => {
-    expect(parseMarkdown("- [ ]")).toEqual([{ type: "task", items: [{ text: "", done: false }] }]);
-    expect(parseMarkdown("> - [ ] a\n> - [x]")).toEqual([{ type: "quote", blocks: [{ type: "task", items: [{ text: "a", done: false }, { text: "", done: true }] }] }]);
+    expect(parseMarkdown("- [ ]")).toEqual([{ type: "task", items: [t("", false)] }]);
+    expect(parseMarkdown("> - [ ] a\n> - [x]")).toEqual([{ type: "quote", blocks: [{ type: "task", items: [t("a", false), t("", true)] }] }]);
   });
+});
+
+describe("중첩 목록 (D10·D11)", () => {
+  const ul = (...items: ReturnType<typeof li>[]): MdBlock => ({ type: "ul", items });
+  it("2칸 들여쓰기 · 표식 폭+1(에디터가 만드는 값) 둘 다 하위", () => {
+    expect(parseMarkdown("- a\n  - b\n- c")).toEqual([ul(li("a", [ul(li("b"))]), li("c"))]);
+    expect(parseMarkdown("1. a\n   - b\n2. c")).toEqual([{ type: "ol", items: [li("a", [ul(li("b"))]), li("c")] }]);
+    expect(parseMarkdown("1. a\n  - b")).toEqual([{ type: "ol", items: [li("a", [ul(li("b"))])] }]);
+  });
+  it("1칸 들여쓰기는 형제", () => expect(parseMarkdown("- a\n - b")).toEqual([ul(li("a"), li("b"))]));
+  it("탭 = 공백 4", () => expect(parseMarkdown("- a\n\t- b\n\t\t- c")).toEqual([ul(li("a", [ul(li("b", [ul(li("c"))]))]))]));
+  it("ul·ol·task 섞임 — 하위 종류가 바뀌면 새 하위 목록", () => {
+    expect(parseMarkdown("- a\n  1. b\n  2. c\n  - [x] d\n- e")).toEqual([
+      ul(li("a", [{ type: "ol", items: [li("b"), li("c")] }, { type: "task", items: [t("d", true)] }]), li("e")),
+    ]);
+  });
+  it("얕은 줄로 돌아오면 그 단계의 형제", () => {
+    expect(parseMarkdown("- a\n  - b\n    - c\n  - d\n- e")).toEqual([ul(li("a", [ul(li("b", [ul(li("c"))]), li("d"))]), li("e"))]);
+  });
+  it("깊이 5 이상은 4단계에 붙인다", () => {
+    const deep = ["- 1", "  - 2", "    - 3", "      - 4", "        - 5", "          - 6"].join("\n");
+    expect(parseMarkdown(deep)).toEqual([ul(li("1", [ul(li("2", [ul(li("3", [ul(li("4"), li("5"), li("6"))]))]))]))]);
+  });
+  it("들여쓴 목록 아닌 줄은 그 항목의 이어진 줄(줄바꿈 유지)", () => {
+    expect(parseMarkdown("- a\n  이어짐\n  - b\n    b 이어짐")).toEqual([ul(li("a\n이어짐", [ul(li("b\nb 이어짐"))]))]);
+  });
+  it("들여쓰지 않은 목록 아닌 줄은 목록을 끝내고 문단", () => {
+    expect(parseMarkdown("- a\n  - b\n문단")).toEqual([ul(li("a", [ul(li("b"))])), { type: "p", lines: ["문단"] }]);
+  });
+  it("번호 목록은 첫 번호를 start 로, 1 이면 생략", () => {
+    expect(parseMarkdown("3. a\n4. b")).toEqual([{ type: "ol", start: 3, items: [li("a"), li("b")] }]);
+    expect(parseMarkdown("- a\n  5. b")).toEqual([ul(li("a", [{ type: "ol", start: 5, items: [li("b")] }]))]);
+  });
+  it("인용 안 중첩", () => expect(parseMarkdown("> - a\n>   - b")).toEqual([{ type: "quote", blocks: [ul(li("a", [ul(li("b"))]))] }]));
 });

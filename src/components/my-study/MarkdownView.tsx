@@ -2,7 +2,7 @@
 
 import { createElement, Fragment } from "react";
 import { imgLabel } from "@/lib/markdown/inline";
-import { headingTag, parseInline, parseMarkdown, type MdBlock, type MdInline } from "./markdown";
+import { headingTag, parseInline, parseMarkdown, type MdBlock, type MdInline, type MdItem } from "./markdown";
 
 /** 줄바꿈(\n)을 <br> 로 — 표 셀(<br>)·문단 안 줄바꿈 */
 function Lines({ text }: { text: string }) {
@@ -42,6 +42,52 @@ export function Inline({ text }: { text: string }) {
   );
 }
 
+// ul 단계별 기호 disc → circle → square → square (스펙 §4.4)
+const UL_STYLE = ["list-disc", "list-[circle]", "list-[square]", "list-[square]"];
+
+/** 목록(하위 목록은 항목 안에서 재귀) — 항목 글은 이어진 줄(\n)을 <br> 로 */
+function ListBlock({ b, level }: { b: Extract<MdBlock, { type: "ul" | "ol" | "task" }>; level: number }) {
+  const sub = (it: MdItem) => it.sub.length > 0 && (
+    <div className="mt-[2px] flex flex-col gap-[2px]">
+      {it.sub.map((c, k) => c.type === "ul" || c.type === "ol" || c.type === "task" ? <ListBlock key={k} b={c} level={level + 1} /> : <Block key={k} b={c} />)}
+    </div>
+  );
+  if (b.type === "task") {
+    return (
+      <ul className={`m-0 flex list-none flex-col gap-[2px] ${level > 0 ? "pl-5" : "p-0"}`}>
+        {b.items.map((it, j) => (
+          <li key={j}>
+            <div className="flex items-start gap-2">
+              {/* 읽기 전용 표시 — 체크는 편집에서만 바꾼다 */}
+              <span aria-hidden="true" className={`mt-[5px] flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] ${it.done ? "border-mint bg-mint text-white" : "border-line-dash bg-surface"}`}>
+                {it.done && (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                )}
+              </span>
+              <span className={it.done ? "text-muted line-through" : undefined}>
+                <span className="sr-only">{it.done ? "완료: " : "할 일: "}</span>
+                <Lines text={it.text} />
+              </span>
+            </div>
+            {sub(it)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  const List = b.type;
+  return (
+    <List start={b.type === "ol" ? b.start : undefined} className={`m-0 pl-5 ${b.type === "ul" ? UL_STYLE[Math.min(level, 3)] : "list-decimal"}`}>
+      {b.items.map((it, j) => (
+        <li key={j}>
+          <Lines text={it.text} />
+          {sub(it)}
+        </li>
+      ))}
+    </List>
+  );
+}
+
 const ALIGN = { none: undefined, left: "left", center: "center", right: "right" } as const;
 
 function Block({ b }: { b: MdBlock }) {
@@ -53,33 +99,9 @@ function Block({ b }: { b: MdBlock }) {
     case "p":
       return <p className="m-0"><Lines text={b.lines.join("\n")} /></p>;
     case "ul":
-    case "ol": {
-      const List = b.type;
-      return (
-        <List className={`m-0 pl-5 ${b.type === "ul" ? "list-disc" : "list-decimal"}`}>
-          {b.items.map((it, j) => <li key={j}><Inline text={it} /></li>)}
-        </List>
-      );
-    }
+    case "ol":
     case "task":
-      return (
-        <ul className="m-0 flex list-none flex-col gap-[2px] p-0">
-          {b.items.map((it, j) => (
-            <li key={j} className="flex items-start gap-2">
-              {/* 읽기 전용 표시 — 체크는 편집에서만 바꾼다 */}
-              <span aria-hidden="true" className={`mt-[5px] flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[4px] border-[1.5px] ${it.done ? "border-mint bg-mint text-white" : "border-line-dash bg-surface"}`}>
-                {it.done && (
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                )}
-              </span>
-              <span className={it.done ? "text-muted line-through" : undefined}>
-                <span className="sr-only">{it.done ? "완료: " : "할 일: "}</span>
-                <Inline text={it.text} />
-              </span>
-            </li>
-          ))}
-        </ul>
-      );
+      return <ListBlock b={b} level={0} />;
     case "quote":
       return (
         <blockquote className="m-0 flex flex-col gap-[6px] border-l-[3px] border-line-3 pl-3 text-muted">
