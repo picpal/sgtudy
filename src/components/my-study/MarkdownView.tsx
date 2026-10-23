@@ -1,32 +1,89 @@
 "use client";
 
-import { createElement, Fragment } from "react";
+import { createElement, Fragment, useState } from "react";
 import { imgLabel } from "@/lib/markdown/inline";
 import { headingTag, parseInline, parseMarkdown, type MdBlock, type MdInline, type MdItem } from "./markdown";
 
 /** 줄바꿈(\n)을 <br> 로 — 표 셀(<br>)·문단 안 줄바꿈 */
-function Lines({ text }: { text: string }) {
+function Lines({ text, images }: { text: string; images?: ImageResolver }) {
   return (
     <>
       {text.split("\n").map((l, j) => (
         <Fragment key={j}>
           {j > 0 && <br />}
-          <Inline text={l} />
+          <Inline text={l} images={images} />
         </Fragment>
       ))}
     </>
   );
 }
 
+/**
+ * 설명 속 그림을 그 노드의 첨부로 푸는 쪽(md-images 스펙 §3.1) — 노드 설명(DetailView·LeafBody)만 넘긴다.
+ * url 은 서명 URL 뿐이다: 사용자가 쓴 주소는 <img src> 에 들어갈 길이 없다(T1·T5).
+ */
+export type ImageResolver = {
+  resolve(name: string): { state: "loading" } | { state: "missing" } | { state: "ok"; fileId: string; url: string; svg: boolean };
+  /** 라이트박스 — 없으면 그림은 누르는 버튼이 아니다 */
+  open?: (fileId: string) => void;
+  /** <img> 가 못 불러오면(서명 만료) 한 번 다시 서명 */
+  refresh(fileId: string): void;
+};
+
+type ImgToken = Extract<MdInline, { t: "img" }>;
+const BOX = "items-center rounded-[10px] border border-dashed border-line-dash px-3 text-[13px] text-muted";
+
+/** 첨부 그림 하나 — 로딩 스켈레톤 → 그림, 못 불러오면 한 번 다시 서명하고 그래도 안 되면 실패 상자 (D5·D6·D14) */
+function AttachedImg({ s, name, images, block }: { s: ImgToken; name: string; images: ImageResolver; block: boolean }) {
+  const r = images.resolve(name);
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const [retried, setRetried] = useState<string | null>(null);
+  const [broken, setBroken] = useState<string | null>(null);
+  const display = block ? "flex" : "inline-flex";
+  if (r.state === "loading") return <span aria-hidden="true" className={`${block ? "block w-full" : "inline-block w-40 align-middle"} h-40 rounded-[10px] bg-surface-2 motion-safe:animate-pulse`} />;
+  if (r.state === "missing") return <span className={`${display} min-h-11 ${BOX}`}>그림을 찾을 수 없어요 · {name}</span>;
+  if (broken === r.fileId) return <span className={`${display} min-h-11 ${BOX}`}>그림을 불러올 수 없어요 · {name}</span>;
+  const loaded = loadedUrl === r.url;
+  const onError = () => {
+    if (retried === r.fileId) setBroken(r.fileId);
+    else {
+      setRetried(r.fileId);
+      images.refresh(r.fileId);
+    }
+  };
+  const img = (
+    // eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다(스펙 D17)
+    <img
+      src={r.url}
+      alt={s.alt || name}
+      loading="lazy"
+      decoding="async"
+      onLoad={() => setLoadedUrl(r.url)}
+      onError={onError}
+      className={`${block ? "block" : "inline-block align-middle"} max-h-[min(560px,70vh)] max-w-full rounded-[10px] object-contain ${r.svg ? "bg-white" : ""} ${loaded ? "" : "min-h-40 min-w-40 bg-surface-2 motion-safe:animate-pulse"}`}
+    />
+  );
+  if (!images.open) return img;
+  const open = images.open;
+  const id = r.fileId;
+  return (
+    <button type="button" onClick={() => open(id)} className={`${block ? "block" : "inline-block align-middle"} max-w-full cursor-zoom-in rounded-[10px] p-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint`}>
+      {img}
+      <span className="sr-only">크게 보기</span>
+    </button>
+  );
+}
+
 /** 그림 토큰 — 외부 그림은 불러오지 않고 링크로(D2), 첨부 그림은 풀 노드가 없으면 자리표시 글자(D4) */
-function Img({ s }: { s: Extract<MdInline, { t: "img" }> }) {
+function Img({ s, images, block = false }: { s: ImgToken; images?: ImageResolver; block?: boolean }) {
   if (s.src.kind === "external") {
     return <a href={s.src.href} target="_blank" rel="noopener noreferrer nofollow" className="text-mint underline">그림 링크: {imgLabel(s)}</a>;
   }
-  return <span className="text-muted">[그림: {imgLabel(s)}]</span>;
+  if (!images) return <span className="text-muted">[그림: {imgLabel(s)}]</span>;
+  return <AttachedImg s={s} name={s.src.name} images={images} block={block} />;
 }
 
-export function Inline({ text }: { text: string }) {
+export function Inline({ text, images }: { text: string; images?: ImageResolver }) {
   return (
     <>
       {parseInline(text).map((s, i) =>
@@ -35,7 +92,7 @@ export function Inline({ text }: { text: string }) {
         : s.t === "s" ? <del key={i} className="text-muted">{s.v}</del>
         : s.t === "code" ? <code key={i} className="rounded-[5px] bg-surface-2 px-[5px] py-px text-[13px]">{s.v}</code>
         : s.t === "a" ? <a key={i} href={s.href} target="_blank" rel="noopener noreferrer nofollow" className="text-mint underline">{s.v}</a>
-        : s.t === "img" ? <Img key={i} s={s} />
+        : s.t === "img" ? <Img key={i} s={s} images={images} />
         : <Fragment key={i}>{s.v}</Fragment>,
       )}
     </>
@@ -46,10 +103,10 @@ export function Inline({ text }: { text: string }) {
 const UL_STYLE = ["list-disc", "list-[circle]", "list-[square]", "list-[square]"];
 
 /** 목록(하위 목록은 항목 안에서 재귀) — 항목 글은 이어진 줄(\n)을 <br> 로 */
-function ListBlock({ b, level }: { b: Extract<MdBlock, { type: "ul" | "ol" | "task" }>; level: number }) {
+function ListBlock({ b, level, images }: { b: Extract<MdBlock, { type: "ul" | "ol" | "task" }>; level: number; images?: ImageResolver }) {
   const sub = (it: MdItem) => it.sub.length > 0 && (
     <div className="mt-[2px] flex flex-col gap-[2px]">
-      {it.sub.map((c, k) => c.type === "ul" || c.type === "ol" || c.type === "task" ? <ListBlock key={k} b={c} level={level + 1} /> : <Block key={k} b={c} />)}
+      {it.sub.map((c, k) => c.type === "ul" || c.type === "ol" || c.type === "task" ? <ListBlock key={k} b={c} level={level + 1} images={images} /> : <Block key={k} b={c} images={images} />)}
     </div>
   );
   if (b.type === "task") {
@@ -66,7 +123,7 @@ function ListBlock({ b, level }: { b: Extract<MdBlock, { type: "ul" | "ol" | "ta
               </span>
               <span className={it.done ? "text-muted line-through" : undefined}>
                 <span className="sr-only">{it.done ? "완료: " : "할 일: "}</span>
-                <Lines text={it.text} />
+                <Lines text={it.text} images={images} />
               </span>
             </div>
             {sub(it)}
@@ -80,7 +137,7 @@ function ListBlock({ b, level }: { b: Extract<MdBlock, { type: "ul" | "ol" | "ta
     <List start={b.type === "ol" ? b.start : undefined} className={`m-0 pl-5 ${b.type === "ul" ? UL_STYLE[Math.min(level, 3)] : "list-decimal"}`}>
       {b.items.map((it, j) => (
         <li key={j}>
-          <Lines text={it.text} />
+          <Lines text={it.text} images={images} />
           {sub(it)}
         </li>
       ))}
@@ -90,22 +147,26 @@ function ListBlock({ b, level }: { b: Extract<MdBlock, { type: "ul" | "ol" | "ta
 
 const ALIGN = { none: undefined, left: "left", center: "center", right: "right" } as const;
 
-function Block({ b }: { b: MdBlock }) {
+function Block({ b, images }: { b: MdBlock; images?: ImageResolver }) {
   switch (b.type) {
     case "h": {
       const size = b.level === 1 ? "text-[17px]" : b.level === 2 ? "text-[16px]" : "text-[15px]";
       return createElement(headingTag(b.level), { className: `m-0 font-bold text-ink ${size}` }, <Inline text={b.text} />);
     }
-    case "p":
-      return <p className="m-0"><Lines text={b.lines.join("\n")} /></p>;
+    case "p": {
+      // 문단에 그림 하나뿐이면 블록 그림(D6)
+      const only = parseInline(b.lines.join("\n").trim());
+      if (only.length === 1 && only[0].t === "img") return <p className="m-0"><Img s={only[0]} images={images} block /></p>;
+      return <p className="m-0"><Lines text={b.lines.join("\n")} images={images} /></p>;
+    }
     case "ul":
     case "ol":
     case "task":
-      return <ListBlock b={b} level={0} />;
+      return <ListBlock b={b} level={0} images={images} />;
     case "quote":
       return (
         <blockquote className="m-0 flex flex-col gap-[6px] border-l-[3px] border-line-3 pl-3 text-muted">
-          {b.blocks.map((c, j) => <Block key={j} b={c} />)}
+          {b.blocks.map((c, j) => <Block key={j} b={c} images={images} />)}
         </blockquote>
       );
     case "details":
@@ -117,7 +178,7 @@ function Block({ b }: { b: MdBlock }) {
             <span>{b.title ? <Inline text={b.title} /> : "펼쳐 보기"}</span>
           </summary>
           <div className="flex flex-col gap-[10px] px-3 pb-3">
-            {b.blocks.map((c, j) => <Block key={j} b={c} />)}
+            {b.blocks.map((c, j) => <Block key={j} b={c} images={images} />)}
           </div>
         </details>
       );
@@ -137,7 +198,7 @@ function Block({ b }: { b: MdBlock }) {
               <tr>
                 {b.table.header.map((c, j) => (
                   <th key={j} scope="col" className="border border-line-3 bg-surface-2 px-[10px] py-[6px] text-left font-semibold text-ink" style={{ textAlign: ALIGN[b.table.align[j] ?? "none"] }}>
-                    <Lines text={c} />
+                    <Lines text={c} images={images} />
                   </th>
                 ))}
               </tr>
@@ -148,7 +209,7 @@ function Block({ b }: { b: MdBlock }) {
                   {r.map((c, j) => (
                     <td key={j} className="border border-line-3 px-[10px] py-[6px] align-top" style={{ textAlign: ALIGN[b.table.align[j] ?? "none"] }}>
                       {/* 빈 칸도 한 줄 높이 — 빈 행이 납작하게 접히지 않게(에디터 표와 같게, Q1-11) */}
-                      {c.trim() ? <Lines text={c} /> : "\u00a0"}
+                      {c.trim() ? <Lines text={c} images={images} /> : "\u00a0"}
                     </td>
                   ))}
                 </tr>
@@ -160,12 +221,12 @@ function Block({ b }: { b: MdBlock }) {
   }
 }
 
-/** 마크다운 본문(스터디 소개·회차/과제 설명) — 파싱 결과를 React 요소로만 그린다 */
-export function MarkdownView({ src, className = "text-[14px] leading-[1.75]" }: { src: string; className?: string }) {
+/** 마크다운 본문(스터디 소개·회차/과제 설명) — 파싱 결과를 React 요소로만 그린다. images 가 있으면 그림 토큰을 그 노드의 첨부로 푼다 */
+export function MarkdownView({ src, className = "text-[14px] leading-[1.75]", images }: { src: string; className?: string; images?: ImageResolver }) {
   const blocks = parseMarkdown(src);
   return (
     <div className={`flex flex-col gap-[10px] text-ink-2 ${className}`}>
-      {blocks.map((b, i) => <Block key={i} b={b} />)}
+      {blocks.map((b, i) => <Block key={i} b={b} images={images} />)}
     </div>
   );
 }
