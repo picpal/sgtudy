@@ -65,12 +65,13 @@ describe("ImageLightbox (스펙 §4.3)", () => {
     mount(ITEMS, 1);
     const order = () => document.activeElement?.getAttribute("aria-label");
     const els = [...dialog()!.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"));
-    expect(els).toEqual(["닫기", "이전 그림", "다음 그림", "b.svg 받기"]);
+    expect(els).toEqual(["축소", "확대", "닫기", "이전 그림", "다음 그림", "b.svg 받기"]);
     expect(order()).toBe("닫기");
+    btn("축소")!.focus();
     key("Tab", true);
     expect(order()).toBe("b.svg 받기");
     key("Tab");
-    expect(order()).toBe("닫기");
+    expect(order()).toBe("축소");
   });
 
   it("←/→ 와 버튼으로 넘기고 끝에서 멈춘다(순환 없음)", () => {
@@ -143,6 +144,110 @@ describe("ImageLightbox (스펙 §4.3)", () => {
     expect(dialog()?.getAttribute("aria-label")).toBe("b.svg (2/3)");
     swipe(90, 0);
     expect(dialog()?.getAttribute("aria-label")).toBe("a.png (1/3)");
+  });
+});
+
+describe("ImageLightbox 확대 (핀치·휠·두 번 누르기·버튼·키)", () => {
+  const ptr = (el: Element, type: string, x: number, y: number, pointerId = 1) =>
+    el.dispatchEvent(Object.assign(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y }), { isPrimary: pointerId === 1, pointerId }));
+  const scale = () => /scale\(([\d.]+)\)/.exec(img()?.style.transform ?? "")?.[1] ?? "1";
+
+  it("바탕은 처음부터 불투명 — 화면 전체 opacity 페이드 없음, 상단 막대(sticky)·토스트보다 위", () => {
+    mount();
+    const host = document.querySelector<HTMLElement>("[data-image-lightbox]")!;
+    expect(host.parentElement).toBe(document.body);
+    expect(host.className).not.toContain("animate-");
+    expect(host.className).toContain("z-[70]");
+  });
+
+  it("+/- 키·버튼으로 확대/축소, 0 은 원래 크기, 원래 크기면 축소는 aria-disabled", () => {
+    mount();
+    expect(btn("축소")!.getAttribute("aria-disabled")).toBe("true");
+    key("+");
+    expect(scale()).toBe("1.5");
+    expect(btn("축소")!.getAttribute("aria-disabled")).toBe("false");
+    act(() => btn("확대")!.click());
+    expect(scale()).toBe("2.25");
+    key("-");
+    expect(scale()).toBe("1.5");
+    key("0");
+    expect(img()!.style.transform).toBe("");
+    for (let k = 0; k < 6; k++) key("+");
+    expect(scale()).toBe("4");
+    expect(btn("확대")!.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("휠로 확대(위로 굴리면 커진다)", () => {
+    mount();
+    const area = img()!.parentElement!;
+    act(() => void area.dispatchEvent(new WheelEvent("wheel", { deltaY: -200, bubbles: true, cancelable: true })));
+    expect(Number(scale())).toBeGreaterThan(1);
+  });
+
+  it("그림을 두 번 누르면 확대, 다시 두 번 누르면 원래 크기", () => {
+    mount();
+    const tap = () => act(() => {
+      ptr(img()!, "pointerdown", 200, 200);
+      ptr(img()!, "pointerup", 200, 200);
+    });
+    tap();
+    expect(img()!.style.transform).toBe("");
+    tap();
+    expect(scale()).toBe("2.5");
+    tap();
+    tap();
+    expect(img()!.style.transform).toBe("");
+  });
+
+  it("두 손가락 핀치로 확대 — 확대 중에는 가로로 끌어도 넘기지 않고(옮기기), 원래 크기로 돌아오면 다시 넘긴다", () => {
+    mount();
+    const area = img()!.parentElement!;
+    act(() => {
+      ptr(area, "pointerdown", 150, 200, 1);
+      ptr(area, "pointerdown", 250, 200, 2);
+      ptr(area, "pointermove", 100, 200, 1);
+      ptr(area, "pointermove", 300, 200, 2);
+      ptr(area, "pointerup", 100, 200, 1);
+      ptr(area, "pointerup", 300, 200, 2);
+    });
+    expect(scale()).toBe("2");
+    const drag = (dx: number) => act(() => {
+      ptr(area, "pointerdown", 200, 200);
+      ptr(area, "pointermove", 200 + dx, 200);
+      ptr(area, "pointerup", 200 + dx, 200);
+    });
+    drag(-120);
+    expect(dialog()?.getAttribute("aria-label")).toBe("a.png (1/3)");
+    // 끌기 끝의 click 은 닫기로 치지 않는다
+    act(() => dialog()!.click());
+    expect(dialog()).not.toBeNull();
+    key("0");
+    drag(-120);
+    expect(dialog()?.getAttribute("aria-label")).toBe("b.svg (2/3)");
+  });
+
+  it("그림을 눌렀는데 click 이 무대로 와도(포인터 캡처) 닫지 않는다 — 바탕을 누른 것만 닫는다", () => {
+    mount();
+    const area = img()!.parentElement!;
+    act(() => {
+      ptr(img()!, "pointerdown", 200, 200);
+      ptr(area, "pointerup", 200, 200);
+      area.click();
+    });
+    expect(dialog()).not.toBeNull();
+    act(() => {
+      ptr(area, "pointerdown", 5, 5);
+      ptr(area, "pointerup", 5, 5);
+      area.click();
+    });
+    expect(dialog()).toBeNull();
+  });
+
+  it("다른 그림으로 넘기면 원래 크기", () => {
+    mount();
+    key("+");
+    key("ArrowRight");
+    expect(img()!.style.transform).toBe("");
   });
 });
 

@@ -6,6 +6,7 @@ import { fetchNodeFiles, setNodeFiles } from "@/lib/api/nodeFiles";
 import { fileUrl } from "@/lib/api/submission";
 import type { FileMeta } from "@/lib/api/types";
 import { isImageMime, isSvgMime } from "@/lib/files/imageMime";
+import { ZoomIcon } from "../MarkdownView";
 import { fileBadge } from "../nodeFiles";
 import { sizeText } from "../submission";
 import { InlineConfirm } from "./InlineConfirm";
@@ -29,7 +30,7 @@ function Thumb({ f, preview }: { f: FileMeta; preview: AttachmentPreview }) {
   if (!url || bad.has(url)) return <span className={BADGE}>{fileBadge(f.contentType)}</span>;
   const svg = isSvgMime(f.contentType);
   return (
-    <button type="button" aria-label={`${f.name} 크게 보기`} onClick={() => preview.onPreview(f)} className={`h-14 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-[10px] border border-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint ${svg ? "bg-white" : "bg-surface-2"}`}>
+    <button type="button" aria-label={`${f.name} 크게 보기`} onClick={() => preview.onPreview(f)} className={`relative h-14 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-[10px] border border-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint ${svg ? "bg-white" : "bg-surface-2"}`}>
       {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다(스펙 D17) */}
       <img
         src={url}
@@ -45,6 +46,10 @@ function Thumb({ f, preview }: { f: FileMeta; preview: AttachmentPreview }) {
         }}
         className={`h-full w-full ${svg ? "object-contain p-1" : "object-cover"}`}
       />
+      {/* 눌러서 확대 힌트 — 손가락으로 쓰는 화면만, 모서리 작은 돋보기 */}
+      <span aria-hidden="true" className="pointer-events-none absolute bottom-[3px] right-[3px] hidden h-[18px] w-[18px] items-center justify-center rounded-full bg-black/55 text-white pointer-coarse:flex">
+        <ZoomIcon size={10} />
+      </span>
     </button>
   );
 }

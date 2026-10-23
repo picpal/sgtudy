@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { Inline, MarkdownView, type ImageResolver } from "./MarkdownView";
+import { imageSizeCache, Inline, MarkdownView, type ImageResolver } from "./MarkdownView";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -82,7 +82,7 @@ describe("MarkdownView 그림 — resolver 있음 (A4 · 스펙 §6 렌더)", ()
   it("글 사이 그림은 줄 높이 안의 작은 그림, 목록 항목에 그림 하나뿐이면 블록 (B · 디자인 우려)", () => {
     expect(html("글 ![](attachment:a.png) 글", resolver())).toMatch(/<img [^>]*class="inline-block h-\[1\.5em\]/);
     expect(html("| x |\n| - |\n| 표 ![](attachment:a.png) |", resolver())).toMatch(/class="inline-block h-\[1\.5em\]/);
-    expect(html("- ![](attachment:a.png)", resolver())).toMatch(/<li><img [^>]*class="block /);
+    expect(html("- ![](attachment:a.png)", resolver())).toMatch(/^<div[^>]*><p class="m-0"><img [^>]*class="block /);
     expect(html("글 ![](attachment:wait.png)", resolver())).toContain("h-[1.5em] w-[2.5em]");
   });
   it("글 사이 「찾을 수 없어요」 상자는 줄 높이를 벌리지 않는다(min-h 없음), 블록은 44px", () => {
@@ -123,6 +123,91 @@ describe("MarkdownView 그림 — resolver 있음 (A4 · 스펙 §6 렌더)", ()
       for (const m of h.matchAll(/<img [^>]*src="([^"]*)"/g)) expect(m[1].startsWith(SIGNED), e).toBe(true);
       expect(h, e).not.toMatch(/\son[a-z]+="/);
     }
+  });
+});
+
+describe("MarkdownView 그림만 든 목록 항목 → 목록 밖 블록 그림 (불릿 없음)", () => {
+  it("단독 항목은 목록이 사라지고 <p> 블록 그림 — <li>·불릿 없음", () => {
+    const h = html("- ![](attachment:a.png)", resolver({ open: () => {} }));
+    expect(h).not.toContain("<li");
+    expect(h).not.toContain("<ul");
+    expect(h).toMatch(/<p class="m-0"><button type="button" class="relative block/);
+  });
+  it("목록 중간의 그림 항목은 목록을 나눈다 — ol 번호는 쓴 그대로 이어진다", () => {
+    const h = html("1. 가\n2. ![](attachment:a.png)\n3. 다\n4. 라", resolver());
+    expect(h).toMatch(/<ol class="m-0 pl-5 list-decimal"><li>가<\/li><\/ol><p class="m-0"><img [^>]*class="block [^>]*><\/p><ol start="3"[^>]*><li>다<\/li><li>라<\/li><\/ol>/);
+    const u = html("- 가\n- ![](attachment:a.png)\n- 다", resolver());
+    expect(u.match(/<ul /g)).toHaveLength(2);
+    expect(u).not.toMatch(/<li><img/);
+  });
+  it("하위 목록 안의 그림 항목도 블록(부모 항목 안), 하위 목록이 딸린 그림 항목·글 섞인 항목은 그대로", () => {
+    expect(html("- 가\n  - ![](attachment:a.png)", resolver())).toMatch(/<li>가<div class="mt-\[2px\] flex flex-col gap-\[2px\]"><p class="m-0"><img /);
+    expect(html("- 글 ![](attachment:a.png)", resolver())).toMatch(/<li>글 <img [^>]*class="inline-block/);
+    expect(html("- ![](attachment:a.png)\n  - 아래", resolver())).toMatch(/<li><img [^>]*class="block /);
+  });
+  it("단독 줄 그림은 이미 블록 (권장 문법)", () => {
+    expect(html("글\n\n![](attachment:a.png)\n\n글", resolver())).toMatch(/<p class="m-0">글<\/p><p class="m-0"><img [^>]*class="block /);
+  });
+});
+
+describe("MarkdownView 블록 그림 크기 예약 (스크롤 끊김)", () => {
+  afterEach(() => imageSizeCache.clear());
+  it("크기를 모르면 640px·16:10 자리, 아는 크기면 그 비율·최종 폭으로 미리 잡는다", () => {
+    expect(html("![](attachment:a.png)", resolver())).toMatch(/<img [^>]*style="width:640px;aspect-ratio:16 \/ 10"/);
+    imageSizeCache.set("f-a", { w: 1600, h: 1000 });
+    const h = html("![](attachment:a.png)", resolver());
+    expect(h).toContain('style="width:min(1600px, calc(min(560px, 70vh) * 1.6000));aspect-ratio:1600 / 1000"');
+    expect(h).not.toContain("min-h-40");
+  });
+  it("SVG 는 예약하지 않는다(원본 크기 기본값 300×150)", () => {
+    expect(html("![](attachment:v.svg)", resolver())).not.toMatch(/<img [^>]*style=/);
+  });
+  it("인라인 그림은 줄 높이 그대로 — 예약 없음", () => {
+    expect(html("글 ![](attachment:a.png)", resolver())).not.toMatch(/<img [^>]*style=/);
+  });
+  it("불러오면 원본 크기를 캐시에 남긴다", async () => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const r = createRoot(host);
+    await act(async () => r.render(createElement(MarkdownView, { src: "![](attachment:a.png)", images: resolver() })));
+    const im = host.querySelector("img")!;
+    Object.defineProperty(im, "naturalWidth", { value: 1200 });
+    Object.defineProperty(im, "naturalHeight", { value: 800 });
+    await act(async () => void im.dispatchEvent(new Event("load")));
+    expect(imageSizeCache.get("f-a")).toEqual({ w: 1200, h: 800 });
+    expect(im.style.aspectRatio).toBe("1200 / 800");
+    act(() => r.unmount());
+    host.remove();
+  });
+  it("「눌러서 확대」 힌트 — 불러온 블록 그림 버튼에만, 손가락 화면만(pointer-coarse)", async () => {
+    const host = document.body.appendChild(document.createElement("div"));
+    const r = createRoot(host);
+    await act(async () => r.render(createElement(MarkdownView, { src: "![](attachment:a.png)\n\n글 ![](attachment:a.png)", images: resolver({ open: () => {} }) })));
+    expect(host.textContent).not.toContain("눌러서 확대");
+    await act(async () => void host.querySelectorAll("img").forEach((im) => im.dispatchEvent(new Event("load"))));
+    const hints = [...host.querySelectorAll("span[aria-hidden=true]")].filter((e) => e.textContent?.includes("눌러서 확대"));
+    expect(hints).toHaveLength(1);
+    expect(hints[0].className).toMatch(/\bhidden\b.*pointer-coarse:inline-flex/);
+    act(() => r.unmount());
+    host.remove();
+  });
+});
+
+describe("MarkdownView 다시 그리기 (라이트박스 열기 등)", () => {
+  it("같은 src·images 면 부모가 다시 그려도 다시 파싱하지 않는다(memo)", async () => {
+    const md = await import("./markdown");
+    const spy = vi.spyOn(md, "parseMarkdown");
+    const host = document.body.appendChild(document.createElement("div"));
+    const r = createRoot(host);
+    const images = resolver();
+    const render = (n: number) => r.render(createElement("div", { "data-n": n }, createElement(MarkdownView, { src: "# 제목\n\n![](attachment:a.png)", images })));
+    act(() => render(1));
+    const calls = spy.mock.calls.length;
+    act(() => render(2));
+    act(() => render(3));
+    expect(spy.mock.calls.length).toBe(calls);
+    spy.mockRestore();
+    act(() => r.unmount());
+    host.remove();
   });
 });
 

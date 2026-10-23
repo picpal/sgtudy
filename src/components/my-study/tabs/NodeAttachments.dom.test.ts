@@ -54,7 +54,14 @@ describe("NodeAttachmentsView 썸네일 (D13)", () => {
     const b = d.querySelector('button[aria-label="흐름.svg 크게 보기"]')!;
     expect(b.className).toContain("bg-white");
     expect(b.querySelector("img")?.className).toContain("object-contain");
-    expect(d.querySelectorAll("svg, object, embed, iframe").length).toBe(0);
+    // 파일 SVG 를 문서에 심지 않는다 — 눌러서 확대 힌트의 장식 아이콘(aria-hidden)만 있다
+    expect(d.querySelectorAll("svg:not([aria-hidden]), object, embed, iframe").length).toBe(0);
+  });
+  it("썸네일에 「눌러서 확대」 돋보기 — 손가락 화면만(pointer-coarse), 장식", () => {
+    const d = html({ files, onOpen: () => {}, preview });
+    const hint = d.querySelector('button[aria-label="흐름.svg 크게 보기"] > span[aria-hidden="true"]')!;
+    expect(hint.className).toMatch(/\bhidden\b.*pointer-coarse:flex/);
+    expect(hint.className).toContain("pointer-events-none");
   });
   it("preview 가 없으면(편집 등) 지금처럼 배지만", () => {
     const d = html({ files, onOpen: () => {} });
