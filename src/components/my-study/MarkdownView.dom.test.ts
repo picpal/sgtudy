@@ -37,3 +37,19 @@ describe("MarkdownView 중첩 목록 (D10 · §4.4)", () => {
   });
   it("이어진 줄은 <br>", () => expect(html("- a\n  이어짐")).toContain("<li>a<br/>이어짐</li>"));
 });
+
+describe("MarkdownView 접기 (D8·D9)", () => {
+  it("<details><summary> — 기본 닫힘, 44px, 빈 제목은 「펼쳐 보기」", () => {
+    const h = html(":::details 해설 **굵게**\n- a\n:::\n\n:::details\nb\n:::");
+    expect(h).toMatch(/<details class="[^"]*"><summary class="[^"]*min-h-11/);
+    expect(h).not.toContain("<details open");
+    expect(h).toContain("<strong");
+    expect(h).toContain("펼쳐 보기");
+  });
+  it("제목의 HTML·그림은 글자", () => {
+    const h = html(":::details <script>x</script> ![a](attachment:p.png)\n:::");
+    expect(h).toContain("&lt;script&gt;");
+    expect(h).not.toContain("<img");
+    expect(h).toContain("[그림: a]");
+  });
+});

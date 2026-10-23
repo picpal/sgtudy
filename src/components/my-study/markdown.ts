@@ -1,7 +1,7 @@
 /**
  * 작은 마크다운 파서 — 에디터(ui/markdown-editor)가 만들어 내는 모양을 그대로 읽는다:
- * 제목(#~###, 더 깊으면 ###)·문단(줄바꿈 유지)·목록(-, *, 1.)·체크리스트(- [ ])·인용(>)·코드 블록(```)·구분선(---)·GFM 표,
- * 인라인은 굵게·기울임·취소선·코드·http(s) 링크.
+ * 제목(#~###, 더 깊으면 ###)·문단(줄바꿈 유지)·목록(-, *, 1. — 들여쓰면 하위 목록)·체크리스트(- [ ])·인용(>)·코드 블록(```)·구분선(---)·GFM 표·접기(:::details),
+ * 인라인은 굵게·기울임·취소선·코드·http(s) 링크·그림.
  * 결과는 데이터일 뿐이고 화면은 React 요소로 그린다(dangerouslySetInnerHTML 없음) → 원문 HTML 은 글자로 남는다 (Q2-10).
  */
 import { parseGfmTable, type TableModel } from "@/lib/markdown/gfmTable";
@@ -17,6 +17,7 @@ export type MdBlock =
   | { type: "ol"; items: MdItem[]; start?: number }
   | { type: "task"; items: MdItem[] } // done 필수
   | { type: "quote"; blocks: MdBlock[] }
+  | { type: "details"; title: string; blocks: MdBlock[] }
   | { type: "code"; lang: string; text: string }
   | { type: "hr" }
   | { type: "table"; table: TableModel };
@@ -31,6 +32,10 @@ const HR = /^(?:-{3,}|\*{3,}|_{3,})$/;
 const QUOTE = /^>\s?/;
 const TABLE_DELIM = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
 const LIST_DEPTH = 4;
+// 접기 — 여는 줄 ":::details 제목", 닫는 줄 ":::" (D8). 중첩은 3단계까지
+const DETAILS = /^:::details(?:\s+(.*))?$/;
+const DETAILS_END = /^:::$/;
+const DETAILS_DEPTH = 3;
 
 /** 소개 본문은 "스터디 소개" h3 아래에 놓이므로 # → h4, ## → h5, ### → h6 (V2-06) */
 export const headingTag = (level: 1 | 2 | 3) => (["h4", "h5", "h6"] as const)[level - 1];
@@ -65,6 +70,11 @@ const newList = (l: ListLine): ListBlock => (l.type === "ol" && l.start !== 1 ? 
 const lastItem = (b: ListBlock) => b.items[b.items.length - 1];
 
 export function parseMarkdown(src: string): MdBlock[] {
+  return parseBlocks(src, 0);
+}
+
+/** depth = 둘러싼 접기 블록 수 */
+function parseBlocks(src: string, depth: number): MdBlock[] {
   const lines = src.replace(/\r\n?/g, "\n").split("\n");
   const out: MdBlock[] = [];
   let para: Extract<MdBlock, { type: "p" }> | null = null;
@@ -131,6 +141,28 @@ export function parseMarkdown(src: string): MdBlock[] {
       out.push({ type: "code", lang: fence[2], text: body.join("\n") });
       continue;
     }
+    const det = depth < DETAILS_DEPTH ? DETAILS.exec(line) : null;
+    if (det) {
+      flush();
+      // 닫는 ::: 까지 모은다 — 안쪽 여는 줄은 깊이를 세고, 코드 펜스 안은 건너뛴다. 닫지 않으면 문서 끝까지
+      const body: string[] = [];
+      let open = 1;
+      for (i++; i < lines.length; i++) {
+        const t = lines[i].trim();
+        const f = FENCE.exec(t);
+        if (f) {
+          body.push(lines[i]);
+          for (i++; i < lines.length && !lines[i].trim().startsWith(f[1]); i++) body.push(lines[i]);
+          if (i < lines.length) body.push(lines[i]);
+          continue;
+        }
+        if (DETAILS.test(t)) open++;
+        else if (DETAILS_END.test(t) && --open === 0) break;
+        body.push(lines[i]);
+      }
+      out.push({ type: "details", title: (det[1] ?? "").trim(), blocks: parseBlocks(body.join("\n"), depth + 1) });
+      continue;
+    }
     if (HR.test(line)) {
       flush();
       out.push({ type: "hr" });
@@ -152,7 +184,7 @@ export function parseMarkdown(src: string): MdBlock[] {
       const body: string[] = [];
       for (; i < lines.length && QUOTE.test(lines[i].trim()); i++) body.push(lines[i].trim().replace(QUOTE, ""));
       i--;
-      out.push({ type: "quote", blocks: parseMarkdown(body.join("\n")) });
+      out.push({ type: "quote", blocks: parseBlocks(body.join("\n"), depth) });
       continue;
     }
     const h = H.exec(line);

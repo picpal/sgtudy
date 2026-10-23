@@ -111,3 +111,30 @@ describe("중첩 목록 (D10·D11)", () => {
   });
   it("인용 안 중첩", () => expect(parseMarkdown("> - a\n>   - b")).toEqual([{ type: "quote", blocks: [ul(li("a", [ul(li("b"))]))] }]));
 });
+
+describe("접기 블록 :::details (D8)", () => {
+  const det = (title: string, blocks: MdBlock[]): MdBlock => ({ type: "details", title, blocks });
+  it("제목과 안쪽 전체 마크다운(목록·표·코드·그림)", () => {
+    expect(parseMarkdown(":::details 해설 **보기**\n- a\n  - b\n\n| x |\n| - |\n| 1 |\n\n```\n:::\n```\n![](attachment:a.png)\n:::\n뒤")).toEqual([
+      det("해설 **보기**", [
+        { type: "ul", items: [li("a", [{ type: "ul", items: [li("b")] }])] },
+        { type: "table", table: { align: ["none"], header: ["x"], rows: [["1"]] } },
+        { type: "code", lang: "", text: ":::" },
+        { type: "p", lines: ["![](attachment:a.png)"] },
+      ]),
+      { type: "p", lines: ["뒤"] },
+    ]);
+  });
+  it("빈 제목은 빈 글자(화면이 「펼쳐 보기」)", () => expect(parseMarkdown(":::details\na\n:::")).toEqual([det("", [{ type: "p", lines: ["a"] }])]));
+  it("닫지 않으면 문서 끝에서 닫는다", () => expect(parseMarkdown("앞\n:::details 쓰다 만\n- a")).toEqual([{ type: "p", lines: ["앞"] }, det("쓰다 만", [{ type: "ul", items: [li("a")] }])]));
+  it("중첩 3단계까지, 4단계 여는 줄은 글자", () => {
+    const src = [":::details 1", ":::details 2", ":::details 3", ":::details 4", "x", ":::", ":::", ":::", ":::"].join("\n");
+    expect(parseMarkdown(src)).toEqual([det("1", [det("2", [det("3", [{ type: "p", lines: [":::details 4", "x", ":::"] }])])])]);
+  });
+  it("코드 펜스 안의 :::details 는 무시", () => {
+    expect(parseMarkdown("```\n:::details x\n:::\n```")).toEqual([{ type: "code", lang: "", text: ":::details x\n:::" }]);
+  });
+  it("인용 안에서도", () => expect(parseMarkdown("> :::details 팁\n> 내용\n> :::")).toEqual([{ type: "quote", blocks: [det("팁", [{ type: "p", lines: ["내용"] }])] }]));
+  it(":::note · 혼자 있는 ::: 는 글자", () => expect(parseMarkdown(":::note\n:::")).toEqual([{ type: "p", lines: [":::note", ":::"] }]));
+  it("목록을 끊고 시작한다", () => expect(parseMarkdown("- a\n:::details b\nc\n:::")).toEqual([{ type: "ul", items: [li("a")] }, det("b", [{ type: "p", lines: ["c"] }])]));
+});

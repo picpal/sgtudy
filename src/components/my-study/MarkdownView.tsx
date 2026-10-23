@@ -108,6 +108,19 @@ function Block({ b }: { b: MdBlock }) {
           {b.blocks.map((c, j) => <Block key={j} b={c} />)}
         </blockquote>
       );
+    case "details":
+      // 네이티브 <details> — 키보드·펼침 상태 낭독이 공짜(D9). 기본 닫힘, 제목의 그림은 자리표시(summary 안 버튼 금지)
+      return (
+        <details className="group rounded-[10px] border border-line">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-[10px] px-3 font-semibold text-ink [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="inline-block text-[12px] text-muted motion-safe:transition-transform group-open:rotate-90">▸</span>
+            <span>{b.title ? <Inline text={b.title} /> : "펼쳐 보기"}</span>
+          </summary>
+          <div className="flex flex-col gap-[10px] px-3 pb-3">
+            {b.blocks.map((c, j) => <Block key={j} b={c} />)}
+          </div>
+        </details>
+      );
     case "code":
       return (
         <pre className="thin-scroll m-0 overflow-x-auto rounded-[10px] border border-line bg-surface-2 px-3 py-[10px] text-[13px] leading-[1.6] text-ink">
