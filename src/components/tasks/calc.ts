@@ -10,9 +10,11 @@ export type TasksFilter = {
   type: "all" | "team" | "personal";
   hideDone: boolean;
   study: string | "all";
+  /** 「과제 · 오답노트」 보기 전환(오답노트 스펙 D17) — notes 면 기간·묶기·유형·완료 숨기기는 뜻이 없어 툴바에서 빠진다 */
+  view: "tasks" | "notes";
 };
 
-export const DEFAULT_FILTER: TasksFilter = { scope: "current", group: "round", type: "all", hideDone: false, study: "all" };
+export const DEFAULT_FILTER: TasksFilter = { scope: "current", group: "round", type: "all", hideDone: false, study: "all", view: "tasks" };
 
 export function parseFilter(sp: URLSearchParams): TasksFilter {
   const scope = sp.get("scope");
@@ -24,6 +26,7 @@ export function parseFilter(sp: URLSearchParams): TasksFilter {
     type: type === "team" || type === "personal" ? type : "all",
     hideDone: sp.get("done") === "hide",
     study: sp.get("study") || "all",
+    view: sp.get("view") === "notes" ? "notes" : "tasks",
   };
 }
 
@@ -35,6 +38,7 @@ export function filterQuery(f: TasksFilter): Record<string, string> {
   if (f.type !== DEFAULT_FILTER.type) q.type = f.type;
   if (f.hideDone) q.done = "hide";
   if (f.study !== "all") q.study = f.study;
+  if (f.view !== DEFAULT_FILTER.view) q.view = f.view;
   return q;
 }
 

@@ -9,6 +9,7 @@ import { NotificationBell } from "@/components/ui/NotificationBell";
 import { Toast, type ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
 import { fetchMyTasks, personalComplete, personalCreate } from "@/lib/api/personal";
+import { fetchWrongNoteMine } from "@/lib/api/wrongNote";
 import { bumpProgress, progressChangedSince, progressScope } from "@/lib/progressStale";
 import type { MeTaskItem, MeTasks } from "@/lib/api/types";
 import { md, weekdayKo } from "@/lib/date";
@@ -17,11 +18,14 @@ import { markTaskOrigin } from "@/lib/taskOrigin";
 import { AddPersonalForm } from "./AddPersonalForm";
 import { focusFirst, latestApplied } from "./requests";
 import { personalErrorText } from "@/components/my-study/personal";
+import { useWrongNote } from "@/components/my-study/useWrongNote";
+import { toNoteStudiesMine } from "@/components/my-study/wrongNote";
 import { addableStudies, applyFilter, studyNote, atLimit, DEFAULT_FILTER, defaultCollapsed, emptyKind, filterQuery, groupByDue, groupByRound, isDone, normalizeFilter, parseFilter, summary, type RoundGroup, type TasksFilter } from "./calc";
 import { RoundGroupCard } from "./RoundGroupCard";
 import { TaskRow } from "./TaskRow";
 import { TasksEmpty } from "./TasksEmpty";
-import { TasksToolbar } from "./TasksToolbar";
+import { TasksNotesView } from "./TasksNotesView";
+import { TasksToolbar, type ToolbarStudy } from "./TasksToolbar";
 import { studyTone } from "./tone";
 
 const groupKey = (g: RoundGroup) => `${g.study.slug}:${g.round?.id ?? "-"}`;
@@ -42,8 +46,19 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const [data, setData] = useState(initial);
   const sp = useSearchParams();
   const raw = parseFilter(new URLSearchParams(sp.toString()));
+  const notesView = raw.view === "notes";
+  const [toast, setToast] = useState<ToastMsg>(null);
+  // 오답노트 보기(D17~D21) — 처음 그 보기가 될 때 받고, 과제 보기로 갔다 와도 유지(훅을 화면이 든다)
+  const notes = useWrongNote(() => fetchWrongNoteMine().then(toNoteStudiesMine), [], { toast: setToast, enabled: notesView });
+  // 오답노트 보기의 스터디 칩은 오답 응답 기준 — me_tasks 에 없는 이탈(INACTIVE) 방도 오답 섹션이 있으니 칩도 있어야 한다.
+  // 받기 전에는 과제 칩을 잠시 보이고, study 정리도 받은 뒤에 한다(이탈 방 slug 가 "전체"로 지워지지 않게)
+  const noteStudies: ToolbarStudy[] | null = notes.studies?.map((s) => ({ slug: s.slug, title: s.title ?? s.slug, tone: s.tone ?? "mint" })) ?? null;
   // 모르는 study(떠난 방 북마크·알림 링크)는 "전체"로 — 화면·툴바·빈 상태·URL 모두 이 값을 쓴다
-  const filter = normalizeFilter(data, raw);
+  const filter = !notesView
+    ? normalizeFilter(data, raw)
+    : !noteStudies || raw.study === "all" || noteStudies.some((s) => s.slug === raw.study)
+      ? raw
+      : { ...raw, study: "all" };
   // 같은 화면 안에서 쿼리만 바꾼다 — 서버 왕복(RSC) 없이 useSearchParams 와 동기화된다(Next 문서: Native History API).
   // replace: 필터 조작은 방문 기록을 쌓지 않는다. 상세로 갔다가 뒤로 오면 이 주소(필터)로 돌아온다
   const setFilter = (f: TasksFilter) => window.history.replaceState(null, "", routes.tasks(filterQuery(f)));
@@ -69,7 +84,6 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const [seq] = useState(latestApplied);
   const headBtn = useRef<HTMLButtonElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
-  const [toast, setToast] = useState<ToastMsg>(null);
   const closeToast = useCallback(() => setToast(null), []);
   const [formOpen, setFormOpen] = useState(false);
   const [adding, setAdding] = useState<string | null>(null);
@@ -98,6 +112,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   // 브라우저 뒤로 가기로 되살아난 화면은 그때의 목록으로 시작한다 — 그 뒤 제출·완료가 있었으면 한 번 다시 받는다
   useEffect(() => {
     if (!progressChangedSince(progressScope.tasks)) return;
+    notes.refetch(); // 제출 뒤 돌아왔다 — 새 오답도 보이게(오답노트 보기가 되면 받는다)
     const id = seq.next();
     fetchMyTasks().then((next) => {
       if (seq.accept(id)) setData(next);
@@ -161,7 +176,8 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   };
 
   const empty = emptyKind(data, filter, items);
-  const noStudy = empty === "noStudy";
+  // 오답노트 보기: 과제 스터디도 오답 스터디도 없을 때만(이탈한 방만 남아도 오답은 보이고, 툴바로 과제 보기에 돌아갈 수 있게)
+  const noStudy = empty === "noStudy" && (!notesView || noteStudies?.length === 0);
   const pieces = [
     sum.left > 0 && <Fragment key="l">남은 팀 과제 {sum.left}개</Fragment>,
     sum.dueToday > 0 && (
@@ -261,7 +277,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
           <div className="flex items-start gap-3 max-sm:px-2">
             <div className="min-w-0 flex-1">
               <h1 ref={title} tabIndex={-1} className="m-0 text-[26px] font-bold focus:outline-none tracking-[-0.02em] max-sm:text-[22px]">내 과제</h1>
-              {pieces.length > 0 && (
+              {!notesView && pieces.length > 0 && (
                 <p className="m-0 mt-[6px] text-[14px] text-muted max-sm:text-[13px]">
                   {pieces.map((p, i) => (
                     <Fragment key={i}>
@@ -272,7 +288,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
                 </p>
               )}
             </div>
-            {!noStudy && addable && (
+            {!notesView && !noStudy && addable && (
               <button
                 ref={headBtn}
                 type="button"
@@ -291,7 +307,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
               </button>
             )}
           </div>
-          {formOpen && (
+          {!notesView && formOpen && (
             <AddPersonalForm
               key={filter.study}
               data={data}
@@ -304,8 +320,8 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
               }}
             />
           )}
-          {!noStudy && <TasksToolbar filter={filter} studies={data.studies} onChange={setFilter} />}
-          {renderBody()}
+          {!noStudy && <TasksToolbar filter={filter} studies={notesView ? (noteStudies ?? data.studies) : data.studies} onChange={setFilter} />}
+          {notesView ? <TasksNotesView notes={notes} study={filter.study} /> : renderBody()}
         </main>
         <Toast msg={toast} onClose={closeToast} />
       </PageBody>

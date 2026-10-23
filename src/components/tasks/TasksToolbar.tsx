@@ -52,55 +52,72 @@ const TYPES: [TasksFilter["type"], string, string][] = [
   ["personal", "개인 목표", "개인"],
 ];
 
-/** 기간 · 묶기 · 유형 · 완료 숨기기 · 스터디 */
-export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilter; studies: MeTaskStudy[]; onChange: (f: TasksFilter) => void }) {
+/** 칩에 쓰는 것만 — 오답노트 보기는 오답 응답의 스터디(이탈한 방 포함)로 칩을 만든다 */
+export type ToolbarStudy = Pick<MeTaskStudy, "slug" | "title" | "tone">;
+
+/** 보기(과제 · 오답노트) · 기간 · 묶기 · 유형 · 완료 숨기기 · 스터디. 오답노트 보기는 보기 전환과 스터디만 */
+export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilter; studies: ToolbarStudy[]; onChange: (f: TasksFilter) => void }) {
   const set = (p: Partial<TasksFilter>) => onChange({ ...filter, ...p });
+  const notes = filter.view === "notes";
   return (
     <div className="flex flex-col gap-[10px] rounded-[16px] bg-surface-2 px-4 py-3 max-sm:px-2">
       <div className="flex flex-wrap items-center gap-x-[14px] gap-y-2 max-sm:gap-x-2">
         <Seg
-          label="기간"
-          value={filter.scope}
+          label="보기"
+          value={filter.view}
           options={[
-            ["current", "이번 회차"],
-            ["all", "전체 회차"],
+            ["tasks", "과제"],
+            ["notes", "오답노트"],
           ]}
-          onChange={(scope) => set({ scope })}
+          onChange={(view) => set({ view })}
         />
-        <span className="inline-flex items-center gap-2 max-sm:hidden">
-          <span className="text-[13px] font-semibold text-ink-3">묶기</span>
+        {!notes && (
+          <>
           <Seg
-            label="묶기"
-            value={filter.group}
+            label="기간"
+            value={filter.scope}
             options={[
-              ["round", "회차"],
-              ["due", "마감일"],
+              ["current", "이번 회차"],
+              ["all", "전체 회차"],
             ]}
-            onChange={(group) => set({ group })}
+            onChange={(scope) => set({ scope })}
           />
-        </span>
-        {/* 390: 묶기는 select 하나 (스펙 §4.2) */}
-        <label className="inline-flex min-h-11 items-center gap-[6px] rounded-[12px] border border-line-3 bg-surface px-3 text-[13px] font-medium text-ink-2 sm:hidden">
-          묶기
-          <select value={filter.group} onChange={(e) => set({ group: e.target.value as TasksFilter["group"] })} className="border-0 bg-transparent text-[13px] font-semibold text-ink">
-            <option value="round">회차</option>
-            <option value="due">마감일</option>
-          </select>
-        </label>
-        <div role="group" aria-label="유형" className="flex flex-wrap gap-x-[6px] gap-y-[10px]">
-          {TYPES.map(([id, long, short]) => (
-            <Chip key={id} on={filter.type === id} onClick={() => set({ type: id })}>
-              <span className="max-sm:hidden">{long}</span>
-              <span className="sm:hidden">{short}</span>
-            </Chip>
-          ))}
-        </div>
-        <span className="flex-[1_1_10px] max-sm:hidden" />
-        {/* 라벨 전체(44px)가 누르는 영역 — 상자는 20px */}
-        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[12px] px-2 text-[13px] text-ink-2">
-          <input type="checkbox" checked={filter.hideDone} onChange={(e) => set({ hideDone: e.target.checked })} className="m-0 h-5 w-5 cursor-pointer accent-mint" />
-          완료 숨기기
-        </label>
+          <span className="inline-flex items-center gap-2 max-sm:hidden">
+            <span className="text-[13px] font-semibold text-ink-3">묶기</span>
+            <Seg
+              label="묶기"
+              value={filter.group}
+              options={[
+                ["round", "회차"],
+                ["due", "마감일"],
+              ]}
+              onChange={(group) => set({ group })}
+            />
+          </span>
+          {/* 390: 묶기는 select 하나 (스펙 §4.2) */}
+          <label className="inline-flex min-h-11 items-center gap-[6px] rounded-[12px] border border-line-3 bg-surface px-3 text-[13px] font-medium text-ink-2 sm:hidden">
+            묶기
+            <select value={filter.group} onChange={(e) => set({ group: e.target.value as TasksFilter["group"] })} className="border-0 bg-transparent text-[13px] font-semibold text-ink">
+              <option value="round">회차</option>
+              <option value="due">마감일</option>
+            </select>
+          </label>
+          <div role="group" aria-label="유형" className="flex flex-wrap gap-x-[6px] gap-y-[10px]">
+            {TYPES.map(([id, long, short]) => (
+              <Chip key={id} on={filter.type === id} onClick={() => set({ type: id })}>
+                <span className="max-sm:hidden">{long}</span>
+                <span className="sm:hidden">{short}</span>
+              </Chip>
+            ))}
+          </div>
+          <span className="flex-[1_1_10px] max-sm:hidden" />
+          {/* 라벨 전체(44px)가 누르는 영역 — 상자는 20px */}
+          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[12px] px-2 text-[13px] text-ink-2">
+            <input type="checkbox" checked={filter.hideDone} onChange={(e) => set({ hideDone: e.target.checked })} className="m-0 h-5 w-5 cursor-pointer accent-mint" />
+            완료 숨기기
+          </label>
+          </>
+        )}
       </div>
       {/* ≤640: 스터디가 많으면 칩이 한 줄씩 쌓여 목록이 한참 밀린다 — 한 줄 가로 스크롤(상자 끝까지) */}
       {studies.length > 1 && (

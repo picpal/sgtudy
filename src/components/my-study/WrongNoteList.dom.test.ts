@@ -178,6 +178,11 @@ describe("WrongNoteList — 목록 (Task 4)", () => {
     const m = mount({ studies: [{ ...AWS(), title: "AWS 스터디", tone: "mint" }, SPRING], scope: "all", studyFilter: "spring" });
     expect([...m.host.querySelectorAll("h2")].map((h) => text(h).replace("오답노트 ›", ""))).toEqual(["Spring 스터디"]);
     expect(text(m.host)).toContain("오답 1문항");
+    act(() => root!.unmount());
+    const go: NoteStudy = { slug: "go", title: "Go 스터디", tone: "mint", hasExam: false, rounds: [] };
+    const g = mount({ studies: [SPRING, go], scope: "all", studyFilter: "go" });
+    expect([...g.host.querySelectorAll("h2")].map((h) => text(h).replace("오답노트 ›", ""))).toEqual(["Go 스터디"]);
+    expect(text(g.host)).toContain("아직 시험이 없는 방이에요");
   });
 });
 

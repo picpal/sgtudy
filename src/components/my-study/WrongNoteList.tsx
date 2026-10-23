@@ -59,7 +59,9 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   const visible = visibleOf(filter, showMastered);
   const selected = applyFilter(studies, "all", true, studyFilter);
   const totals = totalsOf(selected);
-  const empty = emptyState(selected, { pending, showMastered, scope, visible });
+  // 내 과제에서 스터디 하나를 고르면(?study=) 그 섹션 머리(h2)를 남기고 빈 문구는 섹션 한 줄로(스펙 §6.5)
+  const oneSection = scope === "all" && selected.length === 1;
+  const empty = oneSection && !pending ? null : emptyState(selected, { pending, showMastered, scope, visible });
 
   // 필터를 바꿔 목록에서 빠진 문항의 입력은 버린다(D15 — 잃어도 되는 값)
   const changeView = (f: Filter, m: boolean) => {

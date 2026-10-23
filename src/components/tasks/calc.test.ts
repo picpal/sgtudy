@@ -31,11 +31,17 @@ const ids = (xs: { id: string }[]) => xs.map((x) => x.id);
 describe("filter", () => {
   it("parse/query 왕복, 기본값은 키 없음", () => {
     expect(filterQuery(DEFAULT_FILTER)).toEqual({});
-    const f: TasksFilter = { scope: "all", group: "due", type: "personal", hideDone: true, study: "aws" };
+    const f: TasksFilter = { scope: "all", group: "due", type: "personal", hideDone: true, study: "aws", view: "notes" };
     const q = filterQuery(f);
-    expect(q).toEqual({ scope: "all", group: "due", type: "personal", done: "hide", study: "aws" });
+    expect(q).toEqual({ scope: "all", group: "due", type: "personal", done: "hide", study: "aws", view: "notes" });
     expect(parseFilter(new URLSearchParams(q))).toEqual(f);
-    expect(parseFilter(new URLSearchParams("scope=x&group=y&type=z&done=q"))).toEqual(DEFAULT_FILTER);
+    expect(parseFilter(new URLSearchParams("scope=x&group=y&type=z&done=q&view=zz"))).toEqual(DEFAULT_FILTER);
+  });
+  it("view: notes 만 인정, 기본(tasks)은 키 없음", () => {
+    expect(parseFilter(new URLSearchParams("view=notes")).view).toBe("notes");
+    expect(parseFilter(new URLSearchParams("view=tasks")).view).toBe("tasks");
+    expect(filterQuery({ ...DEFAULT_FILTER, view: "notes", study: "aws" })).toEqual({ view: "notes", study: "aws" });
+    expect(filterQuery({ ...DEFAULT_FILTER, view: "tasks" })).toEqual({});
   });
   it("scope current 는 종료 방을 뺀다", () => {
     const m = fx();
