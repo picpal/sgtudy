@@ -72,3 +72,19 @@ export function itemFromUrl(search: string, exists: (id: string) => boolean, can
   const id = itemTarget(readItem(search), exists);
   return { id, mode: id && canEdit && readMode(search) === "edit" && !personal(id) ? "edit" : "view" };
 }
+
+/** 방 만들기 직후 안내(?note=, 방 만들기 AI 2단계 D22·D35) — 회차 적용·모집 시작이 실패해도 방은 만들어졌다. 모르는 값은 무시 */
+export const CREATE_NOTES = {
+  "rounds-skipped": "회차 초안은 적용하지 못했어요 · 진행목표에서 직접 추가해 주세요",
+  "recruit-skipped": "모집은 시작하지 못했어요 · 위의 [모집 시작] 으로 할 수 있어요",
+} as const;
+export type CreateNote = keyof typeof CREATE_NOTES;
+export const isCreateNote = (v: unknown): v is CreateNote => typeof v === "string" && Object.hasOwn(CREATE_NOTES, v);
+
+/** 주소에서 ?note= 만 지운 주소 — 새로고침 때 같은 안내가 다시 뜨지 않게 */
+export function withoutNote(href: string): string {
+  const u = new URL(href, "http://x");
+  u.searchParams.delete("note");
+  const q = u.searchParams.toString();
+  return `${u.pathname}${q ? `?${q}` : ""}${u.hash}`;
+}

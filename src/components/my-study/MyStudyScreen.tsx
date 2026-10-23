@@ -24,7 +24,7 @@ import { COMMENT_HASH_PREFIX, OVERVIEW_ANCHORS, peekHashPrefix, useHashAnnounce,
 import { fetchNoticeInbox } from "@/lib/api/notices";
 import { useRefetchOnFocus } from "@/lib/useRefetchOnFocus";
 import { TodayProvider } from "@/lib/today";
-import { itemFromUrl, readItem, readMode, syncStep, withItem } from "./editUrl";
+import { CREATE_NOTES, itemFromUrl, readItem, readMode, syncStep, withItem, withoutNote, type CreateNote } from "./editUrl";
 import { EMPTY_OVERRIDES, buildTree, findNode, isPersonal, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId, roundsOutsidePeriod } from "./rounds";
 import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, viewBackPatch, type CurMode, type Patch, type ScreenState } from "./state";
@@ -59,7 +59,7 @@ const CONFIRM_TEXT: Record<JoinCardAction, { title: string; body: string; label:
   leaveRequestCancel: { title: "탈퇴 요청을 취소할까요?", body: "취소하면 지금처럼 계속 참가해요.", label: "요청 취소" },
 };
 
-type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string; initialItem?: string };
+type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string; initialItem?: string; initialNote?: CreateNote };
 
 /** 개인 목표 id 인가 — 편집 화면 대상이 아니다(편집 URL 로 와도 보기 상세) */
 const isPersonalId = (nodes: Curriculum["nodes"], id: string) => nodes.some((n) => n.id === id && n.task?.type === "personal");
@@ -70,10 +70,11 @@ function syncListTab(tab: TabId) {
   if (readItem(window.location.search) !== null || (sp.get("tab") ?? "overview") === tab) return;
   const u = new URL(window.location.href);
   u.searchParams.set("tab", tab);
+  if (tab !== "wrong") u.searchParams.delete("round"); // 오답노트 회차 상세(?round=)는 그 탭에서만
   window.history.replaceState(null, "", `${u.pathname}?${u.searchParams.toString()}${u.hash}`);
 }
 
-export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf, initialItem }: Props) {
+export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf, initialItem, initialNote }: Props) {
   const me = useMe();
   const router = useRouter();
   const isLeader = detail.me?.state === "leader";
@@ -107,13 +108,19 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       : {}),
     ...itemInit,
   });
-  const [toast, setToast] = useState<ToastMsg>(null);
+  // 방 만들기 직후 ?note= — 회차 적용·모집 시작 실패 안내(서버 props 로 받아 첫 렌더부터 같은 마크업). 주소에서는 지운다
+  const [toast, setToast] = useState<ToastMsg>(() => (initialNote ? { text: CREATE_NOTES[initialNote], tone: "bad" } : null));
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("note")) window.history.replaceState(window.history.state, "", withoutNote(window.location.href));
+  }, []);
   const update = useCallback((patch: Patch) => setS((prev) => ({ ...prev, ...(typeof patch === "function" ? patch(prev) : patch) })), []);
   const today = cur.today;
   // 편집 패널의 미저장 수정은 커리큘럼 탭에서만 보인다 — 다른 탭·개요는 저장된 값만 (Q2-05)
   const tree = useMemo(() => buildTree(cur, S.ov, today), [cur, S.ov, today]);
   const savedOv = useMemo(() => stripFieldOv(S.ov), [S.ov]);
   const savedTree = useMemo(() => buildTree(cur, savedOv, today), [cur, savedOv, today]);
+  // 오답노트 회차 카드의 기간 — 오답노트 응답에는 회차 날짜가 없다(루트 노드 = 회차)
+  const roundPeriods = useMemo(() => Object.fromEntries(cur.nodes.filter((n) => n.parentId === null).map((n) => [n.id, { startDate: n.startDate, endDate: n.endDate }])), [cur.nodes]);
   const room = useMemo(() => toStudyRoom(detail, savedTree, today, me?.id ?? ""), [detail, savedTree, today, me]);
   const groups = useMemo(() => toSidebarGroups(studies, today), [studies, today]);
   // 연 곳 = 지금 탭 — 상세의 [← 보드] 와 브라우저 뒤로 가기(아래 backTab)가 같은 탭으로 돌아간다
@@ -511,7 +518,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                       {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                       {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                       {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
-                      {S.tab === "wrong" && <WrongNoteTab slug={detail.slug} viewerPending={detail.me?.state === "pending"} toast={setToast} />}
+                      {S.tab === "wrong" && <WrongNoteTab slug={detail.slug} viewerPending={detail.me?.state === "pending"} toast={setToast} periods={roundPeriods} />}
                     </section>
                     {S.tab === "overview" && (
                       <JoinInfoCard

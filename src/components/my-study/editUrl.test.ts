@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isUrlItem, itemFromUrl, itemTarget, readItem, readMode, syncStep, urlStep, withItem } from "./editUrl";
+import { isUrlItem, itemFromUrl, itemTarget, readItem, readMode, syncStep, urlStep, withItem, isCreateNote, withoutNote } from "./editUrl";
 
 describe("edit view URL (?item=)", () => {
   it("reads only numeric server ids", () => {
@@ -83,5 +83,15 @@ describe("detail view URL (보기 ?item=)", () => {
     const personal = (id: string) => id === "32";
     expect(itemFromUrl("?mode=edit&item=32", () => true, true, personal)).toEqual({ id: "32", mode: "view" });
     expect(itemFromUrl("?mode=edit&item=21", () => true, true, personal)).toEqual({ id: "21", mode: "edit" });
+  });
+});
+
+describe("방 만들기 직후 ?note=", () => {
+  it("isCreateNote: 두 값만 · 모르는 값·프로토타입 키는 무시", () => {
+    expect(["rounds-skipped", "recruit-skipped", "x", "toString", undefined].map(isCreateNote)).toEqual([true, true, false, false, false]);
+  });
+  it("withoutNote: note 만 지운다", () => {
+    expect(withoutNote("/my-study/aws?tab=curriculum&mode=edit&note=rounds-skipped")).toBe("/my-study/aws?tab=curriculum&mode=edit");
+    expect(withoutNote("/my-study/aws?note=x")).toBe("/my-study/aws");
   });
 });
