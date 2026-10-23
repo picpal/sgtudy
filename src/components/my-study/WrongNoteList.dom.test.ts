@@ -8,6 +8,8 @@ import type { PracticeOutcome } from "./useWrongNote";
 import { mergePractice, setMastered, type NoteStudy } from "./wrongNote";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+// jsdom 에는 없다 — 문항 이동이 부른다
+Element.prototype.scrollIntoView ??= function () {};
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {}, refresh: () => {} }) }));
 
 const { WrongNoteList } = await import("./WrongNoteList");
@@ -43,15 +45,18 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-type Opt = { studies?: NoteStudy[]; scope?: "room" | "all"; pending?: boolean; studyFilter?: string; practice?: (slug: string, a: { questionId: string; answer: unknown }[]) => PracticeOutcome | Promise<PracticeOutcome> };
+type Opt = { studies?: NoteStudy[]; scope?: "room" | "all"; pending?: boolean; studyFilter?: string; round?: string | null; practice?: (slug: string, a: { questionId: string; answer: unknown }[]) => PracticeOutcome | Promise<PracticeOutcome> };
 function mount(o: Opt = {}) {
   const onPractice = vi.fn(async (slug: string, answers: { questionId: string; answer: unknown }[]): Promise<PracticeOutcome> => o.practice?.(slug, answers) ?? { ok: false });
   const onMaster = vi.fn<(slug: string, id: string, on: boolean) => Promise<boolean>>(async () => true);
   // 부모(useWrongNote)처럼 응답을 목록에 합친다
   function H() {
     const [studies, setStudies] = useState(o.studies ?? [AWS()]);
+    // 부모(useNoteRound)처럼 열린 회차를 든다 — 기본은 3주차 상세
+    const [round, setRound] = useState<string | null>(o.round === undefined ? "3" : o.round);
     return createElement(WrongNoteList, {
       studies, scope: o.scope ?? "room", pending: o.pending, studyFilter: o.studyFilter, busy: false,
+      round, onOpenRound: setRound, onBack: () => setRound(null), periods: { "3": { startDate: "2026-10-15", endDate: "2026-10-21" } },
       onPractice: async (slug, answers) => {
         const r = await onPractice(slug, answers);
         if (r.ok) setStudies((s) => mergePractice(s, r.results));
@@ -81,12 +86,15 @@ const openDetails = (d: HTMLDetailsElement) => act(() => {
 });
 
 describe("WrongNoteList — 목록 (Task 4)", () => {
-  it("회차 h3 · 시험 카드 머리 · 문항 번호 · 머리줄 합계 · 방 탭엔 스터디 h2 없음", () => {
-    const { host } = mount();
+  it("목록 = 회차 카드(h3) · 머리줄 합계 · 문항은 그리지 않음 · 카드 → 상세(시험 카드 머리 · 문항 번호)", () => {
+    const { host } = mount({ round: null });
     expect([...host.querySelectorAll("h3")].map(text)).toEqual(["3주차", "4주차"]);
     expect(host.querySelector("h2")).toBeNull();
-    expect(text(host)).toContain("1/5점 · 오답 3문항");
+    expect(host.querySelector("[data-wn-item]")).toBeNull();
     expect(text(host)).toContain("오답 3문항 · 다시 풀어 맞힘 1 · 잠김 6");
+    click(host.querySelector("[data-round-card='3']"));
+    expect([...host.querySelectorAll("h3")].map(text)).toEqual(["3주차"]);
+    expect(text(host)).toContain("1/5점 · 오답 3문항");
     expect(text(itemEl(host, "2"))).toContain("2.");
     expect(tags(itemEl(host, "2"), "내 답")).toBe(1);
   });
@@ -116,24 +124,38 @@ describe("WrongNoteList — 목록 (Task 4)", () => {
     expect(text(itemEl(host, "3").querySelector("[aria-label='문항 상태']"))).toBe("미답");
   });
 
-  it("필터 칩(radiogroup): 다시 풀어 맞힘 → 그 문항만 · 잠금 카드 빠짐, 아직 못 맞힘 → 나머지 + 잠금", () => {
+  it("필터 칩(radiogroup): 다시 풀어 맞힘 → 그 문항만 · 잠긴 회차 카드 빠짐, 아직 못 맞힘 → 나머지 + 잠금", () => {
+    const list = mount({ round: null });
+    click(btn(list.host.querySelector("[role='radiogroup']")!, "다시 풀어 맞힘"));
+    expect([...list.host.querySelectorAll("h3")].map(text)).toEqual(["3주차"]);
+    expect(text(list.host)).toContain("조건에 맞는 1문항");
+    click(btn(list.host.querySelector("[role='radiogroup']")!, "아직 못 맞힘"));
+    expect([...list.host.querySelectorAll("h3")].map(text)).toEqual(["3주차", "4주차"]);
+    act(() => root!.unmount());
     const { host } = mount();
     const group = host.querySelector("[role='radiogroup']")!;
     expect([...group.querySelectorAll("[role='radio']")].map((b) => [text(b), b.getAttribute("aria-checked")])).toEqual([["전체", "true"], ["아직 못 맞힘", "false"], ["다시 풀어 맞힘", "false"]]);
     click(btn(group, "다시 풀어 맞힘"));
     expect([...host.querySelectorAll("[data-wn-item]")].map((e) => e.getAttribute("data-wn-item"))).toEqual(["2"]);
-    expect(text(host)).not.toContain("종합 시험");
     click(btn(group, "아직 못 맞힘"));
     expect([...host.querySelectorAll("[data-wn-item]")].map((e) => e.getAttribute("data-wn-item"))).toEqual(["1", "3"]);
-    expect(text(host)).toContain("종합 시험");
   });
 
-  it("잠금 카드: 개수·열리는 날만 · 버튼·문항 없음", () => {
-    const { host } = mount();
+  it("잠긴 회차 카드: 자물쇠 · 열리는 날 · 누를 수 없음 / 상세로 와도 잠금 안내 + 개수·날짜만(문항·정답 없음)", () => {
+    const list = mount({ round: null });
+    const lockedCard = [...list.host.querySelectorAll("article")].find((a) => text(a).includes("4주차"))!;
+    expect(text(lockedCard)).toContain("잠김 6 · 10.28 마감 뒤에 열려요");
+    expect(lockedCard.querySelectorAll("button").length).toBe(0);
+    expect(lockedCard.querySelector("svg")).not.toBeNull();
+    act(() => root!.unmount());
+    const { host } = mount({ round: "4" });
+    expect(host.querySelector("[role='note']")?.textContent).toContain("10.28 마감 뒤에 열려요");
     const card = [...host.querySelectorAll("article")].find((a) => text(a).includes("종합 시험"))!;
     expect(text(card)).toContain("4/10점 · 오답 6문항 · 10.28 마감 뒤에 열려요");
     expect(card.querySelectorAll("button").length).toBe(0);
-    expect(card.querySelector("[data-wn-item]")).toBeNull();
+    expect(host.querySelector("[data-wn-item]")).toBeNull();
+    expect(host.querySelector("[role='radiogroup']")).toBeNull();
+    expect(host.querySelector('nav[aria-label="문항 이동"]')).toBeNull();
   });
 
   it("외운 문제 토글 — 외운 문항이 있을 때만, 켜면 「외움」 배지 + [다시 노트에]", () => {
@@ -170,17 +192,17 @@ describe("WrongNoteList — 목록 (Task 4)", () => {
 
   it("여러 스터디(scope all): 스터디 h2 + 「오답노트 ›」 · studyFilter 로 한 섹션 · 시험 없는 스터디 한 줄", () => {
     const empty: NoteStudy = { slug: "go", title: "Go 스터디", tone: "mint", hasExam: false, rounds: [] };
-    const { host } = mount({ studies: [{ ...AWS(), title: "AWS 스터디", tone: "mint" }, SPRING, empty], scope: "all" });
+    const { host } = mount({ studies: [{ ...AWS(), title: "AWS 스터디", tone: "mint" }, SPRING, empty], scope: "all", round: null });
     expect([...host.querySelectorAll("h2")].map((h) => text(h).replace("오답노트 ›", ""))).toEqual(["AWS 스터디", "Spring 스터디", "Go 스터디"]);
     expect(host.querySelector("h2 a")?.getAttribute("href")).toBe(routes.myStudyTab("aws", "wrong"));
     expect(text(host)).toContain("아직 시험이 없는 방이에요");
     act(() => root!.unmount());
-    const m = mount({ studies: [{ ...AWS(), title: "AWS 스터디", tone: "mint" }, SPRING], scope: "all", studyFilter: "spring" });
+    const m = mount({ studies: [{ ...AWS(), title: "AWS 스터디", tone: "mint" }, SPRING], scope: "all", studyFilter: "spring", round: null });
     expect([...m.host.querySelectorAll("h2")].map((h) => text(h).replace("오답노트 ›", ""))).toEqual(["Spring 스터디"]);
     expect(text(m.host)).toContain("오답 1문항");
     act(() => root!.unmount());
     const go: NoteStudy = { slug: "go", title: "Go 스터디", tone: "mint", hasExam: false, rounds: [] };
-    const g = mount({ studies: [SPRING, go], scope: "all", studyFilter: "go" });
+    const g = mount({ studies: [SPRING, go], scope: "all", studyFilter: "go", round: null });
     expect([...g.host.querySelectorAll("h2")].map((h) => text(h).replace("오답노트 ›", ""))).toEqual(["Go 스터디"]);
     expect(text(g.host)).toContain("아직 시험이 없는 방이에요");
   });
@@ -203,7 +225,7 @@ describe("WrongNoteList — 다시 풀기 (Task 5)", () => {
     expect(text(li)).toContain("✓ 맞혔어요");
     expect(tags(li, "정답")).toBe(1);
     expect(li.querySelector("details")?.open).toBe(true);
-    expect(text(host)).toContain("오답 3문항 · 다시 풀어 맞힘 2 · 잠김 6");
+    expect(text(host.querySelector("header"))).toContain("오답 2 · 미답 1 · 다시 풀어 맞힘 2");
     click(btn(li, "닫기"));
     expect(text(itemEl(host, "1").querySelector("[aria-label='문항 상태']"))).toBe("오답다시 풀어 맞힘");
   });
@@ -221,7 +243,7 @@ describe("WrongNoteList — 다시 풀기 (Task 5)", () => {
   });
 
   it("두 스터디 — spring 카드에서 채점하면 slug 가 spring", async () => {
-    const { host, onPractice } = mount({ studies: [{ ...AWS(), title: "AWS", tone: "mint" }, SPRING], scope: "all", practice: (_s, a) => ({ ok: true, results: { [a[0].questionId]: { correct: false, practice: P(false) } } }) });
+    const { host, onPractice } = mount({ studies: [{ ...AWS(), title: "AWS", tone: "mint" }, SPRING], scope: "all", round: "9", practice: (_s, a) => ({ ok: true, results: { [a[0].questionId]: { correct: false, practice: P(false) } } }) });
     click(btn(itemEl(host, "11"), "다시 풀기"));
     click(btn(itemEl(host, "11"), "채점"));
     await flush();
@@ -361,5 +383,116 @@ describe("WrongNoteList — 채점 중 필터 변경 (리뷰 4)", () => {
     // 응답은 목록에 합쳐져 1번이 「다시 풀어 맞힘」 이 됐지만, 다시 풀기 상태는 버렸으니 기본 화면
     expect(btn(itemEl(host, "1"), "다시 풀기")).not.toBeNull();
     expect(text(itemEl(host, "1"))).not.toContain("✓ 맞혔어요");
+  });
+});
+
+describe("WrongNoteList — 회차 카드 → 상세 (D22·D23)", () => {
+  it("카드: 기간·시험 수·오답/미답/다시 풀어 맞힘 · 누르면 onOpenRound → 상세 제목에 포커스 · [회차 목록] → 그 카드에 포커스", () => {
+    const { host } = mount({ round: null });
+    const card = host.querySelector<HTMLElement>("[data-round-card='3']")!.closest("article")!;
+    expect(text(card)).toContain("10.15 ~ 10.21 · 시험 1개");
+    expect([...card.querySelectorAll("li")].map(text)).toEqual(["오답 2", "미답 1", "다시 풀어 맞힘 1"]);
+    click(host.querySelector("[data-round-card='3']"));
+    expect(document.activeElement?.hasAttribute("data-wn-head")).toBe(true);
+    expect(text(document.activeElement)).toBe("3주차");
+    click(btn(host, "회차 목록"));
+    expect(host.querySelector("[data-wn-item]")).toBeNull();
+    expect(document.activeElement?.getAttribute("data-round-card")).toBe("3");
+  });
+
+  it("없는 회차 id → 안내 + [회차 목록으로]", () => {
+    const { host } = mount({ round: "999" });
+    expect(text(host)).toContain("이 회차의 오답을 찾을 수 없어요");
+    click(btn(host, "회차 목록으로"));
+    expect(host.querySelector("[data-round-card='3']")).not.toBeNull();
+  });
+
+  it("여러 스터디(scope all) 상세 — 머리에 스터디 이름", () => {
+    const { host } = mount({ studies: [{ ...AWS(), title: "AWS 스터디", tone: "mint" }, SPRING], scope: "all", round: "9" });
+    expect(text(host.querySelector("header"))).toContain("Spring 스터디");
+    expect(host.querySelector("[data-wn-item='11']")).not.toBeNull();
+    expect(host.querySelector("[data-wn-item='1']")).toBeNull();
+  });
+});
+
+describe("WrongNoteList — 상세 문항 이동 · 다시 푼 횟수 색 (D24·D25)", () => {
+  const nav = (host: HTMLElement) => host.querySelector<HTMLElement>('nav[aria-label="문항 이동"]')!;
+  const cell = (host: HTMLElement, no: number) => [...nav(host).querySelectorAll("button")].find((b) => b.textContent?.startsWith(String(no)))!;
+  const P2 = (c: number, w: number, last: boolean): WrongNotePractice => ({ lastCorrect: last, correctCount: c, wrongCount: w, lastAnswer: 0, lastAt: "2026-10-18T00:00:00.000Z" });
+
+  it("번호 = 시험 안 번호 · aria-label·title 에 다시 푼 횟수와 마지막 정오 · 횟수 단계 색 · 각주는 번호 아래", () => {
+    const st = AWS();
+    st.rounds[0].exams[0].items![2].practice = P2(1, 3, false);
+    const { host } = mount({ studies: [st] });
+    expect([...nav(host).querySelectorAll("button")].map((b) => b.getAttribute("aria-label"))).toEqual([
+      "1번 문항 · 아직 다시 풀지 않았어요",
+      "2번 문항 · 1번 다시 풀었어요 · 마지막에 맞힘",
+      "3번 문항 · 4번 다시 풀었어요 · 마지막에 틀림",
+    ]);
+    expect(cell(host, 2).getAttribute("title")).toBe("2번 문항 · 1번 다시 풀었어요 · 마지막에 맞힘");
+    expect(cell(host, 1).className).toContain("bg-surface");
+    expect(cell(host, 2).className).toContain("bg-blue-soft");
+    expect(cell(host, 3).className).toContain("bg-navy");
+    expect(text(cell(host, 2))).toBe("2✓");
+    expect(text(cell(host, 3))).toBe("3✗");
+    expect(text(nav(host))).toContain("3문항");
+    // 각주: 번호 목록 뒤(아래)
+    const legend = nav(host).querySelector("[data-wn-legend]")!;
+    expect(text(legend)).toContain("다시 푼 횟수");
+    expect(text(legend)).toContain("0번1번2번3번+");
+    expect(text(legend)).toContain("마지막에 맞힘");
+    const lists = [...nav(host).children];
+    expect(lists.indexOf(legend)).toBeGreaterThan(lists.indexOf(nav(host).querySelector("ol")!.parentElement!));
+  });
+
+  it("번호를 누르면 그 문항으로(머리에 포커스)", () => {
+    const { host } = mount();
+    const calls: string[] = [];
+    const orig = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      calls.push((this as HTMLElement).dataset.wnItem ?? "");
+    };
+    click(cell(host, 3));
+    Element.prototype.scrollIntoView = orig;
+    expect(calls).toEqual(["3"]);
+    expect(document.activeElement?.id).toBe("exam-q-wn-3");
+    expect(cell(host, 3).getAttribute("aria-current")).toBe("step");
+  });
+
+  it("다시 풀기 채점 결과가 오면 번호 색·라벨이 바로 바뀐다", async () => {
+    const { host } = mount({ practice: (_s, a) => ({ ok: true, results: { [a[0].questionId]: { correct: false, practice: P2(1, 1, false) } } }) });
+    expect(cell(host, 1).getAttribute("aria-label")).toBe("1번 문항 · 아직 다시 풀지 않았어요");
+    click(btn(itemEl(host, "1"), "다시 풀기"));
+    click(btn(itemEl(host, "1"), "채점"));
+    await flush();
+    expect(cell(host, 1).getAttribute("aria-label")).toBe("1번 문항 · 2번 다시 풀었어요 · 마지막에 틀림");
+    expect(cell(host, 1).className).toContain("bg-blue ");
+  });
+
+  it("묶음 다시 풀기 중 — 그 시험 번호는 답함/안 답함 · 머리 n/총 답함 · 각주에 「답함」", () => {
+    const { host } = mount();
+    click(btn(host, "이 시험 다시 풀기"));
+    expect(text(nav(host))).toContain("0/3 답함");
+    expect(cell(host, 1).getAttribute("aria-label")).toBe("1번 문항 · 안 답함");
+    click(itemEl(host, "1").querySelectorAll<HTMLInputElement>("input[type='radio']")[0]);
+    expect(cell(host, 1).getAttribute("aria-label")).toBe("1번 문항 · 답함");
+    expect(cell(host, 1).className).toContain("bg-mint-soft");
+    expect(text(nav(host))).toContain("1/3 답함");
+    expect(text(nav(host).querySelector("[data-wn-legend]"))).toContain("답함");
+  });
+
+  it("시험이 여럿이면 시험 이름으로 묶는다 · 좁은 화면 [문항 이동] 판을 열고 고르면 닫힌다", () => {
+    const st = AWS();
+    st.rounds[0].exams.push(exam("32", [item("21", { no: 1 })], { title: "보충 시험" }));
+    const { host } = mount({ studies: [st] });
+    expect([...nav(host).querySelectorAll("p")].map(text)).toContain("보충 시험");
+    const toggle = btn(host, "문항 이동")!;
+    click(toggle);
+    const sheet = host.querySelector<HTMLElement>("#wn-nav-sheet")!;
+    expect(sheet.querySelector("[data-wn-legend]")).not.toBeNull();
+    expect(sheet.querySelector("button")!.className).toContain("h-11");
+    click(sheet.querySelectorAll("button")[3]);
+    expect(host.querySelector("#wn-nav-sheet")).toBeNull();
+    expect(document.activeElement?.id).toBe("exam-q-wn-21");
   });
 });

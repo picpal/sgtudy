@@ -52,14 +52,22 @@ const MINE: WrongNoteMine = { today: "2026-10-16", studies: [noteStudy("aws", "A
 
 let root: Root | null = null;
 const realReplace = window.history.replaceState.bind(window.history);
+const realPush = window.history.pushState.bind(window.history);
+const onPop = () => window.dispatchEvent(new Event("test-nav"));
 beforeEach(() => {
   vi.spyOn(window.history, "replaceState").mockImplementation((d, u, url) => {
     realReplace(d, u, url);
     window.dispatchEvent(new Event("test-nav"));
   });
+  vi.spyOn(window.history, "pushState").mockImplementation((d, u, url) => {
+    realPush(d, u, url);
+    window.dispatchEvent(new Event("test-nav"));
+  });
+  window.addEventListener("popstate", onPop);
   m.fetchWrongNoteMine.mockResolvedValue(MINE);
 });
 afterEach(() => {
+  window.removeEventListener("popstate", onPop);
   act(() => root?.unmount());
   root = null;
   document.body.innerHTML = "";
@@ -135,9 +143,44 @@ describe("TasksScreen — 「오답노트」 보기 (오답노트 D17~D21)", () 
     expect(h2s(host)).toEqual(["AWS", "Spring", "Old"]);
   });
 
+  it("목록은 스터디 섹션 안 회차 카드 · 카드 → ?round= push(상세) · [회차 목록] → back(목록, 필터 그대로)", async () => {
+    const host = await mount("?view=notes&study=spring");
+    expect(host.querySelector("[data-wn-item]")).toBeNull();
+    const section = host.querySelector<HTMLElement>("section[aria-label=Spring]")!;
+    expect(section.querySelector("[data-round-card='spring-r']")).not.toBeNull();
+    const before = window.history.length;
+    await click(section.querySelector("[data-round-card='spring-r']"));
+    expect(window.history.length).toBe(before + 1);
+    const q = new URLSearchParams(window.location.search);
+    expect([q.get("view"), q.get("study"), q.get("round")]).toEqual(["notes", "spring", "spring-r"]);
+    expect(host.querySelector("[data-wn-item='2']")).not.toBeNull();
+    expect(host.querySelector("header")!.textContent).toContain("Spring");
+    act(() => btn(host, "회차 목록")!.click());
+    await vi.waitFor(() => expect(new URLSearchParams(window.location.search).get("round")).toBeNull());
+    await flush();
+    expect(new URLSearchParams(window.location.search).get("study")).toBe("spring");
+    expect(host.querySelector("[data-wn-item]")).toBeNull();
+    expect(host.querySelector("[data-round-card='spring-r']")).not.toBeNull();
+  });
+
+  it("?round= 딥링크로 바로 연 상세 — [회차 목록] 은 replace(다른 화면으로 떠나지 않는다) · 과제 보기로 가면 round 가 빠진다", async () => {
+    const host = await mount("?view=notes&round=aws-r");
+    expect(host.querySelector("[data-wn-item='1']")).not.toBeNull();
+    const before = window.history.length;
+    await click(btn(host, "회차 목록"));
+    expect(window.history.length).toBe(before);
+    expect(new URLSearchParams(window.location.search).get("round")).toBeNull();
+    expect(new URLSearchParams(window.location.search).get("view")).toBe("notes");
+    expect(host.querySelector("[data-round-card='aws-r']")).not.toBeNull();
+    act(() => root!.unmount());
+    const h2 = await mount("?view=notes&round=aws-r");
+    await click(btn(view(h2), "과제"));
+    expect(new URLSearchParams(window.location.search).get("round")).toBeNull();
+  });
+
   it("spring 카드에서 다시 풀기 → practiceWrongNote(\"spring\", …)", async () => {
     m.practiceWrongNote.mockResolvedValue({ results: { "2": { correct: true, practice: { lastCorrect: true, correctCount: 1, wrongCount: 0, lastAnswer: true, lastAt: "2026-10-17T00:00:00.000Z" } } } });
-    const host = await mount("?view=notes");
+    const host = await mount("?view=notes&round=spring-r");
     const li = host.querySelector<HTMLElement>("[data-wn-item='2']")!;
     await click(btn(li, "다시 풀기"));
     await click(btn(host.querySelector("[data-wn-item='2']")!, "O"));

@@ -198,3 +198,97 @@ export function wrongNoteErrorAction(e: ApiError): WrongNoteErrorAction {
   if (e.code === "UNKNOWN") return { kind: "toast", text: "채점하지 못했어요 · 연결을 확인하고 다시 시도해 주세요" };
   return { kind: "toast", text: textOf(e) };
 }
+
+/* ---------- 회차 카드 · 상세 (D22~) ---------- */
+
+/** 회차 기간 — 응답에 없어 화면이 커리큘럼(방 탭)·me_tasks(내 과제)에서 넘긴다. 모르면 기간 줄을 뺀다 */
+export type RoundPeriods = Record<string, { startDate: string; endDate: string }>;
+
+export type RoundStats = {
+  exams: number;
+  /** 답했는데 틀림 · 답하지 않음 — 공개된 문항만(외운 것 포함, totalsOf 와 같다) */
+  wrong: number;
+  unanswered: number;
+  retriedOk: number;
+  mastered: number;
+  /** 잠긴 시험 lockedCount 합 */
+  locked: number;
+  /** 시험이 전부 잠겼다 — 카드는 열 수 없고 자물쇠 + 열리는 날 */
+  allLocked: boolean;
+  /** 가장 먼저 열리는 잠긴 시험의 날(잠긴 시험이 없으면 null) */
+  unlockDate: string | null;
+};
+
+export function roundStats(r: WrongNoteRound): RoundStats {
+  const s: RoundStats = { exams: r.exams.length, wrong: 0, unanswered: 0, retriedOk: 0, mastered: 0, locked: 0, allLocked: r.exams.length > 0, unlockDate: null };
+  for (const ex of r.exams) {
+    if (ex.locked) {
+      s.locked += ex.lockedCount ?? 0;
+      const d = ex.unlockDate ?? ex.endDate;
+      if (!s.unlockDate || d < s.unlockDate) s.unlockDate = d;
+      continue;
+    }
+    s.allLocked = false;
+    for (const it of ex.items ?? []) {
+      if (isAnswered(it.mine)) s.wrong += 1;
+      else s.unanswered += 1;
+      if (retriedOk(it)) s.retriedOk += 1;
+      if (it.mastered) s.mastered += 1;
+    }
+  }
+  return s;
+}
+
+/** 카드 숫자 줄 — [["오답", 2], ["미답", 1], …] 0 은 뺀다 */
+export function roundStatParts(s: RoundStats): [string, number][] {
+  const parts: [string, number][] = [["오답", s.wrong], ["미답", s.unanswered], ["다시 풀어 맞힘", s.retriedOk], ["외움", s.mastered], ["잠김", s.locked]];
+  return parts.filter(([, n]) => n > 0);
+}
+
+/** 회차 잠금 문구 — "10.28 마감 뒤에 열려요" */
+export const roundLockedLine = (s: RoundStats): string => (s.unlockDate ? `${md(s.unlockDate)} 마감 뒤에 열려요` : "정답이 공개된 뒤에 열려요");
+
+/** 회차 기간 — "10.14 ~ 10.20" */
+export const periodLine = (p: { startDate: string; endDate: string } | undefined): string | null => (p ? `${md(p.startDate)} ~ ${md(p.endDate)}` : null);
+
+/** 화면에 보이는(필터 결과) 문항 수 — 잠긴 시험은 세지 않는다 */
+export const visibleCount = (r: WrongNoteRound): number => r.exams.reduce((n, ex) => n + (ex.locked ? 0 : (ex.items ?? []).length), 0);
+
+/** id 회차와 그 스터디 — 없으면 null */
+export function findRound(studies: NoteStudy[], id: string): { study: NoteStudy; round: WrongNoteRound } | null {
+  for (const study of studies) for (const round of study.rounds) if (round.id === id) return { study, round };
+  return null;
+}
+
+/** 지금 주소에서 ?round= 만 바꾼 주소(상세 열기·닫기). 다른 쿼리·해시는 그대로 */
+export function withRound(href: string, id: string | null): string {
+  const u = new URL(href, "http://x");
+  if (id) u.searchParams.set("round", id);
+  else u.searchParams.delete("round");
+  const q = u.searchParams.toString();
+  return `${u.pathname}${q ? `?${q}` : ""}${u.hash}`;
+}
+
+/* ---------- 다시 푼 횟수 단계 (문항 이동 번호 색) ---------- */
+
+/** 다시 푼 횟수 = 연습 채점 횟수(맞힘 + 틀림) */
+export const retryCount = (it: WrongNoteItem): number => (it.practice ? it.practice.correctCount + it.practice.wrongCount : 0);
+
+/** 단계 — 0 = 아직, 1, 2, 3 = 3번 이상 */
+export type RetryTier = 0 | 1 | 2 | 3;
+export const retryTier = (n: number): RetryTier => (n >= 3 ? 3 : (n as RetryTier));
+export const RETRY_TIER_KO: Record<RetryTier, string> = { 0: "0번", 1: "1번", 2: "2번", 3: "3번+" };
+
+/** 번호 칸의 마지막 정오 표시 — 다시 푼 적이 없으면 null */
+export const lastMark = (it: WrongNoteItem): "ok" | "bad" | null =>
+  retryCount(it) === 0 || it.practice?.lastCorrect == null ? null : it.practice.lastCorrect ? "ok" : "bad";
+
+/** 번호 칸 aria-label·title — "3번 문항 · 2번 다시 풀었어요 · 마지막에 맞힘" (색만으로 구분하지 않게) */
+export function retryLabel(it: WrongNoteItem): string {
+  const n = retryCount(it);
+  const parts = [`${it.no}번 문항`, n === 0 ? "아직 다시 풀지 않았어요" : `${n}번 다시 풀었어요`];
+  const m = lastMark(it);
+  if (m) parts.push(m === "ok" ? "마지막에 맞힘" : "마지막에 틀림");
+  if (it.mastered) parts.push("외움");
+  return parts.join(" · ");
+}

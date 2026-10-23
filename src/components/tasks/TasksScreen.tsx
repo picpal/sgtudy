@@ -18,6 +18,7 @@ import { markTaskOrigin } from "@/lib/taskOrigin";
 import { AddPersonalForm } from "./AddPersonalForm";
 import { focusFirst, latestApplied } from "./requests";
 import { personalErrorText } from "@/components/my-study/personal";
+import { useNoteRound } from "@/components/my-study/useNoteRound";
 import { useWrongNote } from "@/components/my-study/useWrongNote";
 import { toNoteStudiesMine } from "@/components/my-study/wrongNote";
 import { addableStudies, applyFilter, studyNote, atLimit, DEFAULT_FILTER, defaultCollapsed, emptyKind, filterQuery, groupByDue, groupByRound, isDone, normalizeFilter, parseFilter, summary, type RoundGroup, type TasksFilter } from "./calc";
@@ -50,6 +51,8 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const [toast, setToast] = useState<ToastMsg>(null);
   // 오답노트 보기(D17~D21) — 처음 그 보기가 될 때 받고, 과제 보기로 갔다 와도 유지(훅을 화면이 든다)
   const notes = useWrongNote(() => fetchWrongNoteMine().then(toNoteStudiesMine), [], { toast: setToast, enabled: notesView });
+  // 오답노트 회차 상세(?round=, D23) — 과제 보기에서는 뜻이 없다
+  const noteRound = useNoteRound(notesView);
   // 오답노트 보기의 스터디 칩은 오답 응답 기준 — me_tasks 에 없는 이탈(INACTIVE) 방도 오답 섹션이 있으니 칩도 있어야 한다.
   // 받기 전에는 과제 칩을 잠시 보이고, study 정리도 받은 뒤에 한다(이탈 방 slug 가 "전체"로 지워지지 않게)
   const noteStudies: ToolbarStudy[] | null = notes.studies?.map((s) => ({ slug: s.slug, title: s.title ?? s.slug, tone: s.tone ?? "mint" })) ?? null;
@@ -65,7 +68,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
 
   // URL 에 남은 모르는 study 를 걷어 낸다 (replace — 기록은 쌓지 않는다)
   const stale = raw.study !== filter.study;
-  const cleanQuery = routes.tasks(filterQuery(filter));
+  const cleanQuery = routes.tasks({ ...filterQuery(filter), ...(noteRound.round ? { round: noteRound.round } : {}) });
   useEffect(() => {
     if (stale) window.history.replaceState(null, "", cleanQuery);
   }, [stale, cleanQuery]);
@@ -321,7 +324,18 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
             />
           )}
           {!noStudy && <TasksToolbar filter={filter} studies={notesView ? (noteStudies ?? data.studies) : data.studies} onChange={setFilter} />}
-          {notesView ? <TasksNotesView notes={notes} study={filter.study} /> : renderBody()}
+          {notesView ? (
+            <TasksNotesView
+              notes={notes}
+              study={filter.study}
+              round={noteRound.round}
+              onOpenRound={noteRound.open}
+              onBack={noteRound.back}
+              periods={Object.fromEntries(data.rounds.map((r) => [r.id, { startDate: r.startDate, endDate: r.endDate }]))}
+            />
+          ) : (
+            renderBody()
+          )}
         </main>
         <Toast msg={toast} onClose={closeToast} />
       </PageBody>

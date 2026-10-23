@@ -24,6 +24,8 @@ const hasExplanation = (q: ExamQuestion) => (q.explanation ?? "").trim() !== "";
 
 type Props = {
   it: WrongNoteItem;
+  /** 상세 안 순번(문항 이동이 찾는 data-wn-idx) */
+  idx?: number;
   run: ItemRun | undefined;
   /** 시험 묶음 다시 풀기 중 — 문항별 [채점]·[외웠어요] 는 숨기고 카드 하단 막대가 맡는다 */
   inBatch: boolean;
@@ -41,7 +43,7 @@ type Props = {
  * 오답 문항 하나(스펙 §6.1·§6.4). 기본 = 내 제출 답만(정답 키를 지운 사본, 「정답」 태그 없음) + [다시 풀기]·[외웠어요] + 「정답·해설」 펼침.
  * 다시 풀기 = 같은 자리에서 응시 입력(take) → [채점](서버) → 결과(정답 표시·해설 자동 펼침). 정오는 서버 응답 그대로
  */
-export function WrongNoteItemView({ it, run, inBatch, busy, fieldError, onStart, onAnswer, onGrade, onClose, onMaster }: Props) {
+export function WrongNoteItemView({ it, idx, run, inBatch, busy, fieldError, onStart, onAnswer, onGrade, onClose, onMaster }: Props) {
   const q = it.question;
   const [reveal, setReveal] = useState(false);
   const badges = itemBadges(it);
@@ -59,7 +61,7 @@ export function WrongNoteItemView({ it, run, inBatch, busy, fieldError, onStart,
   }, [phase]);
 
   return (
-    <li ref={liRef} className="flex flex-col gap-2 border-t border-line-2 pt-4 first:border-t-0 first:pt-0" data-wn-item={q.id}>
+    <li ref={liRef} className="flex scroll-mt-24 flex-col gap-2 border-t border-line-2 pt-4 first:border-t-0 first:pt-0" data-wn-item={q.id} data-wn-idx={idx}>
       <p className="m-0 flex flex-wrap items-center gap-[6px]" aria-label="문항 상태">
         {badges.map((b) => (
           <span key={b.text} className={`rounded-[6px] px-[6px] py-[1px] text-[11px] font-bold ${BADGE[b.tone]}`}>

@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { studyTone } from "@/components/tasks/tone";
-import type { WrongNoteExam, WrongNoteItem } from "@/lib/api/types";
+import type { WrongNoteExam, WrongNoteRound } from "@/lib/api/types";
 import type { WrongNoteAnswer } from "@/lib/api/wrongNote";
 import { routes } from "@/lib/routes";
-import { isAnswered } from "./exam";
 import type { PracticeOutcome } from "./useWrongNote";
-import { BTN, BTN_PRIMARY, WrongNoteItemView, type ItemRun } from "./WrongNoteItem";
+import { LockIcon, WrongNoteDetail, type Batch, type Run } from "./WrongNoteDetail";
+import type { ItemRun } from "./WrongNoteItem";
 import {
-  applyFilter, batchSummary, emptyState, examHeadLine, FILTER_EMPTY_TEXT, FILTER_KO, FILTERS, studyEmptyLine, totalsLine, totalsOf, type Filter, type NoteStudy,
+  applyFilter, batchSummary, emptyState, FILTER_EMPTY_TEXT, FILTER_KO, FILTERS, findRound, periodLine, roundLockedLine, roundStatParts, roundStats, studyEmptyLine, totalsLine, totalsOf,
+  visibleCount, type Filter, type NoteStudy, type RoundPeriods,
 } from "./wrongNote";
 
 type Props = {
@@ -26,25 +27,50 @@ type Props = {
   onMaster: (slug: string, questionId: string, on: boolean) => Promise<boolean>;
   /** 묶음 채점 막대를 본문 카드 끝까지 — 그 화면 카드 안쪽 여백만큼 음수 마진 + 같은 여백(기본 = 내 스터디 본문 카드) */
   barInset?: string;
+  /** 열린 회차(주소 ?round=, useNoteRound) — null 이면 회차 카드 목록 */
+  round?: string | null;
+  onOpenRound?: (id: string) => void;
+  onBack?: () => void;
+  /** 회차 기간 — 응답에 없어 화면이 넘긴다(없으면 기간 줄을 뺀다) */
+  periods?: RoundPeriods;
 };
-
-/** 다시 풀기 중인 문항 — snap 은 시작할 때의 문항(필터는 이걸로 판정해 채점 결과로 목록에서 갑자기 사라지지 않게) */
-type Run = { snap: WrongNoteItem; st: ItemRun };
-type Batch = { slug: string; ids: string[]; summary: string | null };
 
 const CHIP = "inline-flex h-11 shrink-0 items-center rounded-[22px] border px-4 text-[13px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint";
 const BAR_INSET = "-mx-7 px-7 max-[901px]:-mx-4 max-[901px]:px-4";
+const noop = () => {};
 
 const itemsOf = (ss: NoteStudy[]) => ss.flatMap((s) => s.rounds.flatMap((r) => r.exams.flatMap((ex) => ex.items ?? [])));
 
-/** 오답노트 본문(스펙 §6.1·§6.2·§6.5) — 방 탭(스터디 1개)과 내 과제 보기(여러 개)가 같이 쓴다. 데이터·호출은 부모(useWrongNote) */
-export function WrongNoteList({ studies, pending, scope, studyFilter = "all", busy, onPractice, onMaster, barInset = BAR_INSET }: Props) {
+/**
+ * 오답노트 본문(스펙 §6.1·§6.2·§6.5 · D22~) — 방 탭(스터디 1개)과 내 과제 보기(여러 개)가 같이 쓴다. 데이터·호출은 부모(useWrongNote).
+ * 첫 화면은 회차 카드, 카드를 누르면 그 회차 상세(문항·다시 풀기·문항 이동). 필터는 두 화면이 같은 상태를 쓴다
+ */
+export function WrongNoteList({ studies, pending, scope, studyFilter = "all", busy, onPractice, onMaster, barInset = BAR_INSET, round = null, onOpenRound = noop, onBack = noop, periods }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
   const [showMastered, setShowMastered] = useState(false);
   const [runs, setRuns] = useState<Record<string, Run>>({});
   const [batches, setBatches] = useState<Record<string, Batch>>({});
   const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
+  // 다른 회차로 가면(목록 포함) 다시 풀기 입력은 버린다(D15 — 잃어도 되는 값)
+  const [shownRound, setShownRound] = useState(round);
+  if (shownRound !== round) {
+    setShownRound(round);
+    setRuns({});
+    setBatches({});
+    setFieldErr({});
+  }
   const rootRef = useRef<HTMLDivElement>(null);
+  // 상세를 열면 그 제목으로, 목록으로 돌아오면 그 회차 카드로 — 처음 그린 화면(새로고침·링크)은 포커스를 옮기지 않는다
+  const prevRound = useRef(round);
+  useEffect(() => {
+    const prev = prevRound.current;
+    prevRound.current = round;
+    if (prev === round) return;
+    const el = round
+      ? rootRef.current?.querySelector<HTMLElement>("[data-wn-head]")
+      : rootRef.current?.querySelector<HTMLElement>(`[data-round-card="${prev}"]`);
+    el?.focus();
+  }, [round]);
   // 외웠어요·다시 노트에 뒤 포커스 — 누른 단추가 사라져 body 로 빠지지 않게. [그 문항, 다음, 앞] 순서로 남아 있는 곳
   const focusWant = useRef<string[] | null>(null);
   const [focusTick, setFocusTick] = useState(0);
@@ -184,7 +210,6 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
     );
   }
 
-  const line = totalsLine(totals);
   const onChipKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
     if (!d) return;
@@ -193,38 +218,86 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
     changeView(next, showMastered);
     e.currentTarget.querySelector<HTMLElement>(`[data-filter="${next}"]`)?.focus();
   };
+  // 상세의 「외운 문제 n개 보기」 는 그 회차 기준
+  const filterBar = (mastered: number) => (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div role="radiogroup" aria-label="오답 필터" onKeyDown={onChipKey} className="flex min-w-0 max-w-full gap-2 overflow-x-auto">
+        {FILTERS.map((f) => {
+          const on = f === filter;
+          return (
+            <button
+              key={f}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              tabIndex={on ? 0 : -1}
+              data-filter={f}
+              onClick={() => changeView(f, showMastered)}
+              className={`${CHIP} ${on ? "border-ink bg-ink font-semibold text-white" : "border-line-3 bg-surface font-medium text-ink-3"}`}
+            >
+              {FILTER_KO[f]}
+            </button>
+          );
+        })}
+      </div>
+      {mastered > 0 && (
+        <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] text-ink-2">
+          <input type="checkbox" checked={showMastered} onChange={(e) => changeView(filter, e.target.checked)} className="size-[18px] accent-mint" />
+          외운 문제 {mastered}개 보기
+        </label>
+      )}
+    </div>
+  );
 
+  if (round !== null) {
+    const hit = findRound(studies, round);
+    if (!hit) {
+      return (
+        <div ref={rootRef} className="mt-[18px] flex flex-col items-start gap-2">
+          <p className="m-0 w-full rounded-[14px] border border-dashed border-line-dash p-5 text-center text-[13px] text-muted">이 회차의 오답을 찾을 수 없어요</p>
+          <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center px-2 text-[13px] font-semibold text-mint-deep underline underline-offset-2">
+            회차 목록으로
+          </button>
+        </div>
+      );
+    }
+    const vis = findRound(applyFilter(frozen, filter, showMastered), round);
+    return (
+      <div ref={rootRef}>
+        <WrongNoteDetail
+          study={hit.study}
+          round={hit.round}
+          visible={vis?.round ?? null}
+          scope={scope}
+          live={live}
+          runs={runs}
+          batches={batches}
+          fieldErr={fieldErr}
+          busy={busy}
+          barInset={barInset}
+          period={periods?.[round]}
+          filterBar={filterBar(roundStats(hit.round).mastered)}
+          onBack={onBack}
+          onRun={setRun}
+          onGrade={(id) => void gradeOne(hit.study.slug, id)}
+          onMaster={(id, on) => {
+            clearErr([id]);
+            void master(hit.study.slug, id, on);
+          }}
+          onStartBatch={(ex) => startBatch(hit.study.slug, ex)}
+          onGradeBatch={(nodeId) => void gradeBatch(nodeId)}
+          onEndBatch={endBatch}
+        />
+      </div>
+    );
+  }
+
+  const line = totalsLine(totals);
   return (
     <div ref={rootRef} className="mt-[18px] flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         {line && <p className="m-0 text-[14px] font-semibold text-ink-2">{line}</p>}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <div role="radiogroup" aria-label="오답 필터" onKeyDown={onChipKey} className="flex min-w-0 max-w-full gap-2 overflow-x-auto">
-            {FILTERS.map((f) => {
-              const on = f === filter;
-              return (
-                <button
-                  key={f}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  tabIndex={on ? 0 : -1}
-                  data-filter={f}
-                  onClick={() => changeView(f, showMastered)}
-                  className={`${CHIP} ${on ? "border-ink bg-ink font-semibold text-white" : "border-line-3 bg-surface font-medium text-ink-3"}`}
-                >
-                  {FILTER_KO[f]}
-                </button>
-              );
-            })}
-          </div>
-          {totals.mastered > 0 && (
-            <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 text-[13px] text-ink-2">
-              <input type="checkbox" checked={showMastered} onChange={(e) => changeView(filter, e.target.checked)} className="size-[18px] accent-mint" />
-              외운 문제 {totals.mastered}개 보기
-            </label>
-          )}
-        </div>
+        {filterBar(totals.mastered)}
       </div>
 
       {empty ? (
@@ -234,7 +307,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
           const s = selected.find((x) => x.slug === vs.slug) ?? vs;
           const studyLine = scope === "all" ? studyEmptyLine(s, vs) : null;
           return (
-            <section key={vs.slug} aria-label={vs.title} className="flex flex-col gap-4">
+            <section key={vs.slug} aria-label={vs.title} className="flex flex-col gap-3">
               {vs.title && (
                 <h2 className="m-0 flex items-center gap-2 px-1 text-[15px] font-bold">
                   <span aria-hidden="true" className="h-[10px] w-[10px] shrink-0 rounded-full" style={{ background: studyTone(vs.tone ?? "mint").dot }} />
@@ -245,34 +318,20 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
                 </h2>
               )}
               {studyLine && <p className="m-0 px-1 text-[13px] text-muted">{studyLine}</p>}
-              {vs.rounds.map((r) => (
-                <section key={r.id} aria-labelledby={`wn-round-${vs.slug}-${r.id}`} className="flex flex-col gap-3">
-                  <h3 id={`wn-round-${vs.slug}-${r.id}`} className="m-0 text-[15px] font-bold text-ink">
-                    {r.title}
-                  </h3>
-                  {r.exams.map((ex) => (
-                    <ExamCard
-                      key={ex.nodeId}
-                      ex={ex}
-                      live={live}
-                      runs={runs}
-                      batch={batches[ex.nodeId] ?? null}
-                      fieldErr={fieldErr}
-                      busy={busy}
-                      barInset={barInset}
-                      onRun={setRun}
-                      onGrade={(id) => void gradeOne(vs.slug, id)}
-                      onMaster={(id, on) => {
-                        clearErr([id]);
-                        void master(vs.slug, id, on);
-                      }}
-                      onStartBatch={() => startBatch(vs.slug, ex)}
-                      onGradeBatch={() => void gradeBatch(ex.nodeId)}
-                      onEndBatch={() => endBatch(ex.nodeId)}
+              {vs.rounds.length > 0 && (
+                <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] gap-3 p-0">
+                  {vs.rounds.map((r) => (
+                    <RoundCard
+                      key={r.id}
+                      round={s.rounds.find((x) => x.id === r.id) ?? r}
+                      shown={visibleCount(r)}
+                      filtered={filter !== "all" || showMastered}
+                      period={periodLine(periods?.[r.id])}
+                      onOpen={() => onOpenRound(r.id)}
                     />
                   ))}
-                </section>
-              ))}
+                </ul>
+              )}
             </section>
           );
         })
@@ -281,117 +340,74 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   );
 }
 
-type CardProps = {
-  ex: WrongNoteExam;
-  live: Map<string, WrongNoteItem>;
-  runs: Record<string, Run>;
-  batch: Batch | null;
-  fieldErr: Record<string, string>;
-  busy: boolean;
-  barInset: string;
-  onRun: (id: string, st: ItemRun | null) => void;
-  onGrade: (id: string) => void;
-  onMaster: (id: string, on: boolean) => void;
-  onStartBatch: () => void;
-  onGradeBatch: () => void;
-  onEndBatch: () => void;
+type RoundCardProps = {
+  /** 필터 전 회차 — 카드 숫자의 기준 */
+  round: WrongNoteRound;
+  /** 지금 필터로 상세에 보일 문항 수 */
+  shown: number;
+  filtered: boolean;
+  period: string | null;
+  onOpen: () => void;
 };
 
-const LockIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
-    <rect x="4" y="11" width="16" height="10" rx="2" />
-    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-  </svg>
-);
-
-/** 시험 카드 — 잠금(개수·날짜만, 버튼 없음) 또는 오답 문항 목록 + [이 시험 다시 풀기] · 묶음 채점 하단 막대 */
-function ExamCard({ ex, live, runs, batch, fieldErr, busy, barInset, onRun, onGrade, onMaster, onStartBatch, onGradeBatch, onEndBatch }: CardProps) {
-  const titleId = `wn-exam-${ex.nodeId}`;
-  if (ex.locked) {
+/** 회차 카드(D22) — 회차명·기간·시험 수·오답/미답/다시 풀어 맞힘/외움/잠김. 전부 잠긴 회차는 열 수 없다(자물쇠 + 열리는 날) */
+function RoundCard({ round, shown, filtered, period, onOpen }: RoundCardProps) {
+  const st = roundStats(round);
+  const descId = `wn-round-desc-${round.id}`;
+  const meta = [period, `시험 ${st.exams}개`].filter(Boolean).join(" · ");
+  const parts = roundStatParts(st);
+  if (st.allLocked) {
     return (
-      <article aria-labelledby={titleId} className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface-2 px-4 py-3">
-        <h4 id={titleId} className="m-0 flex items-center gap-2 text-[15px] font-bold text-ink">
-          <span className="min-w-0 [overflow-wrap:anywhere]">{ex.title}</span>
-          <span className="text-ink-3">
-            <LockIcon />
-          </span>
-        </h4>
-        <p className="m-0 text-[13px] text-ink-3">{examHeadLine(ex)}</p>
-      </article>
+      <li>
+        <article aria-labelledby={`wn-round-${round.id}`} className="flex h-full flex-col gap-2 rounded-[14px] border border-line bg-surface-2 px-4 py-[14px]">
+          <h3 id={`wn-round-${round.id}`} className="m-0 flex items-center gap-2 text-[15px] font-bold text-ink-2">
+            <span className="min-w-0 [overflow-wrap:anywhere]">{round.title}</span>
+            <span className="ml-auto text-ink-3">
+              <LockIcon />
+            </span>
+          </h3>
+          <p className="m-0 text-[13px] text-ink-3">{meta}</p>
+          <p className="m-0 text-[13px] font-semibold text-ink-3">
+            {parts.map(([k, n]) => `${k} ${n}`).join(" · ")} · {roundLockedLine(st)}
+          </p>
+        </article>
+      </li>
     );
   }
-  const items = (ex.items ?? []).map((it) => live.get(it.question.id) ?? it);
-  const answered = batch ? batch.ids.filter((id) => isAnswered(runs[id]?.st.answer)).length : 0;
   return (
-    <article aria-labelledby={titleId} className="flex flex-col">
-      <div className="flex flex-col gap-4 rounded-[14px] border border-line bg-surface-2 px-4 py-4 max-sm:px-3">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <div className="flex min-w-0 flex-[1_1_220px] flex-col gap-[2px]">
-            <h4 id={titleId} className="m-0 text-[15px] font-bold text-ink [overflow-wrap:anywhere]">
-              {ex.title}
-            </h4>
-            <p className="m-0 text-[13px] text-ink-3">{examHeadLine(ex)}</p>
-          </div>
-          {!batch && (
-            <button type="button" className={BTN} disabled={busy} onClick={onStartBatch}>
-              이 시험 다시 풀기
+    <li>
+      <article className="relative flex h-full flex-col gap-2 rounded-[14px] border border-line bg-surface px-4 py-[14px] transition-[box-shadow,border-color] hover:border-mint hover:shadow-[0_4px_14px_rgba(27,34,48,.08)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-mint motion-reduce:transition-none">
+        <div className="flex items-center gap-2">
+          <h3 className="m-0 min-w-0 text-[15px] font-bold text-ink">
+            {/* 카드 전체가 누르는 자리(after 로 덮는다) — 이름은 회차명, 숫자는 설명으로 */}
+            <button type="button" data-round-card={round.id} aria-describedby={descId} onClick={onOpen} className="cursor-pointer text-left outline-none [overflow-wrap:anywhere] after:absolute after:inset-0 after:rounded-[14px]">
+              {round.title}
             </button>
-          )}
+          </h3>
+          <span aria-hidden="true" className="ml-auto text-[16px] text-ink-3">›</span>
         </div>
-        <ol className="m-0 flex list-none flex-col gap-4 rounded-[12px] bg-surface p-4 max-sm:p-3">
-          {items.map((it) => {
-            const id = it.question.id;
-            return (
-              <WrongNoteItemView
-                key={id}
-                it={it}
-                run={runs[id]?.st}
-                inBatch={!!batch?.ids.includes(id)}
-                busy={busy}
-                fieldError={fieldErr[id] ?? null}
-                onStart={() => onRun(id, { s: "take", answer: null })}
-                onAnswer={(a) => onRun(id, { s: "take", answer: a })}
-                onGrade={() => onGrade(id)}
-                onClose={() => onRun(id, null)}
-                onMaster={(on) => onMaster(id, on)}
-              />
-            );
-          })}
-        </ol>
-      </div>
-      {batch && (
-        // 하단 고정 막대 — 시험 응시(ExamSection)의 막대와 같은 방식. 카드가 끝나면 따라 올라간다
-        <div className={`sticky bottom-0 z-[2] mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line-2 bg-surface py-2 ${barInset}`}>
-          <p className="m-0 min-w-0 flex-1 text-[13px] text-ink-2" aria-live="polite">
-            {batch.summary ?? (
-              <>
-                <b className="font-bold text-ink">
-                  {answered}/{batch.ids.length}
-                </b>{" "}
-                답함
-              </>
-            )}
-          </p>
-          {batch.summary ? (
-            // 채점하면 [채점] 이 사라진다 — 포커스가 body 로 빠지지 않게 [닫기] 로
-            <button type="button" className={BTN} onClick={onEndBatch} ref={(el) => void (el && (!document.activeElement || document.activeElement === document.body) && el.focus())}>
-              닫기
-            </button>
-          ) : (
-            <>
-              <button type="button" className={BTN} disabled={busy} onClick={onEndBatch}>
-                그만두기
-              </button>
-              <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={onGradeBatch}>
-                {busy ? "채점 중…" : "채점"}
-              </button>
-            </>
-          )}
+        <div id={descId} className="flex flex-col gap-2">
+          <p className="m-0 text-[13px] text-ink-3">{meta}</p>
+          <ul className="m-0 flex list-none flex-wrap gap-[6px] p-0">
+            {parts.map(([k, n]) => (
+              <li key={k} className={`rounded-[6px] px-[7px] py-[2px] text-[12px] font-semibold ${STAT_TONE[k] ?? "bg-slate-soft text-ink-3"}`}>
+                {k} {n}
+              </li>
+            ))}
+          </ul>
+          {filtered && <p className="m-0 text-[12px] font-semibold text-mint-deep">조건에 맞는 {shown}문항</p>}
         </div>
-      )}
-    </article>
+      </article>
+    </li>
   );
 }
+
+const STAT_TONE: Record<string, string> = {
+  오답: "bg-[#FFF1EF] text-warn",
+  미답: "bg-[#FFF1EF] text-warn",
+  "다시 풀어 맞힘": "bg-[#E3F5EC] text-[#1A7F55]",
+};
+
 
 /** 처음 받는 중 — 시험 응시 카드와 같은 자리표시 */
 export function WrongNoteLoading() {

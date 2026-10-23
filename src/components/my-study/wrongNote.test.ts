@@ -3,6 +3,7 @@ import type { ExamQuestion, WrongNote, WrongNoteExam, WrongNoteItem, WrongNoteMi
 import {
   applyFilter, batchSummary, emptyState, examHeadLine, FILTER_EMPTY_TEXT, itemBadges, lockedLine, mergePractice, PENDING_TEXT, practiceResultText,
   setMastered, stripKey, studyEmptyLine, toNoteStudies, toNoteStudiesMine, totalsLine, totalsOf, wrongNoteErrorAction, type NoteStudy,
+  findRound, lastMark, periodLine, retryCount, retryLabel, retryTier, roundLockedLine, roundStatParts, roundStats, visibleCount, withRound,
 } from "./wrongNote";
 
 const q = (id: string, o: Partial<ExamQuestion> = {}): ExamQuestion => ({
@@ -169,5 +170,38 @@ describe("wrongNoteErrorAction", () => {
     expect(wrongNoteErrorAction({ code: "VALIDATION_FAILED", message: "x", details: { questionId: "12" } })).toEqual({ kind: "field", questionId: "12", text: "답을 확인해 주세요" });
     expect(wrongNoteErrorAction({ code: "AUTH_REQUIRED", message: "로그인이 필요해요" })).toEqual({ kind: "login", text: "로그인이 필요해요" });
     expect(wrongNoteErrorAction({ code: "UNKNOWN", message: "fetch failed" }).kind).toBe("toast");
+  });
+});
+
+describe("회차 카드 · 상세 (D22~D25)", () => {
+  it("roundStats — 오답/미답 나눔 · 다시 풀어 맞힘 · 외움 · 잠김 · 전부 잠김이면 allLocked + 가장 이른 열리는 날", () => {
+    const r = { id: "3", title: "3주차", exams: [exam("31", [item("1"), item("2", { mine: null, practice: ok, mastered: true })]), lockedExam("32", 4)] };
+    expect(roundStats(r)).toEqual({ exams: 2, wrong: 1, unanswered: 1, retriedOk: 1, mastered: 1, locked: 4, allLocked: false, unlockDate: "2026-10-28" });
+    expect(roundStatParts(roundStats(r))).toEqual([["오답", 1], ["미답", 1], ["다시 풀어 맞힘", 1], ["외움", 1], ["잠김", 4]]);
+    const l = roundStats({ id: "4", title: "4주차", exams: [lockedExam("41", 6), { ...lockedExam("42", 1), unlockDate: "2026-10-25" }] });
+    expect([l.allLocked, l.unlockDate, l.locked]).toEqual([true, "2026-10-25", 7]);
+    expect(roundLockedLine(l)).toBe("10.25 마감 뒤에 열려요");
+    expect(visibleCount(r)).toBe(2);
+  });
+
+  it("findRound · periodLine · withRound(다른 쿼리·해시 유지)", () => {
+    expect(findRound([aws, spring], "9")?.study.slug).toBe("spring");
+    expect(findRound([aws], "zz")).toBeNull();
+    expect(periodLine({ startDate: "2026-10-14", endDate: "2026-10-20" })).toBe("10.14 ~ 10.20");
+    expect(periodLine(undefined)).toBeNull();
+    expect(withRound("/my-study/aws?tab=wrong#x", "3")).toBe("/my-study/aws?tab=wrong&round=3#x");
+    expect(withRound("/tasks?round=3&view=notes", null)).toBe("/tasks?view=notes");
+  });
+
+  it("다시 푼 횟수 = 맞힘 + 틀림 · 단계 0/1/2/3+ · 마지막 정오 표시 · 글 라벨", () => {
+    const p = (c: number, w: number, last: boolean | null) => ({ lastCorrect: last, correctCount: c, wrongCount: w, lastAnswer: null, lastAt: null });
+    expect(retryCount(item("1"))).toBe(0);
+    expect(retryCount(item("1", { practice: p(2, 3, true) }))).toBe(5);
+    expect([0, 1, 2, 3, 7].map(retryTier)).toEqual([0, 1, 2, 3, 3]);
+    expect(lastMark(item("1"))).toBeNull();
+    expect(lastMark(item("1", { practice: p(0, 0, null) }))).toBeNull();
+    expect(lastMark(item("1", { practice: bad }))).toBe("bad");
+    expect(retryLabel(item("1"))).toBe("1번 문항 · 아직 다시 풀지 않았어요");
+    expect(retryLabel(item("2", { practice: p(1, 1, true), mastered: true }))).toBe("2번 문항 · 2번 다시 풀었어요 · 마지막에 맞힘 · 외움");
   });
 });

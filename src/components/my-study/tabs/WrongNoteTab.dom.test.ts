@@ -6,7 +6,22 @@ import type { WrongNote } from "@/lib/api/types";
 import { ApiException } from "@/lib/api/errors";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {}, refresh: () => {} }) }));
+// useSearchParams 가 history.pushState·replaceState·popstate 를 따라가게(Next 의 Native History API 동기화 흉내)
+vi.mock("next/navigation", async () => {
+  const { useSyncExternalStore } = await import("react");
+  const sub = (cb: () => void) => {
+    window.addEventListener("test-nav", cb);
+    window.addEventListener("popstate", cb);
+    return () => {
+      window.removeEventListener("test-nav", cb);
+      window.removeEventListener("popstate", cb);
+    };
+  };
+  return {
+    useSearchParams: () => new URLSearchParams(useSyncExternalStore(sub, () => window.location.search)),
+    useRouter: () => ({ push: () => {}, refresh: () => {} }),
+  };
+});
 const api = vi.hoisted(() => ({ fetchWrongNote: vi.fn(), fetchWrongNoteMine: vi.fn(), practiceWrongNote: vi.fn(), masterWrongNote: vi.fn() }));
 vi.mock("@/lib/api/wrongNote", async (orig) => ({ ...(await orig<typeof import("@/lib/api/wrongNote")>()), ...api }));
 
@@ -26,7 +41,14 @@ const VIEW = (): WrongNote => ({
 
 let root: Root | null = null;
 const flush = () => act(async () => {});
+const realPush = window.history.pushState.bind(window.history);
+const realReplace = window.history.replaceState.bind(window.history);
 beforeEach(() => {
+  for (const [k, real] of [["pushState", realPush], ["replaceState", realReplace]] as const)
+    vi.spyOn(window.history, k).mockImplementation((d, u, url) => {
+      real(d, u, url);
+      window.dispatchEvent(new Event("test-nav"));
+    });
   Object.values(api).forEach((f) => f.mockReset());
   api.fetchWrongNote.mockResolvedValue(VIEW());
 });
@@ -34,8 +56,12 @@ afterEach(() => {
   act(() => root?.unmount());
   root = null;
   document.body.innerHTML = "";
+  vi.restoreAllMocks();
+  realReplace(null, "", "/my-study/aws");
 });
-async function mount(viewerPending = false) {
+// 기본은 3주차 상세(?round=3) — 문항 동작 테스트. 목록은 search 로
+async function mount(viewerPending = false, search = "?tab=wrong&round=3") {
+  realReplace(null, "", `/my-study/aws${search}`);
   const toast = vi.fn();
   const host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
@@ -47,6 +73,26 @@ const btn = (scope: ParentNode, label: string) => [...scope.querySelectorAll("bu
 const click = (el: Element | null) => act(() => (el as HTMLElement).click());
 
 describe("WrongNoteTab", () => {
+  it("목록은 회차 카드 · 카드 → ?tab=wrong&round=3 push · 기간 줄(커리큘럼 periods) · 뒤로 가기 → 목록", async () => {
+    const toast = vi.fn();
+    realReplace(null, "", "/my-study/aws?tab=wrong");
+    const host = document.body.appendChild(document.createElement("div"));
+    root = createRoot(host);
+    act(() => root!.render(createElement(WrongNoteTab, { slug: "aws", viewerPending: false, toast, periods: { "3": { startDate: "2026-10-15", endDate: "2026-10-21" } } })));
+    await flush();
+    expect(host.querySelector("[data-wn-item]")).toBeNull();
+    expect(host.textContent).toContain("10.15 ~ 10.21 · 시험 1개");
+    click(host.querySelector("[data-round-card='3']"));
+    await flush();
+    expect(window.location.search).toBe("?tab=wrong&round=3");
+    expect(host.querySelector("[data-wn-item='1']")).not.toBeNull();
+    window.history.back();
+    await vi.waitFor(() => expect(window.location.search).toBe("?tab=wrong"));
+    await flush();
+    expect(host.querySelector("[data-wn-item]")).toBeNull();
+    expect(host.querySelector("[data-round-card='3']")).not.toBeNull();
+  });
+
   it("마운트에 fetchWrongNote(slug) 한 번 → 목록", async () => {
     const { host } = await mount();
     expect(api.fetchWrongNote).toHaveBeenCalledTimes(1);
