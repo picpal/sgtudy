@@ -31,7 +31,7 @@ const ORDER = `권장 순서(이미 채운 칸·사용자가 먼저 말한 칸�
 5. 공개·참가 방식 → ask field "access" (값: "public-direct" | "public-approval" | "private")
 6. 진행 방식 → ask field "style", kind "multi" (값: "weekly-task" | "proof" | "meeting" | "presentation" | "exam" | "other") → 답을 descriptionMd·rulesMd 초안에 녹인다
 7. 추가 요청사항 → ask field "extra", kind "text" ("더 바라는 점이 있나요? 마감 시간, 지각 규칙, 최소 인원, 그룹장도 과제를 하는지") → rulesMd 보강·minMembers·leaderDoesTasks
-8. 요약 → say 에 제목·기간·인원·공개 방식·태그 수·규칙 줄 수를 한 줄로 정리하고 "이대로 미리보기로 갈게요. 바꿀 항목이 있으면 말해 주세요." · ask null · done true`;
+8. 요약 → say 에 제목·기간·인원·공개 방식·태그 수·규칙 줄 수를 한 줄로 정리하고(기간은 같은 해면 "10/26~12/20", 해를 넘기면 "2026.10.26~2027.01.17") "이대로 미리보기로 갈게요. 바꿀 항목이 있으면 말해 주세요." · ask null · done true`;
 
 const OUTPUT = `출력 형식(JSON 하나):
 - say: 사용자에게 보일 말. 해요체, 2문장 이내, 마크다운·이모지·링크 없이 평문. 방금 채운 값을 짧게 확인하고 다음 질문 하나만

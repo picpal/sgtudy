@@ -17,6 +17,7 @@ const rpcMock = vi.fn();
 vi.mock("@/lib/api/errors", async (orig) => ({ ...(await orig<typeof import("@/lib/api/errors")>()), rpc: (...a: unknown[]) => rpcMock(...a) }));
 
 const { NewRoomScreen } = await import("./NewRoomScreen");
+const { roundsQuestion } = await import("./interview/InterviewPanel");
 
 const DRAFT = { title: "AWS SAA", intro: "소개", startDate: "2026-10-26", endDate: "2026-11-15", maxMembers: 6, isPublic: true, joinMode: "direct" };
 const turn = (o: object = {}) => ({ say: "정리했어요.", patch: {}, draft: DRAFT, ask: null, missing: [], dropped: [], done: true, turn: 8, turnsLeft: 4, ...o });
@@ -74,8 +75,14 @@ async function throughInterview(recruit: "yes" | "no" = "yes") {
   return host;
 }
 
+describe("해를 넘는 기간(D43)", () => {
+  it("회차 질문은 연도를 붙여 거꾸로 읽히지 않게", () => {
+    expect(roundsQuestion("2026-10-26", "2027-10-24")).toBe("회차 초안도 자동으로 잡아 드릴까요? 2026.10.26 ~ 2027.10.24 을 26회차로 나누고 제목·목표·과제를 채워요.");
+  });
+});
+
 describe("인터뷰 끝 — 로컬 질문(D33·D36)", () => {
-  it("done → 회차 질문(몇 주차인지) + 칩 2개 · 대화 log 에는 안 들어감", async () => {
+  it("done → 회차 질문(몇 주차인지) + 칩 2개 · 답하기 전엔 대화 log 에 없음", async () => {
     const host = await mount();
     const text = host.textContent!;
     expect(text).toContain("회차 초안도 자동으로 잡아 드릴까요? 10/26~11/15 을 3주차로 나누고");
@@ -116,8 +123,14 @@ describe("인터뷰 끝 — 로컬 질문(D33·D36)", () => {
     const alert = q(host, '[role="alert"]')!;
     expect(alert.textContent).toContain("회차 초안은 지금 어려워요");
     expect([...alert.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["다시 시도", "그냥 미리보기로"]);
+    // 답한 로컬 질문·답은 대화 로그에 남는다(서버로 가는 발화에는 안 들어감)
+    const log = q(host, '[role="log"]')!.textContent!;
+    expect(log).toContain("회차 초안도 자동으로 잡아 드릴까요?");
+    expect(log).toContain("나: 네, 잡아 주세요");
     await click(byText(alert, "다시 시도"));
-    expect(fetchMock.mock.calls.filter((c) => c[0] === "/api/rooms/rounds")).toHaveLength(2);
+    const calls = fetchMock.mock.calls.filter((c) => c[0] === "/api/rooms/rounds");
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[1][1].body as string).userLines).toEqual([]);
     await click(byText(q(host, '[role="alert"]')!, "그냥 미리보기로"));
     expect(q(host, 'input[name="title"]')).not.toBeNull();
     expect(q(host, 'section[aria-label="회차 초안"]')).toBeNull();
@@ -160,10 +173,10 @@ describe("미리보기 섹션(D30) · 기간 수정 무효화", () => {
     expect(submitBtn(host).textContent).toBe("방 만들기 · 회차 4개 · 바로 모집");
     expect(recruitBox(host).checked).toBe(true);
   });
-  it("padded > 0 → '일부 회차는 기본 제목이에요' · 과제 0 시험 0 회차만이면 모집 비활성", async () => {
-    roundsReply = () => json(200, roundsRes(2, { padded: 2, rounds: [view(0, [], false), view(1, [], false)] }));
+  it("padded > 0 → 'n주차는 비어 있어요' · 과제 0 시험 0 회차만이면 모집 비활성", async () => {
+    roundsReply = () => json(200, roundsRes(2, { padded: 1, rounds: [view(0, [], false), { ...view(1, [], false), padded: true }] }));
     const host = await throughInterview();
-    expect(host.textContent).toContain("일부 회차는 기본 제목이에요");
+    expect(host.textContent).toContain("2주차는 비어 있어요 · 다시 생성하거나 만든 뒤 진행목표에서 채워 주세요");
     expect(recruitBox(host).disabled).toBe(true);
     expect(submitBtn(host).textContent).toBe("방 만들기 · 회차 2개 함께");
   });

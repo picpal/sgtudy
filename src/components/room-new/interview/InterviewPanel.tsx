@@ -6,6 +6,7 @@ import { isYmd } from "@/lib/ai/normalize";
 import type { RoundsResponse } from "@/lib/ai/rounds/schema";
 import { splitRounds } from "@/lib/ai/rounds/schedule";
 import type { Ask, Draft, Field } from "@/lib/ai/schema";
+import { slashRange } from "@/lib/api/format";
 import { openRecruitNote } from "@/lib/api/leader";
 import { routes } from "@/lib/routes";
 import { clampCp, cpLength } from "../validate";
@@ -25,11 +26,10 @@ const OPTIONAL: readonly Field[] = ["style", "extra", "minMembers", "leaderDoesT
 const localAsk = (yes: string, no: string): Ask => ({ field: "extra", kind: "single", options: [{ label: yes, value: "yes" }, { label: no, value: "no" }] });
 const ROUNDS_ASK = localAsk("네, 잡아 주세요", "아니요, 미리보기로");
 const RECRUIT_ASK = localAsk("네, 바로 모집 시작", "아니요, 나중에 할게요");
-const md = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
 /** 회차 질문 말 — 서버와 같은 분할로 몇 회차인지 미리 알린다 */
 export function roundsQuestion(start: string, end: string): string {
   const s = splitRounds(start, end);
-  return `회차 초안도 자동으로 잡아 드릴까요? ${md(start)}~${md(end)} 을 ${s.rounds.length}${s.cadenceDays === 7 ? "주차" : "회차"}로 나누고 제목·목표·과제를 채워요.`;
+  return `회차 초안도 자동으로 잡아 드릴까요? ${slashRange(start, end)} 을 ${s.rounds.length}${s.cadenceDays === 7 ? "주차" : "회차"}로 나누고 제목·목표·과제를 채워요.`;
 }
 
 export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinish, onManual, onBudgetExceeded, onRounds, onRecruitPref }: {
@@ -118,6 +118,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
   // 회차를 물을 수 있는가 — 제목·기간이 있어야 서버가 나눈다(없으면 이론상 불가지만 바로 미리보기로, §7)
   const canRounds = done && !!draft.title && isYmd(draft.startDate) && isYmd(draft.endDate);
   const roundsBusy = rounds === "busy";
+  const recruitQuestion = `회차 초안을 잡았어요. 방을 만들면서 바로 모집도 시작할까요? ${openRecruitNote({ isPublic: draft.isPublic ?? true, joinMode: draft.joinMode ?? "direct" })}`;
   const closed = limit || done;
   const showChips = !!ask && !busy && !error && !closed;
   const canSkip = !!ask && OPTIONAL.includes(ask.field);
@@ -175,14 +176,22 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
           </div>
         )}
 
-        {/* 로컬 질문 — 대화(lines)에 넣지 않는다(서버로 다시 가지 않게). 바뀌는 말을 읽어 주도록 자리는 늘 있다 */}
+        {/* 로컬 질문 — 묻는 동안은 여기, 답하면 질문·답이 대화(lines, local)로 남는다(서버로는 안 감). 바뀌는 말을 읽어 주도록 자리는 늘 있다 */}
         <div aria-live="polite" className="flex flex-col gap-2 empty:hidden">
           {canRounds && !busy && rounds === "asking" && (
             <>
               <p className="m-0 max-w-[85%] self-start whitespace-pre-wrap break-words rounded-[16px] bg-surface-2 px-4 py-3 text-[15px] leading-[1.55] text-ink">
                 <span className="sr-only">AI: </span>{roundsQuestion(draft.startDate!, draft.endDate!)}
               </p>
-              <SingleChips key="rounds" ask={ROUNDS_ASK} onPick={(_, v) => (v === "yes" ? void askRounds() : skipRounds())} />
+              <SingleChips
+                key="rounds"
+                ask={ROUNDS_ASK}
+                onPick={(label, v) => {
+                  dispatch({ type: "localAnswer", question: roundsQuestion(draft.startDate!, draft.endDate!), answer: label });
+                  if (v === "yes") void askRounds();
+                  else skipRounds();
+                }}
+              />
             </>
           )}
           {roundsBusy && (
@@ -191,9 +200,16 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
           {rounds === "recruitAsking" && (
             <>
               <p className="m-0 max-w-[85%] self-start whitespace-pre-wrap break-words rounded-[16px] bg-surface-2 px-4 py-3 text-[15px] leading-[1.55] text-ink">
-                <span className="sr-only">AI: </span>회차 초안을 잡았어요. 방을 만들면서 바로 모집도 시작할까요? {openRecruitNote({ isPublic: draft.isPublic ?? true, joinMode: draft.joinMode ?? "direct" })}
+                <span className="sr-only">AI: </span>{recruitQuestion}
               </p>
-              <SingleChips key="recruit" ask={RECRUIT_ASK} onPick={(_, v) => answerRecruit(v === "yes")} />
+              <SingleChips
+                key="recruit"
+                ask={RECRUIT_ASK}
+                onPick={(label, v) => {
+                  dispatch({ type: "localAnswer", question: recruitQuestion, answer: label });
+                  answerRecruit(v === "yes");
+                }}
+              />
             </>
           )}
         </div>

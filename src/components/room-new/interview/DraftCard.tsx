@@ -1,6 +1,7 @@
 "use client";
 
 import type { Draft, Dropped } from "@/lib/ai/schema";
+import { slashDate } from "@/lib/api/format";
 import { PAL, type Tone } from "@/lib/palette";
 
 /* 초안 카드(D16·§9) — 필수 6개 체크 + 선택 항목 + 태그 + 반영 안 된 값 메모. 항목을 누르면 "…을 바꿀래요" 를 보낸다.
@@ -8,7 +9,8 @@ import { PAL, type Tone } from "@/lib/palette";
 
 type Row = { key: string; label: string; obj: string; value: string | null };
 
-const md = (ymd?: string) => (ymd ? `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}` : "");
+/** 시작·종료가 다른 해면 둘 다 연도를 붙인다 — "10/26 · 10/24" 가 거꾸로 읽히지 않게 */
+const crossYear = (d: Draft) => !!d.startDate && !!d.endDate && d.startDate.slice(0, 4) !== d.endDate.slice(0, 4);
 const lines = (s?: string) => (s?.trim() ? s.trim().split("\n").filter((l) => l.trim()).length : 0);
 const ACCESS = (d: Draft) => (d.isPublic === undefined ? null : d.isPublic ? (d.joinMode === "approval" ? "공개 · 승인 후 참가" : "공개 · 바로 참가") : "비공개 · 초대 링크");
 
@@ -17,8 +19,8 @@ export function requiredRows(d: Draft): Row[] {
   return [
     { key: "title", label: "제목", obj: "제목을", value: d.title ?? null },
     { key: "intro", label: "소개", obj: "소개를", value: d.intro ?? null },
-    { key: "startDate", label: "시작", obj: "시작일을", value: d.startDate ? `${md(d.startDate)}` : null },
-    { key: "endDate", label: "종료", obj: "종료일을", value: d.endDate ? `${md(d.endDate)}` : null },
+    { key: "startDate", label: "시작", obj: "시작일을", value: d.startDate ? slashDate(d.startDate, crossYear(d)) : null },
+    { key: "endDate", label: "종료", obj: "종료일을", value: d.endDate ? slashDate(d.endDate, crossYear(d)) : null },
     { key: "maxMembers", label: "인원", obj: "인원을", value: d.maxMembers ? `${d.maxMembers}명${d.minMembers ? ` (최소 ${d.minMembers}명)` : ""}` : null },
     { key: "isPublic", label: "공개", obj: "공개·참가 방식을", value: ACCESS(d) },
   ];

@@ -10,7 +10,8 @@ import type { TurnError } from "./api";
  */
 export type RoundsStep = "idle" | "asking" | "busy" | "error" | "recruitAsking" | "settled";
 
-export type Bubble = { id: number; role: "user" | "assistant"; text: string };
+/** local = 화면이 물은 로컬 질문과 그 답(D33·D36) — 대화 로그에는 남기되 서버(인터뷰·회차 입력)로는 보내지 않는다 */
+export type Bubble = { id: number; role: "user" | "assistant"; text: string; local?: true };
 export type InterviewState = {
   lines: Bubble[];
   ask: Ask | null;
@@ -47,7 +48,9 @@ export type Action =
   | { type: "roundsFail"; err: TurnError }
   | { type: "roundsDone" }
   | { type: "roundsSkip" }
-  | { type: "recruitAnswer"; yes: boolean };
+  | { type: "recruitAnswer"; yes: boolean }
+  /** 로컬 질문에 칩으로 답했다 — 질문과 답을 말풍선으로 남긴다 */
+  | { type: "localAnswer"; question: string; answer: string };
 
 const nextId = (s: InterviewState) => (s.lines.at(-1)?.id ?? 0) + 1;
 
@@ -81,12 +84,16 @@ export function reduce(s: InterviewState, a: Action): InterviewState {
       return { ...s, rounds: "settled", roundsError: null };
     case "recruitAnswer":
       return { ...s, rounds: "settled", openRecruit: a.yes };
+    case "localAnswer": {
+      const id = nextId(s);
+      return { ...s, lines: [...s.lines, { id, role: "assistant", text: a.question, local: true }, { id: id + 1, role: "user", text: a.answer, local: true }] };
+    }
   }
 }
 
-/** 서버로 보낼 대화(지난 say 와 사용자 글만) */
-export const toMessages = (s: InterviewState): ChatLine[] => s.lines.map((l) => ({ role: l.role, text: l.text }));
+/** 서버로 보낼 대화(지난 say 와 사용자 글만 — 로컬 질문·답은 뺀다) */
+export const toMessages = (s: InterviewState): ChatLine[] => s.lines.filter((l) => !l.local).map((l) => ({ role: l.role, text: l.text }));
 /** 이탈 가드 — 사용자가 한 번이라도 답했으면 */
 export const isDirty = (s: InterviewState) => s.lines.some((l) => l.role === "user");
 /** 회차 초안에 보낼 사용자 발화(D27) — user 줄만, 뒤에서 12개 */
-export const userLines = (s: InterviewState): string[] => s.lines.filter((l) => l.role === "user").map((l) => l.text).slice(-12);
+export const userLines = (s: InterviewState): string[] => s.lines.filter((l) => l.role === "user" && !l.local).map((l) => l.text).slice(-12);

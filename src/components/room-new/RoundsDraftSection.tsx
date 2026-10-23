@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { RoundsResponse } from "@/lib/ai/rounds/schema";
+import { slashRange } from "@/lib/api/format";
 
 /*
  * 미리보기(직접 입력 모드) 의 「회차 초안」 섹션(2단계 D30·D33). 회차마다 포함/제외 체크 + [다시 생성].
@@ -9,14 +10,18 @@ import type { RoundsResponse } from "@/lib/ai/rounds/schema";
  * 데스크톱은 펼친 채, 모바일은 접힌 채 시작한다
  */
 
-const md = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
-
 /** 포함한 회차 기준 개수 — 섹션 요약·버튼 라벨·모집 가능 여부가 같은 셈을 쓴다 */
 export function includedStats(data: RoundsResponse, excluded: ReadonlySet<number>) {
   const inc = data.rounds.filter((r) => !excluded.has(r.index));
   const tasks = inc.reduce((n, r) => n + r.tasks.length, 0);
   const exams = inc.filter((r) => r.exam).length;
   return { rounds: inc.length, tasks, exams, leaves: tasks + exams };
+}
+
+/** AI 가 끝내 못 채운 회차(D40) — "11주차·12주차는 비어 있어요 …" */
+function paddedNote(data: RoundsResponse): string {
+  const labels = data.rounds.filter((r) => r.padded).map((r) => r.label);
+  return `${labels.length ? labels.join("·") : `${data.padded}개 회차`}는 비어 있어요 · 다시 생성하거나 만든 뒤 진행목표에서 채워 주세요`;
 }
 
 export function RoundsDraftSection({ data, excluded, onToggle, stale, busy, error, onRegenerate }: {
@@ -49,7 +54,7 @@ export function RoundsDraftSection({ data, excluded, onToggle, stale, busy, erro
               <li key={r.index} className="flex flex-col">
                 <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]">
                   <input type="checkbox" checked={!excluded.has(r.index)} onChange={() => onToggle(r.index)} disabled={busy} className="size-5 shrink-0 accent-mint" />
-                  <span className="shrink-0 text-[13px] text-muted">{r.label} · {md(r.startDate)}~{md(r.endDate)}</span>
+                  <span className="shrink-0 text-[13px] text-muted">{r.label} · {slashRange(r.startDate, r.endDate)}</span>
                   <span className={`min-w-0 break-words font-semibold ${excluded.has(r.index) ? "text-muted line-through" : "text-ink"}`}>{r.title}</span>
                 </label>
                 {(r.goalMd || r.tasks.length > 0 || r.exam) && (
@@ -74,7 +79,7 @@ export function RoundsDraftSection({ data, excluded, onToggle, stale, busy, erro
       )}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-2">
         {stale && <p className="m-0 text-[13px] text-warn">기간이 바뀌어 회차 초안을 다시 잡아야 해요</p>}
-        {!stale && data.padded > 0 && <p className="m-0 text-[13px] text-muted">일부 회차는 기본 제목이에요</p>}
+        {!stale && data.padded > 0 && <p className="m-0 text-[13px] text-muted">{paddedNote(data)}</p>}
         {!stale && s.rounds === 0 && <p className="m-0 text-[13px] text-muted">회차 없이 방만 만들어요</p>}
         {!stale && s.rounds > 0 && excluded.size > 0 && <p className="m-0 text-[13px] text-muted">뺀 회차 자리는 비워 둬요</p>}
         {busy && <p aria-busy="true" className="m-0 text-[13px] text-muted">회차를 다시 잡는 중… 10~40초 걸려요</p>}

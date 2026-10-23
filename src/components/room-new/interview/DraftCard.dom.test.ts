@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { DraftCard, filledCount } from "./DraftCard";
+import { DraftCard, filledCount, requiredRows } from "./DraftCard";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -24,5 +24,10 @@ describe("초안 카드 (D16)", () => {
     expect(btns.map((b) => b.disabled)).toEqual([false, false, false, true, false, true]); // 종료·공개는 아직
     act(() => btns[2].click());
     expect(onAskChange).toHaveBeenCalledWith("시작일을");
+  });
+  it("시작·종료가 다른 해면 둘 다 연도(D43) — 같은 해면 짧게", () => {
+    const val = (d: object) => requiredRows(d).filter((r) => r.key.endsWith("Date")).map((r) => r.value);
+    expect(val({ startDate: "2026-10-26", endDate: "2027-10-24" })).toEqual(["2026.10.26", "2027.10.24"]);
+    expect(val({ startDate: "2026-10-26", endDate: "2026-12-20" })).toEqual(["10/26", "12/20"]);
   });
 });

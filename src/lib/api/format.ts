@@ -19,6 +19,12 @@ export const dateShort = (iso: string, today: string): string => (sameYear(iso, 
 /** 기간 표기 규칙(Q2-13): 시작은 dateShort, 끝은 시작과 다른 해면 YYYY.MM.DD — "10.25 – 2027.01.10", "2027.01.04 – 01.10" */
 export const rangeShort = (start: string, end: string, today: string): string => `${dateShort(start, today)} – ${sameYear(start, end) ? mmdd(end) : ymd(end)}`;
 
+/** "10/26" — 방 만들기(인터뷰·초안 카드·회차 초안) 의 짧은 날짜. withYear 면 "2026.10.26" */
+export const slashDate = (iso: string, withYear = false): string => (withYear ? ymd(iso) : `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`);
+/** 방 만들기 기간 표기 — 같은 해면 "10/26~12/20", 해를 넘기면 거꾸로 읽히지 않게 둘 다 연도 "2026.10.26 ~ 2027.10.24" */
+export const slashRange = (start: string, end: string): string =>
+  sameYear(start, end) ? `${slashDate(start)}~${slashDate(end)}` : `${ymd(start)} ~ ${ymd(end)}`;
+
 /** D14: 기간 주 수 = round((일수+1)/7). 카드 "· N주" 와 종료 방 "N주 완주" 가 같은 값을 쓴다(회차 수와 무관) */
 export const periodWeeks = (start: string, end: string): number => Math.round((diffDays(start, end) + 1) / 7);
 

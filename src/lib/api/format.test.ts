@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays } from "@/lib/date";
-import { curIndexOf, curOf, dateShort, ddayOf, rangeShort, endPart, glanceOf, periodCard, periodLong, periodShort, periodWeeks, roundRow, roundsWindow, rulesOf } from "./format";
+import { curIndexOf, curOf, dateShort, ddayOf, rangeShort, endPart, slashRange, glanceOf, periodCard, periodLong, periodShort, periodWeeks, roundRow, roundsWindow, rulesOf } from "./format";
 import type { RoomDetail, RoundSummary } from "./types";
 
 const TODAY = "2026-10-12";
@@ -230,4 +230,9 @@ describe("날짜 표기 규칙을 쓰는 곳 (Q2-13)", () => {
     const r: RoundSummary = { id: "1", label: "10주차", title: "t", startDate: "2026-12-28", endDate: "2027-01-03", leafCount: 1, assigned: 0, submitted: 0, pct: null };
     expect(roundRow(r, "recruit", TODAY, false).dates).toBe("12.28 – 2027.01.03");
   });
+});
+
+describe("slashRange — 방 만들기 기간: 해를 넘기면 둘 다 연도", () => {
+  it("같은 해", () => expect(slashRange("2026-10-26", "2026-12-20")).toBe("10/26~12/20"));
+  it("해를 넘김(거꾸로 읽히지 않게)", () => expect(slashRange("2026-10-26", "2027-10-24")).toBe("2026.10.26 ~ 2027.10.24"));
 });

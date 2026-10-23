@@ -3,7 +3,7 @@ import { planDoc } from "@/lib/mcp/plan-schema";
 import { addDays } from "../normalize";
 import { splitRounds } from "./schedule";
 import type { RoundsModel } from "./schema";
-import { examEachRound, tasksPerRound, toPlan } from "./toPlan";
+import { examEachRound, goalWithHead, placeRounds, tasksPerRound, toPlan } from "./toPlan";
 
 /* 계획서 서버 조립(D24·D31·Review Focus 2) — planDoc 통과 · 날짜는 회차 표 · 보정 */
 const S = "2026-10-26";
@@ -65,11 +65,31 @@ describe("toPlan", () => {
     const r = toPlan(sched(1), m, { tasksPerRound: 2, examEachRound: false });
     const op = r.plan.ops[0] as unknown as Node & { descriptionMd: string };
     expect(op.title).toBe("1주차 학습");
-    expect(op.descriptionMd).toBe("제목\n링크");
+    expect(op.descriptionMd).toBe("이번 주 목표: 제목\n링크");
     expect(op.children).toHaveLength(1);
     expect([...op.children![0].title].length).toBe(40);
     expect([...op.children![0].descriptionMd!].length).toBe(150);
     expect(r.padded).toBe(0);
+  });
+  it("목표 앞머리는 서버가 회차 길이로 붙인다(D42) — 모델이 붙인 앞머리(섞인 것 포함)는 떼고 다시", () => {
+    expect(goalWithHead("IAM 을 익혀요\n- 정책", 7)).toBe("이번 주 목표: IAM 을 익혀요\n- 정책");
+    expect(goalWithHead("이번 회차 목표: IAM 을 익혀요", 7)).toBe("이번 주 목표: IAM 을 익혀요");
+    expect(goalWithHead("이번 주 목표: IAM 을 익혀요", 14)).toBe("이번 회차 목표: IAM 을 익혀요");
+    expect(goalWithHead("목표: IAM", 14)).toBe("이번 회차 목표: IAM");
+    expect(goalWithHead("이번 주 목표:\n- 정책", 7)).toBe("- 정책");
+    expect(goalWithHead("- 정책만", 7)).toBe("- 정책만");
+    expect(goalWithHead("", 7)).toBe("");
+  });
+  it("placeRounds: 회차 번호로 자리를 맞추고, 번호 없음·틀림·겹침은 남은 자리에 순서대로", () => {
+    const s = sched(4);
+    const it_ = (index: number | undefined, title: string) => ({ index, title, goalMd: "", tasks: [] });
+    const placed = new Map();
+    placeRounds(s.rounds, [it_(4, "넷"), it_(undefined, "가"), it_(4, "겹침"), it_(9, "틀림")], placed);
+    expect([0, 1, 2, 3].map((i) => placed.get(i)?.title)).toEqual(["가", "겹침", "틀림", "넷"]);
+    // 재요청은 빈 자리만 받는다
+    const p2 = new Map([[0, it_(1, "하나")]]);
+    placeRounds(s.rounds.slice(2), [it_(3, "셋"), it_(1, "엉뚱")], p2);
+    expect([0, 1, 2, 3].map((i) => p2.get(i)?.title)).toEqual(["하나", undefined, "셋", "엉뚱"]);
   });
   it("rounds(표시용)는 plan.ops 와 1:1", () => {
     const r = toPlan(sched(3), model(3), { tasksPerRound: 1, examEachRound: true });

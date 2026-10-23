@@ -49,10 +49,45 @@ describe("runRounds", () => {
     const r = await runRounds(year, { callRounds: mockCallRounds });
     expect(r.ok && r.body.rounds[0].goalMd).toMatch(/^이번 회차 목표:/);
   });
-  it("목 '부족 테스트' → padded 2 · '장애 테스트' → AI_UNAVAILABLE", async () => {
-    const short = await runRounds({ ...p, userLines: ["부족 테스트"] }, { callRounds: mockCallRounds });
-    expect(short.ok && short.body.padded).toBe(2);
+  it("목 '부족 테스트' → 첫 요청이 2개 모자라 빠진 회차만 재요청 → padded 0", async () => {
+    const call = vi.fn<CallRounds>(mockCallRounds);
+    const short = await runRounds({ ...p, userLines: ["부족 테스트"] }, { callRounds: call });
+    if (!short.ok) throw new Error("expected ok");
+    expect([short.body.padded, short.refill, call.mock.calls.length]).toEqual([0, 2, 2]);
+    expect(call.mock.calls[1][0].write.map((r) => r.label)).toEqual(["11주차", "12주차"]);
+    expect(call.mock.calls[1][0].messages[0].content).toContain('<write n="2">11,12</write><written>1주차: AWS SAA 자격증 1주차;');
+    expect(short.body.rounds[11].title).toBe("AWS SAA 자격증 12주차");
+  });
+  it("목 '계속 부족 테스트' → 재요청도 모자라면 채움 회차(padded 2, 표시용 padded 표시) · '장애 테스트' → AI_UNAVAILABLE", async () => {
+    const short = await runRounds({ ...p, userLines: ["계속 부족 테스트"] }, { callRounds: mockCallRounds });
+    if (!short.ok) throw new Error("expected ok");
+    expect([short.body.padded, short.refill]).toEqual([2, 2]);
+    expect(short.body.rounds.filter((r) => r.padded).map((r) => [r.label, r.title, r.tasks.length])).toEqual([["11주차", "11주차 학습", 0], ["12주차", "12주차 학습", 0]]);
     expect(await runRounds({ ...p, userLines: ["장애 테스트"] }, { callRounds: mockCallRounds })).toEqual({ ok: false, error: "AI_UNAVAILABLE", status: 529 });
+  });
+  it("모델이 회차 번호를 섞어 보내도 번호 자리로 — '마지막 회차' 요청이 26회차에", async () => {
+    const year = prepareRounds(req({ draft: { ...draft, endDate: "2027-10-24" } }), TODAY)!;
+    const n = year.schedule.rounds.length;
+    const items = year.schedule.rounds.map((r) => ({ index: r.index + 1, title: r.index === n - 1 ? "개인 프로젝트 발표" : `범위 ${r.index + 1}`, goalMd: "", tasks: [] }));
+    const call = vi.fn<CallRounds>().mockResolvedValue({ ok: true, output: { rounds: [items[n - 1], ...items.slice(0, n - 1)] }, usage: { in: 1, out: 1, cached: 0 }, model: "m" });
+    const r = await runRounds(year, { callRounds: call });
+    if (!r.ok) throw new Error("expected ok");
+    expect([r.body.rounds.at(-1)!.title, r.body.rounds[0].title, r.body.padded, r.refill]).toEqual(["개인 프로젝트 발표", "범위 1", 0, 0]);
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+  it("재요청은 시간이 남을 때만(라우트 60s 안) · 재요청 실패는 무시하고 채움", async () => {
+    let t = 0;
+    const call = vi.fn<CallRounds>(async (x) => {
+      t += 50_000; // 첫 요청이 50초 걸렸다
+      return mockCallRounds(x);
+    });
+    const r = await runRounds({ ...p, userLines: ["부족 테스트"] }, { callRounds: call, now: () => t });
+    expect(r.ok && [r.body.padded, r.refill]).toEqual([2, 2]);
+    expect(call).toHaveBeenCalledTimes(1);
+    const fail = vi.fn<CallRounds>(mockCallRounds).mockImplementationOnce(mockCallRounds).mockResolvedValueOnce({ ok: false, status: 529 });
+    const r2 = await runRounds({ ...p, userLines: ["부족 테스트"] }, { callRounds: fail });
+    expect(r2.ok && r2.body.padded).toBe(2);
+    expect(fail.mock.calls[1][0].timeoutMs).toBeLessThanOrEqual(53_000);
   });
   it("모델에 system·데이터 블록 전달 · 모양이 틀린 출력 → AI_UNAVAILABLE", async () => {
     const call = vi.fn<CallRounds>().mockResolvedValue({ ok: true, output: { rounds: "x" }, usage: { in: 1, out: 1, cached: 0 }, model: "m" });

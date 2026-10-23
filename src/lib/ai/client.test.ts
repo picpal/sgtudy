@@ -50,15 +50,25 @@ describe("openaiCallModel", () => {
 });
 
 describe("openaiCallRounds", () => {
-  const rin = { system: "RSYS", messages: [{ role: "user" as const, content: "<schedule/>" }], state: {} as never };
+  const slot = (i: number) => ({ index: i, label: `${i + 1}주차`, startDate: "2026-10-26", endDate: "2026-11-01" });
+  const rin = { system: "RSYS", messages: [{ role: "user" as const, content: "<schedule/>" }], state: {} as never, write: [slot(0), slot(1), slot(2)] };
   it("strict 회차 포맷 · 12,000 상한 · 캐시 키 · 요청 옵션 timeout 50s · 재시도 0 · 사용량 매핑", async () => {
     parse.mockResolvedValue({ status: "completed", output_parsed: { rounds: [] }, model: "gpt-6-luna", usage: { input_tokens: 3000, output_tokens: 2500, input_tokens_details: { cached_tokens: 1200 } } });
     const r = await openaiCallRounds(rin);
     const [body, opts] = parse.mock.calls[0];
     expect(body).toMatchObject({ model: "gpt-6-luna", instructions: "RSYS", input: rin.messages, reasoning: { effort: "low" }, max_output_tokens: 12_000, store: false, prompt_cache_key: "sgtudy-room-rounds" });
     expect(body.text.format).toMatchObject({ type: "json_schema", strict: true, name: "room_rounds_draft" });
+    // 배열 길이 = 쓸 회차 수(D39) · 항목마다 회차 번호
+    expect(body.text.format.schema.properties.rounds).toMatchObject({ minItems: 3, maxItems: 3, items: { required: ["index", "title", "goalMd", "tasks"] } });
     expect(opts).toEqual({ timeout: 50_000, maxRetries: 0 });
     expect(r).toEqual({ ok: true, output: { rounds: [] }, usage: { in: 3000, out: 2500, cached: 1200 }, model: "gpt-6-luna" });
+  });
+  it("재요청: 빠진 회차 수만큼의 길이 · 남은 시간 timeout", async () => {
+    parse.mockResolvedValue({ status: "completed", output_parsed: { rounds: [] }, model: "m" });
+    await openaiCallRounds({ ...rin, write: [slot(25)], timeoutMs: 20_000 });
+    const [body, opts] = parse.mock.calls[0];
+    expect(body.text.format.schema.properties.rounds).toMatchObject({ minItems: 1, maxItems: 1 });
+    expect(opts).toEqual({ timeout: 20_000, maxRetries: 0 });
   });
   it("잘림·API 오류 → 실패(상태 코드만)", async () => {
     parse.mockResolvedValueOnce({ status: "incomplete", output_parsed: null });

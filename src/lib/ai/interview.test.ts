@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CONFIRM_ASK } from "./chips";
 import { runTurn, turnLimitExceeded, isStart, type CallModel } from "./interview";
 import { mockCallModel } from "./interview-mock";
 import { InterviewRequest, type ModelTurn } from "./schema";
@@ -31,6 +32,12 @@ describe("runTurn", () => {
     if (!r.ok) throw new Error();
     expect(r.body.done).toBe(false);
     expect(r.body.ask?.field).toBe("title");
+  });
+  it("missing 이 비었는데 done 없이 칩 없는 질문으로 끝나면 예/아니요 칩", async () => {
+    const r = await runTurn(req({ draft: FULL, messages: [{ role: "user", text: "없어요" }] }), { callModel: model({ say: "이대로 미리보기로 갈까요?" }), today: TODAY, tagDict: DICT });
+    if (!r.ok) throw new Error("expected ok");
+    expect(r.body.done).toBe(false);
+    expect(r.body.ask).toEqual(CONFIRM_ASK);
   });
   it("missing 이 비고 done 이면 done:true · ask null", async () => {
     const r = await runTurn(req({ draft: FULL, messages: [{ role: "assistant", text: "요약" }, { role: "user", text: "좋아요" }] }), { callModel: model({ done: true, ask: { field: "title", kind: "text" } }), today: TODAY, tagDict: DICT });

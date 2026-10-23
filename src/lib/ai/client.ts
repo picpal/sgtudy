@@ -5,7 +5,7 @@ import { aiModel } from "./env";
 import type { CallModel, Usage } from "./interview";
 import type { ChatInput } from "./prompt";
 import type { CallRounds } from "./rounds/rounds";
-import { RoundsModel } from "./rounds/schema";
+import { roundsModelFor } from "./rounds/schema";
 import { ModelTurn } from "./schema";
 
 /*
@@ -60,12 +60,18 @@ export const openaiCallModel: CallModel = async ({ system, messages }) => {
   return r.ok ? { ok: true, turn: r.parsed, usage: r.usage, model: r.model } : r;
 };
 
-/** 회차 초안 한 번(D28) — 26회차 ≈ 6k 토큰 + 추론이라 12,000 상한 · 50초 · 재시도 없음(라우트 maxDuration 60 안) */
-const ROUNDS = {
-  format: zodTextFormat(RoundsModel, "room_rounds_draft"), cacheKey: "sgtudy-room-rounds", maxOutputTokens: 12_000,
-  request: { timeout: 50_000, maxRetries: 0 },
+/**
+ * 회차 초안(D28) — 26회차 ≈ 6k 토큰 + 추론이라 12,000 상한 · 50초 · 재시도 없음(라우트 maxDuration 60 안).
+ * 출력 배열 길이를 쓸 회차 수로 못박는다(strict minItems = maxItems, D39) — 스키마가 n 마다 달라 n 별로 한 번 만들어 둔다
+ */
+const roundsFormats = new Map<number, ReturnType<typeof zodTextFormat>>();
+const roundsFormat = (n: number) => {
+  let f = roundsFormats.get(n);
+  if (!f) roundsFormats.set(n, (f = zodTextFormat(roundsModelFor(n), "room_rounds_draft")));
+  return f;
 };
-export const openaiCallRounds: CallRounds = async ({ system, messages }) => {
-  const r = await callStructured(ROUNDS, { system, messages });
+export const openaiCallRounds: CallRounds = async ({ system, messages, write, timeoutMs }) => {
+  const opts = { format: roundsFormat(write.length), cacheKey: "sgtudy-room-rounds", maxOutputTokens: 12_000, request: { timeout: timeoutMs ?? 50_000, maxRetries: 0 } };
+  const r = await callStructured(opts, { system, messages });
   return r.ok ? { ok: true, output: r.parsed, usage: r.usage, model: r.model } : r;
 };

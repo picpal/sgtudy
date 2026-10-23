@@ -1,5 +1,5 @@
 import { clampCp } from "@/components/room-new/validate";
-import { defaultAsk, sanitizeAsk } from "./chips";
+import { CONFIRM_ASK, defaultAsk, sanitizeAsk } from "./chips";
 import { computeMissing, deriveAnswer, mergeDraft, normalizeDraft, normalizePatch, stripControl, type TagDict } from "./normalize";
 import { buildMessages, systemPrompt, type ChatInput } from "./prompt";
 import { MAX_MESSAGES, ModelTurnIn, SAY_MAX, type Draft, type Dropped, type Field, type InterviewRequest, type RequiredField, type TurnResponse } from "./schema";
@@ -53,7 +53,8 @@ export async function runTurn(req: InterviewRequest, deps: { callModel: CallMode
   const draft = mergeDraft(draft1, fromModel.patch);
   const missing = computeMissing(draft, today);
   const done = m.done && missing.length === 0;
-  const ask = done ? null : (sanitizeAsk(m.ask, draft, today) ?? defaultAsk(missing, today));
+  // 안 끝났는데 질문도 칩도 없으면 확인 질문이다 — 사용자가 "네" 를 직접 치지 않게 예/아니요 칩
+  const ask = done ? null : (sanitizeAsk(m.ask, draft, today) ?? defaultAsk(missing, today) ?? CONFIRM_ASK);
   const dropped: Dropped[] = [...derived.dropped, ...fromModel.dropped];
   const say = clampCp(stripControl(m.say).trim(), SAY_MAX) || FALLBACK_SAY;
   const sent = req.messages.length;

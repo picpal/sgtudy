@@ -58,4 +58,11 @@ describe("회차·모집 로컬 질문 (2단계 D33·D36)", () => {
     for (let i = 0; i < 15; i++) s = reduce(reduce(s, { type: "send", text: `u${i}`, answer: null }), { type: "turn", res });
     expect(userLines(s)).toEqual(Array.from({ length: 12 }, (_, i) => `u${i + 3}`));
   });
+  it("로컬 질문·답(localAnswer)은 로그에 남지만 서버 대화·회차 발화에서는 빠진다", () => {
+    let s = reduce(INITIAL, { type: "turn", res: { ...res, say: "요약", done: true, ask: null, missing: [] } });
+    s = reduce(s, { type: "localAnswer", question: "회차 초안도 잡아 드릴까요?", answer: "네, 잡아 주세요" });
+    expect(s.lines.map((l) => [l.id, l.role, l.text, !!l.local])).toEqual([[1, "assistant", "요약", false], [2, "assistant", "회차 초안도 잡아 드릴까요?", true], [3, "user", "네, 잡아 주세요", true]]);
+    expect(toMessages(s)).toEqual([{ role: "assistant", text: "요약" }]);
+    expect(userLines(s)).toEqual([]);
+  });
 });

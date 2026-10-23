@@ -105,6 +105,12 @@ export function sanitizeAsk(ask: { field: Field; kind: Ask["kind"]; options?: Ch
   return { field, kind, ...(options.length ? { options } : {}), ...(allowOther ? { allowOther } : {}) };
 }
 
+/**
+ * 필수는 다 찼는데 모델이 칩 없이 확인을 물었을 때("이대로 미리보기로 갈까요?") — 예/아니요 칩.
+ * 고르면 글이 모델로 가고, 모델이 done 을 낸다(아니요면 무엇을 바꿀지 묻는다)
+ */
+export const CONFIRM_ASK: Ask = { field: "extra", kind: "single", options: [{ label: "네, 이대로 갈게요", value: "yes" }, { label: "바꿀 게 있어요", value: "no" }] };
+
 /** 모델이 질문을 안 냈는데 필수가 남았을 때 — 첫 빈 칸의 기본 질문 */
 export function defaultAsk(missing: RequiredField[], today: string): Ask | null {
   return missing.length ? defaultChips(missing[0], today) : null;
