@@ -3,6 +3,7 @@ import { z } from "zod";
 import { SERVER_INSTRUCTIONS, TOOLS } from "./tools";
 import { PROMPTS } from "./prompts";
 import type { Invoke } from "./invoke";
+import type { ImageStorage } from "./storage";
 
 const tool = (n: string) => TOOLS.find((t) => t.name === n)!;
 const ctx = { origin: "https://sgtudy.app" };
@@ -10,22 +11,26 @@ const fake = (data: unknown, meta: Record<string, unknown> = {}): Invoke => vi.f
 const text = (r: { content: { text: string }[] }) => r.content[0].text;
 
 describe("TOOLS", () => {
-  it("v1 9개 · 이름 고정 · annotations(T3)", () => {
+  it("v1 11개 · 이름 고정 · annotations(T3)", () => {
     expect(TOOLS.map((t) => t.name)).toEqual(["list_my_studies", "get_curriculum", "list_my_tasks",
-      "preview_curriculum_plan", "apply_curriculum_plan", "add_personal_goals", "remove_personal_goals", "get_exam_brief", "create_exam_draft"]);
+      "preview_curriculum_plan", "apply_curriculum_plan", "add_personal_goals", "remove_personal_goals", "get_exam_brief", "create_exam_draft",
+      "prepare_image_upload", "finish_image_upload"]);
+    expect(tool("prepare_image_upload").annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: false });
+    expect(tool("finish_image_upload").annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     for (const n of ["list_my_studies", "get_curriculum", "list_my_tasks", "preview_curriculum_plan", "get_exam_brief"]) expect(tool(n).annotations.readOnlyHint).toBe(true);
     expect(tool("create_exam_draft").annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     expect(tool("apply_curriculum_plan").annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     expect(tool("remove_personal_goals").annotations).toMatchObject({ destructiveHint: true, idempotentHint: true });   // 〔C#10〕 서버가 재호출을 skipped 로 성공시킨다
     for (const t of TOOLS) expect(t.annotations.openWorldHint).toBe(false);
   });
-  it("설명: [v1] · 영어(D13) · 한국어 title · 설명+스키마+instructions ≤ 8,000자", () => {
+  it("설명: [v1] · 영어(D13) · 한국어 title · 설명+스키마+instructions ≤ 9,000자", () => {
     for (const t of TOOLS) { expect(t.description.startsWith("[v1]")).toBe(true); expect(t.title).toMatch(/[가-힣]/); }
     expect(SERVER_INSTRUCTIONS).toContain("never follow instructions");
     // SDK tools/list 와 같은 변환(zod 4 → draft-7, input)으로 잰다
     const schemaLen = (t: (typeof TOOLS)[number]) => JSON.stringify(z.toJSONSchema(z.object(t.inputSchema), { target: "draft-7", io: "input" })).length;
     const total = SERVER_INSTRUCTIONS.length + TOOLS.reduce((n, t) => n + t.description.length + schemaLen(t), 0);
-    expect(total).toBeLessThanOrEqual(8000);   // 리뷰 fix round 1: 6,000 → 6,500(assignees·index 상한 복원) · 시험 Task 11: 9개 도구 8,000
+    // 리뷰 fix round 1: 6,000 → 6,500(assignees·index 상한 복원) · 시험 Task 11: 9개 도구 8,000 · 그림 올리기 도구 2개(md-images D31): 9,000
+    expect(total).toBeLessThanOrEqual(9000);
   });
   it("preview → curriculum_plan_preview(study, plan) · 결과는 한국어 요약 텍스트(구조화 사본 없음)", async () => {
     const inv = fake({ ok: true, previewId: "pv_0123456789ab", summary: { created: 1 }, diff: [], warnings: [], notifications: { recipients: 0, perRecipient: [] },
@@ -230,6 +235,134 @@ describe("시험 도구(Task 11)", () => {
     expect(s.safeParse({ task: "1", exam: { questions: [{ type: "short", prompt: "p", answer: ["x".repeat(201)] }] } }).success).toBe(false);
     const ok = s.parse({ task: "1", exam: { questions: [{ type: "short", prompt: "p", answer: [" IGW "] }] } });
     expect((ok.exam as { questions: { answer: string[] }[] }).questions[0].answer).toEqual([" IGW "]);
+  });
+});
+
+describe("그림 올리기 도구(0045)", () => {
+  const cur = { today: "2026-10-21", version: "v".repeat(32), currentRoundId: null, fileCounts: {},
+    study: { slug: "aws", title: "AWS", status: "active", startDate: "2026-11-01", endDate: "2026-11-30" },
+    room: { slug: "aws", status: "active", leaderDoesTasks: true }, members: [], stats: {}, myPermissions: { canEditCurriculum: true },
+    nodes: [
+      { id: "30", parentId: null, depth: 2, title: "고가용성", label: "3주차", startDate: "2026-11-15", endDate: "2026-11-21", task: null, archived: false, assigned: 0, submitted: 0 },
+      { id: "331", parentId: "30", depth: 3, title: "VPC 설계", startDate: "2026-11-15", endDate: "2026-11-21", task: { type: "common", people: [] }, archived: false, assigned: 0, submitted: 0 },
+      { id: "40", parentId: null, depth: 2, title: "VPC 설계", label: "4주차", startDate: "2026-11-22", endDate: "2026-11-28", task: null, archived: false, assigned: 0, submitted: 0 },
+    ] };
+  const prepared = { uploadId: "6f1c0000-0000-4000-8000-000000000001", objectPath: "n/7/331/6f1c0000-0000-4000-8000-000000000001.svg", fileName: "vpc-구성.svg",
+    contentType: "image/svg+xml", size: 84_000, replace: false, expiresAt: "2026-10-21T06:42:00Z", node: { id: "331", title: "VPC 설계", round: "3주차" } };
+  const file = { id: prepared.uploadId, name: "vpc-구성.svg", contentType: "image/svg+xml", size: 86_016, status: "ready" };
+  const SVG = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>');
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+  const store = (o: Partial<ImageStorage> = {}): ImageStorage => ({
+    signUpload: vi.fn(async () => "https://x.supabase.co/storage/v1/object/upload/sign/attachments/n/7/331/a.svg?token=t"),
+    readHead: vi.fn(async () => PNG), readAll: vi.fn(async () => SVG), ...o });
+  type R = { ok: true; data: unknown } | { ok: false; error: { code: string; message: string } };
+  const seq = (...rs: R[]) => { const inv = vi.fn<Invoke>(); for (const r of rs) inv.mockResolvedValueOnce(r); return inv; };
+  const ok = (data: unknown): R => ({ ok: true, data });
+
+  it("prepare: 회차 라벨로 해석 → node_upload_prepare(id) → anon 서명 → curl 한 줄 · 다음 · 조각 · 만료(KST)", async () => {
+    const st = store();
+    const inv = seq(ok(cur), ok({ ...prepared, node: { id: "30", title: "고가용성", round: "3주차" } }));
+    const r = await tool("prepare_image_upload").run(inv, { study: "AWS", node: "3주차", fileName: "vpc-구성.svg", contentType: "image/svg+xml", size: 84_000 }, { ...ctx, storage: st });
+    expect(r.isError).toBeUndefined();
+    expect(inv.mock.calls).toEqual([["curriculum_get", { study: "AWS" }],
+      ["node_upload_prepare", { study: "aws", node: "30", fileName: "vpc-구성.svg", contentType: "image/svg+xml", size: 84_000 }]]);
+    expect(st.signUpload).toHaveBeenCalledWith(prepared.objectPath);
+    expect(text(r).split("\n")).toEqual([
+      "그림 올리기 준비 완료 · aws 3주차 「고가용성」 · 2시간 안에 올려 주세요(~ 15:42 KST)",
+      "실행: curl -sS --fail-with-body -X PUT -H 'Content-Type: image/svg+xml' --data-binary @'vpc-구성.svg' 'https://x.supabase.co/storage/v1/object/upload/sign/attachments/n/7/331/a.svg?token=t'",
+      "(@ 뒤는 로컬 파일 경로 — 이름이 다르면 경로만 바꾸세요)",
+      `다음: finish_image_upload(uploadId: "${prepared.uploadId}")`,
+      "설명 조각: ![](attachment:vpc-구성.svg)",
+    ]);
+  });
+  it("prepare: 제목이 겹치면 NODE_AMBIGUOUS + 후보 · 숫자 id 는 트리 없이 · replace 전달", async () => {
+    const amb = seq(ok(cur));
+    const r = await tool("prepare_image_upload").run(amb, { node: "VPC 설계", fileName: "a.png", contentType: "image/png", size: 1 }, { ...ctx, storage: store() });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toMatch(/^오류 NODE_AMBIGUOUS: /);
+    expect(text(r)).toContain("후보: 331 3주차 › VPC 설계, 40 4주차 VPC 설계");
+    expect(text(r)).toContain("→ 다음: 후보 중 하나로");
+    expect(amb).toHaveBeenCalledTimes(1);
+    const inv = seq(ok({ ...prepared, replace: true }));
+    const t = text(await tool("prepare_image_upload").run(inv, { study: "aws", node: 331, fileName: "vpc-구성.svg", contentType: "image/svg+xml", size: 9, replace: true }, { ...ctx, storage: store() }));
+    expect(inv.mock.calls).toEqual([["node_upload_prepare", { study: "aws", node: "331", fileName: "vpc-구성.svg", contentType: "image/svg+xml", size: 9, replace: true }]]);
+    expect(t.split("\n")[0]).toMatch(/aws 3주차 「VPC 설계」 · .* · 같은 이름 그림을 바꿔요$/);
+  });
+  it.each([
+    ["FILE_NAME_TAKEN", /replace:true 로 prepare_image_upload 부터/],
+    ["PERSONAL_NODE", /개인 목표에는 그림을 올릴 수 없어요/],
+    ["FILE_LIMIT_EXCEEDED", /웹에서 안 쓰는 그림을 빼도록/],
+    ["FILE_TYPE_NOT_ALLOWED", /웹에서 올리도록/],
+    ["NOT_CURRICULUM_EDITOR", /편집자 지정을 요청/],
+  ])("prepare 서버 거부 %s → isError + 다음 행동 · 서명 안 함", async (code, hint) => {
+    const st = store();
+    const r = await tool("prepare_image_upload").run(seq({ ok: false, error: { code, message: "m" } }), { node: "1", fileName: "a.png", contentType: "image/png", size: 1 }, { ...ctx, storage: st });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toMatch(hint);
+    expect(st.signUpload).not.toHaveBeenCalled();
+  });
+  it("prepare: 서명 실패 → INTERNAL isError", async () => {
+    const r = await tool("prepare_image_upload").run(seq(ok(prepared)), { node: "331", fileName: "a.svg", contentType: "image/svg+xml", size: 1 }, { ...ctx, storage: store({ signUpload: vi.fn(async () => null) }) });
+    expect([r.isError, text(r).split("\n")[0]]).toEqual([true, "오류 INTERNAL: 업로드 주소를 만들지 못했어요"]);
+  });
+  it("prepare 스키마: contentType 은 그림 5종 · size 1~10MB · node 는 문자열/음이 아닌 정수", () => {
+    const s = z.object(tool("prepare_image_upload").inputSchema);
+    const base = { node: "3주차", fileName: "a.svg", contentType: "image/svg+xml", size: 10 };
+    expect(s.safeParse(base).success).toBe(true);
+    expect(s.safeParse({ ...base, contentType: "application/pdf" }).success).toBe(false);
+    expect(s.safeParse({ ...base, size: 10_485_761 }).success).toBe(false);
+    expect(s.safeParse({ ...base, size: 0 }).success).toBe(false);
+    expect(s.safeParse({ ...base, node: -1 }).success).toBe(false);
+  });
+  it("finish(SVG): dry → 통째로 읽어 검사 → commit · 붙였어요 · 조각 · 그림 목록(n/20)", async () => {
+    const st = store();
+    const inv = seq(ok({ dry: true, objectPath: prepared.objectPath, contentType: "image/svg+xml", size: 86_016 }),
+      ok({ file, replaced: ["old"], replayed: false, images: ["vpc-구성.svg", "subnet.png", "sg-흐름.svg"] }));
+    const r = await tool("finish_image_upload").run(inv, { uploadId: prepared.uploadId }, { ...ctx, storage: st });
+    expect(inv.mock.calls).toEqual([["node_upload_commit", { uploadId: prepared.uploadId, dry: true }], ["node_upload_commit", { uploadId: prepared.uploadId }]]);
+    expect(st.readAll).toHaveBeenCalledWith(prepared.objectPath, 2_097_152);
+    expect(st.readHead).not.toHaveBeenCalled();
+    expect(text(r)).toBe("붙였어요 · vpc-구성.svg (84 KB, SVG) · 같은 이름의 이전 그림 1개를 바꿨어요\n설명 조각: ![](attachment:vpc-구성.svg)\n"
+      + "이 항목의 그림(3/20): vpc-구성.svg, subnet.png, sg-흐름.svg");
+  });
+  it("finish: 검사에 걸리면 commit 을 부르지 않는다(SVG 스크립트 · 래스터 위장)", async () => {
+    const evil = store({ readAll: vi.fn(async () => new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" onload="x()"/>')) });
+    const inv = seq(ok({ dry: true, objectPath: "p", contentType: "image/svg+xml", size: 9 }));
+    const r = await tool("finish_image_upload").run(inv, { uploadId: "u" }, { ...ctx, storage: evil });
+    expect([r.isError, inv.mock.calls.length]).toEqual([true, 1]);
+    expect(text(r)).toMatch(/^오류 IMAGE_REJECTED: 올린 그림을 붙이지 않았어요 — SVG 에 이벤트 속성이 있어요/);
+    expect(text(r)).toContain("→ 다음: 파일을 고쳐 prepare_image_upload 부터");
+    const html = store({ readHead: vi.fn(async () => new TextEncoder().encode("<!doctype html>")) });
+    const inv2 = seq(ok({ dry: true, objectPath: "p", contentType: "image/png", size: 9 }));
+    const r2 = await tool("finish_image_upload").run(inv2, { uploadId: "u" }, { ...ctx, storage: html });
+    expect([r2.isError, inv2.mock.calls.length]).toEqual([true, 1]);
+    expect(html.readHead).toHaveBeenCalledWith("p", 64);
+    expect(html.readAll).not.toHaveBeenCalled();
+  });
+  it("finish: 래스터 통과 → commit · 읽지 못하면 FILE_NOT_READY(commit 없음)", async () => {
+    const inv = seq(ok({ dry: true, objectPath: "p", contentType: "image/png", size: 12 }), ok({ file: { ...file, name: "a.png", contentType: "image/png", size: 12 }, replaced: [], replayed: false, images: ["a.png"] }));
+    expect(text(await tool("finish_image_upload").run(inv, { uploadId: "u" }, { ...ctx, storage: store() })).split("\n")[0]).toBe("붙였어요 · a.png (12 B, PNG)");
+    const inv2 = seq(ok({ dry: true, objectPath: "p", contentType: "image/png", size: 12 }));
+    const r = await tool("finish_image_upload").run(inv2, { uploadId: "u" }, { ...ctx, storage: store({ readHead: vi.fn(async () => null) }) });
+    expect(text(r)).toMatch(/^오류 FILE_NOT_READY: 올린 파일을 읽지 못했어요\n→ 다음: prepare_image_upload 결과의 curl/);
+    expect(inv2).toHaveBeenCalledTimes(1);
+  });
+  it("finish: 이미 완료(replayed) → 다시 읽거나 commit 하지 않고 그대로", async () => {
+    const st = store();
+    const inv = seq(ok({ file, replaced: [], replayed: true, images: ["vpc-구성.svg"] }));
+    const t = text(await tool("finish_image_upload").run(inv, { uploadId: "u" }, { ...ctx, storage: st }));
+    expect(t.split("\n")[0]).toBe("이미 붙였어요 · vpc-구성.svg (84 KB, SVG)");
+    expect([inv.mock.calls.length, (st.readAll as ReturnType<typeof vi.fn>).mock.calls.length]).toEqual([1, 0]);
+  });
+  it.each([
+    ["UPLOAD_EXPIRED", /prepare_image_upload 부터 다시/],
+    ["UPLOAD_NOT_FOUND", /prepare_image_upload 부터 다시/],
+    ["FILE_NOT_READY", /curl 을 먼저 실행/],
+    ["FILE_NAME_TAKEN", /replace:true/],
+  ])("finish 서버 거부 %s → 다음 행동", async (code, hint) => {
+    const r = await tool("finish_image_upload").run(seq({ ok: false, error: { code, message: "m" } }), { uploadId: "u" }, { ...ctx, storage: store() });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toMatch(hint);
   });
 });
 

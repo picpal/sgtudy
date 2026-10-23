@@ -536,3 +536,36 @@ export function formatExamDraft(d: ExamDraftData, link: string | null): string {
   const warn = d.warnings.length ? ` · 경고 ${d.warnings.map((w) => w.message ?? w.code).join(" / ")}` : "";
   return `초안 저장 — ${d.questionCount}문항 ${d.totalPoints}점${warn} · 웹에서 검토·발행: ${link ?? "그 과제의 출제 화면"}`;
 }
+
+/* ---------- 그림 올리기(0045, md-images 스펙 §3.4·§4.5) ---------- */
+export type UploadNode = { id: string; title: string; round?: string | null };
+export type UploadPrepared = { uploadId: string; objectPath: string; fileName: string; contentType: string; size: number; replace: boolean; expiresAt: string; node: UploadNode };
+export type UploadFile = { id: string; name: string; contentType: string; size: number };
+export type UploadDone = { file: UploadFile | null; replaced: string[]; replayed: boolean; images: string[]; node?: UploadNode };
+
+const IMAGE_KIND: Record<string, string> = { "image/png": "PNG", "image/jpeg": "JPG", "image/gif": "GIF", "image/webp": "WEBP", "image/svg+xml": "SVG" };
+const nodeName = (slug: string, n: UploadNode) => `${slug}${n.round && n.round !== n.title ? ` ${n.round}` : ""} 「${n.title}」`;
+const kb = (size: number) => (size < 1024 ? `${size} B` : `${Math.round(size / 1024)} KB`);
+
+/** 준비 결과 — 실행할 curl 한 줄 · 다음 도구 · 설명 조각. 이름은 D25 규칙(따옴표·공백 없음)이라 작은따옴표로 감싸면 셸에 안전하다 */
+export function formatUploadPrepared(d: UploadPrepared, signedUrl: string, slug: string, snippet: string): string {
+  return [
+    `그림 올리기 준비 완료 · ${nodeName(slug, d.node)} · 2시간 안에 올려 주세요(~ ${kst(d.expiresAt).slice(11)} KST)${d.replace ? " · 같은 이름 그림을 바꿔요" : ""}`,
+    `실행: curl -sS --fail-with-body -X PUT -H 'Content-Type: ${d.contentType}' --data-binary @'${d.fileName}' '${signedUrl}'`,
+    "(@ 뒤는 로컬 파일 경로 — 이름이 다르면 경로만 바꾸세요)",
+    `다음: finish_image_upload(uploadId: "${d.uploadId}")`,
+    `설명 조각: ${snippet}`,
+  ].join("\n");
+}
+
+/** 완료 결과 — 붙인 파일 · 바꾼 수 · 조각 · 이 항목의 그림 목록(n/한도) */
+export function formatUploadDone(d: UploadDone, snippet: string | null, limit: number): string {
+  const f = d.file;
+  const head = f
+    ? `${d.replayed ? "이미 붙였어요" : "붙였어요"} · ${f.name} (${kb(f.size)}, ${IMAGE_KIND[f.contentType] ?? f.contentType})`
+    : "이미 처리된 올리기예요(파일은 그 뒤 빠졌어요)";
+  const lines = [d.replaced.length ? `${head} · 같은 이름의 이전 그림 ${d.replaced.length}개를 바꿨어요` : head];
+  if (snippet) lines.push(`설명 조각: ${snippet}`);
+  lines.push(`이 항목의 그림(${d.images.length}/${limit}): ${d.images.length ? d.images.join(", ") : "없음"}`);
+  return lines.join("\n");
+}

@@ -32,9 +32,16 @@ const FIX: Record<string, string> = {
   PLAN_INVALID: FIX_PLAN, INVALID_TITLE: FIX_PLAN, INVALID_PERIOD: FIX_PLAN, VALIDATION_FAILED: FIX_ARG,
   UNKNOWN_REF: FIX_PLAN, DUPLICATE_REF: FIX_PLAN, NODE_NOT_FOUND: FIX_PLAN, NODE_DEPTH_EXCEEDED: FIX_PLAN,
   PLAN_TOO_LARGE: "계획을 회차 몇 개씩 나눠 preview_curriculum_plan 을 여러 번 부르세요",
-  ROUND_NOT_FOUND: FIX_ARG, ROUND_AMBIGUOUS: FIX_ARG, TASK_NOT_FOUND: FIX_ARG, TASK_AMBIGUOUS: FIX_ARG, ASSIGNEE_NOT_MEMBER: FIX_PLAN, ASSIGNEE_AMBIGUOUS: FIX_PLAN,
+  ROUND_NOT_FOUND: FIX_ARG, ROUND_AMBIGUOUS: FIX_ARG, TASK_NOT_FOUND: FIX_ARG, TASK_AMBIGUOUS: FIX_ARG, NODE_AMBIGUOUS: FIX_ARG, ASSIGNEE_NOT_MEMBER: FIX_PLAN, ASSIGNEE_AMBIGUOUS: FIX_PLAN,
   STUDY_NOT_FOUND: "list_my_studies 로 slug 를 확인해 study 에 넣고 다시 부르세요",
   STUDY_AMBIGUOUS: "사용자에게 어느 스터디인지 물어본 뒤 study 에 그 slug 를 넣어 다시 부르세요",
+  // 0045 그림 올리기
+  FILE_NAME_TAKEN: "같은 이름을 바꾸려면 replace:true 로 prepare_image_upload 부터 다시 부르세요(다른 이름도 돼요)",
+  FILE_NOT_READY: "prepare_image_upload 결과의 curl 을 먼저 실행한 뒤 finish_image_upload 를 다시 부르세요",
+  FILE_TOO_LARGE: "파일을 줄여(SVG 2MB · 그 밖 10MB) prepare_image_upload 부터 다시 부르세요",
+  IMAGE_REJECTED: "파일을 고쳐 prepare_image_upload 부터 다시 부르세요(같은 이름 그대로 돼요)",
+  UPLOAD_EXPIRED: "prepare_image_upload 부터 다시 부르세요",
+  UPLOAD_NOT_FOUND: "prepare_image_upload 부터 다시 부르세요(uploadId 는 그 결과의 값)",
 };
 const REREAD = "같은 계획으로 preview_curriculum_plan 을 다시 부르세요(재시도 가능)";
 const REREAD_CODES = new Set(["STALE_VERSION", "PREVIEW_EXPIRED", "PREVIEW_NOT_FOUND"]);
@@ -58,6 +65,9 @@ const STOP: Record<string, string> = {
   UNDO_STALE: "되돌리기는 일정 변경만 돼요 — 그 뒤 바뀐 것은 사용자에게 웹에서 고치도록 안내하세요",
   TIMEOUT: SPLIT, PAYLOAD_TOO_LARGE: SPLIT,
   INTERNAL: "잠시 뒤 한 번 다시 시도하고, 계속되면 사용자에게 알리세요",
+  FILE_LIMIT_EXCEEDED: "사용자에게 웹에서 안 쓰는 그림을 빼도록 안내하세요(항목당 그림 20개)",
+  FILE_TYPE_NOT_ALLOWED: "그림(PNG·JPG·GIF·WEBP·SVG)만 올릴 수 있어요 — 다른 파일은 사용자에게 웹에서 올리도록 안내하세요",
+  RATE_LIMITED: "잠시 기다렸다가 다시 부르세요",
 };
 
 /** 오류 코드 → 다음 행동(분류·한 문장). DB 오류 문구(message)는 그대로 두고 이 문장만 덧붙인다 */
@@ -68,7 +78,7 @@ export function nextStep(code: string, details?: Record<string, unknown>): NextS
     return { kind: "fix", hint };
   }
   if (REREAD_CODES.has(code)) return { kind: "reread", hint: REREAD };
-  if (code === "API_RATE_LIMITED" && typeof details?.retryAfterSec === "number") {
+  if ((code === "API_RATE_LIMITED" || code === "RATE_LIMITED") && typeof details?.retryAfterSec === "number") {
     return { kind: "stop", hint: `${details.retryAfterSec}초 뒤에 다시 부르세요` };
   }
   return { kind: "stop", hint: STOP[code] ?? "사용자에게 오류 내용을 그대로 알리세요" };
