@@ -190,3 +190,10 @@
     transform: translateY(100%);
   }
 }
+
+/* 그림 크게 보기 — motion-safe: 로만 쓴다 */
+@keyframes lightbox-fade {
+  from {
+    opacity: 0;
+  }
+}
