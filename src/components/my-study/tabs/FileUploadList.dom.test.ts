@@ -28,3 +28,15 @@ describe("FileUploadList label/hint", () => {
     expect(b.className).toMatch(/h-11/);
   });
 });
+
+describe("FileUploadList 조각 복사 (md-images §4.2)", () => {
+  const row = (fileId: string, name: string) => ({ key: `saved:${fileId}`, fileId, name, size: 3, status: "ready" as const, progress: 100 });
+  const rows = [row("p", "구성도.png"), row("d", "자료.pdf")];
+  it("canCopy 인 줄만 44px 「조각 복사」, 제출(onCopy 없음)은 없다", () => {
+    const d = html({ rows, canCopy: (r) => r.fileId === "p", onCopy: () => {} });
+    const b = d.querySelector('button[aria-label="구성도.png 조각 복사"]');
+    expect(b?.className).toContain("h-11");
+    expect(d.querySelector('button[aria-label="자료.pdf 조각 복사"]')).toBeNull();
+    expect(html({ rows }).textContent).not.toContain("조각 복사");
+  });
+});

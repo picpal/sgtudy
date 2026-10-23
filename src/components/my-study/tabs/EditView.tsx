@@ -595,6 +595,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           onRemove={up.remove}
           onRetry={up.retry}
           canRetry={up.canRetry}
+          canCopy={up.canCopy}
+          onCopy={(r) => void up.copySnippet(r)}
           disabled={n.temp || savedFiles === null || saving}
         />
       </div>

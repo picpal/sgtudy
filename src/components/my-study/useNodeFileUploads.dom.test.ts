@@ -26,6 +26,7 @@ beforeEach(() => {
   api.upload.mockReset();
 });
 
+const toastSpy = vi.fn();
 const savedFile: FileMeta = { id: "s1", name: "기존.pdf", contentType: "application/pdf", size: 3, status: "ready" };
 const file = (n: string) => new File(["abc"], n, { type: "application/pdf" });
 const flush = () => act(async () => {
@@ -35,7 +36,7 @@ const flush = () => act(async () => {
 function Harness({ saved }: { saved: FileMeta[] }) {
   const [nodeId, sn] = useState<string | null>("21");
   const [selected, setSelected] = useState(saved.map((f) => f.id));
-  const hook = useNodeFileUploads({ nodeId, saved, selected, onSelect: setSelected, toast: () => {} });
+  const hook = useNodeFileUploads({ nodeId, saved, selected, onSelect: setSelected, toast: toastSpy });
   useEffect(() => {
     out.h = hook;
     out.setNode = sn;
@@ -136,5 +137,44 @@ describe("useNodeFileUploads", () => {
     expect(c.error).toBe("저장한 뒤 파일을 붙일 수 있어요");
     expect(out.h.uploading).toBe(false);
     expect(out.h.canRetry(c)).toBe(true);
+  });
+});
+
+describe("useNodeFileUploads — 그림 사전 검사·조각 복사 (B4)", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+  const png = (n: string, bytes: BlobPart) => new File([bytes], n, { type: "image/png" });
+  beforeEach(() => toastSpy.mockReset());
+
+  it("PNG 라고 고른 파일의 내용이 PNG 가 아니면 올리지 않고 줄 오류(다시 시도 없음)", async () => {
+    mount();
+    act(() => out.h.pick([png("가짜.png", "<!doctype html><script>x</script>")]));
+    await flush();
+    expect(api.upload).not.toHaveBeenCalled();
+    const row = out.h.rows.find((r) => r.name === "가짜.png")!;
+    expect(row.status).toBe("error");
+    expect(row.error).toBe("파일 내용이 PNG 그림이 아니에요");
+    expect(out.h.canRetry(row)).toBe(false);
+  });
+
+  it("진짜 PNG 는 올리고, 올린 그림 줄만 조각 복사 대상", async () => {
+    api.upload.mockResolvedValue(undefined);
+    api.register.mockImplementation((_n: string, f: { name: string; mime: string }) => Promise.resolve({ id: "img1", name: f.name, contentType: f.mime, size: 12, status: "ready" }));
+    mount();
+    act(() => out.h.pick([png("AWS VPC (1).png", PNG)]));
+    await flush();
+    expect(api.upload).toHaveBeenCalledTimes(1);
+    const row = out.h.rows.find((r) => r.fileId === "img1")!;
+    expect(out.h.canCopy(row)).toBe(true);
+    expect(out.h.canCopy(out.h.rows.find((r) => r.fileId === "s1")!)).toBe(false); // PDF
+
+    const write = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: write }, configurable: true });
+    await act(async () => out.h.copySnippet(row));
+    expect(write).toHaveBeenCalledWith("![](attachment:AWS%20VPC%20%281%29.png)");
+    expect(toastSpy).toHaveBeenLastCalledWith({ text: "그림 조각을 복사했어요 · 설명에 붙여 넣으세요", tone: "ok" });
+
+    write.mockRejectedValueOnce(new Error("denied"));
+    await act(async () => out.h.copySnippet(row));
+    expect(toastSpy.mock.lastCall?.[0].text).toContain("![](attachment:AWS%20VPC%20%281%29.png)");
   });
 });

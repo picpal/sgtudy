@@ -265,6 +265,8 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
         onRemove={up.remove}
         onRetry={up.retry}
         canRetry={up.canRetry}
+        canCopy={up.canCopy}
+        onCopy={(r) => void up.copySnippet(r)}
         disabled={n.temp || savedFiles === null || saving}
       />
       <p className="m-0 text-[12px] text-muted">

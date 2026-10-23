@@ -7,6 +7,8 @@ import { discardNodeUnattached, registerNodeFile } from "@/lib/api/nodeFiles";
 import { roomIdOfNode } from "@/lib/api/submission";
 import type { FileMeta } from "@/lib/api/types";
 import { uploadAttachment, uploadErrorText, type UploadFailure } from "@/lib/api/upload";
+import { imageKindLabel, imageSnippet, sniffImage } from "@/lib/files/imageCheck";
+import { isImageMime } from "@/lib/files/imageMime";
 import { NODE_FILE_LIMITS, nodeObjectKey, nodeRemovePlan, nodeRows } from "./nodeFiles";
 import { checkFile } from "./submission";
 import { slotsLeft, uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
@@ -30,6 +32,19 @@ type Act = UploadAction | { type: "reset" };
 const reducer = (rows: UploadRow[], a: Act) => (a.type === "reset" ? [] : uploadsReducer(rows, a));
 
 const CONCURRENCY = 2;
+const HEAD_BYTES = 64;
+
+/** 그림이라고 고른 파일의 앞부분이 그 형식인지(D27 웹 사전 검사) — 아니면 줄 오류 문구. 읽지 못하면 검사를 건너뛴다(서버·버킷이 다시 본다) */
+async function imageMismatch(file: File, mime: string): Promise<string | null> {
+  if (!isImageMime(mime)) return null;
+  let head: Uint8Array;
+  try {
+    head = new Uint8Array(await file.slice(0, HEAD_BYTES).arrayBuffer());
+  } catch {
+    return null;
+  }
+  return sniffImage(head) === mime ? null : `파일 내용이 ${imageKindLabel(mime)} 그림이 아니에요`;
+}
 const isFailure = (e: unknown): e is UploadFailure => typeof e === "object" && e !== null && "status" in e && typeof (e as UploadFailure).status === "number";
 
 export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }: Args) {
@@ -108,6 +123,13 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
       aborts.current.set(k, ac);
       void (async () => {
         try {
+          const bad = await imageMismatch(item.file, item.mime);
+          if (ac.signal.aborted || !alive.current) return;
+          if (bad) {
+            files.current.delete(k); // 다시 시도해도 같다 — 빼기만 남긴다
+            dispatch({ type: "fail", key: k, error: bad });
+            return;
+          }
           if (roomId.current?.node !== node) roomId.current = { node, p: roomIdOfNode(node) };
           const room = await roomId.current.p;
           const path = nodeObjectKey(room, node, k, item.file.name);
@@ -218,5 +240,18 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
 
   const uploading = pending.some((r) => r.status === "uploading");
 
-  return { rows, pick, remove, retry, canRetry, uploading, markError, discardUnsaved };
+  /** 올린 그림 줄 — 「조각 복사」 대상 */
+  const canCopy = (row: UploadRow) => row.status === "ready" && !!row.meta && isImageMime(row.meta.contentType);
+  /** 설명에 붙여 넣을 그림 조각을 클립보드로 — 실패하면(권한·http) 토스트에 조각 원문 */
+  const copySnippet = async (row: UploadRow) => {
+    const snippet = imageSnippet(row.name);
+    try {
+      await navigator.clipboard.writeText(snippet);
+      toast({ text: "그림 조각을 복사했어요 · 설명에 붙여 넣으세요", tone: "ok" });
+    } catch {
+      toast({ text: `복사하지 못했어요 · 설명에 직접 적어 주세요: ${snippet}`, tone: "bad" });
+    }
+  };
+
+  return { rows, pick, remove, retry, canRetry, uploading, markError, discardUnsaved, canCopy, copySnippet };
 }
