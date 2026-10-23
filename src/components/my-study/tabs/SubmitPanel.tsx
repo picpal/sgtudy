@@ -20,6 +20,8 @@ type Props = {
   title: string;
   /** 머리 아래 한 줄 — "여기서 제출해요 · 마감 10.18(일)" */
   sub?: string | null;
+  /** sub 자리 — below(기본): 제목 아래 줄 · inline: 제목과 같은 줄 오른쪽 끝(baseline 정렬, 좁으면 줄바꿈) */
+  subPlacement?: "below" | "inline";
   icon: "submit" | "exam" | "results";
   badge?: { status: TaskStatus; text: string } | null;
   headingRef?: Ref<HTMLHeadingElement>;
@@ -45,8 +47,9 @@ export function SubmitSlotPortal({ children }: { children?: ReactNode }) {
 }
 
 /** 자리 카드 한 장(포털 없이) — 「과제 제출」·「시험 응시」·「시험 결과」가 같은 머리(아이콘 · h2 · 한 줄 · 배지) */
-export function SlotCard({ id, title, sub, icon, badge, headingRef, children }: Props) {
+export function SlotCard({ id, title, sub, subPlacement = "below", icon, badge, headingRef, children }: Props) {
   // 표식: 결과 카드는 따로 — 「내가 하는 곳」(data-submit-panel)을 찾는 쪽이 결과 카드를 집지 않게
+  const inline = subPlacement === "inline";
   const mark = icon === "results" ? { "data-results-panel": "" } : { "data-submit-panel": "" };
   return (
     <section aria-labelledby={id} {...mark} className="flex min-w-0 flex-col gap-5 rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:px-4 max-sm:pb-7 max-sm:pt-5">
@@ -72,11 +75,11 @@ export function SlotCard({ id, title, sub, icon, badge, headingRef, children }: 
             </svg>
           )}
         </span>
-        <div className="flex min-w-0 flex-[1_1_160px] flex-col">
+        <div className={`flex min-w-0 flex-[1_1_160px] ${inline ? "flex-wrap items-baseline gap-x-3 gap-y-1" : "flex-col"}`}>
           <h2 id={id} ref={headingRef} tabIndex={-1} className="m-0 scroll-mt-4 text-[18px] font-bold text-ink outline-none">
             {title}
           </h2>
-          {sub && <p className="m-0 text-[12px] text-muted">{sub}</p>}
+          {sub && <p className={`m-0 text-[12px] text-muted${inline ? " ml-auto" : ""}`}>{sub}</p>}
         </div>
         {badge && (
           <span className={`inline-flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-[3px] text-[12px] font-bold ${BADGE_TONE[badge.status]}`}>

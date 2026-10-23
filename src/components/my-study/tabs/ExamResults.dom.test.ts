@@ -123,6 +123,14 @@ describe("ExamResults", () => {
     await mount();
     expect(m.results).toHaveBeenCalledWith("aws", "311");
     expect(head()).toContain("3/4 제출 · 평균 3.7/5 · 최고 5");
+    // 요약은 제목과 같은 머리 줄 컨테이너 안(오른쪽 끝, baseline) — 제목 아래 줄이 아니다
+    const h2 = host.querySelector("h2#exam-results-311")!;
+    const sum = h2.nextElementSibling as HTMLElement;
+    expect(sum.textContent).toBe("3/4 제출 · 평균 3.7/5 · 최고 5");
+    expect(sum.parentElement).toBe(h2.parentElement);
+    expect(h2.parentElement!.className).toMatch(/items-baseline/);
+    expect(h2.parentElement!.className).toMatch(/flex-wrap/);
+    expect(sum.className).toMatch(/ml-auto/);
     const rates = Array.from(host.querySelectorAll("ol > li")).map((li) => li.textContent);
     expect(rates).toEqual(["1.100%", "2.33%", "3.67%", "4.100%"]);
     const bars = host.querySelectorAll("[role=progressbar]");

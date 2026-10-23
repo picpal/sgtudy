@@ -66,7 +66,7 @@ export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
   const qs = data ? [...data.questions].sort((a, b) => a.ord - b.ord) : [];
 
   return (
-    <SlotCard id={`exam-results-${nodeId}`} title="시험 결과" sub={data ? resultsHead(data) : null} icon="results">
+    <SlotCard id={`exam-results-${nodeId}`} title="시험 결과" sub={data ? resultsHead(data) : null} subPlacement="inline" icon="results">
 
       {!data && !error && <div aria-busy="true" aria-label="결과 불러오는 중" className="h-[96px] rounded-[10px] bg-surface-3" />}
       {!data && error && (

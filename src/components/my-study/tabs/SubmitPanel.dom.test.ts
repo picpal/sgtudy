@@ -37,6 +37,20 @@ describe("SubmitPanel 자리", () => {
     expect(s.querySelector("h2")?.textContent).toBe("과제 제출");
     expect(s.textContent).toContain("본문");
   });
+  it("sub 는 기본 제목 아래 줄, subPlacement=inline 이면 제목과 같은 줄(ml-auto)", () => {
+    for (const placement of ["below", "inline"] as const) {
+      const el = createElement(SubmitPanel, { id: "x-title", title: "제목", sub: "요약", subPlacement: placement, icon: "exam" });
+      const h = document.body.appendChild(document.createElement("div"));
+      const r = createRoot(h);
+      act(() => r.render(el));
+      const p = h.querySelector("h2#x-title")!.nextElementSibling as HTMLElement;
+      expect(p.textContent).toBe("요약");
+      expect(p.classList.contains("ml-auto")).toBe(placement === "inline");
+      expect(p.parentElement!.classList.contains("flex-col")).toBe(placement === "below");
+      act(() => r.unmount());
+      h.remove();
+    }
+  });
   it("자리가 아직 붙지 않았으면(null) 그리지 않는다", () => {
     const host = mount(null);
     expect(host.querySelector("section")).toBeNull();
