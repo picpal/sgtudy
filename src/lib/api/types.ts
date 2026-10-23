@@ -440,6 +440,38 @@ export type ExamResults = {
   members: (Person & { status: TaskStatus; score: number | null; submittedAt: string | null; isLate: boolean | null })[];
 };
 
+/* ---------- 오답노트 (0046_wrong_note.sql) ---------- */
+/** 연습 기록 — 한 번도 다시 풀지 않았으면(외웠어요만 눌렀어도) null. lastAnswer = 마지막 연습 답(canon, 미답 null) */
+export type WrongNotePractice = { lastCorrect: boolean | null; correctCount: number; wrongCount: number; lastAnswer: unknown; lastAt: string | null };
+/** 공개된 시험의 오답 한 문항. question 에 answer·explanation 이 항상 있다(D5). no = 시험 안 번호(ord+1), mine = 제출 때 내 답(null = 미답) */
+export type WrongNoteItem = { question: ExamQuestion; no: number; mine: unknown; practice: WrongNotePractice | null; mastered: boolean };
+/** locked(정답 공개 전, D3) 이면 lockedCount·unlockDate 만 있고 items 키가 없다. 아니면 items(길이 ≥ 1) */
+export type WrongNoteExam = {
+  nodeId: string;
+  title: string;
+  endDate: string;
+  reveal: ExamReveal;
+  score: number | null;
+  maxScore: number | null;
+  correctCount: number | null;
+  questionCount: number;
+  locked: boolean;
+  lockedCount?: number;
+  unlockDate?: string;
+  items?: WrongNoteItem[];
+};
+/** 회차(루트 노드) 묶음 — 오답이 있는 시험만 */
+export type WrongNoteRound = { id: string; title: string; exams: WrongNoteExam[] };
+/** wrong = 공개된 오답(외운 것 포함) · retriedOk = 마지막 연습이 맞힘 · mastered = 외움 · locked = 잠긴 시험 lockedCount 합 */
+export type WrongNoteTotals = { wrong: number; retriedOk: number; mastered: number; locked: number };
+/** wrong_note_list — 방 탭. pending = 승인 대기(내용 없음). totals 는 초기값, 화면 정본은 클라이언트 totalsOf(D21) */
+export type WrongNote = { today: string; viewer: "member" | "pending"; hasExam: boolean; totals: WrongNoteTotals; rounds: WrongNoteRound[] };
+/** wrong_note_mine — 내 과제 「오답노트」 보기(D18). 방 id 순(me_tasks.studies 와 같은 순서·tone·status) */
+export type WrongNoteStudy = { slug: string; title: string; tone: Tone; status: RoomStatusDto; hasExam: boolean; totals: WrongNoteTotals; rounds: WrongNoteRound[] };
+export type WrongNoteMine = { today: string; studies: WrongNoteStudy[] };
+/** wrong_note_practice — 문항 id → 정오 + 갱신된 연습 행(정답·해설·합계 없음, D14·D21) */
+export type WrongNotePracticeResult = { results: Record<string, { correct: boolean; practice: WrongNotePractice }> };
+
 /* ---------- 공지 (0040_room_notices.sql) ---------- */
 /** read = 보는 사람이 현재 리비전을 확인했는지("다시 알리기" 뒤엔 false). edited = 제목·본문이 작성 1분 뒤 바뀜(고정·팝업 토글 제외) */
 export type Notice = {
