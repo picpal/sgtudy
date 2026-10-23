@@ -259,3 +259,33 @@ describe("MarkdownView 그림 — 못 불러오면 (D14)", () => {
     await act(async () => root.unmount());
   });
 });
+
+describe("MarkdownView 문서형(doc) 제목·구분선 여백", () => {
+  const src = "표\n\n---\n\n## 1. VPC 구조\n\n# 큰제목";
+  const docHtml = (doc: boolean) => renderToStaticMarkup(createElement(MarkdownView, { src, doc }));
+  it("doc 이면 제목이 커지고 위 여백·hr 여백이 붙는다", () => {
+    const h = docHtml(true);
+    expect(h).toContain("text-[18px] mt-[18px]");
+    expect(h).toContain("text-[20px] mt-[22px]");
+    expect(h).toContain("[hr+&]:mt-0");
+    expect(h).toContain('<hr class="my-[16px]');
+  });
+  it("기본(짧은 글 영역)은 그대로", () => {
+    const h = docHtml(false);
+    expect(h).not.toContain("mt-[18px]");
+    expect(h).toContain("text-[16px]");
+    expect(h).toContain('<hr class="my-1');
+  });
+  it("doc 은 노드 설명에만 붙는다", async () => {
+    const { readFileSync, readdirSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const hits: string[] = [];
+    const walk = (d: string) => readdirSync(d).forEach((f) => {
+      const p = join(d, f);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (/\.tsx$/.test(f) && /<MarkdownView\b[^>]*\bdoc\b/.test(readFileSync(p, "utf8"))) hits.push(f);
+    });
+    walk("src");
+    expect(hits).toEqual(["NodeDescription.tsx"]);
+  });
+});

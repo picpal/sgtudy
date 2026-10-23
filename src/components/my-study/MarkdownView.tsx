@@ -229,9 +229,17 @@ function ListBlock({ b, level, images }: { b: Extract<MdBlock, { type: "ul" | "o
 
 const ALIGN = { none: undefined, left: "left", center: "center", right: "right" } as const;
 
-function Block({ b, images }: { b: MdBlock; images?: ImageResolver }) {
+/** 문서형(긴 가이드) 제목 — 블록 사이 gap(10px) 위에 더하는 여백. 첫 요소·구분선 바로 뒤는 0 */
+const DOC_H = [
+  "text-[20px] mt-[22px] mb-[2px]",
+  "text-[18px] mt-[18px] mb-[2px]",
+  "text-[16px] mt-[10px]",
+] as const;
+
+function Block({ b, images, doc = false }: { b: MdBlock; images?: ImageResolver; doc?: boolean }) {
   switch (b.type) {
     case "h": {
+      if (doc) return createElement(headingTag(b.level), { className: `m-0 font-bold text-ink first:mt-0 [hr+&]:mt-0 ${DOC_H[Math.min(b.level, 3) - 1]}` }, <Inline text={b.text} />);
       const size = b.level === 1 ? "text-[17px]" : b.level === 2 ? "text-[16px]" : "text-[15px]";
       return createElement(headingTag(b.level), { className: `m-0 font-bold text-ink ${size}` }, <Inline text={b.text} />);
     }
@@ -271,10 +279,10 @@ function Block({ b, images }: { b: MdBlock; images?: ImageResolver }) {
         </pre>
       );
     case "hr":
-      return <hr className="my-1 border-0 border-t border-line" />;
+      return <hr className={`${doc ? "my-[16px]" : "my-1"} border-0 border-t border-line`} />;
     case "table":
       return (
-        <div className="thin-scroll overflow-x-auto">
+        <div className={`thin-scroll overflow-x-auto${doc ? " [p+&]:mt-[6px]" : ""}`}>
           <table className="w-full border-collapse text-[13px] leading-[1.6]">
             <thead>
               <tr>
@@ -303,13 +311,13 @@ function Block({ b, images }: { b: MdBlock; images?: ImageResolver }) {
   }
 }
 
-/** 마크다운 본문(스터디 소개·회차/과제 설명) — 파싱 결과를 React 요소로만 그린다. images 가 있으면 그림 토큰을 그 노드의 첨부로 푼다 */
+/** 마크다운 본문(스터디 소개·회차/과제 설명) — doc 이면 긴 가이드용 제목·구분선 여백(노드 설명 전용) — 파싱 결과를 React 요소로만 그린다. images 가 있으면 그림 토큰을 그 노드의 첨부로 푼다 */
 // memo + 파싱 useMemo — 라이트박스를 열고 닫는 등 부모만 다시 그릴 때 13~18k자 설명을 다시 파싱·그리지 않게
-export const MarkdownView = memo(function MarkdownView({ src, className = "text-[14px] leading-[1.75]", images }: { src: string; className?: string; images?: ImageResolver }) {
+export const MarkdownView = memo(function MarkdownView({ src, className = "text-[14px] leading-[1.75]", images, doc = false }: { src: string; className?: string; images?: ImageResolver; doc?: boolean }) {
   const blocks = useMemo(() => parseMarkdown(src), [src]);
   return (
     <div className={`flex flex-col gap-[10px] text-ink-2 ${className}`}>
-      {blocks.map((b, i) => <Block key={i} b={b} images={images} />)}
+      {blocks.map((b, i) => <Block key={i} b={b} images={images} doc={doc} />)}
     </div>
   );
 });
