@@ -313,7 +313,7 @@ describe("CommentSection — 딥링크 #comment-{id}", () => {
 });
 
 describe("CommentSection — 리뷰 후속", () => {
-  it("M7: 딥링크 조회 중에 [새로 고침]이 끼어도 딥링크 목록으로 끝을 맺고(스크롤·해시 제거), 같은 링크를 다시 누르면 다시 부른다", async () => {
+  it("M7: 딥링크 조회 중에 창 복귀 조회가 끼어도 딥링크 목록으로 끝을 맺고(스크롤·해시 제거), 같은 링크를 다시 누르면 다시 부른다", async () => {
     window.history.replaceState(null, "", "/my-study/aws?task=3");
     let release: () => void = () => {};
     api.fetchComments.mockImplementation((_s: string, _n: string, o?: { from?: string }) =>
@@ -324,7 +324,10 @@ describe("CommentSection — 리뷰 후속", () => {
     await mount();
     expect(items().map((li) => li.dataset.comment)).toEqual(["13"]);
     await act(async () => announceHash("/my-study/aws?task=3#comment-12")); // 딥링크 조회 출발(응답 대기)
-    await act(async () => btn("새로 고침")!.click()); // 끼어든 최신 쪽 조회 — 먼저 끝난다
+    const now = Date.now();
+    const spy = vi.spyOn(Date, "now").mockReturnValue(now + 31_000);
+    await act(async () => window.dispatchEvent(new Event("focus"))); // 끼어든 최신 쪽 조회 — 먼저 끝난다
+    spy.mockRestore();
     await flush();
     await act(async () => release());
     await flush();
@@ -336,6 +339,11 @@ describe("CommentSection — 리뷰 후속", () => {
     await flush();
     expect(api.fetchComments.mock.calls.length).toBe(calls + 1);
     expect(scrolled).toEqual(["comment-12", "comment-12"]);
+  });
+  it("「새로 고침」 버튼은 없다", async () => {
+    api.fetchComments.mockResolvedValue(P([C("13")]));
+    await mount();
+    expect(btn("새로 고침")).toBeUndefined();
   });
   it("M12: 딥링크 창(hasNewer)에서는 「이전 댓글 더 보기」 에 숫자가 없다", async () => {
     window.history.replaceState(null, "", "/my-study/aws?task=3#comment-120");

@@ -331,9 +331,7 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
             </span>
           ) : mentions > COMMENT_LIMITS.mentionsMax ? (
             <span className="font-medium text-warn">한 댓글에서 {COMMENT_LIMITS.mentionsMax}명까지 부를 수 있어요</span>
-          ) : (
-            <span className="max-sm:hidden">**굵게** _기울임_ `코드` [링크](주소) · Ctrl/⌘+Enter 등록</span>
-          )}
+          ) : null}
           {len > COUNT_FROM && (
             <span data-count className={`ml-2 ${len > COMMENT_LIMITS.bodyMax ? "font-semibold text-warn" : ""}`}>
               {len.toLocaleString("ko-KR")}/{COMMENT_LIMITS.bodyMax.toLocaleString("ko-KR")}

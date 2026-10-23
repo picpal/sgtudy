@@ -62,7 +62,7 @@ const absTime = (iso: string) => new Date(iso).toLocaleString("ko-KR", { timeZon
 
 /**
  * 회차·과제 보기 상세 하단 「댓글」 (스펙 §6.3) — 오래된 → 최신, 처음엔 최신 50 + [이전 댓글 더 보기], 아래 입력창.
- * 갱신은 실시간 없이 등록·수정·삭제 뒤 · 창으로 돌아올 때(30초 지났으면) · [새로 고침] · 딥링크 도착(D19).
+ * 갱신은 실시간 없이 등록·수정·삭제 뒤 · 창으로 돌아올 때(30초 지났으면) · 딥링크 도착(D19).
  * 딥링크 #comment-{id}: from={id} 로 불러 그 댓글을 꼭 넣고, 다 그려지면 useHashPrefixTarget 이 가운데로 스크롤 + 포커스, 2초 강조(D16)
  */
 export function CommentSection({ slug, nodeId, members, meId, viewerPending, toast }: Props) {
@@ -102,7 +102,7 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
     lastAt.current = Date.now();
   }, []);
 
-  // 처음·[새로 고침]·창 복귀 — 최신 쪽
+  // 처음·창 복귀 — 최신 쪽
   useEffect(() => {
     if (viewerPending) return;
     const my = ++seq.current;
@@ -115,7 +115,7 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
   // 딥링크 — 그 댓글부터(from). 없거나 지워졌으면 서버가 최신 쪽을 주고 target 으로 알린다
   useEffect(() => {
     if (!want || viewerPending) return;
-    // 딥링크는 자기 번호로만 버린다(더 새 딥링크가 왔을 때) — [새로 고침]·창 복귀 조회가 끼어도 반드시 끝을 맺어(done) 훅이 찾아가고 해시를 지운다 (리뷰 M7)
+    // 딥링크는 자기 번호로만 버린다(더 새 딥링크가 왔을 때) — 창 복귀 조회가 끼어도 반드시 끝을 맺어(done) 훅이 찾아가고 해시를 지운다 (리뷰 M7)
     const myDeep = ++deep.current;
     deepBusy.current = true;
     const from = commentIdOfHash(want);
@@ -356,9 +356,6 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
           ) : (
             page.writeBlock && page.writeBlock !== "exam_locked" && note(BLOCK_TEXT[page.writeBlock])
           )}
-          <button type="button" onClick={refresh} className="h-11 self-start rounded-[22px] px-2 text-[13px] font-semibold text-ink-3 hover:text-ink">
-            새로 고침
-          </button>
         </>
       )}
     </section>

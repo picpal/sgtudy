@@ -54,6 +54,10 @@ afterEach(() => {
 });
 
 describe("CommentComposer — 멘션 자동완성(MentionPicker)", () => {
+  it("입력창 아래에 마크다운·단축키 안내 문구가 없다", () => {
+    mount();
+    expect(document.body.textContent).not.toContain("Ctrl/⌘+Enter 등록");
+  });
   it("@ 를 치면 그룹장·ACTIVE 후보가 열린다 — 본인은 빠진다, ARIA combobox/listbox", () => {
     mount();
     expect(area().getAttribute("role")).toBe("combobox");
