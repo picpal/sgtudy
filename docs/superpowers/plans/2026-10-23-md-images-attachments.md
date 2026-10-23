@@ -214,6 +214,13 @@
 | 2 | B | 없음 | 썸네일·라이트박스 |
 | 3 | C | **0045 먼저 push → 그다음 웹 배포** | 웹이 먼저 나가면 3인자 `node_files_set` 이 없어 저장이 실패한다 — 반드시 DB 먼저 |
 
+C 배포 순서(C5, 2026-10-23 로컬 통합 확인 뒤):
+
+- [ ] ① 사용자 승인 → `supabase db push`(0045). **0046 이 이미 호스팅에 있으면 0045 는 번호가 앞이라 `--include-all` 이 필요하다**(0045 는 0046 과 독립 — 순서가 바뀌어 적용돼도 결과 같음)
+- [ ] ② Vercel 배포(웹 저장 경로가 3인자 `node_files_set` 을 부른다 — ① 전에 나가면 편집 저장이 실패)
+- [ ] ③ 배포 뒤 호스팅 실측: 배포판에서 SVG 첨부 1개 → 설명 그림 · 라이트박스, inline 서명 URL 응답 헤더 기록(스펙 §7 표 마지막 줄)
+- [ ] ④ javis 세션 안내: 도구 `prepare_image_upload`(study·node·fileName·contentType·size·replace?) → 결과의 curl 실행(@ 뒤 로컬 경로) → `finish_image_upload(uploadId)` → `preview/apply_curriculum_plan` 의 update `set.descriptionMd` 에 조각 `![alt](attachment:이름)`. SVG 2MB · 그 밖 10MB · 항목당 그림 20 · 같은 이름은 `replace:true` · 이름에 공백·괄호·따옴표·%#? 불가 · MCP 서버를 재연결해야 새 도구가 보인다
+
 ## 결정에 따른 변경 (사용자가 권장안을 바꿀 때)
 
 | 바뀌는 결정 | 고칠 Task |

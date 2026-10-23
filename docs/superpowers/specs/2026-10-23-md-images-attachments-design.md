@@ -314,7 +314,21 @@ node_upload_commit(p_slug text, p_upload uuid, p_dry boolean) → jsonb         
 
 ## 7. 남은 위험 · 나중
 
-- **anon Storage 정책 동작 가정**: `createSignedUploadUrl` 이 호출자(anon) 의 INSERT RLS 로 판정하고, 업로드 시점에 티켓 만료를 다시 보지 않을 수 있다(서명 수명 2h 로 제한됨). 계획 C0 스파이크에서 로컬로 확인하고, 다르게 동작하면 대안 = anon 키로 직접 `POST /storage/v1/object/attachments/{path}`(업로드 시점 RLS) — curl 명령만 바뀐다.
+- **anon Storage 정책 동작 가정** → **C0 실측으로 확인(2026-10-23, 로컬 storage-api v1.80.2) — 서명 업로드 그대로 간다(대안 불필요)**:
+
+  | 확인 | 결과 |
+  |---|---|
+  | anon `createSignedUploadUrl(path)` · 열린 티켓 있는 경로 | 성공(2h URL) |
+  | 같은 호출 · 티켓 없는 경로 | 403 `new row violates row-level security policy` — 서명 단계에서 anon INSERT RLS 로 판정 |
+  | `curl -X PUT --data-binary` (Content-Type 지정) | 200 `{"Key":…}` · `storage.objects.owner_id` **비어 있음**(anon) · `metadata.mimetype` = 보낸 Content-Type · `metadata.size` = 실제 바이트 |
+  | 서명 뒤 티켓을 닫고 PUT | **올라간다** — 업로드 시점엔 RLS 를 다시 보지 않는다(서명 수명 2h 동안 그 경로 1개). 완료는 티켓이 막으므로(완료된·만료된 티켓은 commit 불가) 그런 객체는 행이 없어 24h 고아 정리 대상(T7 그대로) |
+  | 같은 URL 로 다시 PUT(`x-upsert: true` 포함) | 409 `KeyAlreadyExists` — 덮어쓰기 없음 |
+  | Content-Type 없음 / `text/html` | 415 `InvalidMimeType` — 버킷 MIME 목록이 막는다(curl 에 `-H 'Content-Type: …'` 필수) |
+  | anon `download`·`createSignedUrl` · 티켓 열림 / 닫힘 | 성공 / `Object not found` · Range `bytes=0-63` → 206 |
+  | 응답 헤더(로컬 inline 서명 URL) | `Content-Type: image/png` 만 — `X-Content-Type-Options`·`Content-Security-Policy`·`Content-Disposition` 없음. `&download=` 붙이면 `content-disposition: attachment` |
+  | 응답 헤더(호스팅, 잘못된 토큰 오류 응답만 관찰 — 실물 서명 URL 은 배포 뒤) | `server: cloudflare` · nosniff·CSP 없음 |
+
+  결론에 따른 구현: 완료(`node_upload_commit`)는 객체 업로더(owner_id)가 아니라 **티켓 주인**을 본다 · 실물 MIME·크기는 `metadata` 로 재검사. T3(Storage 출처에서 SVG 를 최상위로 열기)의 남는 위험은 그대로 — Storage 가 nosniff·CSP 를 주지 않으므로 경계는 D15(`<img>` 로만·「원본 열기」 없음)와 D27 검사다.
 - **썸네일 무게**: 원본을 그대로 줄여 그린다. 10MB PNG 20장 노드는 모바일에서 무겁다 → 업로드 안내에 "그림은 1MB 이하 권장", 나중에 업로드 시 브라우저 리사이즈 또는 Supabase 이미지 변환.
 - **SVG 검사 우회**(D27): 방어 심층일 뿐. 경계는 `<img>` 렌더 · 「원본 열기」 없음 · Storage 출처 분리.
 - **D30 옛 탭**: 배포 직후 열려 있던 편집 화면은 2인자 판으로 저장해 MCP 그림을 지울 수 있다.
