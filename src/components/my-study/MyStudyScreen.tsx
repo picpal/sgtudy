@@ -70,7 +70,6 @@ function syncListTab(tab: TabId) {
   if (readItem(window.location.search) !== null || (sp.get("tab") ?? "overview") === tab) return;
   const u = new URL(window.location.href);
   u.searchParams.set("tab", tab);
-  if (tab !== "wrong") u.searchParams.delete("round"); // 오답노트 회차 상세(?round=)는 그 탭에서만
   window.history.replaceState(null, "", `${u.pathname}?${u.searchParams.toString()}${u.hash}`);
 }
 
@@ -119,8 +118,6 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const tree = useMemo(() => buildTree(cur, S.ov, today), [cur, S.ov, today]);
   const savedOv = useMemo(() => stripFieldOv(S.ov), [S.ov]);
   const savedTree = useMemo(() => buildTree(cur, savedOv, today), [cur, savedOv, today]);
-  // 오답노트 회차 카드의 기간 — 오답노트 응답에는 회차 날짜가 없다(루트 노드 = 회차)
-  const roundPeriods = useMemo(() => Object.fromEntries(cur.nodes.filter((n) => n.parentId === null).map((n) => [n.id, { startDate: n.startDate, endDate: n.endDate }])), [cur.nodes]);
   const room = useMemo(() => toStudyRoom(detail, savedTree, today, me?.id ?? ""), [detail, savedTree, today, me]);
   const groups = useMemo(() => toSidebarGroups(studies, today), [studies, today]);
   // 연 곳 = 지금 탭 — 상세의 [← 보드] 와 브라우저 뒤로 가기(아래 backTab)가 같은 탭으로 돌아간다
@@ -518,7 +515,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
                       {S.tab === "board" && <BoardTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                       {S.tab === "calendar" && <CalendarTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} />}
                       {S.tab === "gantt" && <GanttTab tree={savedTree} S={S} update={update} goLeaf={goLeaf} isLeader={isLeader} />}
-                      {S.tab === "wrong" && <WrongNoteTab slug={detail.slug} viewerPending={detail.me?.state === "pending"} toast={setToast} periods={roundPeriods} />}
+                      {S.tab === "wrong" && <WrongNoteTab slug={detail.slug} viewerPending={detail.me?.state === "pending"} toast={setToast} />}
                     </section>
                     {S.tab === "overview" && (
                       <JoinInfoCard
