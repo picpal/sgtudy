@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoomDetail } from "@/lib/api/types";
+import { revalidateOnChange } from "@/components/room-new/validate";
 import { RECRUIT_CHANGED, buildPatch, dangerOf, lockedOf, mergeServerFields, saveSteps, valuesOf, validateSettings } from "./settings";
 
 const TODAY = "2026-10-12";
@@ -36,8 +37,8 @@ describe("lockedOf — 서버 room_update 의 상태별 잠금과 같다", () =>
     expect(lockedOf({ status: "draft", archived: false }).size).toBe(0);
     expect(lockedOf({ status: "recruit", archived: false }).size).toBe(0);
   });
-  it("진행중: 시작일·최소 인원·참가 방식·그룹장 과제 수행 (공개 여부는 열림, 0039)", () => {
-    expect([...lockedOf({ status: "active", archived: false })].sort()).toEqual(["joinMode", "leaderDoesTasks", "minMembers", "startDate"]);
+  it("진행중: 최소 인원·참가 방식·그룹장 과제 수행 (공개 여부 0039·시작일 0048 은 열림)", () => {
+    expect([...lockedOf({ status: "active", archived: false })].sort()).toEqual(["joinMode", "leaderDoesTasks", "minMembers"]);
   });
   it("종료·보관: 전부", () => {
     expect(lockedOf({ status: "ended", archived: false }).size).toBe(11);
@@ -82,6 +83,20 @@ describe("validateSettings — 방 만들기 검사 + 바뀐 칸 기준", () => 
     const d = { ...base, status: "active" as const, startDate: "2026-10-01" };
     expect(validateSettings(valuesOf(d), { ...valuesOf(d), endDate: "2026-10-11" }, TODAY, d).endDate).toBe("진행중에는 종료일을 오늘 이후로만 바꿀 수 있어요");
     expect(validateSettings(valuesOf(d), { ...valuesOf(d), endDate: "2026-10-12" }, TODAY, d)).toEqual({});
+  });
+  it("진행중 시작일은 오늘까지 — 과거로 앞당길 수 있고(0048) 1년 상한은 그대로", () => {
+    const d = { ...base, status: "active" as const, startDate: "2026-10-05", endDate: "2026-12-31" };
+    expect(validateSettings(valuesOf(d), { ...valuesOf(d), startDate: "2026-09-21" }, TODAY, d)).toEqual({});
+    expect(validateSettings(valuesOf(d), { ...valuesOf(d), startDate: "2026-10-12" }, TODAY, d)).toEqual({});
+    expect(validateSettings(valuesOf(d), { ...valuesOf(d), startDate: "2026-10-13" }, TODAY, d).startDate).toBe("진행중에는 시작일을 오늘 이후로 바꿀 수 없어요");
+    expect(validateSettings(valuesOf(d), { ...valuesOf(d), startDate: "2025-12-01" }, TODAY, d).endDate).toBe("기간은 최대 1년이에요");
+  });
+  it("입력 중 오류 갱신도 상태별 규칙 — 진행중 시작일을 과거로 고치면 오류가 사라진다", () => {
+    const d = { ...base, status: "active" as const, startDate: "2026-10-05" };
+    const errs = { startDate: "진행중에는 시작일을 오늘 이후로 바꿀 수 없어요" };
+    const next = { ...valuesOf(d), startDate: "2026-09-28" };
+    expect(revalidateOnChange(errs, "startDate", next, TODAY, (v, t) => validateSettings(valuesOf(d), v, t, d))).toEqual({});
+    expect(revalidateOnChange(errs, "startDate", next, TODAY).startDate).toBe("시작일은 오늘 이후여야 해요"); // 방 만들기 규칙(기본)은 그대로
   });
   it("제목·한 줄 소개 필수", () => {
     const e = validateSettings(valuesOf(base), { ...valuesOf(base), title: " ", intro: "" }, TODAY, base);

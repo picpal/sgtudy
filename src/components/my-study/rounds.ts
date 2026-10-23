@@ -240,8 +240,12 @@ export function dropPlan(nodes: TreeNode[], dragId: string, overId: string, half
 }
 
 /** before: 시작일 앞에 걸친 일정이 있다 — 종료일 늘리기로는 못 맞추고 회차·과제 기간을 고쳐야 한다 */
-export type PeriodGap = { count: number; text: string; fitEnd: string | null; before: boolean };
-type PeriodNode = { parentId: string | null; startDate: string; endDate: string; archived: boolean };
+/**
+ * key: 「그대로 두기」 기억용 — 기간 밖으로 걸친 회차(과제는 자기 회차로 묶음)를 앞·뒤로 나눈 id 목록. 개수 문구·방 기간이 아니라
+ *   이것만 보므로, 같은 회차에 과제를 더하거나 종료일을 늘려도 그대로고 새 회차가 밖으로 나가거나 걸친 쪽이 바뀌면 달라진다
+ */
+export type PeriodGap = { count: number; text: string; fitEnd: string | null; fitStart: string | null; before: boolean; key: string };
+type PeriodNode = { id: string; parentId: string | null; startDate: string; endDate: string; archived: boolean };
 
 /**
  * 방 기간을 벗어난 일정 — 서버 PERIOD_OUTSIDE_ROOM 과 같은 판정(보관 제외 모든 노드: 시작일 앞 또는 종료일 뒤로 걸치면).
@@ -249,6 +253,7 @@ type PeriodNode = { parentId: string | null; startDate: string; endDate: string;
  * 화면 필터·미저장 수정과 무관)로 여기서 본다. 회차(parentId 없음)와 과제를 나눠 센다. 없으면 null.
  * fitEnd: 종료일 뒤로 넘친 게 있고, 보관 제외 전체 노드의 마지막 마감(진행중 room_update 규칙: 마지막 과제 마감 이후)이
  * 1년 상한 안이면 그 날짜 — 아니면 null(회차 편집으로만)
+ * fitStart: 시작일 앞으로 걸친 게 있고, 보관 제외 전체 노드의 가장 이른 시작일로 앞당겨도 지금 종료일이 1년 상한 안이면 그 날짜 — 아니면 null
  */
 export function roundsOutsidePeriod(nodes: PeriodNode[], period: { start: string; end: string }): PeriodGap | null {
   const live = nodes.filter((n) => !n.archived);
@@ -260,7 +265,17 @@ export function roundsOutsidePeriod(nodes: PeriodNode[], period: { start: string
   const text = `${what}가 스터디 기간(${mmdd(period.start)} – ${endPart(period.start, period.end)})을 벗어나요`;
   const lastEnd = live.reduce((m, n) => (n.endDate > m ? n.endDate : m), period.end);
   const fitEnd = lastEnd > period.end && lastEnd <= maxEndDate(period.start) ? lastEnd : null;
-  return { count: out.length, text, fitEnd, before: out.some((n) => n.startDate < period.start) };
+  const firstStart = live.reduce((m, n) => (n.startDate < m ? n.startDate : m), period.start);
+  const fitStart = firstStart < period.start && period.end <= maxEndDate(firstStart) ? firstStart : null;
+  const parentOf = new Map(nodes.map((n) => [n.id, n.parentId]));
+  const roundOfId = (id: string) => {
+    let cur = id;
+    for (let p = parentOf.get(cur); p; p = parentOf.get(cur)) cur = p;
+    return cur;
+  };
+  const roundIds = (side: PeriodNode[]) => [...new Set(side.map((n) => roundOfId(n.id)))].sort().join(",");
+  const key = `b:${roundIds(out.filter((n) => n.startDate < period.start))}|a:${roundIds(out.filter((n) => n.endDate > period.end))}`;
+  return { count: out.length, text, fitEnd, fitStart, before: out.some((n) => n.startDate < period.start), key };
 }
 
 /**

@@ -27,6 +27,9 @@ export const approveApplicant = (slug: string, userId: string, client?: Db) => r
 /** 종료일만 바꾼다(room_update, 그룹장 전용). 모집 전·중엔 1년 상한, 진행중엔 오늘·마지막 과제 마감 이후만 — 서버가 검사 */
 export const updateRoomEndDate = (slug: string, endDate: string, client?: Db) =>
   rpc<RoomDetail & { warnings: { code: string; nodeId: string }[] }>("room_update", { p_slug: slug, p_patch: { endDate } }, client);
+/** 시작일만 바꾼다(room_update, 그룹장 전용). 진행중엔 오늘 이하 — 앞당겨 지난 주차를 등록, 늦추기는 가장 이른 일정까지(0048) — 서버가 검사 */
+export const updateRoomStartDate = (slug: string, startDate: string, client?: Db) =>
+  rpc<RoomDetail & { warnings: { code: string; nodeId: string }[] }>("room_update", { p_slug: slug, p_patch: { startDate } }, client);
 export const rejectApplicant = (slug: string, userId: string, client?: Db) => rpc<MembershipResult>("room_reject", { p_slug: slug, p_user: userId }, client);
 
 export type StatusAction = "openRecruit" | "start";

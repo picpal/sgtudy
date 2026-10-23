@@ -72,12 +72,12 @@ const RELATED: Partial<Record<keyof NewRoomValues, (keyof NewRoomValues)[]>> = {
 
 /**
  * 입력 중 오류 갱신 (V1-01) — 이미 떠 있는 오류만 다시 계산한다. 바뀐 칸(과 묶인 칸)이 유효해지면 지우고,
- * 아직 틀리면 지금 값에 맞는 문구로 바꾼다. 새 오류는 만들지 않는다(그건 제출 때).
+ * 아직 틀리면 지금 값에 맞는 문구로 바꾼다. 새 오류는 만들지 않는다(그건 제출 때). validate: 방 설정은 validateSettings(상태별 규칙)
  */
-export function revalidateOnChange(errors: Errors, changed: keyof NewRoomValues, next: NewRoomValues, today: string): Errors {
+export function revalidateOnChange(errors: Errors, changed: keyof NewRoomValues, next: NewRoomValues, today: string, validate: (v: NewRoomValues, today: string) => Errors = validateNewRoom): Errors {
   const keys = (RELATED[changed] ?? [changed]).filter((k) => errors[k]);
   if (!keys.length) return errors;
-  const fresh = validateNewRoom(next, today);
+  const fresh = validate(next, today);
   const out = { ...errors };
   for (const k of keys) {
     if (fresh[k]) out[k] = fresh[k];

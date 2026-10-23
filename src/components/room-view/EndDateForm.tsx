@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toApiError } from "@/lib/api/errors";
-import { updateRoomEndDate } from "@/lib/api/leader";
+import { updateRoomEndDate, updateRoomStartDate } from "@/lib/api/leader";
 import type { RoomDetail } from "@/lib/api/types";
 import { DATE_NO_OVERFLOW_CLASS } from "@/components/room-new/fields";
 
 type Props = {
   slug: string;
+  /** 바꿀 칸 — 기본 종료일. 시작일은 진행목표/개요 「시작일 앞당기기」(0048) */
+  field?: "startDate" | "endDate";
   /** 처음 채울 날짜 — 시작이 막혔으면 상한, 회차가 넘치면 마지막 회차 마감 */
   initial: string;
   min?: string;
@@ -19,10 +21,11 @@ type Props = {
 };
 
 /**
- * 방 종료일만 바꾸는 작은 폼 (room_update {endDate}, 그룹장 전용) — 방 설정 화면이 아직 없어 필요한 자리에서 바로 연다.
+ * 방 종료일(또는 시작일)만 바꾸는 작은 폼 (room_update {endDate|startDate}, 그룹장 전용) — 방 설정 화면이 아직 없어 필요한 자리에서 바로 연다.
  * 그룹장 패널("지금 시작"이 1년 상한에 막힘)·진행목표/개요("기간 맞추기")가 같이 쓴다. 검사는 서버가 하고 문구를 그대로 보여 준다
  */
-export function EndDateForm({ slug, initial, min, max, hint, onSaved, onCancel }: Props) {
+export function EndDateForm({ slug, field = "endDate", initial, min, max, hint, onSaved, onCancel }: Props) {
+  const isStart = field === "startDate";
   const [value, setValue] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -34,9 +37,9 @@ export function EndDateForm({ slug, initial, min, max, hint, onSaved, onCancel }
     setBusy(true);
     setError("");
     try {
-      onSaved(await updateRoomEndDate(slug, value));
+      onSaved(await (isStart ? updateRoomStartDate : updateRoomEndDate)(slug, value));
     } catch (e) {
-      setError(toApiError(e).message || "종료일을 바꾸지 못했어요 · 잠시 후 다시 시도해 주세요");
+      setError(toApiError(e).message || `${isStart ? "시작일" : "종료일"}을 바꾸지 못했어요 · 잠시 후 다시 시도해 주세요`);
       setBusy(false);
     }
   };
@@ -54,7 +57,7 @@ export function EndDateForm({ slug, initial, min, max, hint, onSaved, onCancel }
       className="flex flex-col gap-2"
     >
       <label className="flex flex-col gap-1 text-[12px] font-semibold text-ink-3">
-        새 종료일
+        {isStart ? "새 시작일" : "새 종료일"}
         <input
           ref={input}
           type="date"

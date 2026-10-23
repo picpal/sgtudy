@@ -5,7 +5,8 @@ import { validateNewRoom, type NewRoomValues } from "@/components/room-new/valid
 /**
  * 방 설정 (QA Q3-1·Q2-2) — 방 만들기 폼과 같은 값 모양(NewRoomValues). 서버 규칙(0039 room_update · 0004 room_delete/room_archive)을 그대로 비춘다:
  * - 준비중·모집중: 모두 수정, 삭제 가능
- * - 진행중: 시작일·최소 인원·참가 방식·그룹장 과제 수행은 잠김(공개 여부는 바꿀 수 있음, 0039), 종료일은 오늘(과 마지막 과제 마감) 이후로만. 삭제 대신 보관
+ * - 진행중: 최소 인원·참가 방식·그룹장 과제 수행은 잠김(공개 여부는 바꿀 수 있음, 0039), 종료일은 오늘(과 마지막 과제 마감) 이후로만,
+ *   시작일은 오늘 이하로만(앞당겨 지난 주차를 등록 · 늦추기는 가장 이른 일정까지 — 서버가 검사, 0048). 삭제 대신 보관
  * - 종료·보관: 수정 불가. 종료는 보관, 보관은 풀기만
  */
 type Src = Pick<RoomDetail, "title" | "intro" | "descriptionMd" | "rulesMd" | "startDate" | "endDate" | "maxMembers" | "minMembers" | "isPublic" | "joinMode" | "leaderDoesTasks">;
@@ -29,7 +30,7 @@ export function mergeServerFields(cur: NewRoomValues, next: Src, changed: readon
 }
 
 const ALL: Field[] = ["title", "intro", "descriptionMd", "rulesMd", "startDate", "endDate", "maxMembers", "minMembers", "isPublic", "joinMode", "leaderDoesTasks"];
-const ACTIVE_LOCKED: Field[] = ["startDate", "minMembers", "joinMode", "leaderDoesTasks"];
+const ACTIVE_LOCKED: Field[] = ["minMembers", "joinMode", "leaderDoesTasks"];
 
 export function lockedOf(d: State): Set<Field> {
   if (d.archived || d.status === "ended") return new Set(ALL);
@@ -46,6 +47,9 @@ export function lockReason(d: State): string {
 }
 
 const num = (s: string) => Number(s.trim());
+export const ACTIVE_START_FUTURE = "진행중에는 시작일을 오늘 이후로 바꿀 수 없어요";
+/** 진행중 시작일 칸 아래 — 앞당기기 용도와 늦추기 한도(서버가 가장 이른 일정으로 다시 본다) */
+export const ACTIVE_START_HINT = "오늘까지 · 앞당기면 지난 주차 회차를 등록할 수 있어요 · 늦출 때는 가장 이른 일정까지만";
 
 /** 바뀐 칸만 room_update patch(camelCase)로. 문자열은 trim 해서 비교 — 안 바뀐 기간은 보내지 않는다(서버가 기간을 바꿀 때만 검사) */
 export function buildPatch(initial: NewRoomValues, v: NewRoomValues): Record<string, string | number | boolean | null> {
@@ -58,12 +62,17 @@ export function buildPatch(initial: NewRoomValues, v: NewRoomValues): Record<str
   return p;
 }
 
-/** 방 만들기 검사를 쓰되, 기간은 바꿨을 때만 본다. 진행중 종료일은 오늘 이후, 최대 인원은 지금 참가자 수 이상 */
+/** 방 만들기 검사를 쓰되, 기간은 바꿨을 때만 본다. 진행중 시작일은 오늘 이하(과거 허용)·종료일은 오늘 이후, 최대 인원은 지금 참가자 수 이상 */
 export function validateSettings(initial: NewRoomValues, v: NewRoomValues, today: string, d: State & Pick<RoomDetail, "memberCount">): Partial<Record<Field, string>> {
   const e = validateNewRoom(v, today);
   const startChanged = v.startDate !== initial.startDate;
   const endChanged = v.endDate !== initial.endDate;
   if (!startChanged) delete e.startDate;
+  else if (d.status === "active" && v.startDate) {
+    // 진행중 시작일은 과거로 앞당길 수 있다(0048) — "오늘 이후" 대신 "오늘 이하"
+    if (v.startDate > today) e.startDate = ACTIVE_START_FUTURE;
+    else delete e.startDate;
+  }
   if (!startChanged && !endChanged) delete e.endDate;
   if (d.status === "active" && endChanged && !e.endDate && v.endDate < today) e.endDate = "진행중에는 종료일을 오늘 이후로만 바꿀 수 있어요";
   const max = num(v.maxMembers);

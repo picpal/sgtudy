@@ -289,7 +289,7 @@ export const ROOM_CASES: Case[] = [
     },
   },
   {
-    name: "room_update: 상태별 필드 잠금 (DRAFT/RECRUIT 전부 가능, ACTIVE 는 startDate 등 FIELD_LOCKED·isPublic 은 가능(0039), ENDED 전부 잠금)",
+    name: "room_update: 상태별 필드 잠금 (DRAFT/RECRUIT 전부 가능, ACTIVE 는 minMembers 등 FIELD_LOCKED·isPublic(0039)·startDate(0048) 는 가능, ENDED 전부 잠금)",
     run: async (q) => {
       await setToday(q, TODAY);
       const d = await createRoom(q, USERS.서연, { startDate: "2026-10-13", endDate: "2026-10-31" });
@@ -325,9 +325,20 @@ export const ROOM_CASES: Case[] = [
       await expectFailSql(q, upd, [d.slug, JSON.stringify({ maxMembers: 2 })], "CAPACITY_BELOW_CURRENT");
       // ACTIVE 단계
       await q(`select public.room_start($1)`, [d.slug]);
-      for (const k of ["startDate", "minMembers", "joinMode", "leaderDoesTasks"]) {
-        await expectFailSql(q, upd, [d.slug, JSON.stringify({ [k]: k === "startDate" ? "2026-10-20" : k === "minMembers" ? 1 : k === "joinMode" ? "direct" : true })], "FIELD_LOCKED");
+      for (const k of ["minMembers", "joinMode", "leaderDoesTasks"]) {
+        await expectFailSql(q, upd, [d.slug, JSON.stringify({ [k]: k === "minMembers" ? 1 : k === "joinMode" ? "direct" : true })], "FIELD_LOCKED");
       }
+      // 0048: 진행중 시작일 — 앞당기기(지난 주차 등록)는 1년 상한만, 오늘 뒤로는 안 되고, 늦추기는 가장 이른 일정(10-14)까지만
+      [{ r }] = await q(upd, [d.slug, JSON.stringify({ startDate: "2026-09-28" })]);
+      assertEquals([r.status, r.startDate, r.warnings], ["active", "2026-09-28", []]);
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ startDate: "2026-10-13" })], "INVALID_PERIOD");   // today(10-12) 뒤
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ startDate: "2025-10-01" })], "PERIOD_TOO_LONG");   // 종료일(10-31)까지 1년 넘음
+      await seedLeaves(q, d.id, [{ title: "지난 과제", type: "COMMON", s: "2026-10-05", e: "2026-10-11" }], { label: "0주차", title: "지난 회차", s: "2026-10-05", e: "2026-10-11" });
+      await expectFailSql(q, upd, [d.slug, JSON.stringify({ startDate: "2026-10-06" })], "INVALID_PERIOD");   // 지난 회차(10-05) 뒤로 늦춤
+      [{ r }] = await q(upd, [d.slug, JSON.stringify({ startDate: "2026-10-05" })]);                         // 가장 이른 일정까지는 늦출 수 있다
+      assertEquals([r.startDate, r.warnings], ["2026-10-05", []]);
+      const [{ n: periodNoti }] = await q(`select count(*)::int as n from public.notifications where kind = 'ROOM_PERIOD_CHANGED' and room_id = $1`, [d.id]);
+      assertEquals(periodNoti > 0, true);   // 시작일만 바꿔도 참가자에게 기간 변경 알림
       // 0039: 진행중에도 공개/비공개 전환 가능
       [{ r }] = await q(upd, [d.slug, JSON.stringify({ isPublic: false })]);
       assertEquals([r.status, r.isPublic], ["active", false]);

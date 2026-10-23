@@ -18,7 +18,7 @@ import type { RoomDetail } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import { useToday } from "@/lib/today";
 import { useLeaveConfirm } from "@/lib/useLeaveConfirm";
-import { archiveRoom, buildPatch, dangerOf, deleteRoom, lockReason, lockedOf, mergeServerFields, saveSteps, updateRoom, validateSettings, valuesOf } from "./settings";
+import { ACTIVE_START_HINT, archiveRoom, buildPatch, dangerOf, deleteRoom, lockReason, lockedOf, mergeServerFields, saveSteps, updateRoom, validateSettings, valuesOf } from "./settings";
 import { NotifySettingsSection } from "./NotifySettings";
 import { RecruitInviteSection } from "./RecruitInviteSection";
 import { SideBackRail, TopBackLink } from "./BackButtons";
@@ -83,10 +83,12 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
   const set = <K extends keyof NewRoomValues>(k: K, val: NewRoomValues[K]) => {
     const next = { ...v, [k]: val };
     setV(next);
-    setErrors((e) => revalidateOnChange(e, k, next, today));
+    setErrors((e) => revalidateOnChange(e, k, next, today, recheckWith));
   };
-  const recheck = (k: keyof NewRoomValues) => setErrors((e) => revalidateOnChange(e, k, v, today));
+  const recheck = (k: keyof NewRoomValues) => setErrors((e) => revalidateOnChange(e, k, v, today, recheckWith));
   const dis = (k: keyof NewRoomValues) => locked.has(k) || busy;
+  // 입력 중 오류 갱신도 상태별 규칙으로(진행중 시작일은 과거 허용 — 0048)
+  const recheckWith = (next: NewRoomValues, t: string) => validateSettings(base, next, t, d);
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
@@ -164,7 +166,7 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
           </p>
           {reason && (
             <p role="note" className="mb-6 mt-0 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-3 text-[13px] font-medium leading-[1.5] text-[#6B4700]">
-              {d.status === "active" && !d.archived ? "진행중에는 시작일·최소 인원·참가 방식·그룹장 과제 수행을 바꿀 수 없어요" : reason}
+              {d.status === "active" && !d.archived ? "진행중에는 최소 인원·참가 방식·그룹장 과제 수행을 바꿀 수 없어요" : reason}
             </p>
           )}
 
@@ -220,15 +222,15 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
               title="기간"
               desc={
                 d.status === "active" && !d.archived
-                  ? "진행중에는 종료일만 바꿀 수 있어요 · 오늘과 마지막 과제 마감 이후로. 종료일이 지나면 스터디가 자동으로 종료돼요 — 일찍 끝내려면 종료일을 앞당겨 주세요"
+                  ? "진행중에는 시작일은 오늘까지, 종료일은 오늘과 마지막 과제 마감 이후로 바꿀 수 있어요 · 종료일이 지나면 스터디가 자동으로 종료돼요 — 일찍 끝내려면 종료일을 앞당겨 주세요"
                   : d.status === "draft" || d.status === "recruit"
                     ? "시작일은 오늘 이후, 기간은 최대 1년이에요"
                     : undefined
               }
             >
               <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-                <Field label="시작일" required hint={locked.has("startDate") && !d.archived && d.status !== "ended" ? reason : undefined} error={errors.startDate}>
-                  <input name="startDate" type="date" className={DATE_FIELD_CLASS} min={v.startDate === base.startDate ? undefined : today} value={v.startDate} disabled={dis("startDate")} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} aria-invalid={!!errors.startDate} />
+                <Field label="시작일" required hint={d.status === "active" && !d.archived ? ACTIVE_START_HINT : undefined} error={errors.startDate}>
+                  <input name="startDate" type="date" className={DATE_FIELD_CLASS} min={d.status === "active" || v.startDate === base.startDate ? undefined : today} max={d.status === "active" ? today : undefined} value={v.startDate} disabled={dis("startDate")} onChange={(e) => set("startDate", e.target.value)} onBlur={() => recheck("startDate")} aria-invalid={!!errors.startDate} />
                 </Field>
                 <Field label="종료일" required error={errors.endDate}>
                   <input name="endDate" type="date" className={DATE_FIELD_CLASS} min={d.status === "active" ? today : v.startDate || today} max={maxEndDate(v.startDate) || undefined} value={v.endDate} disabled={dis("endDate")} onChange={(e) => set("endDate", e.target.value)} onBlur={() => recheck("endDate")} aria-invalid={!!errors.endDate} />

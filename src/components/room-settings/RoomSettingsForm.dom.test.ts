@@ -47,6 +47,19 @@ const mount = (d: Partial<RoomDetail>, back?: string) => {
   return { host, root, input };
 };
 
+describe("방 설정 — 진행중 시작일(0048)", () => {
+  it("열려 있고 오늘까지만 고를 수 있다 · 앞당기기 안내", () => {
+    const { host, root, input } = mount({});
+    const start = input("startDate");
+    expect(start.disabled).toBe(false);
+    expect(start.max).toBe("2026-10-19");
+    expect(start.min).toBe("");
+    expect(host.textContent).toContain("앞당기면 지난 주차 회차를 등록할 수 있어요");
+    expect(host.textContent).toContain("진행중에는 최소 인원·참가 방식·그룹장 과제 수행을 바꿀 수 없어요");
+    act(() => root.unmount());
+  });
+});
+
 describe("방 설정 — 진행중에 잠긴 칸도 지금 값을 보인다", () => {
   it("최소 인원이 없으면(null) 빈 칸이 아니라 '제한 없음', 시작일·최대 인원은 값 그대로", () => {
     const { root, input } = mount({});
@@ -55,7 +68,6 @@ describe("방 설정 — 진행중에 잠긴 칸도 지금 값을 보인다", ()
     expect(min.value).toBe("");
     expect(min.placeholder).toBe("제한 없음");
     expect(min.className).toContain("disabled:placeholder:text-muted");
-    expect(input("startDate").disabled).toBe(true);
     expect(input("startDate").value).toBe("2026-10-01");
     expect(input("maxMembers").value).toBe("10");
     act(() => root.unmount());
@@ -167,7 +179,7 @@ describe("방 설정 — 기간 두 날짜 칸이 서로 겹치지 않는다(iOS
   };
   it.each([
     ["모집중(수정 가능)", { status: "recruit" }],
-    ["진행중(시작일 잠김)", { status: "active" }],
+    ["진행중", { status: "active" }],
   ] as const)("%s — 시작일·종료일 모두 기본 모양을 끈 날짜 칸, 같은 minmax 그리드 안", (_, d) => {
     const { input } = mount(d as Partial<RoomDetail>);
     const start = input("startDate");

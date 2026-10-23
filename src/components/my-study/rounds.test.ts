@@ -246,20 +246,38 @@ describe("roundsOutsidePeriod", () => {
   ];
   it("모두 기간 안이면 null", () => expect(roundsOutsidePeriod(nodes, { start: "2026-10-15", end: "2026-11-25" })).toBeNull());
   it("회차는 안인데 과제만 밖이어도 잡는다", () => {
-    expect(roundsOutsidePeriod(nodes, { start: "2026-10-15", end: "2026-10-28" })).toEqual({ count: 1, text: "과제 1개가 스터디 기간(10.15 – 10.28)을 벗어나요", fitEnd: "2026-11-25", before: false });
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-15", end: "2026-10-28" })).toEqual({ count: 1, text: "과제 1개가 스터디 기간(10.15 – 10.28)을 벗어나요", fitEnd: "2026-11-25", fitStart: null, before: false, key: "b:|a:r2" });
   });
   it("회차·과제를 나눠 센다, 늘릴 종료일 = 보관 제외 전체 노드의 마지막 마감", () => {
-    expect(roundsOutsidePeriod(nodes, { start: "2026-10-15", end: "2026-10-23" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(10.15 – 10.23)을 벗어나요", fitEnd: "2026-11-25", before: false });
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-15", end: "2026-10-23" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(10.15 – 10.23)을 벗어나요", fitEnd: "2026-11-25", fitStart: null, before: false, key: "b:|a:r2" });
   });
-  it("시작일 앞에 걸친 일정이 있으면 before — 종료일 늘리기는 뒤쪽만 맞춘다", () => {
-    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-10-23" })).toEqual({ count: 4, text: "회차 2개·과제 2개가 스터디 기간(10.16 – 10.23)을 벗어나요", fitEnd: "2026-11-25", before: true });
+  it("시작일 앞에 걸친 일정이 있으면 before + 앞당길 시작일 = 보관 제외 전체 노드의 가장 이른 시작", () => {
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-10-23" })).toEqual({ count: 4, text: "회차 2개·과제 2개가 스터디 기간(10.16 – 10.23)을 벗어나요", fitEnd: "2026-11-25", fitStart: "2026-10-15", before: true, key: "b:r1|a:r2" });
   });
   it("시작일 앞만 걸치면 fitEnd null", () => {
-    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-11-25" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(10.16 – 11.25)을 벗어나요", fitEnd: null, before: true });
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-11-25" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(10.16 – 11.25)을 벗어나요", fitEnd: null, fitStart: "2026-10-15", before: true, key: "b:r1|a:" });
   });
   it("늘린 종료일이 1년 상한을 넘으면 fitEnd null, 해를 넘는 기간은 끝을 YYYY.MM.DD 로", () => {
     expect(roundsOutsidePeriod(nodes, { start: "2025-11-30", end: "2026-10-23" })?.fitEnd).toBe("2026-11-25");
-    expect(roundsOutsidePeriod(nodes, { start: "2025-11-01", end: "2026-10-23" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(11.01 – 2026.10.23)을 벗어나요", fitEnd: null, before: false });
+    expect(roundsOutsidePeriod(nodes, { start: "2025-11-01", end: "2026-10-23" })).toEqual({ count: 2, text: "회차 1개·과제 1개가 스터디 기간(11.01 – 2026.10.23)을 벗어나요", fitEnd: null, fitStart: null, before: false, key: "b:|a:r2" });
+  });
+  it("앞당긴 시작일로 지금 종료일이 1년 상한을 넘으면 fitStart null", () => {
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2027-10-14" })?.fitStart).toBe("2026-10-15");
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2027-10-15" })?.fitStart).toBeNull();
+  });
+  // 「그대로 두기」 기억 키 — 렌더·날짜·개수에 흔들리지 않고, 벗어난 회차 집합이 바뀔 때만 달라진다 (사용자 보고 2026-10-23)
+  it("key: 같은 회차에 과제를 더하거나 종료일만 늘려도 그대로", () => {
+    const base = roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-11-25" })!;
+    const moreTasks = roundsOutsidePeriod([...nodes, n("t1b", "r1", "10-15", "10-18"), n("g1", "r1", "10-15", "10-21"), n("t1c", "g1", "10-15", "10-16")], { start: "2026-10-16", end: "2026-11-25" })!;
+    expect(moreTasks.text).not.toBe(base.text);
+    expect(moreTasks.key).toBe(base.key);
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-12-31" })!.key).toBe(base.key);
+    expect(roundsOutsidePeriod([...nodes].reverse(), { start: "2026-10-16", end: "2026-11-25" })!.key).toBe(base.key);
+  });
+  it("key: 새 회차가 밖으로 나가거나 걸친 쪽이 바뀌면 달라진다", () => {
+    const base = roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-11-25" })!;
+    expect(roundsOutsidePeriod([...nodes, n("r0", null, "10-08", "10-14")], { start: "2026-10-16", end: "2026-11-25" })!.key).toBe("b:r0,r1|a:");
+    expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-11-20" })!.key).not.toBe(base.key);
   });
 });
 
