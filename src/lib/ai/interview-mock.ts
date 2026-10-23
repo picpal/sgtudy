@@ -34,7 +34,7 @@ const ASK: Record<Stage, ModelTurn["ask"]> = {
 
 /** DraftCard 「…을 바꿀래요」 → 다시 물을 단계 */
 const CHANGE: [RegExp, Stage][] = [
-  [/^(제목|소개|태그)/, "topic"], [/^시작/, "startDate"], [/^(종료|기간)/, "durationWeeks"], [/^(최대 )?인원/, "maxMembers"], [/^(공개|참가)/, "access"], [/^(상세|진행|규칙)/, "style"],
+  [/^(제목|소개|태그)/, "topic"], [/^시작/, "startDate"], [/^(종료|기간)/, "durationWeeks"], [/^(최대 )?인원/, "maxMembers"], [/^(공개|참가)/, "access"], [/^(상세|진행|규칙)/, "style"], [/^그룹장/, "extra"],
 ];
 
 const STYLE_TEXT: Record<string, [string, string]> = {
@@ -72,7 +72,7 @@ export const mockCallModel: CallModel = async ({ state }) => {
     if (keys.length) {
       patch.descriptionMd = [`${draft.title ?? "이 스터디"}를 함께 진행해요.`, ...keys.map((k) => STYLE_TEXT[k][0])].join("\n\n");
       patch.rulesMd = keys.map((k) => STYLE_TEXT[k][1]).filter(Boolean).join("\n");
-    } else if (text) patch.descriptionMd = text;
+    } else if (text && !/건너/.test(text)) patch.descriptionMd = text;
     note = "진행 방식을 설명과 규칙에 적어 둘게요. ";
   } else if (!answer && text) {
     switch (asked ?? "topic") {
