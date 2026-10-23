@@ -1,10 +1,11 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { rpc } from "@/lib/api/errors";
+import { ApiException, rpc } from "@/lib/api/errors";
 import { fetchMyStudies } from "@/lib/api/my-study";
 import type { Me, MeStudies, MetaDto } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
+import { sessionExpiredUrl } from "@/lib/supabase/return-to";
 import { createClient } from "@/lib/supabase/server";
 
 /*
@@ -51,11 +52,28 @@ export const getMyStudies = cache(async (): Promise<MeStudies> => fetchMyStudies
 export const getToday = cache(async (): Promise<string> => (await rpc<MetaDto>("meta_get", {}, await getServerClient())).today);
 
 /**
+ * 고아 세션: JWT 는 유효한데 profiles 행이 없다 — 계정이 지워진 뒤 브라우저에 남은 쿠키(JWT 는 만료 전까지 서명 검증을 통과한다).
+ * me_get 의 NOT_FOUND 는 이 경우뿐이다. profiles 는 auth.users INSERT 트리거(0001 on_auth_user_created)가 같은 트랜잭션에서 만들므로
+ * 가입 직후 "프로필이 아직 없는" 순간은 없다 — 정상 가입을 고아로 오판하지 않는다.
+ */
+export const isOrphanSession = (e: unknown): boolean => e instanceof ApiException && e.code === "NOT_FOUND";
+
+/** getMe + 고아 세션이면 세션 정리 라우트로 보낸다(서버 컴포넌트는 쿠키를 못 지운다). 그 밖의 실패는 그대로 throw */
+export async function getMeOrExpire(returnTo: string): Promise<Me | null> {
+  try {
+    return await getMe();
+  } catch (e) {
+    if (isOrphanSession(e)) redirect(sessionExpiredUrl(returnTo));
+    throw e;
+  }
+}
+
+/**
  * 로그인+온보딩이 필요한 서버 페이지(/me, /rooms/new, /my-study, /schedule, /tasks)에서 호출.
  * proxy 가 비로그인은 이미 /login 으로 보내지만, 온보딩 미완료는 여기서 잡는다(D7).
  */
 export async function requireMe(returnTo: string): Promise<Me> {
-  const me = await getMe();
+  const me = await getMeOrExpire(returnTo);
   if (!me) redirect(routes.login(returnTo));
   if (!me.onboarded) redirect(routes.onboarding(returnTo));
   return me;

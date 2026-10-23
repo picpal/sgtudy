@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isProtectedPath, loginUrl, safeReturnTo } from "./return-to";
+import { isProtectedPath, loginUrl, safeReturnTo, SESSION_EXPIRED, sessionExpiredUrl } from "./return-to";
 
 describe("isProtectedPath", () => {
   it("protects my-study, schedule, tasks, me, rooms/new", () => {
@@ -42,5 +42,14 @@ describe("safeReturnTo", () => {
 describe("loginUrl", () => {
   it("encodes returnTo", () => {
     expect(loginUrl("/my-study/aws?task=3")).toBe("/login?returnTo=%2Fmy-study%2Faws%3Ftask%3D3");
+  });
+  it("appends the session_expired reason after returnTo", () => {
+    expect(loginUrl("/rooms/new", SESSION_EXPIRED)).toBe("/login?returnTo=%2Frooms%2Fnew&reason=session_expired");
+  });
+});
+
+describe("sessionExpiredUrl", () => {
+  it("points at the cleanup route with an encoded returnTo", () => {
+    expect(sessionExpiredUrl("/my-study/aws?task=3")).toBe("/auth/session-expired?returnTo=%2Fmy-study%2Faws%3Ftask%3D3");
   });
 });

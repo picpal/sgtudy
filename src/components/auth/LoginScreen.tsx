@@ -12,8 +12,11 @@ import { PasswordInput } from "./PasswordInput";
 import { useCaptcha } from "./Turnstile";
 import { fieldClass, labelClass, primaryClass } from "./styles";
 
-/** 기본 로그인: 이메일 + 비밀번호. 인증 코드는 가입(routes.signup)과 비밀번호 재설정(routes.resetPassword)에서만 쓴다 */
-export function LoginScreen({ returnTo }: { returnTo: string }) {
+/**
+ * 기본 로그인: 이메일 + 비밀번호. 인증 코드는 가입(routes.signup)과 비밀번호 재설정(routes.resetPassword)에서만 쓴다.
+ * sessionExpired = 고아 세션을 정리하고 넘어온 경우(?reason=session_expired) — 한 줄 안내를 띄운다
+ */
+export function LoginScreen({ returnTo, sessionExpired = false }: { returnTo: string; sessionExpired?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -83,6 +86,11 @@ export function LoginScreen({ returnTo }: { returnTo: string }) {
 
   return (
     <AuthShell title="로그인" subtitle="이메일과 비밀번호로 로그인해요.">
+      {sessionExpired && (
+        <p role="status" className="m-0 rounded-[12px] bg-surface-3 px-4 py-3 text-[13px] leading-[1.6] text-ink">
+          로그인 정보가 만료됐어요. 다시 로그인해 주세요.
+        </p>
+      )}
       <form onSubmit={submit} noValidate className="flex flex-col gap-3">
         <label className={labelClass}>
           이메일

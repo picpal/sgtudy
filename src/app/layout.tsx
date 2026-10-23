@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_KR } from "next/font/google";
 import { unstable_rethrow } from "next/navigation";
-import { getAuthClaims, getMe, getMyStudies, getToday } from "@/lib/api/me.server";
+import { getAuthClaims, getMe, getMyStudies, getToday, isOrphanSession } from "@/lib/api/me.server";
 import { isOnboardingRequired } from "@/lib/api/errors";
 import { myStudyHrefOf } from "@/lib/api/my-study";
 import type { Me } from "@/lib/api/types";
@@ -30,6 +30,8 @@ async function loadMe(): Promise<Me | null> {
     return await getMe();
   } catch (e) {
     unstable_rethrow(e); // cookies() 동적 렌더 신호는 삼키지 않는다(/_not-found 정적 프리렌더 방지)
+    // 고아 세션(계정 삭제 후 남은 쿠키)은 장애가 아니다 — 보호 화면·로그인 가드(getMeOrExpire)가 쿠키를 정리한다
+    if (isOrphanSession(e)) return null;
     console.error("[layout] me_get failed — rendering as anonymous", e);
     return null;
   }

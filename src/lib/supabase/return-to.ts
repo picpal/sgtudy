@@ -20,6 +20,15 @@ export function safeReturnTo(raw: string | null | undefined): string {
   return raw;
 }
 
-export function loginUrl(returnTo: string): string {
-  return `/login?returnTo=${encodeURIComponent(returnTo)}`;
+/** 로그인 화면 안내 사유 — 고아 세션(계정이 지워졌는데 쿠키만 남음)을 정리하고 보낼 때 붙인다 */
+export const SESSION_EXPIRED = "session_expired";
+
+export function loginUrl(returnTo: string, reason?: typeof SESSION_EXPIRED): string {
+  const q = `/login?returnTo=${encodeURIComponent(returnTo)}`;
+  return reason ? `${q}&reason=${reason}` : q;
+}
+
+/** 고아 세션 정리 라우트(src/app/auth/session-expired/route.ts). 서버 컴포넌트는 쿠키를 못 지우므로 여기로 보낸다 */
+export function sessionExpiredUrl(returnTo: string): string {
+  return `/auth/session-expired?returnTo=${encodeURIComponent(returnTo)}`;
 }
