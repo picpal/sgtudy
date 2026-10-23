@@ -267,7 +267,7 @@ describe("MarkdownView 문서형(doc) 제목·구분선 여백", () => {
     const h = docHtml(true);
     expect(h).toContain("text-[18px] mt-[18px]");
     expect(h).toContain("text-[20px] mt-[22px]");
-    expect(h).toContain("[hr+&]:mt-0");
+    expect(h).toContain("[hr+&amp;]:mt-0");
     expect(h).toContain('<hr class="my-[16px]');
   });
   it("기본(짧은 글 영역)은 그대로", () => {
