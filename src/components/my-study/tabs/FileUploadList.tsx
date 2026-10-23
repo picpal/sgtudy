@@ -18,12 +18,14 @@ type Props = {
   /** 노드 첨부의 그림 줄 「조각 복사」(md-images 스펙 §4.2) — 제출 첨부는 넘기지 않는다 */
   canCopy?: (row: UploadRow) => boolean;
   onCopy?: (row: UploadRow) => void;
+  /** 고르기 accept — 기본은 제출 형식(노드 첨부는 SVG 를 더한 NODE_ACCEPT) */
+  accept?: string;
 };
 
 const DEFAULT_HINT = "끌어다 놓아도 돼요 · PNG·JPG·GIF·WEBP·PDF·ZIP·TXT·MD · 파일당 10MB · 5개까지";
 
 /** 첨부 — 드롭존 + [파일 고르기] · 줄마다 진행률/상태 · [취소|빼기|다시 시도] (스펙 §2.3-3) */
-export function FileUploadList({ rows, onPick, onRemove, onRetry, canRetry, disabled, label = "파일 (선택)", hint = DEFAULT_HINT, canCopy, onCopy }: Props) {
+export function FileUploadList({ rows, onPick, onRemove, onRetry, canRetry, disabled, label = "파일 (선택)", hint = DEFAULT_HINT, canCopy, onCopy, accept = ACCEPT }: Props) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -58,7 +60,7 @@ export function FileUploadList({ rows, onPick, onRemove, onRetry, canRetry, disa
           ref={input}
           type="file"
           multiple
-          accept={ACCEPT}
+          accept={accept}
           aria-labelledby={`${id}-label`}
           className="hidden"
           onChange={(e) => {

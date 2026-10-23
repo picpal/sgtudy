@@ -14,7 +14,7 @@ import { PersonalForm } from "./PersonalForm";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const m = vi.hoisted(() => ({ fetch: vi.fn(), register: vi.fn(), discard: vi.fn(), upload: vi.fn(), set: vi.fn() }));
-vi.mock("@/lib/api/nodeFiles", async (orig) => ({ ...(await orig<object>()), fetchNodeFiles: m.fetch, fetchNodeFilesOrEmpty: m.fetch, registerNodeFile: m.register, discardNodeUnattached: m.discard, setNodeFiles: m.set }));
+vi.mock("@/lib/api/nodeFiles", async (orig) => ({ ...(await orig<object>()), fetchNodeFiles: m.fetch, fetchNodeFilesOrEmpty: m.fetch, registerNodeFile: m.register, discardNodeUnattached: m.discard, setNodeFilesFrom: m.set }));
 vi.mock("@/lib/api/submission", async (orig) => ({ ...(await orig<object>()), roomIdOfNode: () => Promise.resolve("7"), fetchTask: () => new Promise(() => {}) }));
 vi.mock("@/lib/api/upload", () => ({ uploadAttachment: m.upload, uploadErrorText: () => "실패" }));
 vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }));
@@ -85,7 +85,7 @@ describe("PersonalForm 첨부 파일", () => {
     expect(m.fetch).toHaveBeenCalledWith("32");
     expect(host.textContent).toContain("s1.pdf");
     expect(host.textContent).toContain("첨부 파일 (선택)");
-    expect(host.textContent).toContain("끌어다 놓아도 돼요 · PNG");
+    expect(host.textContent).toContain("끌어다 놓아도 돼요 · 그림(PNG·JPG·GIF·WEBP·SVG) 20개");
   });
 
   it("1. 올리는 중 — 떠나려 하면 '버리기'/'계속 편집' 만, 문구 고정", async () => {
@@ -219,7 +219,7 @@ describe("PersonalForm 첨부 파일", () => {
     });
     act(() => button("저장").click());
     await flush();
-    expect(m.set).toHaveBeenCalledWith("32", ["s1", "new1"]);
+    expect(m.set).toHaveBeenCalledWith("32", ["s1", "new1"], ["s1"]);   // 3인자(base = 붙어 있던 목록, D30)
     expect(order).toEqual(["files", "node"]);
     expect(m.discard).not.toHaveBeenCalled();
     expect(host.querySelector("form")).toBeNull();

@@ -11,9 +11,9 @@ import { useCurriculumApi, type CurriculumApi } from "./useCurriculumApi";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const m = vi.hoisted(() => ({ setFiles: vi.fn(), nodeUpdate: vi.fn(), personalUpdate: vi.fn(), nodeCreate: vi.fn(), fetchCurriculum: vi.fn(), putExam: vi.fn(), calls: [] as string[] }));
+const m = vi.hoisted(() => ({ setFiles: vi.fn(), setFilesFrom: vi.fn(), nodeUpdate: vi.fn(), personalUpdate: vi.fn(), nodeCreate: vi.fn(), fetchCurriculum: vi.fn(), putExam: vi.fn(), calls: [] as string[] }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push: () => {} }) }));
-vi.mock("@/lib/api/nodeFiles", () => ({ setNodeFiles: m.setFiles }));
+vi.mock("@/lib/api/nodeFiles", () => ({ setNodeFiles: m.setFiles, setNodeFilesFrom: m.setFilesFrom }));
 vi.mock("@/lib/api/personal", async (orig) => ({ ...(await orig<typeof import("@/lib/api/personal")>()), personalUpdate: m.personalUpdate }));
 vi.mock("@/lib/api/my-study", async (orig) => ({ ...(await orig<typeof import("@/lib/api/my-study")>()), nodeUpdate: m.nodeUpdate, nodeCreate: m.nodeCreate, fetchCurriculum: m.fetchCurriculum }));
 vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), putExam: m.putExam }));
@@ -46,6 +46,7 @@ beforeEach(() => {
   cur = AWS;
   toasts = [];
   m.calls = [];
+  m.setFilesFrom.mockReset();
   m.setFiles.mockReset().mockImplementation(async (_n: string, ids: string[]) => {
     m.calls.push("files");
     return ids.map(meta);
@@ -68,6 +69,15 @@ describe("api.save — 첨부 (node_files_set 먼저)", () => {
     expect(m.calls).toEqual(["files", "node"]);
     expect(onFiles).toHaveBeenCalledWith([meta("a"), meta("b")]);
     expect("21" in S.ov.files).toBe(false);
+  });
+
+  it("baseFiles 가 있으면 3인자 setNodeFilesFrom(0045 D30) — 2인자는 부르지 않는다", async () => {
+    m.setFilesFrom.mockImplementation(async (_n: string, ids: string[]) => [...ids, "mcp"].map(meta));
+    const onFiles = vi.fn();
+    expect(await api.save(leaf, withOv({ files: { "21": ["a"] } }), { onFiles, baseFiles: ["a", "b"] })).toBe(true);
+    expect(m.setFilesFrom).toHaveBeenCalledWith("21", ["a"], ["a", "b"]);
+    expect(m.setFiles).not.toHaveBeenCalled();
+    expect(onFiles).toHaveBeenCalledWith([meta("a"), meta("mcp")]);          // 편집 중 붙은 그림은 남는다
   });
 
   it("첨부만: nodeUpdate 없이 '저장했어요'", async () => {

@@ -12,7 +12,7 @@ import { fetchNodeFiles } from "@/lib/api/nodeFiles";
 import type { FileMeta } from "@/lib/api/types";
 import { Seg } from "../bits";
 import { dropFieldOv, isDirty, isPersonal, leafLocks, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
-import { NODE_FILE_HINT, sameIds } from "../nodeFiles";
+import { NODE_ACCEPT, NODE_FILE_HINT, sameIds } from "../nodeFiles";
 import { designatedHint, moveNote, movedPeriod, reorderIndex, roundOf, roundOptions, sameShiftAsk, shiftAskOf, shiftAskText, type ShiftAsk } from "../rounds";
 import { editReturn, patchOv, type Leave, type ScreenState, type Update } from "../state";
 import type { RoomStatus } from "../submission";
@@ -267,7 +267,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
       // 저장하지 않은 시험 문항도 함께 — 위쪽 [저장] 이 고친 문항을 묻지 않고 버리지 않게. 문항 저장이 거절되면(검사·잠김) 머문다
       ok = !examDirty || (await examRef.current?.save()) !== false;
       if (ok && !dirty && examDirty) update({ saved: (text = "문제를 저장했어요") });
-      else if (ok) ok = await api.save(n, S.ov, { shift, onFiles: setSavedFiles, skipFiles: savedFiles === null, onSaved: (t) => (text = t) });
+      else if (ok) ok = await api.save(n, S.ov, { shift, onFiles: setSavedFiles, skipFiles: savedFiles === null, baseFiles: savedIds, onSaved: (t) => (text = t) });
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -590,6 +590,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         <FileUploadList
           label="첨부 파일 (선택)"
           hint={n.temp ? "저장한 뒤 파일을 붙일 수 있어요" : filesErr ? FILES_ERR : `끌어다 놓아도 돼요 · ${NODE_FILE_HINT}`}
+          accept={NODE_ACCEPT}
           rows={up.rows}
           onPick={up.pick}
           onRemove={up.remove}

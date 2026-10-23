@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "./errors";
-import { discardNodeFile, discardNodeUnattached, fetchNodeFiles, fetchNodeFilesOrEmpty, nodeImageUrls, registerNodeFile, setNodeFiles } from "./nodeFiles";
+import { discardNodeFile, discardNodeUnattached, fetchNodeFiles, fetchNodeFilesOrEmpty, nodeImageUrls, registerNodeFile, setNodeFiles, setNodeFilesFrom } from "./nodeFiles";
 
 const fake = (data: unknown = {}, error: unknown = null) => {
   const calls: [string, unknown][] = [];
@@ -19,6 +19,11 @@ describe("nodeFiles adapter (0030)", () => {
     const f = fake([]);
     await setNodeFiles("21", ["b", "a"], f.client);
     expect(f.calls).toEqual([["node_files_set", { p_node: 21, p_file_ids: ["b", "a"] }]]);
+  });
+  it("setNodeFilesFrom → node_files_set 3인자(p_base, 0045 D30)", async () => {
+    const f = fake([]);
+    await setNodeFilesFrom("21", ["b"], ["a", "b"], f.client);
+    expect(f.calls).toEqual([["node_files_set", { p_node: 21, p_file_ids: ["b"], p_base: ["a", "b"] }]]);
   });
   it("fetchNodeFiles → node_files", async () => {
     const f = fake([{ id: "a" }]);

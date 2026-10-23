@@ -13,7 +13,7 @@ import { EditView } from "./EditView";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const m = vi.hoisted(() => ({ fetch: vi.fn(), register: vi.fn(), discard: vi.fn(), upload: vi.fn() }));
-vi.mock("@/lib/api/nodeFiles", () => ({ fetchNodeFiles: m.fetch, registerNodeFile: m.register, discardNodeUnattached: m.discard, setNodeFiles: vi.fn() }));
+vi.mock("@/lib/api/nodeFiles", () => ({ fetchNodeFiles: m.fetch, registerNodeFile: m.register, discardNodeUnattached: m.discard, setNodeFiles: vi.fn(), setNodeFilesFrom: vi.fn() }));
 vi.mock("@/lib/api/submission", () => ({ roomIdOfNode: () => Promise.resolve("7") }));
 vi.mock("@/lib/api/upload", () => ({ uploadAttachment: m.upload, uploadErrorText: () => "실패" }));
 vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }));
@@ -102,7 +102,7 @@ describe("EditView 첨부 파일", () => {
     await mount(leaf);
     expect(m.fetch).toHaveBeenCalledWith("21");
     expect(host.textContent).toContain("s1.pdf");
-    expect(host.textContent).toContain("끌어다 놓아도 돼요 · PNG");
+    expect(host.textContent).toContain("끌어다 놓아도 돼요 · 그림(PNG·JPG·GIF·WEBP·SVG) 20개");
     expect(button("파일 고르기").disabled).toBe(false);
   });
 
@@ -179,6 +179,7 @@ describe("EditView 첨부 파일", () => {
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0][1].files["21"]).toEqual(["s1", "new1"]);
     expect(typeof save.mock.calls[0][2].onFiles).toBe("function");
+    expect(save.mock.calls[0][2].baseFiles).toEqual(["s1"]);                // 0045 D30: 편집을 시작할 때 붙어 있던 목록
   });
 
   it("목록을 못 불러오면 빈 목록으로 보지 않는다 — 첨부 비활성 + 토스트, 저장은 첨부를 빼고 (I-1)", async () => {

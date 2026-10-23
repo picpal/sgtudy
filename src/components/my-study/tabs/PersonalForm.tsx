@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
-import { fetchNodeFiles, setNodeFiles } from "@/lib/api/nodeFiles";
+import { fetchNodeFiles, setNodeFilesFrom } from "@/lib/api/nodeFiles";
 import type { FileMeta } from "@/lib/api/types";
 import { rangeShort } from "@/lib/api/format";
 import { useToday } from "@/lib/today";
@@ -12,7 +12,7 @@ import { DATE_NO_OVERFLOW_CLASS } from "@/components/room-new/fields";
 import { TypeBadge } from "../bits";
 import type { LeafNode, ParentNode } from "../model";
 import { draftOf, formScrollNeeded, personalPatch, pickRound, roundWarning, type PersonalDraft } from "../personal";
-import { NODE_FILE_HINT, sameIds, saveSteps } from "../nodeFiles";
+import { NODE_ACCEPT, NODE_FILE_HINT, sameIds, saveSteps } from "../nodeFiles";
 import { roundOptions } from "../rounds";
 import type { CurriculumApi } from "../useCurriculumApi";
 import { useNodeFileUploads } from "../useNodeFileUploads";
@@ -163,7 +163,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
     try {
       if (steps[0] === "files") {
         try {
-          const attached = await setNodeFiles(n.id, sent!);
+          const attached = await setNodeFilesFrom(n.id, sent!, savedIds); // base = 지금 붙어 있다고 보는 목록(D30)
           setSavedFiles(attached);
           // 저장하는 사이 또 고쳤다면 그 선택은 남긴다 — 보낸 것과 같을 때만 저장본으로 맞춘다
           setFileIds((cur) => (cur && sameIds(cur, sent!) ? attached.map((f) => f.id) : cur));
@@ -260,6 +260,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
       <FileUploadList
         label="첨부 파일 (선택)"
         hint={n.temp ? "저장한 뒤 파일을 붙일 수 있어요" : filesErr ? FILES_ERR : `끌어다 놓아도 돼요 · ${NODE_FILE_HINT}`}
+        accept={NODE_ACCEPT}
         rows={up.rows}
         onPick={up.pick}
         onRemove={up.remove}

@@ -178,3 +178,26 @@ describe("useNodeFileUploads — 그림 사전 검사·조각 복사 (B4)", () =
     expect(toastSpy.mock.lastCall?.[0].text).toContain("![](attachment:AWS%20VPC%20%281%29.png)");
   });
 });
+
+describe("useNodeFileUploads — SVG (0045)", () => {
+  const svg = (n: string, text: string) => new File([text], n, { type: "image/svg+xml" });
+  it("스크립트가 든 SVG 는 올리지 않고 걸린 규칙 문구로 줄 오류", async () => {
+    mount();
+    act(() => out.h.pick([svg("bad.svg", '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')]));
+    await flush();
+    expect(api.upload).not.toHaveBeenCalled();
+    const row = out.h.rows.find((r) => r.name === "bad.svg")!;
+    expect([row.status, row.error]).toEqual(["error", "SVG 에 스크립트가 있어요(<script>)"]);
+  });
+  it("깨끗한 SVG 는 image/svg+xml 로 올린다", async () => {
+    api.upload.mockResolvedValue(undefined);
+    api.register.mockImplementation((_n: string, f: { name: string; mime: string }) => Promise.resolve({ id: "v1", name: f.name, contentType: f.mime, size: 9, status: "ready" }));
+    mount();
+    act(() => out.h.pick([svg("vpc.svg", '<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>')]));
+    await flush();
+    expect(api.upload).toHaveBeenCalledTimes(1);
+    expect(api.upload.mock.calls[0][0]).toMatch(/^n\/7\/21\/.+\.svg$/);
+    expect(api.upload.mock.calls[0][2]).toBe("image/svg+xml");
+    expect(out.h.rows.find((r) => r.fileId === "v1")?.status).toBe("ready");
+  });
+});

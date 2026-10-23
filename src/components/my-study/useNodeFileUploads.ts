@@ -7,11 +7,10 @@ import { discardNodeUnattached, registerNodeFile } from "@/lib/api/nodeFiles";
 import { roomIdOfNode } from "@/lib/api/submission";
 import type { FileMeta } from "@/lib/api/types";
 import { uploadAttachment, uploadErrorText, type UploadFailure } from "@/lib/api/upload";
-import { imageKindLabel, imageSnippet, sniffImage } from "@/lib/files/imageCheck";
+import { imageKindLabel, imageSnippet, sniffImage, svgProblems } from "@/lib/files/imageCheck";
 import { isImageMime } from "@/lib/files/imageMime";
-import { NODE_FILE_LIMITS, nodeObjectKey, nodeRemovePlan, nodeRows } from "./nodeFiles";
-import { checkFile } from "./submission";
-import { slotsLeft, uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
+import { checkNodeFile, NODE_FILE_LIMITS, nodeObjectKey, nodeRemovePlan, nodeRows } from "./nodeFiles";
+import { uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
 
 /* 진행목표 항목 첨부 업로드 큐 — useSubmissionComposer 의 업로드 큐와 같은 규칙(동시성 2·abort·미연결 정리).
    목록은 제어형: 붙은 파일 id 는 호출자(selected/onSelect)가 들고, 여기는 메타와 올리는 중·실패 줄만 든다.
@@ -34,16 +33,20 @@ const reducer = (rows: UploadRow[], a: Act) => (a.type === "reset" ? [] : upload
 const CONCURRENCY = 2;
 const HEAD_BYTES = 64;
 
-/** 그림이라고 고른 파일의 앞부분이 그 형식인지(D27 웹 사전 검사) — 아니면 줄 오류 문구. 읽지 못하면 검사를 건너뛴다(서버·버킷이 다시 본다) */
+/** 그림이라고 고른 파일의 앞부분이 그 형식인지(D27 웹 사전 검사) — 아니면 줄 오류 문구. SVG 는 통째로(≤2MB) 읽어 금지 규칙도 본다.
+    읽지 못하면 검사를 건너뛴다(서버·버킷이 다시 본다) */
 async function imageMismatch(file: File, mime: string): Promise<string | null> {
   if (!isImageMime(mime)) return null;
   let head: Uint8Array;
+  let svg: string | null = null;
   try {
     head = new Uint8Array(await file.slice(0, HEAD_BYTES).arrayBuffer());
+    if (mime === "image/svg+xml" && file.size <= NODE_FILE_LIMITS.svgBytes) svg = await file.text();
   } catch {
     return null;
   }
-  return sniffImage(head) === mime ? null : `파일 내용이 ${imageKindLabel(mime)} 그림이 아니에요`;
+  if (sniffImage(head) !== mime) return `파일 내용이 ${imageKindLabel(mime)} 그림이 아니에요`;
+  return svg === null ? null : (svgProblems(svg)[0] ?? null);
 }
 const isFailure = (e: unknown): e is UploadFailure => typeof e === "object" && e !== null && "status" in e && typeof (e as UploadFailure).status === "number";
 
@@ -179,8 +182,8 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
     const added: UploadRow[] = [];
     for (const f of list) {
       const k = crypto.randomUUID();
-      // 실패 줄도 자리를 차지한다 (slotsLeft 와 같은 셈)
-      const check = checkFile(f, slotsLeft([...rowsRef.current, ...added], NODE_FILE_LIMITS.files));
+      // 실패 줄도 자리를 차지한다 (종류별 — 그림 20 / 파일 5, 0045)
+      const check = checkNodeFile(f, [...rowsRef.current, ...added]);
       if (!check.ok) {
         added.push({ key: k, fileId: "", name: f.name, size: f.size, status: "error", progress: 0, error: check.error });
         continue;

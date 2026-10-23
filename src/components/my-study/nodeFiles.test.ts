@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FileMeta } from "@/lib/api/types";
-import { fileBadge, nodeObjectKey, nodeRemovePlan, nodeRows, sameIds, saveSteps } from "./nodeFiles";
+import { ACCEPT } from "./submission";
+import { checkNodeFile, fileBadge, NODE_ACCEPT, NODE_FILE_HINT, nodeMimeOf, nodeObjectKey, nodeRemovePlan, nodeRows, sameIds, saveSteps } from "./nodeFiles";
 import type { UploadRow } from "./uploads";
 
 const meta = (id: string): FileMeta => ({ id, name: `${id}.pdf`, contentType: "application/pdf", size: 4, status: "ready" });
@@ -47,5 +48,39 @@ describe("saveSteps — 저장 순서 (node_files_set 먼저)", () => {
     expect(saveSteps(true, ["a"])).toEqual(["files"]);
     expect(saveSteps(false, undefined)).toEqual(["node"]);
     expect(saveSteps(true, undefined)).toEqual([]);
+  });
+});
+
+describe("checkNodeFile — 종류별 한도·SVG (0045 D18·D19)", () => {
+  const row = (name: string, contentType?: string): UploadRow =>
+    ({ key: name, fileId: name, name, size: 1, status: contentType ? "ready" : "uploading", progress: 0, ...(contentType ? { meta: { id: name, name, contentType, size: 1, status: "ready" } } : {}) });
+  const imgs = (n: number) => Array.from({ length: n }, (_, i) => row(`g${i}.svg`, "image/svg+xml"));
+  const docs = (n: number) => Array.from({ length: n }, (_, i) => row(`d${i}.pdf`, "application/pdf"));
+  const f = (name: string, type: string, size = 10) => ({ name, type, size });
+  it("그림 20 + 문서 5 는 서로 자리를 먹지 않는다", () => {
+    expect(checkNodeFile(f("a.png", "image/png"), [...imgs(19), ...docs(5)])).toEqual({ ok: true, mime: "image/png" });
+    expect(checkNodeFile(f("a.pdf", "application/pdf"), [...imgs(20), ...docs(4)])).toEqual({ ok: true, mime: "application/pdf" });
+  });
+  it("21번째 그림 · 6번째 문서는 각 문구", () => {
+    expect(checkNodeFile(f("a.png", "image/png"), imgs(20))).toEqual({ ok: false, error: "그림은 항목당 20개까지예요" });
+    expect(checkNodeFile(f("a.pdf", "application/pdf"), docs(5))).toEqual({ ok: false, error: "파일은 항목당 5개까지예요" });
+  });
+  it("올리는 중 줄은 이름 확장자로 종류를 센다", () => {
+    const up20 = Array.from({ length: 20 }, (_, i) => row(`u${i}.webp`));
+    expect(checkNodeFile(f("a.png", "image/png"), up20).ok).toBe(false);
+    expect(checkNodeFile(f("a.pdf", "application/pdf"), up20).ok).toBe(true);
+  });
+  it("SVG: type 또는 .svg 확장자로 알아보고 2MB 넘으면 거절", () => {
+    expect(nodeMimeOf(f("a.svg", ""))).toBe("image/svg+xml");
+    expect(nodeMimeOf(f("a.svg", "image/svg+xml"))).toBe("image/svg+xml");
+    expect(checkNodeFile(f("a.svg", "image/svg+xml", 2_097_152), []).ok).toBe(true);
+    expect(checkNodeFile(f("a.svg", "image/svg+xml", 2_097_153), [])).toEqual({ ok: false, error: "SVG 는 2MB까지예요" });
+    expect(checkNodeFile(f("a.exe", "application/x-msdownload"), [])).toEqual({ ok: false, error: "올릴 수 없는 형식이에요" });
+  });
+  it("accept·안내: 노드 첨부만 SVG — 제출 ACCEPT 는 그대로", () => {
+    expect(NODE_ACCEPT).toContain("image/svg+xml");
+    expect(NODE_ACCEPT).toContain(".svg");
+    expect(ACCEPT).not.toContain("svg");
+    expect(NODE_FILE_HINT).toBe("그림(PNG·JPG·GIF·WEBP·SVG) 20개 · 파일(PDF·ZIP·TXT·MD) 5개 · 파일당 10MB(SVG 2MB)");
   });
 });

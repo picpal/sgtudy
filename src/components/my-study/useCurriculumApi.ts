@@ -6,7 +6,7 @@ import { toApiError } from "@/lib/api/errors";
 import { putExam } from "@/lib/api/exam";
 import { fetchCurriculum, recheckCurriculumEdit, nodeArchive, nodeCreate, nodeDelete, nodeMove, nodeUpdate, patchOf } from "@/lib/api/my-study";
 import { personalArchive, personalComplete, personalCreate, personalDelete, personalUpdate, type PersonalPatch } from "@/lib/api/personal";
-import { setNodeFiles } from "@/lib/api/nodeFiles";
+import { setNodeFiles, setNodeFilesFrom } from "@/lib/api/nodeFiles";
 import { bumpProgress } from "@/lib/progressStale";
 import type { Curriculum, FileMeta, MeState, NodePatch } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
@@ -57,7 +57,8 @@ export type CurriculumApi = {
 export type CreateOpts = { title?: string; open?: boolean; taskType?: "common" | "designated"; exam?: true };
 
 /** onSaved: 저장에 성공하면 그 안내 문구(S.saved 와 같은 글) — 저장하고 화면을 떠나는 호출자가 토스트로 보여 준다 */
-export type SaveOpts = { shift?: boolean; onFiles?: (f: FileMeta[]) => void; skipFiles?: boolean; onSaved?: (text: string) => void };
+/** baseFiles: 편집 화면이 붙어 있다고 보는 id(불러온·마지막 저장 목록) — 있으면 3인자 node_files_set(0045, D30): 그 사이 다른 곳이 붙인 파일은 지우지 않는다 */
+export type SaveOpts = { shift?: boolean; onFiles?: (f: FileMeta[]) => void; skipFiles?: boolean; onSaved?: (text: string) => void; baseFiles?: string[] };
 
 export const dropKey = <T,>(rec: Record<string, T>, key: string) => {
   const { [key]: _omit, ...rest } = rec; // eslint-disable-line @typescript-eslint/no-unused-vars
@@ -202,7 +203,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       }
       if (steps[0] === "files") {
         try {
-          const attached = await setNodeFiles(n.id, files!);
+          const attached = opts.baseFiles ? await setNodeFilesFrom(n.id, files!, opts.baseFiles) : await setNodeFiles(n.id, files!);
           opts.onFiles?.(attached);
           update((p) => ({ ov: dropSent(p.ov) }));
         } catch (e) {

@@ -1,11 +1,38 @@
 import type { FileMeta } from "@/lib/api/types";
-import { extOf } from "./submission";
+import { isImageMime } from "@/lib/files/imageMime";
+import { ACCEPT, extOf, mimeOf, SUB_LIMITS, type FileCheck } from "./submission";
 import { fromSaved, removePlanOf, type UploadRow } from "./uploads";
 
-/* 항목(노드) 첨부 순수 로직 — 0030 DB 규칙과 같은 값·모양 */
+/* 항목(노드) 첨부 순수 로직 — 0030·0045 DB 규칙과 같은 값·모양 */
 
-export const NODE_FILE_LIMITS = { files: 5 } as const; // 0030 node_file_limit() 와 같은 값 (D1)
-export const NODE_FILE_HINT = "PNG·JPG·GIF·WEBP·PDF·ZIP·TXT·MD · 파일당 10MB · 5개까지";
+/** 0045 node_image_limit()=20 · node_file_limit()=5(그림 아닌 것) · node_svg_max_bytes() (md-images 스펙 D18) */
+export const NODE_FILE_LIMITS = { images: 20, files: 5, svgBytes: 2_097_152 } as const;
+export const NODE_FILE_HINT = "그림(PNG·JPG·GIF·WEBP·SVG) 20개 · 파일(PDF·ZIP·TXT·MD) 5개 · 파일당 10MB(SVG 2MB)";
+/** 노드 첨부 고르기 accept — 제출 ACCEPT + SVG(노드 첨부만, D19) */
+export const NODE_ACCEPT = `${ACCEPT},image/svg+xml,.svg`;
+
+/** 제출 mimeOf + SVG (0045 node_doc_mime_types) */
+export function nodeMimeOf(f: { name: string; type: string }): string | null {
+  if (f.type === "image/svg+xml" || (f.type === "" && extOf(f.name) === "svg")) return "image/svg+xml";
+  return mimeOf(f);
+}
+
+/** 줄이 그림 자리를 쓰는가 — 올린 줄은 메타, 올리는 중·실패 줄은 이름의 확장자로 */
+export const isImageRow = (r: UploadRow) => isImageMime(r.meta?.contentType ?? nodeMimeOf({ name: r.name, type: "" }) ?? "");
+
+/** 올리기 전 거절(노드 첨부) — 순서: 형식 → 자리(종류별) → 빈 파일 → 크기(SVG 2MB). 실패 줄도 그 종류 자리를 차지한다 */
+export function checkNodeFile(f: { name: string; type: string; size: number }, rows: readonly UploadRow[]): FileCheck {
+  const mime = nodeMimeOf(f);
+  if (!mime) return { ok: false, error: "올릴 수 없는 형식이에요" };
+  const img = isImageMime(mime);
+  const used = rows.filter((r) => isImageRow(r) === img).length;
+  if (img && used >= NODE_FILE_LIMITS.images) return { ok: false, error: `그림은 항목당 ${NODE_FILE_LIMITS.images}개까지예요` };
+  if (!img && used >= NODE_FILE_LIMITS.files) return { ok: false, error: `파일은 항목당 ${NODE_FILE_LIMITS.files}개까지예요` };
+  if (f.size <= 0) return { ok: false, error: "빈 파일은 올릴 수 없어요" };
+  if (f.size > SUB_LIMITS.fileBytes) return { ok: false, error: "10MB를 넘는 파일이에요" };
+  if (mime === "image/svg+xml" && f.size > NODE_FILE_LIMITS.svgBytes) return { ok: false, error: "SVG 는 2MB까지예요" };
+  return { ok: true, mime };
+}
 
 /** `n/{room}/{node}/{uuid}[.ext]` */
 export const nodeObjectKey = (roomId: string, nodeId: string, uuid: string, name: string) => {
