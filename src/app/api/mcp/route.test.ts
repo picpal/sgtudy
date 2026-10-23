@@ -34,13 +34,13 @@ describe("POST /api/mcp", () => {
     const r = await POST(rpc("tools/list"));
     expect([r.status, r.headers.get("retry-after")]).toEqual([429, "60"]);
   });
-  it("정상 initialize → 200 JSON-RPC 결과(serverInfo sgtudy) · tools/list → 9개", async () => {
+  it("정상 initialize → 200 JSON-RPC 결과(serverInfo sgtudy) · tools/list → 11개(그림 올리기 2개, 0045)", async () => {
     auth.mockResolvedValue(ok);
     const a = await POST(init());
     expect(a.status).toBe(200);
     expect((await a.json()).result.serverInfo.name).toBe("sgtudy");
     const b = await POST(rpc("tools/list", {}, 2));
-    expect((await b.json()).result.tools).toHaveLength(9);
+    expect((await b.json()).result.tools).toHaveLength(11);
     expect(auth).toHaveBeenCalledTimes(2);   // HTTP 요청마다 1회
   });
   it("연결 중 폐기: 첫 요청 200 → 토큰 폐기 → 다음 tools/call 은 401(도구 isError 가 아님)", async () => {
