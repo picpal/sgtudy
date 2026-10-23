@@ -11,10 +11,11 @@ export const mockCallRounds: CallRounds = async ({ state }) => {
   if (said.includes("장애 테스트")) return { ok: false, status: 529 };
   const topic = clampCp(state.draft.title, 12);
   const n = state.schedule.rounds.length - (said.includes("부족 테스트") ? 2 : 0);
+  const period = state.schedule.cadenceDays === 7 ? "이번 주" : "이번 회차";
   const output: RoundsModel = {
     rounds: state.schedule.rounds.slice(0, Math.max(0, n)).map((r) => ({
       title: `${topic} ${r.label}`,
-      goalMd: `이번 주 목표: ${r.label} 범위를 익혀요\n- 핵심 개념 정리\n- 연습 문제`,
+      goalMd: `${period} 목표: ${r.label} 범위를 익혀요\n- 핵심 개념 정리\n- 연습 문제`,
       tasks: [
         { title: `${r.label} 핵심 정리`, descriptionMd: "정리한 내용을 글로 올려요" },
         { title: `${r.label} 문제 풀기`, descriptionMd: "푼 문제와 오답을 정리해 올려요" },

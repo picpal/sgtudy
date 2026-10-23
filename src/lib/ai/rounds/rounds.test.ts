@@ -41,6 +41,13 @@ describe("runRounds", () => {
     expect(r.body.stats).toEqual({ rounds: 12, tasks: 24, exams: 12, cadenceDays: 7 });
     expect(r.body.padded).toBe(0);
     expect(r.model).toBe("mock");
+    expect(r.body.rounds[0].goalMd).toMatch(/^이번 주 목표:/);
+  });
+  it("목 대본: 14일 회차면 '이번 회차 목표'", async () => {
+    const year = prepareRounds(req({ draft: { ...draft, endDate: "2027-10-24" } }), TODAY)!;
+    expect(year.schedule.cadenceDays).toBe(14);
+    const r = await runRounds(year, { callRounds: mockCallRounds });
+    expect(r.ok && r.body.rounds[0].goalMd).toMatch(/^이번 회차 목표:/);
   });
   it("목 '부족 테스트' → padded 2 · '장애 테스트' → AI_UNAVAILABLE", async () => {
     const short = await runRounds({ ...p, userLines: ["부족 테스트"] }, { callRounds: mockCallRounds });
