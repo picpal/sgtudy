@@ -90,7 +90,7 @@ describe("인터뷰 끝 — 로컬 질문(D33·D36)", () => {
     expect(host.textContent).toContain("바로 모집도 시작할까요? 전체 공개 방 목록에 보이고 누구나 바로 참가할 수 있어요");
     await click(radio(host, "네, 바로 모집 시작"));
     expect(q(host, '[role="tab"][aria-selected="true"]')!.textContent).toBe("직접 입력");
-    expect(q(host, 'section[aria-label="회차 초안"] summary')!.textContent).toBe("회차 초안 3개 · 과제 6개 · 시험 3개");
+    expect(q(host, 'section[aria-label="회차 초안"] summary')!.textContent!.replace("›", "")).toBe("회차 초안 3개 · 과제 6개 · 시험 3개");
     expect(recruitBox(host).checked).toBe(true);
     expect(submitBtn(host).textContent).toBe("방 만들기 · 회차 3개 · 바로 모집");
   });
@@ -134,7 +134,7 @@ describe("미리보기 섹션(D30) · 기간 수정 무효화", () => {
   it("회차 체크 해제 → 요약·라벨 변화 · 안내 · 전부 빼면 방만 + 모집 비활성", async () => {
     const host = await throughInterview();
     await click(roundBoxes(host)[1]);
-    expect(q(host, 'section[aria-label="회차 초안"] summary')!.textContent).toBe("회차 초안 2개 · 과제 4개 · 시험 2개");
+    expect(q(host, 'section[aria-label="회차 초안"] summary')!.textContent!.replace("›", "")).toBe("회차 초안 2개 · 과제 4개 · 시험 2개");
     expect(host.textContent).toContain("뺀 회차 자리는 비워 둬요");
     expect(submitBtn(host).textContent).toBe("방 만들기 · 회차 2개 · 바로 모집");
     await click(roundBoxes(host)[0]);

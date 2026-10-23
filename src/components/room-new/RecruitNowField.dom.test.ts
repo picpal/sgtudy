@@ -44,7 +44,7 @@ describe("RoundsDraftSection", () => {
   it("요약(시험 0이면 생략) · summary 44px · 행 = 라벨·M/D 기간·제목 · 글은 텍스트 노드", () => {
     const host = render(createElement(RoundsDraftSection, props));
     const summary = host.querySelector("summary")!;
-    expect([summary.textContent, summary.className.includes("min-h-11")]).toEqual(["회차 초안 1개 · 과제 1개", true]);
+    expect([summary.textContent, summary.className.includes("min-h-11")]).toEqual(["›회차 초안 1개 · 과제 1개", true]);
     expect(host.querySelector("label")!.textContent).toBe("1주차 · 10/26~11/1IAM 기초");
     expect(host.querySelector("a")).toBeNull();
     expect(host.textContent).toContain("[링크](x)");

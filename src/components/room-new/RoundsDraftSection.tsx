@@ -39,8 +39,11 @@ export function RoundsDraftSection({ data, excluded, onToggle, stale, busy, erro
       {stale ? (
         <p className="m-0 flex min-h-11 items-center text-[15px] font-semibold">{summary}</p>
       ) : (
-        <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-          <summary className="flex min-h-11 cursor-pointer items-center text-[15px] font-semibold">{summary}</summary>
+        <details open={open} onToggle={(e) => setOpen(e.currentTarget.open)} className="group">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[15px] font-semibold [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="text-muted transition-transform group-open:rotate-90">›</span>
+            {summary}
+          </summary>
           <ol className="m-0 flex list-none flex-col gap-1 p-0 pb-2">
             {data.rounds.map((r) => (
               <li key={r.index} className="flex flex-col">
@@ -50,8 +53,11 @@ export function RoundsDraftSection({ data, excluded, onToggle, stale, busy, erro
                   <span className={`min-w-0 break-words font-semibold ${excluded.has(r.index) ? "text-muted line-through" : "text-ink"}`}>{r.title}</span>
                 </label>
                 {(r.goalMd || r.tasks.length > 0 || r.exam) && (
-                  <details className="ml-8">
-                    <summary className="flex min-h-11 cursor-pointer items-center text-[13px] text-ink-2">목표·과제 보기</summary>
+                  <details className="group/row ml-8">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-[13px] text-ink-2 [&::-webkit-details-marker]:hidden">
+                      <span aria-hidden="true" className="text-muted transition-transform group-open/row:rotate-90">›</span>
+                      목표·과제 보기
+                    </summary>
                     <div className="flex flex-col gap-1 pb-2 text-[13px] text-ink-2">
                       {r.goalMd && <p className="m-0 whitespace-pre-wrap break-words">{r.goalMd}</p>}
                       <ul className="m-0 flex list-disc flex-col gap-1 pl-5">
