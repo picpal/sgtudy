@@ -1,7 +1,7 @@
 # 방 만들기 AI 인터뷰 — 2단계: 회차 초안 설계
 
 - 작성일: 2026-10-23 · 마이그레이션 **0049**(0048 까지 운영 적용)
-- 상태: D21~D34 권장안 · **사용자 승인 대기**
+- 상태: D21~D34 권장안 · **사용자 승인 대기** · D35~D38(바로 모집 시작, §3.1) 범위 추가 2026-10-23
 - 요청(원문): "잘 생성되었고, 미리보기 및 생성하기도 정상이야. 다만 아쉬운건 회차 관련해서도 각 목표를 대략적으로 AI가 잡아주는게 필요해. 사람들은 이런 하나하나를 등록하는걸 귀찮아 할것같아. 내가 뭔가 목표를 세우면 그에 맞게 어느정도는 회차가 잡히는걸 바랄거야. 그래서 AI대화 마지막에는 회차 정보를 자동 등록할까요? 하고 등록한다고 하면 대략적으로 회차 생성을 해주자"
 - 선행: `2026-10-23-room-create-ai-interview-design.md`(D1~D20, §8 "진행목표 초안" 을 이 문서가 구체화) · `2026-10-19-ai-integration-design.md` §7.2(`sgtudy.plan/v1`) · 0034·0038(계획서 검증·적용) · 0047(`ai_usage`)
 - 플랜: `docs/superpowers/plans/2026-10-23-room-create-ai-rounds.md`
@@ -55,6 +55,21 @@
 | **D33** | UI | — | 인터뷰 `done` 뒤 **로컬 질문 말풍선**(AI 호출 없음): "회차 초안도 자동으로 잡아 드릴까요? 10/26~1/17 을 12주차로 나누고 제목·목표·과제를 채워요." + 칩 [네, 잡아 주세요] [아니요, 미리보기로]. 예 → "회차를 잡는 중…"(aria-busy, 10~40초 안내) → 끝나면 자동으로 미리보기(직접 입력 모드)로. 수동 폼 **아래** 「회차 초안 N개 · 과제 M개 · 시험 K개」 `<details>` 섹션(데스크톱 기본 펼침·모바일 접힘), 회차 행 = 체크 + 라벨·기간·제목, 행을 펼치면 목표·과제. [방 만들기] 라벨 → "방 만들기 · 회차 N개 함께"(§7) |
 | **D34** | 목·테스트 | — | `AI_INTERVIEW_MOCK=1` 이면 결정적 대본(`rounds-mock.ts`: 제목 "{주제} N주차", 과제 "…읽기/…풀기"). 실제 모델은 Task 7 수동 확인에서만 |
 
+### 3.1 추가 범위: 「바로 모집을 시작할까요?」 (D35~D38, 2026-10-23 사용자 승인)
+
+배경: 새 방은 DRAFT(준비중) 로 시작하고 그룹장이 「모집 시작」(`room_open_recruit`) 을 눌러야 RECRUIT 가 되어 둘러보기에 나온다(비공개방은 초대 링크가 그때부터 열린다 — `ROOM_NOT_RECRUITING`). 사용자가 이 단계를 몰라 "공개방인데 왜 안 보이느냐" 고 물었다. f19936d 가 내 스터디 상단에 「준비중 안내 + [모집 시작]」 막대(`DraftRecruitBanner`, `useOpenRecruit`)를 이미 배포했다 — 이 절은 **만드는 순간**에 고를 수 있게 하는 것이고, 막대는 그대로 둔다(고르지 않았거나 실패한 방의 안전망).
+
+**제약(탐색):** `room_open_recruit`(0004) 는 `require_leader` · `status = DRAFT` · **말단 과제(`task_type is not null`, 보관 제외) 1개 이상** 을 요구한다(`ROOM_NO_LEAF_TASK`). 즉 **회차 초안(과제 또는 시험 리프 포함)이 함께 적용될 때만** 생성 직후 모집 시작이 가능하다. 직접 입력만으로 만든 빈 방은 불가 — 이 제약을 UI 가 그대로 설명한다.
+
+| # | 결정 | 선택지 | 권장(근거) |
+|---|---|---|---|
+| **D35** | 상태 전환 방법 | 새 RPC / `room_create` 인자 / **기존 `room_open_recruit` 를 생성 직후 이어서 호출** | **기존 RPC 재사용**(`openRecruit(slug)` in `src/lib/api/leader.ts`) — 검증(그룹장·DRAFT·말단 과제)·`assignment_resync`·응답이 그대로. 순서: `room_create` → 태그 → 계획서 preview/apply → **`room_open_recruit`** → 이동. 회차 적용이 실패했거나 제외돼 과제가 0이면 호출하지 않는다(`ROOM_NO_LEAF_TASK` 가 뻔하므로). 실패하면 방은 남기고 `note=recruit-skipped` 토스트 "모집은 시작하지 못했어요 · 위의 [모집 시작] 으로 할 수 있어요"(막대가 보이는 상태라 안내만) |
+| **D36** | 선택 위치 | 인터뷰만 / 미리보기만 / **둘 다, 하나의 상태** | (1) 인터뷰: 회차 초안 생성이 **성공한 뒤** 로컬 질문 "방을 만들면서 바로 모집도 시작할까요?" 칩 [네, 바로 모집 시작] [아니요, 나중에 할게요] — 회차를 안 잡았으면 묻지 않는다(불가능한 선택을 보이지 않음) (2) 미리보기(직접 입력 모드 하단, 회차 섹션 아래·[방 만들기] 위): 체크박스 「만들면서 바로 모집 시작」 + 설명 1줄 = `openRecruitNote(values)`(f19936d 와 같은 문구). 인터뷰 답이 체크 초기값이 되고 여기서 바꿀 수 있다. 과제가 0(회차 없음·전부 제외·stale)이면 **체크 불가 + 힌트** "회차에 과제가 1개 이상 있어야 모집을 시작할 수 있어요 · 만든 뒤 내 스터디 상단에서 시작할 수 있어요"(직접 입력만 쓴 사용자에게도 준비중 단계를 알려 주는 효과) |
+| **D37** | 기본값 | 항상 꺼짐 / **회차 초안이 있으면 켜짐** | **켜짐**(회차 초안이 포함돼 있을 때) — 요청의 핵심이 "모르고 지나치는 단계" 라서 opt-out 이 맞다. 사용자는 이미 미리보기에서 회차·과제를 확인했고, 모집중에도 공개 여부·참가 방식은 방 설정에서 바꿀 수 있다(`openRecruitConfirm` 문구와 같은 근거). 인터뷰에서 "아니요" 를 고르면 꺼진 채 미리보기로 |
+| **D38** | 비공개방 의미 | 비공개는 숨김 / **같은 체크, 문구만 다름** | 비공개(`isPublic=false`)도 모집 시작이 있어야 초대 링크가 열린다(`room_join` → `ROOM_NOT_RECRUITING`). 체크는 같고 설명이 `openRecruitNote` 대로 "목록에는 안 보이고 초대 링크를 받은 사람만 …" 으로 바뀐다. 기본값도 켜짐 — 비공개방을 만들고 링크를 보냈는데 아무도 못 들어오는 것이 바로 신고된 혼란의 비공개 버전이다 |
+
+**관련 결정 수정:** D22·D32 의 실패 경로에 `recruit-skipped` 를 더한다. `note` 는 `rounds-skipped`(회차 실패 → 모집도 시도 안 함) · `recruit-skipped`(회차 OK·모집 실패) 둘 중 하나. 버튼 라벨은 회차·모집에 따라 "방 만들기" / "방 만들기 · 회차 N개 함께" / "방 만들기 · 회차 N개 · 바로 모집". DB 변경 없음(0049 는 회차 상한만).
+
 ## 4. 흐름
 
 ```
@@ -63,16 +78,19 @@
   └ (로컬) "회차 초안도 자동으로 잡아 드릴까요? …"  [네, 잡아 주세요] [아니요, 미리보기로]
        ├ 아니오 → onFinish (기존)
        └ 예 → POST /api/rooms/rounds {draft, userLines, style}
-             ├ 200 {plan, rounds(표시용), stats} → NewRoomScreen.roundsDraft 저장 → onFinish
-             └ 오류 → 말풍선 [다시 시도] [그냥 미리보기로]
+             ├ 200 {plan, rounds(표시용), stats} → NewRoomScreen.roundsDraft 저장
+             │     └ (로컬) "방을 만들면서 바로 모집도 시작할까요?"  [네, 바로 모집 시작] [아니요, 나중에 할게요]  (D36) → openRecruit 초기값 → onFinish
+             └ 오류 → 말풍선 [다시 시도] [그냥 미리보기로]  (모집 질문 없음)
 미리보기(직접 입력 모드)
   └ 폼(prefill) + 배너 + 「회차 초안 N개」 details(체크·다시 생성)
-  └ [방 만들기 · 회차 N개 함께]
+  └ ☑ 만들면서 바로 모집 시작 — openRecruitNote 문구 (과제 0 이면 비활성 + 힌트)   (D36~D38)
+  └ [방 만들기 · 회차 N개 · 바로 모집]
        ├ room_create → slug                     (기존, 실패하면 기존 오류 UI)
        ├ putRoomTags (기존, 실패 무시)
-       ├ curriculum_plan_preview(slug, plan(포함 회차만)) → previewId   ┐ 실패 → 토스트 note
+       ├ curriculum_plan_preview(slug, plan(포함 회차만)) → previewId   ┐ 실패 → note=rounds-skipped(모집도 건너뜀)
        ├ curriculum_plan_apply(slug, previewId)                        ┘
-       └ router.push(myStudyEdit(slug) [+ &note=rounds-skipped])
+       ├ room_open_recruit(slug)  (체크됐고 회차 적용 성공일 때만)         실패 → note=recruit-skipped
+       └ router.push(myStudyEdit(slug) [+ &note=…])
 ```
 
 - 다시 생성: 같은 요청을 다시 보낸다(상한 1회 소모). 체크 상태는 초기화.
@@ -164,8 +182,10 @@ alter table public.ai_usage add constraint ai_usage_kind_check check (kind in ('
 | `RATE_LIMITED window:"rounds"` / `AI_BUDGET_EXCEEDED` | "오늘은 회차 초안을 더 만들 수 없어요" + [그냥 미리보기로]. 세그먼트는 숨기지 않는다(인터뷰는 가능) |
 | `room_create` 실패 | 기존 폼 오류 UI. 회차 초안은 그대로 남아 다시 누르면 함께 간다 |
 | preview `ok:false` / apply 예외 / 네트워크 | 방은 만들어졌다 → `myStudyEdit(slug)` + `note=rounds-skipped` → 토스트 "회차 초안은 적용하지 못했어요 · 진행목표에서 직접 추가해 주세요". 콘솔에 `errors[0].code` 만 |
-| 폼에서 기간 수정 | `roundsDraft` 무효화 + [다시 생성] 안내(§4) |
-| 전부 제외 | 회차 없이 방만 — 버튼 라벨 "방 만들기" 로 복귀 |
+| 폼에서 기간 수정 | `roundsDraft` 무효화 + [다시 생성] 안내(§4). 모집 체크도 비활성(과제 0) |
+| 전부 제외 | 회차 없이 방만 — 버튼 라벨 "방 만들기" 로 복귀, 모집 체크 비활성 |
+| `room_open_recruit` 실패(`ROOM_NO_LEAF_TASK`·네트워크 등) | 방(+회차)은 그대로 → `note=recruit-skipped` → 토스트 "모집은 시작하지 못했어요 · 위의 [모집 시작] 으로 할 수 있어요". 준비중 막대(f19936d)가 그대로 보인다 |
+| 모집 성공 | 상태 RECRUIT 로 편집 화면 진입 — 준비중 막대는 조건상 안 그려진다. 별도 토스트 없음(배너·상태 배지로 충분) |
 
 ## 8. 비용·지연 추정
 
@@ -196,7 +216,8 @@ alter table public.ai_usage add constraint ai_usage_kind_check check (kind in ('
 | 라우트 | 403/413/401/400(날짜 없음) · `ai_turn_check(p_kind:"room_rounds")` 가 모델 호출 **전** · 429 window rounds · 503 · 정상 200 모양 · 로그 1줄에 내용 없음 |
 | SQL(PGlite) | 0049: `room_rounds` 11회째 `RATE_LIMITED window:"rounds"` · 10분 창에 두 kind 합산 · 전체 300(테스트용 낮춘 `ai_limits`) → `AI_BUDGET_EXCEEDED` · `room_interview` 동작 0047 과 동일(회귀) |
 | DOM | done 뒤 로컬 질문 칩 2개 · 예 → busy → `onRounds` → 미리보기 · 섹션 요약 문구·체크 해제 시 stats·버튼 라벨 변화 · 기간 수정 → 무효화 안내 · 실패 말풍선 버튼 |
-| 통합(목) | `NewRoomForm.submit`: `room_create` 뒤 `curriculum_plan_preview`→`apply` 호출 순서·인자(포함 회차만) · preview 실패 → push 에 `note` |
+| 통합(목) | `NewRoomForm.submit`: `room_create` 뒤 `curriculum_plan_preview`→`apply`→(체크 시) `room_open_recruit` 호출 순서·인자(포함 회차만) · preview 실패 → `rounds-skipped`(모집 미호출) · 모집 실패 → `recruit-skipped` · 과제 0 이면 모집 미호출 |
+| DOM(모집) | 회차 성공 뒤에만 모집 질문 칩 · 답이 체크 초기값 · 공개/비공개 문구(`openRecruitNote`) · 과제 0·stale 이면 비활성+힌트 · 버튼 라벨 3종 |
 | E2E(선택, MOCK) | 인터뷰 → 예 → 미리보기 → 방 만들기 → `/my-study/{slug}?tab=curriculum&mode=edit` 에 회차 N개 |
 | 수동(호스티드) | 실제 모델 3주제(자격증 12주·코딩테스트 8주·영어 26회차) · 제목 길이·과제 구체성·p95 지연·`incomplete` 여부 |
 
@@ -210,3 +231,5 @@ alter table public.ai_usage add constraint ai_usage_kind_check check (kind in ('
 | 회차 글 품질 | gpt-6-luna 가 "대략적" 초안으로 충분한지 — 부족하면 `AI_INTERVIEW_MODEL` 상위 모델 비교(비용·`roundsGlobalPerDay` 조정) |
 | 제외 회차의 빈 주(D30) | 날짜를 당기지 않는다. 사용자가 당기길 원하면 진행목표 편집(기존 `shift`) |
 | 0049 check 제약 이름 | `ai_usage_kind_check` 는 PG 자동 이름 — Task 1 에서 `\d` 로 확인 뒤 drop |
+| 기본 켜짐(D37)의 부작용 | 공개·바로 참가 방이 생성 즉시 둘러보기에 노출된다. 미리보기에서 회차·체크를 봤고 모집중에도 설정 변경이 가능해 수용. 신고가 오면 기본값만 끈다(상수 1개) |
+| 모집 시작은 회차 적용에 종속 | `ROOM_NO_LEAF_TASK` 때문에 회차 없는 방은 생성 시 모집 불가 — 힌트로 안내하고 막대(f19936d)가 뒤를 받친다 |

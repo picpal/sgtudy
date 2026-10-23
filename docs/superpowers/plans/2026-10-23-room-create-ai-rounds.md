@@ -4,7 +4,7 @@
 
 **Goal:** 인터뷰가 끝나면 "회차 초안도 자동으로 잡아 드릴까요?" 를 묻고, 예 를 고르면 `POST /api/rooms/rounds` 1회로 **방 기간을 서버가 나눈 회차 표**에 모델이 제목·목표·과제 글을 채운 `sgtudy.plan/v1` 계획서를 받는다. 미리보기(수동 폼) 아래 접힘 섹션에 보여 주고(회차 제외 체크·다시 생성), [방 만들기] 때 `room_create` → `curriculum_plan_preview` → `curriculum_plan_apply` 로 방과 회차를 만든다. 회차가 실패해도 방은 만들어진다.
 
-**Spec:** `docs/superpowers/specs/2026-10-23-room-create-ai-rounds-design.md` (D21~D34 권장안 · 사용자 승인 대기)
+**Spec:** `docs/superpowers/specs/2026-10-23-room-create-ai-rounds-design.md` (D21~D34 권장안 · 사용자 승인 대기 · **D35~D38 「바로 모집 시작」 추가 범위** — Task 4·5·6 에만 영향, Task 1~3 무관)
 
 **Architecture:**
 - **DB** = `0049_ai_rounds_usage.sql` 하나: `ai_usage.kind` check 에 `room_rounds` 추가, `ai_limits()`·`ai_turn_check()` 재정의(0047 판 복사 + rounds 분기). 계획서 경로(0034·0038)는 **무변경**.
@@ -40,6 +40,7 @@
 6. **1단계 회귀 없음** — `room_interview` 상한 동작·인터뷰 DOM 테스트·수동 폼 전부 통과. `client.ts` 일반화 뒤 `openaiCallModel` 동작 동일. → Task 1·3·4.
 7. **기간 수정 시 무효화** — 폼에서 시작·종료일을 바꾸면 회차 초안이 사라지고 안내가 보인다. → Task 4.
 8. **접근성·반응형** — details `<summary>` 44px, 체크박스 라벨, 390/820/1440 가로 스크롤 없음, 로컬 질문 칩 radiogroup. → Task 4·6.
+9. **모집 시작은 기존 RPC·조건 그대로(D35)** — `openRecruit(slug)` 는 회차 적용 성공 **뒤**, 체크됐고 과제 ≥1 일 때만. 실패해도 push. f19936d 의 `DraftRecruitBanner`·`useOpenRecruit`·`LeaderPanel` 은 **수정하지 않는다**(문구 함수 `openRecruitNote` 만 import). → Task 4·5.
 
 ---
 
@@ -109,6 +110,14 @@
 - Modify: `src/components/room-new/NewRoomForm.tsx` — props `afterCreate?: (slug: string) => Promise<string | null>`(돌려준 문자열 = 이동 URL 에 붙일 `note`), `submitLabel?: string`. `submit`: `room_create` → `putRoomTags`(기존) → `const note = afterCreate ? await afterCreate(room.slug).catch(() => "rounds-skipped") : null` → `router.push(note ? `${routes.myStudyEdit(room.slug)}&note=${note}` : routes.myStudyEdit(room.slug))`. 그 외 무변경.
 - Create: `src/lib/api/plan.ts` — `planPreview(slug, plan) → PreviewData`(`rpc("curriculum_plan_preview", {p_slug, p_plan, p_undo_of: null})`), `planApply(slug, previewId)`; `applyRoundsPlan(slug, plan): Promise<"applied"|"rounds-skipped">`(preview `ok:false` → skipped + `console.warn(code)`; apply 예외 → skipped). `database.types.ts` 에 RPC 타입이 없으면 1단계 관례대로 추가.
 - Modify: `src/components/room-new/NewRoomScreen.tsx` — `afterCreate = roundsDraft && !roundsStale && includedOps.length ? (slug) => applyRoundsPlan(slug, withOnly(plan, excluded)) : undefined`. `withOnly` 는 `ops.filter((_, i) => !excluded.has(i))` 뿐(D31).
+
+**추가 범위 — 바로 모집 시작(D35~D38), 같은 Task 안:**
+- Modify: `src/components/room-new/interview/state.ts` — `rounds` 단계에 `"recruitAsking"` 추가(회차 성공 뒤), `openRecruit: boolean | null`(인터뷰 답, null = 안 물음). 액션 `roundsDone`(→ recruitAsking), `recruitAnswer(yes)`.
+- Modify: `src/components/room-new/interview/InterviewPanel.tsx` — `rounds==="recruitAsking"` 이면 로컬 말풍선 "방을 만들면서 바로 모집도 시작할까요? {openRecruitNote(draft)}" + `SingleChips` [네, 바로 모집 시작] [아니요, 나중에 할게요] → `recruitAnswer` → `onRecruitPref(yes)` → `onFinish()`. 회차 실패·건너뛰기 경로에서는 묻지 않는다.
+- Modify: `src/components/room-new/NewRoomScreen.tsx` — `openRecruit: boolean` 상태(기본 **true**, 인터뷰 답이 덮어씀 — D37) · `canRecruit = includedLeafCount(roundsDraft, excluded) > 0 && !roundsStale`(과제 + 시험 리프 수) · `afterCreate` 를 `(slug) => applyRoundsPlan(...).then(r => r === "applied" && openRecruit && canRecruit ? tryOpenRecruit(slug) : r)` 로 확장 · 버튼 라벨 3종 "방 만들기" / "… · 회차 N개 함께" / "… · 회차 N개 · 바로 모집".
+- Create: `src/components/room-new/RecruitNowField.tsx` — 체크박스 「만들면서 바로 모집 시작」(44px 라벨) + 설명 `openRecruitNote({isPublic, joinMode})`(`src/lib/api/leader.ts` import, f19936d 문구 재사용) · `disabled={!canRecruit}` 이면 힌트 "회차에 과제가 1개 이상 있어야 모집을 시작할 수 있어요 · 만든 뒤 내 스터디 상단에서 시작할 수 있어요"(`aria-describedby`). 회차 섹션 아래·폼 submit 버튼 위에 `NewRoomForm` 의 `extra` 슬롯(새 prop `beforeSubmit?: ReactNode`)으로 렌더. 직접 입력만 쓴 사용자에게도 비활성 상태로 보인다(D36).
+- Modify: `src/lib/api/plan.ts` — `tryOpenRecruit(slug): Promise<"applied" | "recruit-skipped">`(`openRecruit(slug)` from `@/lib/api/leader`; 예외 → skipped + `console.warn(code)`). **`useOpenRecruit` 훅은 쓰지 않는다**(토스트·refresh 가 생성 화면에 없음) — RPC 래퍼 `openRecruit` 와 문구만 공유.
+- Tests 추가: `state.test.ts`(roundsDone → recruitAsking · recruitAnswer), `InterviewPanel.dom.test.ts`(회차 성공 뒤에만 모집 칩 · 답 → `onRecruitPref` → `onFinish` · 회차 실패 경로엔 칩 없음), `RecruitNowField.dom.test.ts`(공개 direct/approval·비공개 문구 · disabled 힌트 · 44px), `NewRoomScreen.dom.test.ts`(기본 체크 true · 인터뷰 "아니요" → false · 전부 제외/stale → disabled · 라벨 3종), `NewRoomForm.dom.test.ts`(`afterCreate` 결과 `recruit-skipped` → note 쿼리), `plan.test.ts`(`tryOpenRecruit` 분기 · apply 실패면 openRecruit 미호출).
 - Tests: `state.test.ts`(style 기억·rounds 단계 전이·userLines 12개), `InterviewPanel.dom.test.ts` 보강(done → 질문 칩 2개 · 아니오 → `onFinish` · 예 → `postRounds` 본문(`style`·`userLines`) → `onRounds`+`onFinish` · 실패 말풍선 버튼 · 429 rounds 는 다시 시도 없음), `RoundsDraftSection.dom.test.ts`(요약 문구·체크 해제 → stats·전부 제외 문구·stale 안내·padded 문구·summary 44px 클래스), `NewRoomScreen.dom.test.ts` 보강(기간 수정 → stale · 버튼 라벨 "방 만들기 · 회차 N개 함께"/"방 만들기"), `NewRoomForm.dom.test.ts` 보강(`afterCreate` 가 `room_create` **뒤** 호출·거부돼도 push 됨·note 쿼리), `plan.test.ts`(`applyRoundsPlan` 분기 — `rpc` 를 `vi.mock`).
 
 - [ ] **Step 1: 시작 조건** — Task 0 Step 4 의 autoscroll 커밋이 main 에 있고 `InterviewPanel.tsx` 작업 트리가 깨끗한지 확인. 아니면 멈추고 보고.
@@ -120,8 +129,8 @@
 
 **Files:**
 - Modify: `src/components/my-study/editUrl.ts`(또는 Task 0 Step 5 에서 확인한 쿼리 처리 위치) — `note=rounds-skipped` 읽기 + URL 에서 제거(`router.replace`, 새로고침 때 재표시 방지).
-- Modify: `src/components/my-study/MyStudyScreen.tsx` — 마운트 시 note 가 있으면 `setToast({text:"회차 초안은 적용하지 못했어요 · 진행목표에서 직접 추가해 주세요", tone:"warn"})`(기존 `Toast` 톤 이름 확인).
-- Tests: `editUrl.test.ts` 보강, `MyStudyScreen.dom.test.ts` 에 케이스 1개(note → 토스트 문구, 없으면 없음).
+- Modify: `src/components/my-study/MyStudyScreen.tsx` — 마운트 시 note 가 있으면 토스트: `rounds-skipped` → "회차 초안은 적용하지 못했어요 · 진행목표에서 직접 추가해 주세요", `recruit-skipped` → "모집은 시작하지 못했어요 · 위의 [모집 시작] 으로 할 수 있어요"(`tone` 은 기존 `Toast` 톤 이름 확인). **`DraftRecruitBanner` 는 건드리지 않는다**(준비중이면 그대로 보여 재시도 경로가 된다).
+- Tests: `editUrl.test.ts` 보강, `MyStudyScreen.dom.test.ts` 에 케이스 2개(note 두 값 → 각 문구, 없으면 없음, 알 수 없는 값 무시).
 
 - [ ] **Step 1:** 테스트 먼저. **Step 2:** 구현(다른 note 값은 무시). **Step 3:** 게이트 · 커밋.
 
@@ -133,7 +142,8 @@
 
 - [ ] **Step 1:** `vm_stat` → `.env.local` `AI_INTERVIEW_MOCK=1` → `npx next dev -p 3700` → `ego-browser` 로 `/rooms/new?mode=ai` 를 390/820/1440 에서: 인터뷰 완주 → 질문 칩 → 예 → "잡는 중" → 미리보기에 회차 섹션(모바일 접힘·데스크톱 펼침) → 회차 1개 제외 → 버튼 라벨 → [방 만들기] → `/my-study/{slug}?tab=curriculum&mode=edit` 에 회차 N−1 개·과제·시험 리프([시험] 표시) 확인. 키보드만으로 질문 칩·체크·details 조작. 스크린샷 3장은 `$CLAUDE_JOB_DIR/tmp`.
 - [ ] **Step 2:** 발화에 "장애 테스트" 로 실패 말풍선 → [그냥 미리보기로] → 방만 생성. 발화 "부족 테스트" 로 `padded` 문구.
-- [ ] **Step 3:** 폼에서 종료일 수정 → stale 안내 → [다시 생성] → 회차 수 변화.
+- [ ] **Step 3:** 폼에서 종료일 수정 → stale 안내 + 모집 체크 비활성 → [다시 생성] → 회차 수 변화·체크 복귀.
+- [ ] **Step 3b(모집):** (가) 인터뷰 → 회차 예 → 모집 "네" → 미리보기 체크 켜짐·라벨 "… · 바로 모집" → 생성 → 편집 화면 상태 배지 **모집중**·준비중 막대 없음 → 둘러보기에 방 보임. (나) 모집 "아니요" → 체크 꺼짐 → 생성 → 준비중 막대 보임. (다) 직접 입력만 → 체크 비활성+힌트 확인. (라) 비공개방으로 (가) 반복 → 문구 "초대 링크를 받은 사람만 …".
 - [ ] **Step 4:** dev 서버 종료. 문제는 해당 Task 파일만 고치고 게이트 · 커밋.
 
 ---
@@ -161,3 +171,6 @@
 | D29 상한 숫자 / 턴에 합산 | Task 1 `ai_limits()` 상수 · 합산이면 0049 를 check 제약 1줄로 축소 |
 | D30 인라인 편집 추가 | Task 4 `RoundsDraftSection` 에 입력 칸 + `withOnly` 를 제목 반영까지 확장(서버 검증은 그대로) |
 | D33 질문 위치(`done` 전에 묻기 등) | Task 4 `state.ts` 전이·`InterviewPanel` |
+| D37 기본값 꺼짐 | Task 4 `NewRoomScreen` 초기값 상수 1개 + 테스트 |
+| D36 인터뷰 질문 제거(체크박스만) | Task 4 `recruitAsking` 단계·칩 삭제, `RecruitNowField` 는 유지 |
+| D35 회차 없는 방도 모집(서버 `ROOM_NO_LEAF_TASK` 완화) | DB 변경(0050) — 이 플랜 밖, 사용자 결정 |
