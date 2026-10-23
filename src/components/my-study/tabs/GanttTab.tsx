@@ -7,7 +7,7 @@ import { useToday } from "@/lib/today";
 import { Avatar } from "@/components/ui/Avatar";
 import { Chip, CodeIcons, PERSONAL_BAR, Seg, TypeBadge } from "../bits";
 import { isDone, ownerCode, ownerOf } from "../personal";
-import { codeLabel, ganttRange, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
+import { codeLabel, ganttRange, listClosed, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
 import { toggleMinePatch, toggleOthersPatch, type ScreenState, type Update, type Zoom } from "../state";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void; isLeader: boolean };
@@ -34,7 +34,9 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
   const meId = useMe()?.id ?? null;
   // 진행목표와 같은 두 칩·같은 state ("내 것만"·"팀원 목표"; 둘은 서로 끈다). 간트는 읽기 전용 — 편집 범위 없음
   const scope: ItemScope = { meId, mineOnly: S.mineOnly, others: S.othersPersonal && !S.mineOnly, isEdit: false, isLeader };
-  const rows = visibleNodes(tree.roots, S.closed, scope);
+  // 진행목표와 같은 접힘 — 고른 값 우선, 없으면 끝난 회차는 접는다(연 과제의 회차는 진행목표가 펼쳐 둔다)
+  const closed = listClosed(tree.roots, S.closed, today);
+  const rows = visibleNodes(tree.roots, closed, scope);
   const toggleMine = () => update(toggleMinePatch);
   const toggleOthers = () => update(toggleOthersPatch);
 
@@ -49,7 +51,7 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
   const tIdx = diffDays(start, today);
   const hasToday = tIdx >= 0 && tIdx < nDays;
   const todayX = tIdx * dw + dw / 2;
-  const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !p.closed[id] } }));
+  const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !listClosed(tree.roots, p.closed, today)[id] } }));
   // 처음(및 확대 단위 변경 시) 오늘이 차트 영역 가운데쯤 오도록 가로 스크롤 (Q1-21/Q3-08)
   const scroller = useRef<HTMLDivElement>(null);
   const labelCol = useRef<HTMLDivElement>(null);
@@ -121,7 +123,7 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
             </div>
 
             {rows.map((n) => {
-              const open = !S.closed[n.id];
+              const open = !closed[n.id];
               const x = diffDays(start, n.s) * dw;
               const w = (diffDays(n.s, n.e) + 1) * dw;
               const personal = n.leaf && n.personal;

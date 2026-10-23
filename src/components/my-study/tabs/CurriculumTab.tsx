@@ -74,7 +74,7 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
   const isEdit = canEdit && S.curMode === "edit";
   // 보기 범위 — 편집 모드엔 개인 목표 없음·필터 없음. 보기 모드는 칩("내 것만"·"팀원 목표"; 둘은 서로 끈다)
   const scope: ItemScope = { meId, mineOnly: !isEdit && S.mineOnly, others: !isEdit && S.othersPersonal && !S.mineOnly, isEdit, isLeader };
-  // 끝난 회차는 기본 접힘(고른 적 없을 때) — 보기·편집 목록이 같은 값을 쓴다. 간트는 S.closed 그대로
+  // 끝난 회차는 기본 접힘(고른 적 없을 때) — 보기·편집 목록과 간트가 같은 값을 쓴다
   const closed = listClosed(tree.roots, S.closed, today);
   const rows = visibleNodes(tree.roots, closed, scope);
   const canAddPersonal = !isEdit && !!personal?.canAdd;

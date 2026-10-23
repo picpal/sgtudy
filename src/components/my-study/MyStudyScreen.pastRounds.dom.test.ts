@@ -113,3 +113,26 @@ describe("진행목표 — 끝난 회차 기본 접힘", () => {
     expect(toggleOf(host, title("1")).getAttribute("aria-expanded")).toBe("true");
   });
 });
+
+const ganttHas = (host: HTMLElement, id: string) => !!host.querySelector(`[data-gantt-row="${id}"]`);
+describe("간트 — 끝난 회차 기본 접힘(진행목표와 같은 규칙)", () => {
+  it("끝난 회차는 접혀 있고 진행 회차는 펼쳐져 있다 · 펼치면 그대로 유지", () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=gantt");
+    const { host } = mount({ initialTab: "gantt", key: "aws::gantt" } as Partial<Props>);
+    expect(ganttHas(host, "11")).toBe(false);
+    expect(ganttHas(host, "21")).toBe(true);
+    act(() => toggleOf(host, title("1")).click());
+    expect(ganttHas(host, "11")).toBe(true);
+    act(() => buttonByText(host, "보드").click());
+    act(() => buttonByText(host, "간트").click());
+    expect(ganttHas(host, "11")).toBe(true);
+  });
+  it("끝난 회차 안 과제를 연 뒤 간트로 오면 그 회차가 펼쳐져 있다", () => {
+    window.history.replaceState(null, "", "/my-study/aws?tab=curriculum&item=11");
+    const { host } = mount({ initialItem: "11" });
+    expect(detailTitle(host)).toBe(title("11"));
+    act(() => buttonByText(host, "간트").click());
+    expect(ganttHas(host, "11")).toBe(true);
+  });
+});
+
