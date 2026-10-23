@@ -145,5 +145,6 @@ sqlTest("rls: attachments bucket and storage policies exist", withCase(db, async
   assertEquals(Number(bk[0].file_size_limit), 10485760);
   assert((bk[0].allowed_mime_types as string[]).includes("application/pdf"));
   const pols = await q("select polname from pg_policy where polrelid = 'storage.objects'::regclass order by 1");
-  assertEquals(pols.map((p) => p.polname), ["attachments_insert_assignee", "attachments_insert_node_doc", "attachments_select_member", "attachments_select_node_doc"]);
+  assertEquals(pols.map((p) => p.polname), ["attachments_insert_assignee", "attachments_insert_node_doc", "attachments_insert_upload_ticket",
+                                         "attachments_select_member", "attachments_select_node_doc", "attachments_select_upload_ticket"]);
 }));

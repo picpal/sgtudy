@@ -609,3 +609,42 @@ Deno.test({ name: "트랜잭션 경계: api_invoke 가 남긴 sgtudy.api_uid 는
   await g.exec("rollback");
   await g.close();
 } });
+
+cases("api invoke 0045 · 그림 올리기", db, [
+  { name: "prepare → commit(dry·진짜) — commit 은 티켓의 방으로 해석 · 감사 summary 에 이름 없음 · read 토큰 API_SCOPE_DENIED", run: async (q) => {
+    await setToday(q, "2026-10-12");
+    const t = await tokenFor(q, "민수");
+    const leaf = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    const p = await call(q, t, "node_upload_prepare", { study: "aws", node: Number(leaf), fileName: "비밀이름.svg", contentType: "image/svg+xml", size: 42 });
+    assertEquals([p.ok, p.data.fileName, p.data.node.id], [true, "비밀이름.svg", leaf]);
+    await q("insert into storage.objects (bucket_id, name, owner_id, metadata) values ('attachments', $1, null, '{\"size\":40,\"mimetype\":\"image/svg+xml\"}')", [p.data.objectPath]);
+    const d = await call(q, t, "node_upload_commit", { uploadId: p.data.uploadId, dry: true });
+    assertEquals([d.ok, d.data.dry, d.data.size], [true, true, 40]);
+    const c = await call(q, t, "node_upload_commit", { uploadId: p.data.uploadId });
+    assertEquals([c.ok, c.data.file.name, c.data.images], [true, "비밀이름.svg", ["비밀이름.svg"]]);
+    const bad = await call(q, t, "node_upload_commit", { uploadId: "not-a-uuid" });
+    assertEquals([bad.ok, bad.error.code], [false, "UPLOAD_NOT_FOUND"]);
+    const audit = await q(`select op, ok, dry_run, room_id::text as room, summary, summary::text as s, error_code from public.api_audit
+                           where op like 'node_upload_%' order by id`);
+    assertEquals(audit.map((a) => [a.op, a.ok, a.dry_run, a.room]),
+      [["node_upload_prepare", true, null, await roomId(q, "aws")], ["node_upload_commit", true, true, await roomId(q, "aws")],
+       ["node_upload_commit", true, false, await roomId(q, "aws")], ["node_upload_commit", false, false, null]]);
+    assertEquals(audit[0].summary, { node: leaf, contentType: "image/svg+xml", size: 42 });
+    assertEquals(audit[2].summary, { node: leaf, contentType: "image/svg+xml", size: 40, replaced: 0, replayed: false, dry: false });
+    assertEquals(audit[3].error_code, "UPLOAD_NOT_FOUND");
+    for (const a of audit) assertEquals(a.s.includes("비밀이름"), false);         // T12
+    const r = await tokenFor(q, "민수", "{read}");
+    await expectFail(q("select public.api_invoke($1, 'node_upload_prepare', '{}'::jsonb)", [r]), "API_SCOPE_DENIED");
+    await expectFail(q("select public.api_invoke($1, 'node_upload_commit', '{}'::jsonb)", [r]), "API_SCOPE_DENIED");
+    assertEquals((await one(q, "select public.api_scope_of('node_upload_prepare') as s")).s, "curriculum:write");
+  } },
+  { name: "남의 티켓은 commit 해석 단계에서 UPLOAD_NOT_FOUND(방 정보 없이)", run: async (q) => {
+    await setToday(q, "2026-10-12");
+    const leaf = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    const t = await tokenFor(q, "민수");
+    const p = await call(q, t, "node_upload_prepare", { study: "aws", node: Number(leaf), fileName: "a.png", contentType: "image/png", size: 1 });
+    const other = await tokenFor(q, "지은");
+    const c = await call(q, other, "node_upload_commit", { uploadId: p.data.uploadId });
+    assertEquals([c.ok, c.error.code], [false, "UPLOAD_NOT_FOUND"]);
+  } },
+]);

@@ -37,10 +37,11 @@ enabled = true
 file_size_limit = "10MiB"
 
 # D10: private 버킷, 10MB, MIME 화이트리스트. 호스팅에는 0003_rls.sql 이 같은 설정으로 INSERT 한다.
+# 0045: image/svg+xml 추가(노드 첨부만 등록 — 호스팅은 0045 의 update 가 맞춘다)
 [storage.buckets.attachments]
 public = false
 file_size_limit = "10MiB"
-allowed_mime_types = ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/zip", "application/x-zip-compressed", "text/plain", "text/markdown"]
+allowed_mime_types = ["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf", "application/zip", "application/x-zip-compressed", "text/plain", "text/markdown", "image/svg+xml"]
 
 [auth]
 enabled = true

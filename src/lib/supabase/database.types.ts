@@ -976,6 +976,83 @@ export type Database = {
           },
         ]
       }
+      node_upload_tickets: {
+        Row: {
+          committed_at: string | null
+          content_type: string
+          created_at: string
+          expires_at: string
+          file_id: string | null
+          file_name: string
+          id: string
+          node_id: number
+          object_path: string
+          replace: boolean
+          room_id: number
+          size_bytes: number
+          user_id: string
+        }
+        Insert: {
+          committed_at?: string | null
+          content_type: string
+          created_at?: string
+          expires_at: string
+          file_id?: string | null
+          file_name: string
+          id?: string
+          node_id: number
+          object_path: string
+          replace?: boolean
+          room_id: number
+          size_bytes: number
+          user_id: string
+        }
+        Update: {
+          committed_at?: string | null
+          content_type?: string
+          created_at?: string
+          expires_at?: string
+          file_id?: string | null
+          file_name?: string
+          id?: string
+          node_id?: number
+          object_path?: string
+          replace?: boolean
+          room_id?: number
+          size_bytes?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "node_upload_tickets_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "goal_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "node_upload_tickets_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "node_upload_tickets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "node_upload_tickets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           actor_user_id: string | null
@@ -2462,6 +2539,7 @@ export type Database = {
         Returns: Json
       }
       node_doc_key_ok: { Args: { p_name: string }; Returns: boolean }
+      node_doc_mime_types: { Args: never; Returns: string[] }
       node_doc_object_readable: { Args: { p_name: string }; Returns: boolean }
       node_doc_object_writable: { Args: { p_name: string }; Returns: boolean }
       node_doc_readable: {
@@ -2515,8 +2593,15 @@ export type Database = {
       }
       node_files: { Args: { p_node: number }; Returns: Json }
       node_files_json: { Args: { p_node: number }; Returns: Json }
-      node_files_set: {
-        Args: { p_file_ids: string[]; p_node: number }
+      node_files_limit_check: { Args: { p_ids: string[] }; Returns: undefined }
+      node_files_set:
+        | { Args: { p_file_ids: string[]; p_node: number }; Returns: Json }
+        | {
+            Args: { p_base: string[]; p_file_ids: string[]; p_node: number }
+            Returns: Json
+          }
+      node_files_set_core: {
+        Args: { p_base: string[]; p_file_ids: string[]; p_node: number }
         Returns: Json
       }
       node_get: {
@@ -2548,6 +2633,9 @@ export type Database = {
         }
       }
       node_has_submissions: { Args: { p_node: number }; Returns: boolean }
+      node_image_limit: { Args: never; Returns: number }
+      node_image_mime_types: { Args: never; Returns: string[] }
+      node_image_names: { Args: { p_node: number }; Returns: Json }
       node_indent: {
         Args: { p_node_id: number; p_slug: string }
         Returns: Json
@@ -2577,6 +2665,7 @@ export type Database = {
         Returns: undefined
       }
       node_subtree: { Args: { p_node: number }; Returns: number[] }
+      node_svg_max_bytes: { Args: never; Returns: number }
       node_unarchive: {
         Args: { p_node_id: number; p_slug: string }
         Returns: Json
@@ -2585,6 +2674,30 @@ export type Database = {
         Args: { p_node_id: number; p_patch: Json; p_slug: string }
         Returns: Json
       }
+      node_upload_commit: {
+        Args: { p_dry: boolean; p_slug: string; p_upload: string }
+        Returns: Json
+      }
+      node_upload_node_json: {
+        Args: { n: Database["public"]["Tables"]["goal_nodes"]["Row"] }
+        Returns: Json
+      }
+      node_upload_prepare: {
+        Args: {
+          p_mime: string
+          p_name: string
+          p_node: number
+          p_replace: boolean
+          p_size: number
+          p_slug: string
+        }
+        Returns: Json
+      }
+      node_upload_same_name: {
+        Args: { p_images_only: boolean; p_name: string; p_node: number }
+        Returns: number
+      }
+      node_upload_ticket_open: { Args: { p_name: string }; Returns: boolean }
       notice_assert_editable: {
         Args: { r: Database["public"]["Tables"]["rooms"]["Row"] }
         Returns: undefined

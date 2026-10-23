@@ -129,3 +129,20 @@ cases("orphan-objects", db, [
     assertEquals((await reg(again)).status, "ready");
   } },
 ]);
+
+cases("orphan-objects · 0045 upload tickets", db, [
+  { name: "완료 안 한 티켓 객체는 24h 뒤 후보 · 완료된 것은 행이 있어 후보 아님", run: async (q) => {
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, await uidOf(q, "민수"));
+    const leaf = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    const prep = async (name: string) => (await one(q, "select public.node_upload_prepare('aws', $1::bigint, $2, 'image/png', 10, false) as r", [leaf, name])).r;
+    const [left, done] = [await prep("left.png"), await prep("done.png")];
+    for (const t of [left, done]) {
+      await q("insert into storage.objects (bucket_id, name, owner_id, metadata, created_at) values ('attachments', $1, null, '{\"size\":10,\"mimetype\":\"image/png\"}', now() - interval '2 hours')", [t.objectPath]);
+    }
+    await one(q, "select public.node_upload_commit('aws', $1::uuid, false)", [done.uploadId]);
+    await q("update storage.objects set created_at = now() - interval '25 hours' where name in ($1, $2)", [left.objectPath, done.objectPath]);
+    const got = await candidates(q);
+    assertEquals([got.includes(left.objectPath), got.includes(done.objectPath)], [true, false]);
+  } },
+]);

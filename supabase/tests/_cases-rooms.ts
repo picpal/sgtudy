@@ -826,6 +826,8 @@ export const ROOM_CASES: Case[] = [
         "api_invoke(text,text,jsonb)",
         // 0037: 회차 시험 보기(anon 은 EXAM_NOT_FOUND 로 끝난다 — 존재 숨김)
         "exam_get(text,bigint)",
+        // 0045: 그림 업로드 티켓 Storage 정책 래퍼(anon 서명 업로드 — 열린 티켓의 그 경로만)
+        "node_upload_ticket_open(text)",
       ];
       const AUTH = [
         ...ANON,
@@ -871,6 +873,8 @@ export const ROOM_CASES: Case[] = [
         "feedback_submit(text,text,jsonb)",
         // 0046: 오답노트(내부 wrong_note_* 헬퍼는 GRANT 없음)
         "wrong_note_list(text)", "wrong_note_mine()", "wrong_note_practice(text,jsonb)", "wrong_note_master(text,bigint,boolean)",
+        // 0045: 노드 첨부 저장 base 판(내부 node_files_set_core·node_upload_* 는 GRANT 없음)
+        "node_files_set(bigint,uuid[],uuid[])",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

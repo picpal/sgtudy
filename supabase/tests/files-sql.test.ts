@@ -138,8 +138,23 @@ cases("files", db, [
   { name: "bucket + policies from 0003 are what file_register relies on", run: async (q) => {
     const bk = await one(q, "select file_size_limit::text as lim, allowed_mime_types as m from storage.buckets where id = 'attachments'");
     assertEquals(bk.lim, "10485760");
-    assertEquals((bk.m as string[]).length, 9);
-    const mt = await one(q, "select public.allowed_mime_types() as m");
+    assertEquals((bk.m as string[]).length, 10);                                // 0045: 9종 + SVG(노드 첨부만 등록)
+    const mt = await one(q, "select public.node_doc_mime_types() as m");
     assertEquals((mt.m as string[]).sort(), (bk.m as string[]).sort());
+    const sub = await one(q, "select public.allowed_mime_types() as m");        // 제출 첨부 목록은 그대로 9종(SVG 없음)
+    assertEquals((sub.m as string[]).length, 9);
+    assertEquals((sub.m as string[]).includes("image/svg+xml"), false);
+  } },
+]);
+
+cases("files · 0045", db, [
+  { name: "제출 첨부는 SVG 를 받지 않는다(버킷은 받지만 file_register 가 거부 — 고아 정리가 지운다)", run: async (q) => {
+    await setNow(q, "2026-10-12T03:00:00Z");
+    const cheolsu = await uidOf(q, "철수"); const room = await roomId(q, "aws"); const ec2 = await nodeId(q, "aws", "EC2 인스턴스 유형 정리");
+    await asUser(q, cheolsu);
+    const path = `${room}/${ec2}/${cheolsu}/${crypto.randomUUID()}.svg`;
+    await uploaded(q, path, cheolsu, 100, "image/svg+xml");
+    await expectFail(register(q, ec2, path, "a.svg", "image/svg+xml", 100), "FILE_TYPE_NOT_ALLOWED");
+    await expectFail(register(q, ec2, path, "a.png", "image/png", 100), "FILE_TYPE_NOT_ALLOWED");   // 신고를 속여도 실물 MIME
   } },
 ]);

@@ -374,3 +374,82 @@ cases("node attachments · RPC", db, [
     }
   } },
 ]);
+
+// ───────── 0045: 종류별 한도 · SVG · 3인자 node_files_set (스펙 D18·D19·D30) ─────────
+const setFrom = (q: Q, node: string, ids: string[], base: string[]) =>
+  one(q, "select public.node_files_set($1::bigint, $2::uuid[], $3::uuid[]) as r", [node, uuids(ids), uuids(base)]).then((r) => r.r as Row[]);
+const img = (q: Q, node: string, room: string, uid: string) => staged(q, node, room, uid, "image/svg+xml", "svg");
+/** FILE_LIMIT_EXCEEDED 의 문구(detail)까지 — 종류별 한도 구분 */
+async function expectLimit(p: Promise<unknown>, detail: string) {
+  try { await p; } catch (e) {
+    const err = e as { message: string; detail?: string };
+    assertEquals([err.message, err.detail], ["FILE_LIMIT_EXCEEDED", detail]);
+    return;
+  }
+  throw new Error(`expected FILE_LIMIT_EXCEEDED (${detail}), but the call succeeded`);
+}
+
+cases("node attachments · 0045", db, [
+  { name: "SVG: 노드 첨부는 등록 OK · 2MB 초과 FILE_TOO_LARGE(실물 크기) · 제출 첨부(file_register)는 거부", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF); const minsu = await uidOf(q, "민수");
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, minsu);
+    const a = await img(q, leaf, aws, minsu);
+    assertEquals((await one(q, "select content_type from public.files where id = $1::uuid", [a])).content_type, "image/svg+xml");
+    const big = `n/${aws}/${leaf}/${crypto.randomUUID()}.svg`;
+    await q("insert into storage.objects (bucket_id, name, owner_id, metadata) values ('attachments', $1, $2, $3::jsonb)",
+            [big, minsu, JSON.stringify({ size: 2097153, mimetype: "image/svg+xml" })]);
+    await expectFail(one(q, "select public.node_file_register($1::bigint, $2, 'b.svg', 'image/svg+xml', 10)", [leaf, big]), "FILE_TOO_LARGE");
+    const cheolsu = await uidOf(q, "철수");
+    await asUser(q, cheolsu);
+    const sub = `${aws}/${leaf}/${cheolsu}/${crypto.randomUUID()}.svg`;
+    await q("insert into storage.objects (bucket_id, name, owner_id, metadata) values ('attachments', $1, $2, '{\"size\":10,\"mimetype\":\"image/svg+xml\"}')", [sub, cheolsu]);
+    await expectFail(one(q, "select public.file_register($1::bigint, $2, 'x.svg', 'image/svg+xml', 10)", [leaf, sub]), "FILE_TYPE_NOT_ALLOWED");
+  } },
+  { name: "종류별 한도: 그림 20 + 문서 5 동시에 붙는다 · 그림 21 / 문서 6 은 각 문구로 거부 · 미저장 한도도 종류별", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF); const minsu = await uidOf(q, "민수");
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, minsu);
+    const imgs: string[] = []; const docs: string[] = [];
+    for (let i = 0; i < 20; i++) imgs.push(await img(q, leaf, aws, minsu));          // 미저장 그림 20(문서 한도 5 와 별개)
+    for (let i = 0; i < 5; i++) docs.push(await staged(q, leaf, aws, minsu));
+    await expectLimit(img(q, leaf, aws, minsu), "그림은 항목당 20개까지예요");
+    await expectLimit(staged(q, leaf, aws, minsu), "파일은 항목당 5개까지예요");
+    assertEquals((await setFiles(q, leaf, [...imgs, ...docs])).length, 25);
+    const extraImg = await img(q, leaf, aws, minsu); const extraDoc = await staged(q, leaf, aws, minsu);
+    await expectLimit(setFiles(q, leaf, [...imgs, ...docs, extraImg]), "그림은 항목당 20개까지예요");
+    await expectLimit(setFiles(q, leaf, [...imgs, ...docs, extraDoc]), "파일은 항목당 5개까지예요");
+  } },
+  { name: "3인자: base 밖(편집 중 붙은) 파일은 남고 base 안에서 빠진 것만 DELETED · 새 미저장도 붙는다", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF); const minsu = await uidOf(q, "민수");
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, minsu);
+    const a = await img(q, leaf, aws, minsu); const b = await staged(q, leaf, aws, minsu);
+    await setFiles(q, leaf, [a, b]);
+    const base = [a, b];                                                               // 편집 시작 때 붙어 있던 것
+    const mcp = await img(q, leaf, aws, minsu); await setFiles(q, leaf, [a, b, mcp]);   // 그 사이 다른 경로가 붙임
+    const fresh = await staged(q, leaf, aws, minsu);
+    const r = await setFrom(q, leaf, [a, fresh], base);                                 // 편집에서 b 를 빼고 fresh 를 더함
+    assertEquals(r.map((f) => f.id).sort(), [a, fresh, mcp].sort());
+    assertEquals((await statusOf(q, b)).status, "DELETED");
+    assertEquals((await statusOf(q, mcp)).status, "READY");
+    // 2인자 판은 그대로 집합 의미(목록에 없으면 지운다)
+    assertEquals((await setFiles(q, leaf, [a])).map((f) => f.id), [a]);
+    assertEquals((await statusOf(q, mcp)).status, "DELETED");
+  } },
+  { name: "3인자: 합친 결과로 한도 · base null VALIDATION_FAILED · 멤버는 NOT_CURRICULUM_EDITOR", run: async (q) => {
+    const aws = await roomId(q, "aws"); const leaf = await nodeId(q, "aws", LEAF); const minsu = await uidOf(q, "민수");
+    await setNow(q, "2026-10-12T03:00:00Z");
+    await asUser(q, minsu);
+    const docs: string[] = [];
+    for (let i = 0; i < 4; i++) docs.push(await staged(q, leaf, aws, minsu));
+    await setFiles(q, leaf, docs);                                                     // 붙은 문서 4
+    const n1 = await staged(q, leaf, aws, minsu); const n2 = await staged(q, leaf, aws, minsu);
+    // 편집은 빈 상태에서 시작(base=[]) → 붙은 4 는 남고 새 2 를 더하면 6 → 거부
+    await expectLimit(setFrom(q, leaf, [n1, n2], []), "파일은 항목당 5개까지예요");
+    assertEquals((await setFrom(q, leaf, [n1], [])).length, 5);
+    await expectFail(one(q, "select public.node_files_set($1::bigint, '{}'::uuid[], null::uuid[])", [leaf]), "VALIDATION_FAILED");
+    await asUser(q, await uidOf(q, "철수"));
+    await expectFail(setFrom(q, leaf, [], []), "NOT_CURRICULUM_EDITOR");
+  } },
+]);
