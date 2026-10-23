@@ -94,7 +94,7 @@ function AttachedImg({ s, name, images, block }: { s: ImgToken; name: string; im
     />
   );
   // 불러오는 동안 img 는 자리만 차지하고(opacity-0 — 깨진 아이콘·대체 글자가 안 보이게) 그 위에 스켈레톤을 깐다
-  const skeleton = loaded ? null : <span data-img-skeleton aria-hidden="true" className={`absolute inset-0 bg-line-2 motion-safe:animate-pulse ${block ? "rounded-[10px]" : "rounded-[4px]"}`} />;
+  const skeleton = loaded ? null : <span data-img-skeleton aria-hidden="true" className={`absolute inset-0 bg-line-3 motion-safe:animate-pulse ${block ? "rounded-[10px]" : "rounded-[4px]"}`} />;
   if (!images.open) return <span className={block ? "relative block max-w-full" : "relative inline-block max-w-full align-middle leading-none"}>{img}{skeleton}</span>;
   const open = images.open;
   const id = r.fileId;

@@ -97,7 +97,7 @@ describe("MarkdownView 그림 — resolver 있음 (A4 · 스펙 §6 렌더)", ()
     const root = createRoot(host);
     act(() => root.render(createElement(MarkdownView, { src: "![구성도](attachment:a.png)", images: resolver({ open: () => {} }) })));
     const img = host.querySelector("img")!;
-    expect(host.querySelector("[data-img-skeleton]")?.className).toMatch(/bg-line-2 motion-safe:animate-pulse/);
+    expect(host.querySelector("[data-img-skeleton]")?.className).toMatch(/bg-line-3 motion-safe:animate-pulse/);
     expect(img.className).toContain("opacity-0");
     expect(img.getAttribute("alt")).toBe("구성도");
     act(() => void img.dispatchEvent(new Event("load")));
