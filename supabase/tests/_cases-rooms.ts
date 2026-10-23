@@ -875,6 +875,8 @@ export const ROOM_CASES: Case[] = [
         "wrong_note_list(text)", "wrong_note_mine()", "wrong_note_practice(text,jsonb)", "wrong_note_master(text,bigint,boolean)",
         // 0045: 노드 첨부 저장 base 판(내부 node_files_set_core·node_upload_* 는 GRANT 없음)
         "node_files_set(bigint,uuid[],uuid[])",
+        // 0047: AI 인터뷰 사용량·상한(ai_limits 는 GRANT 없음, api_invoke 비노출)
+        "ai_turn_check(text,boolean)", "ai_turn_done(bigint,integer,integer,integer,text)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

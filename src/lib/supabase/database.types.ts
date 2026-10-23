@@ -34,6 +34,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_usage: {
+        Row: {
+          cached_tokens: number | null
+          created_at: string
+          id: number
+          input_tokens: number | null
+          kind: string
+          model: string | null
+          output_tokens: number | null
+          started: boolean
+          user_id: string
+        }
+        Insert: {
+          cached_tokens?: number | null
+          created_at?: string
+          id?: never
+          input_tokens?: number | null
+          kind: string
+          model?: string | null
+          output_tokens?: number | null
+          started?: boolean
+          user_id: string
+        }
+        Update: {
+          cached_tokens?: number | null
+          created_at?: string
+          id?: never
+          input_tokens?: number | null
+          kind?: string
+          model?: string | null
+          output_tokens?: number | null
+          started?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_audit: {
         Row: {
           created_at: string
@@ -1821,6 +1872,21 @@ export type Database = {
       }
     }
     Functions: {
+      ai_limits: { Args: never; Returns: Json }
+      ai_turn_check: {
+        Args: { p_kind: string; p_started: boolean }
+        Returns: Json
+      }
+      ai_turn_done: {
+        Args: {
+          p_cached: number
+          p_id: number
+          p_in: number
+          p_model: string
+          p_out: number
+        }
+        Returns: undefined
+      }
       allowed_mime_types: { Args: never; Returns: string[] }
       api_authenticate: {
         Args: { p_op: string; p_token: string }
