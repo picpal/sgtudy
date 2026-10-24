@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -16,9 +16,13 @@ vi.mock("@/lib/api/feedback", async (orig) => ({
 
 const { FeedbackButton } = await import("./FeedbackButton");
 
+// 대화상자는 body 로 포털된다 — innerHTML 로 지우기 전에 언마운트해야 이펙트 정리(스크롤 잠금 해제)가 돈다
+const roots: Root[] = [];
 const mount = async () => {
   const host = document.body.appendChild(document.createElement("div"));
-  await act(async () => createRoot(host).render(createElement(FeedbackButton)));
+  const root = createRoot(host);
+  roots.push(root);
+  await act(async () => root.render(createElement(FeedbackButton)));
   return host;
 };
 const trigger = () => document.querySelector<HTMLButtonElement>('button[aria-label="의견 보내기"]')!;
@@ -34,6 +38,7 @@ const type = async (v: string) => {
 };
 
 afterEach(() => {
+  act(() => roots.splice(0).forEach((r) => r.unmount()));
   document.body.innerHTML = "";
   api.calls = [];
   api.fail = null;
@@ -93,5 +98,48 @@ describe("FeedbackButton", () => {
     await act(async () => trigger().click());
     await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
     expect(dialog()).toBeNull();
+  });
+
+  it("모바일 시트 구조 — 머리(제목·닫기) / 가운데 스크롤(칩·내용·정보) / 아래 보내기 줄", async () => {
+    await mount();
+    await act(async () => trigger().click());
+    const d = dialog()!;
+    const head = d.querySelector("[data-sheet-head]")!;
+    const body = d.querySelector("[data-sheet-body]")!;
+    const foot = d.querySelector("[data-sheet-foot]")!;
+    expect(head.querySelector("h2")!.textContent).toBe("의견 보내기");
+    expect(head.querySelector('button[aria-label="닫기"]')).not.toBeNull();
+    expect(body.querySelector('[role="radiogroup"]')).not.toBeNull();
+    expect(body.querySelector("textarea")).not.toBeNull();
+    expect(body.querySelector("details")).not.toBeNull();
+    expect(foot.contains(byText("보내기"))).toBe(true);
+    expect(body.className).toContain("overflow-y-auto");
+    await act(async () => head.querySelector<HTMLButtonElement>('button[aria-label="닫기"]')!.click());
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(trigger());
+  });
+
+  it("열린 동안 바탕 스크롤을 잠그고 시트를 visualViewport(키보드 뺀 칸)에 맞춘다", async () => {
+    const vv = Object.assign(new EventTarget(), { height: 844, offsetTop: 0 });
+    Object.defineProperty(window, "visualViewport", { value: vv, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
+    try {
+      await mount();
+      await act(async () => trigger().click());
+      const d = dialog()!;
+      expect(document.body.style.overflow).toBe("hidden");
+      expect(d.style.getPropertyValue("--vv-h")).toBe("844px");
+      expect(d.hasAttribute("data-kb")).toBe(false);
+      // 키보드가 올라와 보이는 칸이 줄고 페이지가 밀린 상황
+      Object.assign(vv, { height: 480, offsetTop: 120 });
+      await act(async () => vv.dispatchEvent(new Event("resize")));
+      expect(d.style.getPropertyValue("--vv-h")).toBe("480px");
+      expect(d.style.getPropertyValue("--vv-top")).toBe("120px");
+      expect(d.hasAttribute("data-kb")).toBe(true);
+      await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+      expect(document.body.style.overflow).toBe("");
+    } finally {
+      delete (window as { visualViewport?: unknown }).visualViewport;
+    }
   });
 });
