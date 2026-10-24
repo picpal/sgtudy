@@ -4,7 +4,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { studyTone } from "@/components/tasks/tone";
 import type { WrongNoteExam, WrongNoteItem, WrongNoteRound } from "@/lib/api/types";
 import { isAnswered } from "./exam";
-import { NAV_TONE, QuestionNav, useCurrentQuestion, type NavGroup } from "./tabs/ExamNav";
+import { NAV_TONE, QuestionNav, QuestionNavSheet, useCurrentQuestion, type NavGroup } from "./tabs/ExamNav";
 import { BTN, BTN_PRIMARY, WrongNoteItemView, type ItemRun } from "./WrongNoteItem";
 import {
   examHeadLine, FILTER_EMPTY_TEXT, lastMark, periodLine, RETRY_TIER_KO, retryCount, retryLabel, retryTier, roundLockedLine, roundStatParts, roundStats, type NoteStudy, type RetryTier,
@@ -63,13 +63,14 @@ const BackIcon = () => (
   </svg>
 );
 
-/** 회차 오답노트 상세(D23·D24) — 시험 카드·문항 목록 + 오른쪽 따라오는 문항 이동(다시 푼 횟수 색 · 각주). 좁으면 하단 막대 [문항 이동] 판 */
+/** 회차 오답노트 상세(D23·D24) — 시험 카드·문항 목록 + 오른쪽 따라오는 문항 이동(다시 푼 횟수 색 · 각주). 좁으면 하단 막대 [문항 이동] 바텀 시트 */
 export function WrongNoteDetail(p: Props) {
   const { study, round, visible, runs, batches, live } = p;
   const stats = roundStats(round);
   const period = periodLine(p.period);
   const listRef = useRef<HTMLDivElement>(null);
   const [navOpen, setNavOpen] = useState(false);
+  const closeNav = () => setNavOpen(false);
 
   // 문항 이동 칸 — 잠기지 않은 시험별 묶음, 번호는 시험 안 번호(문항 머리와 같은 수). 순번은 묶음을 이어 센다
   const exams = visible?.exams ?? [];
@@ -198,11 +199,9 @@ export function WrongNoteDetail(p: Props) {
       )}
 
       {nav && (
-        // 좁은 화면 — 시험 응시처럼 하단 고정 막대의 [문항 이동] 이 판을 연다. 묶음 채점 막대는 이 막대 위에 선다
+        // 좁은 화면 — 시험 응시처럼 하단 고정 막대의 [문항 이동] 이 바텀 시트를 연다. 묶음 채점 막대는 이 막대 위에 선다
         <div className={`sticky bottom-0 z-[3] flex flex-col gap-2 border-t border-line-2 bg-surface py-2 ${p.barInset} ${SHEET_ONLY}`}>
-          {navOpen && (
-            <QuestionNav id="wn-nav-sheet" variant="sheet" groups={groups} summary={summary} current={current} onJump={jump} legend={legend} className="max-h-[45vh] overflow-y-auto pb-1 pt-1" />
-          )}
+          {navOpen && <QuestionNavSheet id="wn-nav-sheet" groups={groups} summary={summary} current={current} onJump={jump} legend={legend} onClose={closeNav} />}
           <div className="flex items-center gap-3">
             {/* 묶음 다시 풀기 중이면 "n/총 답함" 은 바로 위 묶음 막대가 보인다 — 겹치지 않게 비운다 */}
             <p className="m-0 min-w-0 flex-1 text-[13px] text-ink-2">{taking === 0 && summary}</p>

@@ -9,7 +9,7 @@ import { examBadgeOf, examPanelSub, isAnswered, questionResult, resultSummary, s
 import { statusRows, type StatusRow } from "../submission";
 import { useExamTake, type ExamSaveState } from "../useExamTake";
 import { useTaskDetail } from "../useTaskDetail";
-import { ExamNav, useCurrentQuestion } from "./ExamNav";
+import { ExamNav, ExamNavSheet, useCurrentQuestion } from "./ExamNav";
 import { ExamQuestionView } from "./ExamQuestionView";
 import { ExamResults } from "./ExamResults";
 import { InlineConfirm } from "./InlineConfirm";
@@ -95,7 +95,7 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
   const total = qs.length;
   const [current, setCurrent] = useCurrentQuestion(listRef, mode === "take" ? total : 0);
   const done = qs.map((q) => isAnswered(t.answers[q.id]));
-  // 문항 이동: 그 문항 머리로 스크롤(동작 줄이기면 바로) + 포커스. 좁은 화면 판은 닫는다
+  // 문항 이동: 그 문항 머리로 스크롤(동작 줄이기면 바로) + 포커스. 좁은 화면 시트는 닫는다
   const jump = (i: number) => {
     const li = listRef.current?.querySelector<HTMLElement>(`[data-qi="${i}"]`);
     if (!li) return;
@@ -105,6 +105,7 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
     setCurrent(i);
     setNavOpen(false);
   };
+  const closeNav = () => setNavOpen(false);
   const info = v ? takeNote(v, quietNotAssigned) : null;
   const sum = v && mode === "result" ? resultSummary(v) : null;
   const stamp = v?.attempt?.status === "submitted" ? submittedLine(v.attempt) : null;
@@ -145,7 +146,7 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
 
             {v && mode === "take" && (
               <div ref={examRef} tabIndex={-1} aria-label="시험 문항" className="flex flex-col outline-none">
-                {/* 넓으면(@880) 오른쪽에 문항 이동이 붙어 따라온다 — 내용을 가리지 않게 칸을 따로 둔다. 좁으면 하단 막대의 [문항 이동] 판 */}
+                {/* 넓으면(@880) 오른쪽에 문항 이동이 붙어 따라온다 — 내용을 가리지 않게 칸을 따로 둔다. 좁으면 하단 막대의 [문항 이동] 바텀 시트 */}
                 <div className="flex items-start gap-6">
                   <ol ref={listRef} className="m-0 flex min-w-0 flex-1 list-none flex-col gap-6 p-0 pb-5">
                     {qs.map((q, i) => (
@@ -162,7 +163,7 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
                 </div>
                 {/* 하단 고정 막대 — DetailView 위 막대(sticky top-0)와 같은 방식. 문항 목록이 끝나면 따라 올라간다 */}
                 <div className="sticky bottom-0 z-[2] -mx-7 flex flex-col gap-2 border-t border-line-2 bg-surface px-7 py-2 max-[901px]:-mx-4 max-[901px]:px-4">
-                  {navOpen && !ask && <ExamNav id="exam-nav-sheet" variant="sheet" answered={done} current={current} onJump={jump} className="max-h-[40vh] overflow-y-auto pb-1 pt-1 @[880px]:hidden" />}
+                  {navOpen && !ask && <ExamNavSheet id="exam-nav-sheet" answered={done} current={current} onJump={jump} onClose={closeNav} />}
               {ask ? (
                     <InlineConfirm
                       text={submitAsk(total - t.answered)}

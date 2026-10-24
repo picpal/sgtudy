@@ -488,11 +488,23 @@ describe("WrongNoteList — 상세 문항 이동 · 다시 푼 횟수 색 (D24·
     expect([...nav(host).querySelectorAll("p")].map(text)).toContain("보충 시험");
     const toggle = btn(host, "문항 이동")!;
     click(toggle);
-    const sheet = host.querySelector<HTMLElement>("#wn-nav-sheet")!;
-    expect(sheet.querySelector("[data-wn-legend]")).not.toBeNull();
-    expect(sheet.querySelector("button")!.className).toContain("h-11");
-    click(sheet.querySelectorAll("button")[3]);
-    expect(host.querySelector("#wn-nav-sheet")).toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const sheet = document.getElementById("wn-nav-sheet")!;
+    expect(sheet.getAttribute("role")).toBe("dialog");
+    // 범례는 번호 칸 아래 · 귀퉁이 표시·횟수 색은 시트에서도 그대로
+    const grid = sheet.querySelector<HTMLElement>('nav[aria-label="문항 이동"]')!;
+    const legend = grid.querySelector("[data-wn-legend]")!;
+    expect(legend).not.toBeNull();
+    expect(grid.lastElementChild).toBe(legend);
+    expect([...nav(host).querySelectorAll("button")].map((b) => b.className)).toEqual([...grid.querySelectorAll("button")].map((b) => b.className.replace("h-11", "h-9")));
+    expect(grid.querySelector("button")!.className).toContain("h-11");
+    // 바탕을 누르면 닫힌다
+    click(document.querySelector("[data-qnav-backdrop]")!);
+    expect(document.getElementById("wn-nav-sheet")).toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    click(toggle);
+    click(document.getElementById("wn-nav-sheet")!.querySelectorAll('nav[aria-label="문항 이동"] button')[3]);
+    expect(document.getElementById("wn-nav-sheet")).toBeNull();
     expect(document.activeElement?.id).toBe("exam-q-wn-21");
   });
 });

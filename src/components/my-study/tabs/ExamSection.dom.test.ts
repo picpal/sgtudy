@@ -447,18 +447,57 @@ describe("ExamSection — 문항 이동", () => {
     window.matchMedia = mm;
     expect(calls[1]).toEqual(["1", { behavior: "auto", block: "start" }]);
   });
-  it("좁은 화면 하단 막대 [문항 이동] — 판을 열고, 고르면 닫힌다", async () => {
+  it("좁은 화면 하단 막대 [문항 이동] — 바텀 시트(body 포털·바탕 잠금)를 열고, 고르면 닫힌다", async () => {
     await mount(view());
     const toggle = button("문항 이동")!;
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    toggle.focus();
     act(() => toggle.click());
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    const sheet = host.querySelector<HTMLElement>("#exam-nav-sheet")!;
-    expect(sheet.getAttribute("aria-label")).toBe("문항 이동");
-    expect(sheet.querySelector("button")!.className).toContain("h-11");
-    act(() => sheet.querySelectorAll("button")[3].click());
-    expect(host.querySelector("#exam-nav-sheet")).toBeNull();
+    const sheet = document.getElementById("exam-nav-sheet")!;
+    expect(host.contains(sheet)).toBe(false);
+    expect(sheet.getAttribute("role")).toBe("dialog");
+    expect(sheet.querySelector("h2")?.textContent).toBe("문항 이동");
+    // 답함 요약은 시트 머리 한 곳 — 번호 칸 nav 안에는 머리가 없다
+    expect(sheet.textContent).toContain("0/4 답함");
+    const grid = sheet.querySelector<HTMLElement>('nav[aria-label="문항 이동"]')!;
+    expect(grid.textContent).not.toContain("답함");
+    expect(document.body.style.overflow).toBe("hidden");
+    // 열면 지금 문항 칸에 포커스
+    expect(document.activeElement?.getAttribute("aria-current")).toBe("step");
+    expect(grid.querySelector("button")!.className).toContain("h-11");
+    act(() => grid.querySelectorAll("button")[3].click());
+    expect(document.getElementById("exam-nav-sheet")).toBeNull();
+    expect(document.body.style.overflow).toBe("");
     expect(document.activeElement?.id).toBe("exam-q-4");
+  });
+  it("바텀 시트 — 바탕을 누르거나 닫기·Esc 로 닫히고 [문항 이동] 으로 포커스가 돌아온다", async () => {
+    await mount(view());
+    const toggle = button("문항 이동")!;
+    const open = () => {
+      toggle.focus();
+      act(() => toggle.click());
+      return document.getElementById("exam-nav-sheet")!;
+    };
+    // 시트 안을 눌러도 닫히지 않는다
+    const h2 = open().querySelector("h2")!;
+    act(() => h2.click());
+    expect(document.getElementById("exam-nav-sheet")).not.toBeNull();
+    act(() => document.querySelector<HTMLElement>("[data-qnav-backdrop]")!.click());
+    expect(document.getElementById("exam-nav-sheet")).toBeNull();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(toggle);
+
+    const x = open().querySelector<HTMLButtonElement>('button[aria-label="닫기"]')!;
+    act(() => x.click());
+    expect(document.getElementById("exam-nav-sheet")).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+
+    open();
+    act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(document.getElementById("exam-nav-sheet")).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+    expect(document.body.style.overflow).toBe("");
   });
   it("결과 화면에는 문항 이동이 없다", async () => {
     await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS) }));
