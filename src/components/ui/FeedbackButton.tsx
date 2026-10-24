@@ -147,8 +147,8 @@ export function FeedbackButton() {
                   </svg>
                 </button>
               </div>
-              <div data-sheet-body className="flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain max-sm:flex-1 max-sm:p-4">
-                <p id={`${id}-desc`} className="m-0 text-[14px] leading-[1.6] text-ink-2 sm:-mt-3">불편한 점·버그·바라는 기능을 알려 주세요. 답이 필요하면 계정 이메일로 연락드려요.</p>
+              <div data-sheet-body className="flex min-h-0 flex-col gap-4 overflow-y-auto overscroll-contain sm:-mt-3 max-sm:flex-1 max-sm:p-4">
+                <p id={`${id}-desc`} className="m-0 text-[14px] leading-[1.6] text-ink-2">불편한 점·버그·바라는 기능을 알려 주세요. 답이 필요하면 계정 이메일로 연락드려요.</p>
                 <div role="radiogroup" aria-label="종류" className="flex flex-wrap gap-2">
                   {FEEDBACK_KINDS.map((k) => {
                     const on = k.key === kind;
