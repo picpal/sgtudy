@@ -149,6 +149,18 @@
   }
 }
 
+/* iOS Safari 는 글자가 16px 보다 작은 입력칸에 포커스하면 화면을 확대한다 — 좁은 화면·터치 기기에서만 입력칸 글자를 16px 로.
+   레이어 밖 규칙은 @layer 안의 Tailwind 유틸리티(text-sm·text-[14px])를 이긴다(!important 불필요). maximum-scale 은 핀치 줌을 막아 쓰지 않는다 */
+@media (max-width: 639px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  textarea,
+  select,
+  [contenteditable]:not([contenteditable="false"]),
+  .cm-content {
+    font-size: 16px;
+  }
+}
+
 /* 2줄 말줄임 */
 .clamp-2 {
   display: -webkit-box;
