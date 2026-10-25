@@ -127,6 +127,7 @@ export function FeedbackButton() {
         ctx &&
         createPortal(
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(27,34,48,.4)] p-4 max-sm:p-0" onClick={() => !busy && close()}>
+            {/* 모바일: iOS 는 키보드 아래 주소 바 구간에 뒤 페이지가 비친다 → 시트 그림자를 surface 로 아래로 연장(시트와 함께 움직여 열림 애니메이션 깜빡임 없음) */}
             <div
               ref={boxRef}
               data-feedback-sheet
@@ -136,7 +137,7 @@ export function FeedbackButton() {
               aria-labelledby={`${id}-title`}
               aria-describedby={`${id}-desc`}
               onClick={(e) => e.stopPropagation()}
-              className="group flex max-h-[calc(100dvh-32px)] w-full max-w-[440px] flex-col gap-4 rounded-[18px] bg-surface p-6 shadow-[0_20px_60px_rgba(27,34,48,.25)] max-sm:fixed max-sm:inset-x-0 max-sm:top-[var(--vv-top,0px)] max-sm:h-[var(--vv-h,100dvh)] max-sm:max-h-none max-sm:max-w-none max-sm:gap-0 max-sm:rounded-none max-sm:p-0 max-sm:shadow-none max-sm:motion-safe:animate-[notice-sheet_.22s_ease-out]"
+              className="group flex max-h-[calc(100dvh-32px)] w-full max-w-[440px] flex-col gap-4 rounded-[18px] bg-surface p-6 shadow-[0_20px_60px_rgba(27,34,48,.25)] max-sm:fixed max-sm:inset-x-0 max-sm:top-[var(--vv-top,0px)] max-sm:h-[var(--vv-h,100dvh)] max-sm:max-h-none max-sm:max-w-none max-sm:gap-0 max-sm:rounded-none max-sm:p-0 max-sm:shadow-[0_100vh_0_var(--surface)] max-sm:motion-safe:animate-[notice-sheet_.22s_ease-out]"
             >
               <div data-sheet-head className="flex items-center gap-2 max-sm:min-h-14 max-sm:shrink-0 max-sm:border-b max-sm:border-line max-sm:py-1 max-sm:pl-4 max-sm:pr-1">
                 <h2 id={`${id}-title`} className="m-0 text-[18px] font-bold">의견 보내기</h2>
