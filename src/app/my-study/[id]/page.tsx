@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { isCreateNote, isUrlItem } from "@/components/my-study/editUrl";
 import { MyStudyScreen } from "@/components/my-study/MyStudyScreen";
+import { ScreenMount } from "@/components/my-study/ScreenMount";
 import type { TabId } from "@/components/my-study/StudyHeaderInfo";
 import { toApiError } from "@/lib/api/errors";
 import { getMyStudies, getServerClient, requireMe } from "@/lib/api/me.server";
 import { fetchCurriculum } from "@/lib/api/my-study";
 import { getRoomDetail, roomMetadata } from "@/lib/api/room-meta.server";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
-import { screenKeyOf } from "@/lib/leaveGuard";
+import { screenKeyOf, screenKeyText } from "@/lib/leaveGuard";
 import { routes } from "@/lib/routes";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -42,9 +43,12 @@ export default async function MyStudyPage({ params, searchParams }: { params: Pr
   const task = key.task || undefined;
   // ?item= 은 그룹장 편집 화면에 열린 항목 — 새로고침하면 다시 연다(없는 id 는 화면이 목록으로 돌린다)
   const item = isUrlItem(sp.item) ? sp.item : undefined;
-  // key 로 방 변경 시 화면 상태(탭·편집 오버라이드 등)를 리셋한다. ?tab= 도 넣어, 같은 방에서 알림 링크(?tab=curriculum)를 눌러도 그 탭으로 연다
+  // key 로 방 변경 시 화면 상태(탭·편집 오버라이드 등)를 리셋한다. ?tab= 도 넣어, 같은 방에서 알림 링크(?tab=curriculum)를 눌러도 그 탭으로 연다.
+  // key 는 ScreenMount 가 든다 — 이동일 때만 다시 마운트하고, 화면이 바꾼 주소를 읽어 온 router.refresh() 는 화면을 그대로 둔다
   return (
-    <MyStudyScreen key={`${id}:${task ?? ""}:${tab}`} detail={detail} curriculum={curriculum} studies={studies}
-      initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} initialLeaf={task} initialItem={item} initialNote={isCreateNote(sp.note) ? sp.note : undefined} />
+    <ScreenMount room={id} serverKey={screenKeyText(id, key)}>
+      <MyStudyScreen detail={detail} curriculum={curriculum} studies={studies}
+        initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} initialLeaf={task} initialItem={item} initialNote={isCreateNote(sp.note) ? sp.note : undefined} />
+    </ScreenMount>
   );
 }
