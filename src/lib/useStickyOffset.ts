@@ -15,3 +15,26 @@ export function useStickyOffset(bar: RefObject<HTMLElement | null>, host: RefObj
     return () => ro.disconnect();
   }, [bar, host, name]);
 }
+
+/**
+ * 화면 맨 위에 붙은 막대에 data-stuck 을 단다. 모바일 Safari 는 상태바 쪽 위 띠 뒤로 본문이 비쳐 지나가므로,
+ * 붙어 있는 동안만 막대 바탕을 위로 연장한다(STUCK_FILL) — 붙기 전에는 위 내용을 가리지 않는다.
+ */
+export const STUCK_FILL = "max-sm:data-[stuck]:shadow-[0_-64px_0_0_var(--surface)]";
+export function useStuckAttr(bar: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const b = bar.current;
+    if (!b) return;
+    const upd = () => {
+      if (b.getBoundingClientRect().top <= 0.5) b.setAttribute("data-stuck", "");
+      else b.removeAttribute("data-stuck");
+    };
+    upd();
+    window.addEventListener("scroll", upd, { passive: true });
+    window.addEventListener("resize", upd);
+    return () => {
+      window.removeEventListener("scroll", upd);
+      window.removeEventListener("resize", upd);
+    };
+  }, [bar]);
+}
