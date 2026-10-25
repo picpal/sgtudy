@@ -42,6 +42,8 @@ export const routes = {
   resetPassword: (returnTo?: string) => withReturn("/reset-password", returnTo),
   /** 닉네임 설정 (§4.1) */
   onboarding: (returnTo?: string) => withReturn("/onboarding", returnTo),
+  /** 의견 보내기 — 모바일 전용 페이지(0044). from = 연 화면 주소(함께 보내는 정보·돌아갈 곳) */
+  feedback: (from?: string) => (from ? `/feedback?from=${encodeURIComponent(from)}` : "/feedback"),
   /** 내 프로필 (§4.13) */
   me: () => "/me",
   /** 초대 링크 진입 (§4.12) */

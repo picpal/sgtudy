@@ -5,7 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const api = vi.hoisted(() => ({ calls: [] as unknown[][], fail: null as unknown }));
+const api = vi.hoisted(() => ({ calls: [] as unknown[][], fail: null as unknown, pushed: [] as string[] }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: (h: string) => api.pushed.push(h) }) }));
 vi.mock("@/lib/api/feedback", async (orig) => ({
   ...(await orig<typeof import("@/lib/api/feedback")>()),
   submitFeedback: (...a: unknown[]) => {
@@ -15,6 +16,7 @@ vi.mock("@/lib/api/feedback", async (orig) => ({
 }));
 
 const { FeedbackButton } = await import("./FeedbackButton");
+const nav = await import("./feedbackNav");
 
 // 대화상자는 body 로 포털된다 — innerHTML 로 지우기 전에 언마운트해야 이펙트 정리(스크롤 잠금 해제)가 돈다
 const roots: Root[] = [];
@@ -42,6 +44,8 @@ afterEach(() => {
   document.body.innerHTML = "";
   api.calls = [];
   api.fail = null;
+  api.pushed = [];
+  delete (window as { matchMedia?: unknown }).matchMedia;
   window.history.replaceState(null, "", "/");
 });
 
@@ -100,46 +104,20 @@ describe("FeedbackButton", () => {
     expect(dialog()).toBeNull();
   });
 
-  it("모바일 시트 구조 — 머리(제목·닫기) / 가운데 스크롤(칩·내용·정보) / 아래 보내기 줄", async () => {
+  it("모바일(< sm)은 대화상자 대신 /feedback 페이지로 — 연 화면 주소를 from 으로", async () => {
+    window.matchMedia = ((q: string) => ({ matches: q === "(width < 40rem)" })) as unknown as typeof window.matchMedia;
+    window.history.replaceState(null, "", "/my-study/aws?tab=tasks");
     await mount();
     await act(async () => trigger().click());
-    const d = dialog()!;
-    const head = d.querySelector("[data-sheet-head]")!;
-    const body = d.querySelector("[data-sheet-body]")!;
-    const foot = d.querySelector("[data-sheet-foot]")!;
-    expect(head.querySelector("h2")!.textContent).toBe("의견 보내기");
-    expect(head.querySelector('button[aria-label="닫기"]')).not.toBeNull();
-    expect(body.querySelector('[role="radiogroup"]')).not.toBeNull();
-    expect(body.querySelector("textarea")).not.toBeNull();
-    expect(body.querySelector("details")).not.toBeNull();
-    expect(foot.contains(byText("보내기"))).toBe(true);
-    expect(body.className).toContain("overflow-y-auto");
-    await act(async () => head.querySelector<HTMLButtonElement>('button[aria-label="닫기"]')!.click());
     expect(dialog()).toBeNull();
-    expect(document.activeElement).toBe(trigger());
+    expect(api.pushed).toEqual(["/feedback?from=%2Fmy-study%2Faws%3Ftab%3Dtasks"]);
+    expect(nav.openedInApp("/my-study/aws?tab=tasks")).toBe(true);
   });
 
-  it("열린 동안 바탕 스크롤을 잠그고 시트를 visualViewport(키보드 뺀 칸)에 맞춘다", async () => {
-    const vv = Object.assign(new EventTarget(), { height: 844, offsetTop: 0 });
-    Object.defineProperty(window, "visualViewport", { value: vv, configurable: true });
-    Object.defineProperty(window, "innerHeight", { value: 844, configurable: true });
-    try {
-      await mount();
-      await act(async () => trigger().click());
-      const d = dialog()!;
-      expect(document.body.style.overflow).toBe("hidden");
-      expect(d.style.getPropertyValue("--vv-h")).toBe("844px");
-      expect(d.hasAttribute("data-kb")).toBe(false);
-      // 키보드가 올라와 보이는 칸이 줄고 페이지가 밀린 상황
-      Object.assign(vv, { height: 480, offsetTop: 120 });
-      await act(async () => vv.dispatchEvent(new Event("resize")));
-      expect(d.style.getPropertyValue("--vv-h")).toBe("480px");
-      expect(d.style.getPropertyValue("--vv-top")).toBe("120px");
-      expect(d.hasAttribute("data-kb")).toBe(true);
-      await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
-      expect(document.body.style.overflow).toBe("");
-    } finally {
-      delete (window as { visualViewport?: unknown }).visualViewport;
-    }
+  it("모바일 페이지에서 보내고 돌아오면 마운트하며 토스트를 한 번 띄운다", async () => {
+    nav.setFeedbackSent();
+    await mount();
+    expect(document.querySelector('[role="status"]')!.textContent).toContain("보내 주셔서 고마워요");
+    expect(nav.takeFeedbackSent()).toBe(false);
   });
 });
