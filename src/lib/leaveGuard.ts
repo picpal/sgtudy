@@ -36,12 +36,6 @@ export function screenKeyOf(sp: URLSearchParams | { tab?: string; task?: string 
   return { tab: (SCREEN_TABS as readonly string[]).includes(tab) ? tab : "overview", task: /^\d+$/.test(task) ? task : "" };
 }
 
-/** 화면 key 문자열 — `${방}:${task}:${tab}`. page.tsx(서버 key)와 ScreenMount(주소 key)가 같은 규칙으로 만든다 */
-export const screenKeyText = (room: string, sp: URLSearchParams | { tab?: string; task?: string }): string => {
-  const k = screenKeyOf(sp);
-  return `${room}:${k.task}:${k.tab}`;
-};
-
 let mounted: ScreenKey | null = null;
 
 /** 마운트된 내 스터디 화면이 자기 key(initialTab·initialLeaf)를 알린다. 돌려준 함수로 푼다 */

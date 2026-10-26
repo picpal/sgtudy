@@ -25,8 +25,6 @@ type Props = {
   /** 승인 대기 — 댓글을 볼 수 없다(D2). 부르지 않고 안내만 */
   viewerPending: boolean;
   toast: (m: ToastMsg) => void;
-  /** 바뀌면 최신 쪽을 다시 받는다 — 시험을 제출하면 잠금(exam_locked)이 풀린다. 화면은 다시 마운트하지 않는다 */
-  reloadKey?: number;
 };
 
 const BLOCK_TEXT: Record<Exclude<CommentWriteBlock, "exam_locked">, string> = {
@@ -67,7 +65,7 @@ const absTime = (iso: string) => new Date(iso).toLocaleString("ko-KR", { timeZon
  * 갱신은 실시간 없이 등록·수정·삭제 뒤 · 창으로 돌아올 때(30초 지났으면) · 딥링크 도착(D19).
  * 딥링크 #comment-{id}: from={id} 로 불러 그 댓글을 꼭 넣고, 다 그려지면 useHashPrefixTarget 이 가운데로 스크롤 + 포커스, 2초 강조(D16)
  */
-export function CommentSection({ slug, nodeId, members, meId, viewerPending, toast, reloadKey = 0 }: Props) {
+export function CommentSection({ slug, nodeId, members, meId, viewerPending, toast }: Props) {
   const ids = useId();
   const [page, setPage] = useState<CommentPage | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -112,7 +110,7 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
     fetchComments(slug, nodeId)
       .then((p) => my === seq.current && !deepBusy.current && apply(p, true))
       .catch((e) => my === seq.current && !deepBusy.current && setLoadErr(commentErrorText(toApiError(e))));
-  }, [slug, nodeId, viewerPending, tick, reloadKey, apply]);
+  }, [slug, nodeId, viewerPending, tick, apply]);
 
   // 딥링크 — 그 댓글부터(from). 없거나 지워졌으면 서버가 최신 쪽을 주고 target 으로 알린다
   useEffect(() => {

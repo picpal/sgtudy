@@ -24,7 +24,6 @@ import { ExamAiTab } from "./ExamAiTab";
 import { ExamEditor, type ExamEditorHandle } from "./ExamEditor";
 import { FileUploadList } from "./FileUploadList";
 import { InlineConfirm } from "./InlineConfirm";
-import { STUCK_FILL, useStuckAttr } from "@/lib/useStickyOffset";
 
 type Props = {
   n: TreeNode;
@@ -64,7 +63,6 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   const id = n.id;
   const view = useRef<HTMLElement>(null);
   const bar = useRef<HTMLDivElement>(null);
-  useStuckAttr(bar);
   const heading = useRef<HTMLHeadingElement>(null);
   const titleInput = useRef<HTMLInputElement>(null);
   const removeBtn = useRef<HTMLButtonElement>(null);
@@ -324,7 +322,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   return (
     <section ref={view} aria-labelledby="edit-view-title" onKeyDown={onKey} className="flex scroll-mt-0 flex-col">
       {/* 고정 막대 — 편집 화면은 문서가 스크롤된다(한 페이지 스크롤). 화면 위쪽에 붙어 저장·삭제가 잘리지 않는다 */}
-      <div ref={bar} className={`sticky top-0 z-[2] -mx-1 flex flex-col gap-2 border-b border-line-2 bg-surface px-1 pb-3 pt-3 ${STUCK_FILL}`}>
+      <div ref={bar} className="sticky top-0 z-[2] -mx-1 flex flex-col gap-2 border-b border-line-2 bg-surface px-1 pb-3 pt-3">
         {/* 좁은 화면(390)에서 버튼이 한 줄에 다 안 들어가면(보관 해제·올리는 중 문구) 오른쪽 버튼 묶음째 다음 줄로 — 가로 스크롤 없음 */}
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={back} className="inline-flex h-11 shrink-0 items-center gap-[6px] rounded-[22px] border border-line-3 bg-surface pl-3 pr-4 text-[14px] font-semibold text-ink">
