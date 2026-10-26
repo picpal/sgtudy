@@ -13,6 +13,7 @@ cases("cron+seed", db, [
       ["completion_digest",  "0 0 * * *",   "select public.job_completion_digest()"],
       ["deadline_reminder",  "0 0 * * *",   "select public.job_deadline_reminder()"],
       ["draft_blocked",      "5 15 * * *",  "select public.job_draft_blocked()"],
+      ["expire-inactive-sessions", "15 19 * * *", "select public.job_expire_inactive_sessions()"],   // 0050 — 04:15 KST
       ["member_count_audit", "32 19 * * *", "select public.member_count_audit()"],
       ["room_tick",          "*/5 * * * *", "select public.room_tick()"],
       ["round_started",      "1 15 * * *",  "select public.job_round_started()"],

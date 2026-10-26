@@ -28,6 +28,18 @@ create table auth.identities (
   last_sign_in_at timestamptz, created_at timestamptz default now(), updated_at timestamptz default now(),
   unique (provider_id, provider)
 );
+-- 0050 이 지우는 세션 — 실제 auth.sessions 와 같은 타입(refreshed_at 만 timestamp without time zone)
+create table auth.sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz, updated_at timestamptz, not_after timestamptz,
+  refreshed_at timestamp
+);
+create table auth.refresh_tokens (
+  id bigserial primary key, token varchar(255), user_id varchar(255), revoked boolean,
+  created_at timestamptz, updated_at timestamptz, parent varchar(255),
+  session_id uuid references auth.sessions(id) on delete cascade
+);
 -- 테스트는 set_config('app.uid', <uuid>, true) 로 로그인 사용자를 흉내 낸다
 create function auth.uid() returns uuid language sql stable as
   $$ select nullif(current_setting('app.uid', true), '')::uuid $$;
