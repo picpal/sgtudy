@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Listbox, type ListboxOption } from "@/components/ui/Listbox";
 import { StatusIcon } from "@/components/ui/StatusIcon";
 import { diffDays, md, weekdayKo } from "@/lib/date";
@@ -45,6 +46,16 @@ type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) 
 
 export function BoardTab({ tree, S, update, goLeaf }: Props) {
   const today = useToday();
+  // 「전체 회차 보기」로 넓히기 전 회차 — 있으면 전체 보기에서 「접기」로 그 회차에 돌아간다(드롭다운으로 직접 고른 전체엔 없음)
+  const [backTo, setBackTo] = useState<string | null>(null);
+  const expandRef = useRef<HTMLButtonElement>(null);
+  const collapsed = useRef(false);
+  // 접은 뒤 목록이 짧아져 버튼이 화면 밖이면 — 펼치기 버튼으로 포커스를 옮겨 화면 안으로 끌어온다
+  useEffect(() => {
+    if (!collapsed.current) return;
+    collapsed.current = false;
+    expandRef.current?.focus();
+  });
   const meId = useMe()?.id ?? null;
   const mine = S.bMode === "mine";
   const scoped = boardSource(tree, mine, meId);
@@ -75,7 +86,7 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
         <Seg<BoardMode> label="칸반 범위" value={S.bMode} onChange={(m) => update({ bMode: m })} options={[["mine", "내 칸반"], ["team", "팀 칸반"]]} />
         <span className="flex-[1_1_20px]" />
         {/* 좁은 폭: 버튼이 한 줄을 다 쓰고 목록은 아래에서 올라오는 시트. sm 이상: 버튼은 칸반 세그(40px)와 같은 높이(누르는 영역은 44px), 목록은 버튼 아래 팝오버 */}
-        <Listbox label="회차 필터" prefix="회차" value={bRound} options={rounds} onChange={(v) => update({ bRound: v })} className="max-sm:w-full sm:w-[300px] sm:max-w-[360px]" />
+        <Listbox label="회차 필터" prefix="회차" value={bRound} options={rounds} onChange={(v) => { setBackTo(null); update({ bRound: v }); }} className="max-sm:w-full sm:w-[300px] sm:max-w-[360px]" />
       </div>
       <p className="m-0 text-[12px] text-muted">
         {mine
@@ -102,14 +113,26 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
                 {cards.length === 0 && <p className="mx-1 my-[6px] text-[12px] text-faint">{EMPTY[id]}</p>}
                 {id === "todo" && cards.length === 0 && bRound !== "all" && nextTodo > 0 && (
                   <button
+                    ref={expandRef}
                     type="button"
-                    onClick={() => update({ bRound: "all" })}
+                    aria-expanded={false}
+                    onClick={() => { setBackTo(bRound); update({ bRound: "all" }); }}
                     className="flex min-h-11 w-full items-center justify-between gap-2 rounded-[12px] border border-dashed border-line-dash bg-surface px-3 text-left text-[12px] font-semibold text-ink-2 hover:border-mint hover:text-mint-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
                   >
                     <span>이후 회차 과제 {nextTodo}개</span>
                     <span className="text-mint-deep">
                       전체 회차 보기 <span aria-hidden="true">→</span>
                     </span>
+                  </button>
+                )}
+                {id === "todo" && bRound === "all" && backTo && rounds.some((o) => o.value === backTo) && (
+                  <button
+                    type="button"
+                    aria-expanded={true}
+                    onClick={() => { update({ bRound: backTo }); setBackTo(null); collapsed.current = true; }}
+                    className="flex min-h-11 w-full items-center justify-center gap-1 rounded-[12px] border border-dashed border-line-dash bg-surface px-3 text-[12px] font-semibold text-mint-deep hover:border-mint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
+                  >
+                    접기 <span aria-hidden="true">↑</span>
                   </button>
                 )}
               </section>

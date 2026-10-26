@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // 보드 회차 필터 — 회차가 많아도(20주차 등) 칩이 여러 줄로 쌓이지 않게 드롭다운(listbox) 하나로 고른다.
 import { afterEach, describe, expect, it } from "vitest";
-import { act, createElement, type ComponentProps } from "react";
+import { act, createElement, useState, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MeProvider } from "@/lib/me";
 import { TodayProvider } from "@/lib/today";
@@ -213,5 +213,48 @@ describe("BoardTab 예정 칸 — 다음 회차 안내", () => {
     act(() => root?.unmount());
     host?.remove();
     expect(hint(mount({ bRound: "r1", bMode: "team" }, manyRounds(3)).host)).toBeNull();
+  });
+});
+
+describe("BoardTab 예정 칸 — 전체 회차 보기 ↔ 접기", () => {
+  /** update 가 상태에 반영되는 하네스 */
+  function mountLive(start: Partial<ScreenState>) {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const Live = () => {
+      const [S, setS] = useState<ScreenState>({ ...INITIAL_STATE, tab: "board" as const, ...start });
+      return createElement(BoardTab, { tree, S, update: (p) => setS((o) => ({ ...o, ...p })), goLeaf: () => {} });
+    };
+    act(() => root!.render(createElement(MeProvider, { me } as ComponentProps<typeof MeProvider>, createElement(TodayProvider, { today: REF_DAY } as ComponentProps<typeof TodayProvider>, createElement(Live)))));
+    return host;
+  }
+  const collapseBtn = (h: HTMLElement) => [...h.querySelectorAll<HTMLButtonElement>("section button")].find((b) => b.textContent?.includes("접기")) ?? null;
+
+  it("펼치기(aria-expanded=false) → 전체 회차 + 접기(aria-expanded=true) → 누르면 원래 회차로 복귀해 펼치기 버튼에 포커스", () => {
+    const h = mountLive({ bRound: "2", bMode: "mine" });
+    expect(hint(h)!.getAttribute("aria-expanded")).toBe("false");
+    expect(collapseBtn(h)).toBeNull();
+    click(hint(h)!);
+    expect(hint(h)).toBeNull();
+    const c = collapseBtn(h)!;
+    expect(c.getAttribute("aria-expanded")).toBe("true");
+    expect(c.closest("section")!.getAttribute("aria-label")).toBe("예정");
+    click(c);
+    expect(collapseBtn(h)).toBeNull();
+    expect(hint(h)).not.toBeNull();
+    expect(document.activeElement).toBe(hint(h));
+    expect(h.querySelector('[aria-label^="회차 필터"]')!.getAttribute("aria-label")).toContain("2");
+  });
+
+  it("드롭다운으로 직접 고른 전체엔 접기가 없고, 펼친 뒤 드롭다운으로 다른 회차를 골라도 접기는 사라진다", () => {
+    expect(collapseBtn(mountLive({ bRound: "all", bMode: "mine" }))).toBeNull();
+    act(() => root?.unmount());
+    host?.remove();
+    const h = mountLive({ bRound: "2", bMode: "mine" });
+    click(hint(h)!);
+    click(h.querySelector<HTMLElement>('[aria-label^="회차 필터"]')!);
+    click(h.querySelectorAll<HTMLElement>('[role="option"]')[3]);
+    expect(collapseBtn(h)).toBeNull();
   });
 });
