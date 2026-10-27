@@ -890,6 +890,8 @@ export const ROOM_CASES: Case[] = [
         "ai_turn_check(text,boolean)", "ai_turn_done(bigint,integer,integer,integer,text)",
         // 0051: 오답노트 다시 볼 문제(★)
         "wrong_note_bookmark(text,bigint,boolean)",
+        // 0052: AI 용어 해설(ai_limits 는 GRANT 없음, api_invoke 비노출)
+        "ai_explain_begin(text,text)", "ai_explain_done(bigint,text,text,text,jsonb,integer,integer,integer,text)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

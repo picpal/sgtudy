@@ -29,7 +29,10 @@ cases("ai_usage 0049 · schema", db, [
     await fill(q, uid, 1, "2026-10-23T09:00:00+09:00", "room_rounds");
     await expectFail(fill(q, uid, 1, "2026-10-23T09:00:00+09:00", "exam_draft"), "ai_usage_kind_check");
     const lim = (await one(q, "select public.ai_limits() as v")).v as Row;
-    assertEquals(lim, { perTenMin: 30, perDay: 120, startsPerDay: 10, globalPerDay: 3000, roundsPerDay: 10, roundsGlobalPerDay: 300 });
+    // 0052 가 explain* 키를 더했다 — 0049 키 값은 그대로
+    assertEquals({ ...lim, explainPerTenMin: undefined, explainPerDay: undefined, explainGlobalPerDay: undefined },
+      { perTenMin: 30, perDay: 120, startsPerDay: 10, globalPerDay: 3000, roundsPerDay: 10, roundsGlobalPerDay: 300,
+        explainPerTenMin: undefined, explainPerDay: undefined, explainGlobalPerDay: undefined });
     const can = async (role: string, f: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, `public.${f}`])).v;
     assertEquals(await can("authenticated", "ai_turn_check(text,boolean)"), true);
     assertEquals(await can("anon", "ai_turn_check(text,boolean)"), false);
