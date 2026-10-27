@@ -6,6 +6,7 @@ import { COPY } from "./copy";
 import type { SelectionPick } from "./selection";
 
 /** 모바일 판정(D4) — 640px 미만이면 하단 고정 막대 */
+/* z: 공지 팝업(NoticePopup z-[45]) 안의 선택에서도 알약이 그 위에 떠야 한다 */
 export const MOBILE_MQ = "(width < 40rem)";
 export const PILL_W = 168;
 const PILL_H = 44;
@@ -45,7 +46,7 @@ export function AskAiPill({ pick, onAsk }: { pick: SelectionPick; onAsk: () => v
   );
   if (mobile) {
     return createPortal(
-      <div data-ask-ai-pill="bar" className="pointer-events-none fixed inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-30 flex justify-center px-4">
+      <div data-ask-ai-pill="bar" className="pointer-events-none fixed inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-[46] flex justify-center px-4">
         <button {...common} className="pointer-events-auto flex min-h-11 max-w-full items-center gap-2 rounded-full bg-ink px-5 text-[14px] font-semibold text-surface shadow-[0_6px_20px_rgba(27,34,48,.28)]">
           {icon}
           <span className="truncate">{COPY.pillMobile(short(pick.term))}</span>
@@ -60,7 +61,7 @@ export function AskAiPill({ pick, onAsk }: { pick: SelectionPick; onAsk: () => v
       {...common}
       data-ask-ai-pill="float"
       style={{ top, left, width: PILL_W }}
-      className="fixed z-30 flex h-11 items-center justify-center gap-[6px] rounded-full bg-ink text-[14px] font-semibold text-surface shadow-[0_6px_20px_rgba(27,34,48,.28)]"
+      className="fixed z-[46] flex h-11 items-center justify-center gap-[6px] rounded-full bg-ink text-[14px] font-semibold text-surface shadow-[0_6px_20px_rgba(27,34,48,.28)]"
     >
       {icon}
       {COPY.pill}

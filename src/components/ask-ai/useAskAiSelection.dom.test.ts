@@ -98,6 +98,32 @@ describe("useAskAiSelection", () => {
     const sc = add.mock.calls.find((c) => c[0] === "scroll")!;
     expect(sc[2]).toEqual({ capture: true, passive: true, once: true });
   });
+  it("mobile bar: scroll·resize don't hide (no listeners) · collapsing the selection hides", () => {
+    const mm = vi.fn(() => ({ matches: true }) as MediaQueryList);
+    vi.stubGlobal("matchMedia", mm);
+    const add = vi.spyOn(window, "addEventListener");
+    try {
+      render(true);
+      select("p", 0, 3);
+      fire();
+      act(() => void vi.advanceTimersByTime(250));
+      expect(out().pick?.term).toBe("VPC");
+      act(() => void window.dispatchEvent(new Event("scroll")));
+      act(() => void window.dispatchEvent(new Event("resize")));
+      expect(out().pick?.term).toBe("VPC");
+      expect(add.mock.calls.some((c) => c[0] === "scroll" || c[0] === "resize")).toBe(false);
+      select("p", 0, 5); // 핸들 드래그로 선택을 넓혀도 그대로 이어진다
+      fire();
+      act(() => void vi.advanceTimersByTime(250));
+      expect(out().pick?.term).toBe("VPC 의");
+      act(() => void document.getSelection()!.removeAllRanges());
+      fire();
+      act(() => void vi.advanceTimersByTime(250));
+      expect(out().pick).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it("enabled=false → no document listeners", () => {
     const add = vi.spyOn(document, "addEventListener");
     render(false);

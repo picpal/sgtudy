@@ -71,6 +71,25 @@ describe("AskAiSheet", () => {
     act(() => (document.querySelector('[role="dialog"]') as HTMLElement).click()); // 상자 안 클릭은 닫지 않는다
     expect(p.onClose).toHaveBeenCalledTimes(3);
   });
+  it("Esc closes only the sheet — an underlying document keydown listener (NoticePopup) doesn't see it", () => {
+    const under = vi.fn();
+    document.addEventListener("keydown", under);
+    try {
+      const p = props(ok);
+      render(p);
+      act(() => void document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+      expect(p.onClose).toHaveBeenCalledTimes(1);
+      expect(under).not.toHaveBeenCalled();
+      act(() => void document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true })));
+      expect(under).toHaveBeenCalledTimes(1);
+    } finally {
+      document.removeEventListener("keydown", under);
+    }
+  });
+  it("sits above NoticePopup (z-[45])", () => {
+    render(props(ok));
+    expect((document.querySelector("[data-ask-ai-backdrop]") as HTMLElement).className).toContain("z-[60]");
+  });
   it("unmount restores focus to returnFocus and body overflow", () => {
     render(props(ok));
     expect(document.activeElement?.tagName).toBe("H2");

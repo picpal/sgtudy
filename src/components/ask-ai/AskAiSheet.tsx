@@ -43,14 +43,19 @@ export function AskAiSheet({ term, state, onClose, onAskRelated, returnFocus }: 
   }, []);
   const onEsc = useEffectEvent(() => onClose());
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onEsc();
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    // capture + stopPropagation: 공지 팝업(NoticePopup) 위에 열렸을 때 Esc 가 팝업까지 닫지 않게(팝업도 document keydown 을 듣는다)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      onEsc();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
   }, []);
   const title = state.phase === "ok" && state.body.term ? state.body.term : term;
 
   return createPortal(
-    <div data-ask-ai-backdrop className="fixed inset-0 z-40 flex items-end justify-center bg-[rgba(27,34,48,.4)] sm:items-center sm:p-6" onClick={onClose}>
+    <div data-ask-ai-backdrop className="fixed inset-0 z-[60] flex items-end justify-center bg-[rgba(27,34,48,.4)] sm:items-center sm:p-6" onClick={onClose}>
       <div
         ref={box}
         role="dialog"
