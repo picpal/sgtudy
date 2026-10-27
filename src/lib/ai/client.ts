@@ -2,6 +2,8 @@ import "server-only";
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
 import { aiModel } from "./env";
+import type { CallExplain } from "./explain/explain";
+import { ExplainOut } from "./explain/schema";
 import type { CallModel, Usage } from "./interview";
 import type { ChatInput } from "./prompt";
 import type { CallRounds } from "./rounds/rounds";
@@ -73,5 +75,12 @@ const roundsFormat = (n: number) => {
 export const openaiCallRounds: CallRounds = async ({ system, messages, write, timeoutMs }) => {
   const opts = { format: roundsFormat(write.length), cacheKey: "sgtudy-room-rounds", maxOutputTokens: 12_000, request: { timeout: timeoutMs ?? 50_000, maxRetries: 0 } };
   const r = await callStructured(opts, { system, messages });
+  return r.ok ? { ok: true, output: r.parsed, usage: r.usage, model: r.model } : r;
+};
+
+/** 용어 해설(D10) — 출력 ≈450, 1500 상한 · 25s · 재시도 없음(라우트 maxDuration 30 안) */
+const EXPLAIN = { format: zodTextFormat(ExplainOut, "term_explain"), cacheKey: "sgtudy-term-explain", maxOutputTokens: 1500, request: { timeout: 25_000, maxRetries: 0 } };
+export const openaiCallExplain: CallExplain = async ({ system, messages }) => {
+  const r = await callStructured(EXPLAIN, { system, messages });
   return r.ok ? { ok: true, output: r.parsed, usage: r.usage, model: r.model } : r;
 };

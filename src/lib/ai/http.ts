@@ -36,4 +36,8 @@ export const MSG = {
   ROUNDS_UNAVAILABLE: "회차 초안은 지금 어려워요 · 방만 먼저 만들고 진행목표에서 채울 수 있어요",
   ROUNDS_LIMIT: "오늘은 회차 초안을 더 만들 수 없어요 · 방을 만든 뒤 진행목표에서 채울 수 있어요",
   ROUNDS_NO_PERIOD: "제목과 기간을 먼저 정해 주세요",
+  EXPLAIN_UNAVAILABLE: "지금은 AI 해설이 어려워요 · 잠시 후 다시 해 주세요",
+  EXPLAIN_IN_PROGRESS: "시험을 제출한 뒤에 쓸 수 있어요",
+  EXPLAIN_NOT_MEMBER: "참가가 승인되면 쓸 수 있어요",
+  EXPLAIN_TOO_LONG: "40자까지 선택해 주세요",
 } as const;

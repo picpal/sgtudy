@@ -12,3 +12,6 @@ export const aiModel = () => process.env.AI_INTERVIEW_MODEL?.trim() || DEFAULT_A
 
 /** 키와 모델이 있거나 목 모드면 세그먼트를 그린다. 아니면 지금 화면 그대로(D12) */
 export const aiInterviewEnabled = () => (!!process.env.OPENAI_API_KEY?.trim() && !!aiModel()) || aiMock();
+
+/** 용어 해설(D17) — 인터뷰와 같은 키·목 조건 + 끄기 스위치 AI_EXPLAIN_OFF=1 */
+export const aiExplainEnabled = () => aiInterviewEnabled() && process.env.AI_EXPLAIN_OFF !== "1";
