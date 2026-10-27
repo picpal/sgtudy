@@ -1,0 +1,23 @@
+/* 「AI에게 물어보기」 문구(스펙 §6, 해요체) */
+export const COPY = {
+  pill: "AI에게 물어보기",
+  pillMobile: (term: string) => `“${term}” AI에게 물어보기`,
+  pillAria: "선택한 용어 AI에게 물어보기",
+  subtitle: "이 스터디 관점으로 설명해요",
+  secOneLiner: "한 줄 요약",
+  secInContext: "이 스터디에서는",
+  secPoints: "시험·실무 포인트",
+  secRelated: "관련 용어",
+  loading1: "이 스터디 맥락을 읽는 중…",
+  loading2: "해설을 쓰는 중…",
+  notTerm: "용어나 짧은 구를 선택해 주세요 · 문장이나 문제는 설명하지 않아요",
+  unavailable: "지금은 AI 해설이 어려워요 · 잠시 후 다시 해 주세요",
+  rateTenMin: "AI 해설을 너무 빨리 쓰고 있어요 · 잠시 후 다시 해 주세요",
+  rateDay: "오늘은 AI 해설을 더 쓸 수 없어요 · 내일 다시 해 주세요",
+  budget: "오늘은 AI 해설을 더 쓸 수 없어요 · 내일 다시 해 주세요",
+  inProgress: "시험을 제출한 뒤에 쓸 수 있어요",
+  notMember: "참가가 승인되면 쓸 수 있어요",
+  footnote: "AI 가 쓴 글이라 틀릴 수 있어요 · 같은 방 멤버와 해설을 공유해요",
+  close: "닫기",
+  retryAfter: (sec: number) => (sec >= 3600 ? `${Math.ceil(sec / 3600)}시간 뒤에 다시 쓸 수 있어요` : sec >= 60 ? `${Math.ceil(sec / 60)}분 뒤에 다시 쓸 수 있어요` : `${sec}초 뒤에 다시 쓸 수 있어요`),
+} as const;
