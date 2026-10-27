@@ -37,13 +37,15 @@ type Props = {
   onGrade: () => void;
   onClose: () => void;
   onMaster: (on: boolean) => void;
+  /** 다시 볼 문제(★) 켜기·끄기 — 정오·외움·다시 풀기 상태와 무관하게 늘 보인다 */
+  onBookmark: (on: boolean) => void;
 };
 
 /**
  * 오답 문항 하나(스펙 §6.1·§6.4). 기본 = 내 제출 답만(정답 키를 지운 사본, 「정답」 태그 없음) + [다시 풀기]·[외웠어요] + 「정답·해설」 펼침.
  * 다시 풀기 = 같은 자리에서 응시 입력(take) → [채점](서버) → 결과(정답 표시·해설 자동 펼침). 정오는 서버 응답 그대로
  */
-export function WrongNoteItemView({ it, idx, run, inBatch, busy, fieldError, onStart, onAnswer, onGrade, onClose, onMaster }: Props) {
+export function WrongNoteItemView({ it, idx, run, inBatch, busy, fieldError, onStart, onAnswer, onGrade, onClose, onMaster, onBookmark }: Props) {
   const q = it.question;
   const [reveal, setReveal] = useState(false);
   const badges = itemBadges(it);
@@ -56,24 +58,27 @@ export function WrongNoteItemView({ it, idx, run, inBatch, busy, fieldError, onS
     prev.current = phase;
     const a = document.activeElement;
     if (a && a !== document.body) return;
-    const sel = phase === "take" ? "input, button[aria-pressed]" : phase === "done" ? '[data-focus="again"]' : '[data-focus="start"]';
+    const sel = phase === "take" ? "input, button[aria-pressed]:not([data-star])" : phase === "done" ? '[data-focus="again"]' : '[data-focus="start"]';
     liRef.current?.querySelector<HTMLElement>(sel)?.focus();
   }, [phase]);
 
   return (
     <li ref={liRef} className="flex scroll-mt-24 flex-col gap-2 border-t border-line-2 pt-4 first:border-t-0 first:pt-0" data-wn-item={q.id} data-wn-idx={idx}>
-      <p className="m-0 flex flex-wrap items-center gap-[6px]" aria-label="문항 상태">
-        {badges.map((b) => (
-          <span key={b.text} className={`rounded-[6px] px-[6px] py-[1px] text-[11px] font-bold ${BADGE[b.tone]}`}>
-            {b.text}
-          </span>
-        ))}
-        {run?.s === "done" && (
-          <span role="status" className={`text-[12px] font-bold ${run.correct ? "text-[#1A7F55]" : "text-warn"}`}>
-            {practiceResultText(run.correct)}
-          </span>
-        )}
-      </p>
+      <div className="flex items-start gap-2">
+        <p className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-[6px] pt-[10px]" aria-label="문항 상태">
+          {badges.map((b) => (
+            <span key={b.text} className={`rounded-[6px] px-[6px] py-[1px] text-[11px] font-bold ${BADGE[b.tone]}`}>
+              {b.text}
+            </span>
+          ))}
+          {run?.s === "done" && (
+            <span role="status" className={`text-[12px] font-bold ${run.correct ? "text-[#1A7F55]" : "text-warn"}`}>
+              {practiceResultText(run.correct)}
+            </span>
+          )}
+        </p>
+        <StarToggle on={it.bookmarked} disabled={busy} onToggle={() => onBookmark(!it.bookmarked)} />
+      </div>
 
       <ul className="m-0 list-none p-0">
         {run?.s === "take" ? (
@@ -138,5 +143,24 @@ export function WrongNoteItemView({ it, idx, run, inBatch, busy, fieldError, onS
         </>
       )}
     </li>
+  );
+}
+
+/** 다시 볼 문제(★) 토글 — 이름은 고정, 켜짐은 aria-pressed(스크린리더가 「눌림」 으로 읽는다). 44px 누름 영역 */
+export function StarToggle({ on, disabled, onToggle }: { on: boolean; disabled?: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      aria-label="다시 볼 문제"
+      title={on ? "다시 볼 문제에서 빼기" : "다시 볼 문제로 표시"}
+      data-star
+      disabled={disabled}
+      onClick={onToggle}
+      className={`inline-flex h-11 shrink-0 items-center gap-1 rounded-[22px] px-3 text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint disabled:opacity-50 ${on ? "bg-amber-soft text-amber-text" : "text-ink-3 hover:bg-surface-2"}`}
+    >
+      <span aria-hidden="true" className="text-[16px] leading-none">{on ? "★" : "☆"}</span>
+      <span className="max-sm:sr-only">다시 볼 문제</span>
+    </button>
   );
 }

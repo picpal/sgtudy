@@ -168,6 +168,30 @@ export const mergePractice = (studies: NoteStudy[], results: WrongNotePracticeRe
 export const setMastered = (studies: NoteStudy[], questionId: string, on: boolean): NoteStudy[] =>
   mapItems(studies, (it) => (it.question.id === questionId ? { ...it, mastered: on } : it));
 
+/** 다시 볼 문제(★) 켜기·끄기 */
+export const setBookmarked = (studies: NoteStudy[], questionId: string, on: boolean): NoteStudy[] =>
+  mapItems(studies, (it) => (it.question.id === questionId ? { ...it, bookmarked: on } : it));
+
+/* ---------- 다시 볼 문제(★, 0051) ---------- */
+
+/** ★ 모아 보기 한 줄 — 문항 + 원래 자리(스터디·회차·시험). 필터·외움과 무관 */
+export type StarEntry = { study: NoteStudy; round: WrongNoteRound; exam: WrongNoteExam; item: WrongNoteItem };
+
+/**
+ * ★ 표시한 문항 — 스터디 → 회차 → 시험 → 문항 순(목록 순서 그대로). 잠긴 시험은 items 가 없으니 나오지 않는다.
+ * ids 를 주면 ★ 대신 그 문항들(모아 보기를 연 때의 ★ — 보는 중에 ☆ 로 꺼도 자리에 남아 되돌릴 수 있게)
+ */
+export function starEntries(studies: NoteStudy[], ids?: ReadonlySet<string>): StarEntry[] {
+  const out: StarEntry[] = [];
+  for (const study of studies) for (const round of study.rounds) for (const exam of round.exams)
+    for (const item of exam.items ?? []) if (ids ? ids.has(item.question.id) : item.bookmarked) out.push({ study, round, exam, item });
+  return out;
+}
+
+/** 회차 안 ★ 개수(카드 배지) */
+export const roundStarCount = (r: WrongNoteRound): number =>
+  r.exams.reduce((n, ex) => n + (ex.items ?? []).filter((it) => it.bookmarked).length, 0);
+
 /* ---------- 오류 → 화면 동작 ---------- */
 
 /** 0046 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */
@@ -290,5 +314,6 @@ export function retryLabel(it: WrongNoteItem): string {
   const m = lastMark(it);
   if (m) parts.push(m === "ok" ? "마지막에 맞힘" : "마지막에 틀림");
   if (it.mastered) parts.push("외움");
+  if (it.bookmarked) parts.push("다시 볼 문제");
   return parts.join(" · ");
 }

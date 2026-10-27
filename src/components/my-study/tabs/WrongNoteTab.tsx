@@ -42,6 +42,7 @@ export function WrongNoteTab({ slug, viewerPending, toast, periods }: Props) {
       busy={w.busy}
       onPractice={w.practice}
       onMaster={w.master}
+      onBookmark={w.bookmark}
       round={nav.round}
       onOpenRound={nav.open}
       onBack={nav.back}

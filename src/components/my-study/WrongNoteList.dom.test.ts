@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { ExamQuestion, WrongNoteExam, WrongNoteItem, WrongNotePractice } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 import type { PracticeOutcome } from "./useWrongNote";
-import { mergePractice, setMastered, type NoteStudy } from "./wrongNote";
+import { mergePractice, setBookmarked, setMastered, type NoteStudy } from "./wrongNote";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 // jsdom 에는 없다 — 문항 이동이 부른다
@@ -17,7 +17,7 @@ const { WrongNoteList } = await import("./WrongNoteList");
 const q = (id: string, o: Partial<ExamQuestion> = {}): ExamQuestion => ({
   id, ord: Number(id) - 1, type: "single", prompt: `문제 ${id}`, choices: ["가", "나", "다"], points: 2, answer: 0, explanation: `해설 **${id}**`, ...o,
 });
-const item = (id: string, o: Partial<WrongNoteItem> = {}): WrongNoteItem => ({ question: q(id), no: Number(id), mine: 1, practice: null, mastered: false, ...o });
+const item = (id: string, o: Partial<WrongNoteItem> = {}): WrongNoteItem => ({ question: q(id), no: Number(id), mine: 1, practice: null, mastered: false, bookmarked: false, ...o });
 const P = (lastCorrect: boolean): WrongNotePractice => ({ lastCorrect, correctCount: lastCorrect ? 1 : 0, wrongCount: lastCorrect ? 0 : 1, lastAnswer: 0, lastAt: "2026-10-17T00:00:00.000Z" });
 const exam = (nodeId: string, items: WrongNoteItem[], o: Partial<WrongNoteExam> = {}): WrongNoteExam => ({
   nodeId, title: `시험 ${nodeId}`, endDate: "2026-10-21", reveal: "after_submit", score: 1, maxScore: 5, correctCount: 1, questionCount: 4, locked: false, items, ...o,
@@ -49,6 +49,7 @@ type Opt = { studies?: NoteStudy[]; scope?: "room" | "all"; pending?: boolean; s
 function mount(o: Opt = {}) {
   const onPractice = vi.fn(async (slug: string, answers: { questionId: string; answer: unknown }[]): Promise<PracticeOutcome> => o.practice?.(slug, answers) ?? { ok: false });
   const onMaster = vi.fn<(slug: string, id: string, on: boolean) => Promise<boolean>>(async () => true);
+  const onBookmark = vi.fn<(slug: string, id: string, on: boolean) => Promise<boolean>>(async () => true);
   // 부모(useWrongNote)처럼 응답을 목록에 합친다
   function H() {
     const [studies, setStudies] = useState(o.studies ?? [AWS()]);
@@ -67,12 +68,17 @@ function mount(o: Opt = {}) {
         setStudies((s) => setMastered(s, id, on));
         return true;
       },
+      onBookmark: async (slug, id, on) => {
+        await onBookmark(slug, id, on);
+        setStudies((s) => setBookmarked(s, id, on));
+        return true;
+      },
     });
   }
   const host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
   act(() => root!.render(createElement(H)));
-  return { host, onPractice, onMaster };
+  return { host, onPractice, onMaster, onBookmark };
 }
 
 const text = (el: Element | null) => el?.textContent ?? "";
@@ -506,5 +512,90 @@ describe("WrongNoteList — 상세 문항 이동 · 다시 푼 횟수 색 (D24·
     click(document.getElementById("wn-nav-sheet")!.querySelectorAll('nav[aria-label="문항 이동"] button')[3]);
     expect(document.getElementById("wn-nav-sheet")).toBeNull();
     expect(document.activeElement?.id).toBe("exam-q-wn-21");
+  });
+});
+
+describe("WrongNoteList — 다시 볼 문제 ★ (0051)", () => {
+  const star = (scope: ParentNode, id: string) => scope.querySelector<HTMLButtonElement>(`[data-wn-item="${id}"] button[data-star]`)!;
+  const starBtn = (host: HTMLElement) => [...host.querySelectorAll("button")].find((b) => /다시 볼 문제 \(\d+\)/.test(b.textContent ?? "")) ?? null;
+  const navCell = (host: HTMLElement, no: string) =>
+    [...host.querySelectorAll<HTMLElement>('nav[aria-label="문항 이동"] li button')].find((b) => b.textContent?.replace("★", "").startsWith(no))!;
+
+  it("문항 ☆ 토글(aria-pressed · 라벨 고정) → onBookmark · 번호 칸 ★ · 라벨 · 각주에 「다시 볼 문제」 · 외움·정오와 무관", async () => {
+    const { host, onBookmark } = mount();
+    const b = star(host, "1");
+    expect(b.getAttribute("aria-label")).toBe("다시 볼 문제");
+    expect(b.getAttribute("aria-pressed")).toBe("false");
+    expect(navCell(host, "1").querySelector("[data-nav-star]")).toBeNull();
+    await click(b);
+    await flush();
+    expect(onBookmark).toHaveBeenCalledWith("aws", "1", true);
+    expect(star(host, "1").getAttribute("aria-pressed")).toBe("true");
+    expect(navCell(host, "1").querySelector("[data-nav-star]")).not.toBeNull();
+    expect(navCell(host, "1").getAttribute("aria-label")).toContain("다시 볼 문제");
+    // ✓·✗ 귀퉁이와 따로 — 다시 풀어 맞힌 2번은 ✓ 만
+    expect(navCell(host, "2").querySelector("[data-nav-star]")).toBeNull();
+    expect(text(host.querySelector("[data-wn-legend]"))).toContain("다시 볼 문제");
+    // 다시 풀어 맞힌 문항에도 표시할 수 있다
+    await click(star(host, "2"));
+    await flush();
+    expect(onBookmark).toHaveBeenLastCalledWith("aws", "2", true);
+    expect(star(host, "2").getAttribute("aria-pressed")).toBe("true");
+    await click(star(host, "1"));
+    await flush();
+    expect(onBookmark).toHaveBeenLastCalledWith("aws", "1", false);
+    expect(star(host, "1").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("목록: 회차 카드 ★ 개수 · 「★ 다시 볼 문제 (N)」 → ★ 문항만(필터·외움 무관) · 끄면 자리에 남음 · 「회차에서 보기」 → 상세", async () => {
+    const s = AWS();
+    s.rounds[0].exams[0].items![0].bookmarked = true;
+    s.rounds[0].exams[0].items![2] = { ...s.rounds[0].exams[0].items![2], bookmarked: true, mastered: true };
+    const { host } = mount({ studies: [s], round: null });
+    expect(text(host.querySelector('[data-round-card="3"]')!.closest("article"))).toContain("다시 볼 문제 2");
+    const sb = starBtn(host)!;
+    expect(text(sb)).toContain("다시 볼 문제 (2)");
+    expect(sb.getAttribute("aria-pressed")).toBe("false");
+    await click(sb);
+    expect(starBtn(host)!.getAttribute("aria-pressed")).toBe("true");
+    expect(host.querySelector('[role="radiogroup"]')).toBeNull();               // 필터는 이 보기에 없다
+    const ids = () => [...host.querySelectorAll<HTMLElement>("[data-wn-item]")].map((e) => e.dataset.wnItem);
+    expect(ids()).toEqual(["1", "3"]);                                         // 외운 3번도 보인다
+    expect(text(host.querySelector('ol[aria-label="다시 볼 문제"]'))).toContain("3주차 · 시험 31");
+    await click(star(host, "1"));
+    await flush();
+    expect(ids()).toEqual(["1", "3"]);                                         // 꺼도 자리에 남는다
+    expect(star(host, "1").getAttribute("aria-pressed")).toBe("false");
+    expect(text(starBtn(host))).toContain("(1)");
+    await click(btn(host.querySelector('[data-wn-item="3"]')!.closest("li:not([data-wn-item])")!, "회차에서 보기 ›"));
+    await flush();
+    expect(text(host.querySelector("[data-wn-head]"))).toBe("3주차");
+    expect(host.querySelector('[data-wn-item="3"]')).not.toBeNull();          // 외운 문항이라 외운 문제 보기가 켜졌다
+    expect(document.activeElement?.id).toBe("exam-q-wn-3");
+    await click(btn(host, "회차 목록"));
+    expect(starBtn(host)!.getAttribute("aria-pressed")).toBe("true");         // 돌아오면 ★ 보기 그대로
+    await click(btn(host, "회차 목록으로"));
+    expect(host.querySelector('[data-round-card="3"]')).not.toBeNull();
+  });
+
+  it("★ 0 개 → 보기 안내 · 잠긴 회차 카드엔 ★ 없음", async () => {
+    const { host } = mount({ round: null });
+    expect(text(host.querySelector('[data-round-card="3"]')!.closest("article"))).not.toContain("다시 볼 문제");
+    await click(starBtn(host));
+    expect(text(host)).toContain("아직 표시한 문항이 없어요");
+  });
+
+  it("scope all — 줄마다 스터디 이름 · studyFilter 로 그 스터디 ★ 만", async () => {
+    const a = AWS();
+    a.title = "AWS 스터디";
+    a.rounds[0].exams[0].items![0].bookmarked = true;
+    const sp: NoteStudy = { ...SPRING, rounds: [{ ...SPRING.rounds[0], exams: [exam("91", [item("11", { bookmarked: true })])] }] };
+    let m = mount({ studies: [a, sp], scope: "all", round: null });
+    expect(text(starBtn(m.host))).toContain("(2)");
+    await click(starBtn(m.host));
+    expect(text(m.host.querySelector('ol[aria-label="다시 볼 문제"]'))).toContain("Spring 스터디");
+    act(() => root?.unmount());
+    m = mount({ studies: [a, sp], scope: "all", round: null, studyFilter: "spring" });
+    expect(text(starBtn(m.host))).toContain("(1)");
   });
 });

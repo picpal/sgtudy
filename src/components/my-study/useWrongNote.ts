@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
 import type { WrongNotePracticeResult } from "@/lib/api/types";
-import { masterWrongNote, practiceWrongNote, type WrongNoteAnswer } from "@/lib/api/wrongNote";
-import { mergePractice, setMastered, wrongNoteErrorAction, type NoteStudy } from "./wrongNote";
+import { bookmarkWrongNote, masterWrongNote, practiceWrongNote, type WrongNoteAnswer } from "@/lib/api/wrongNote";
+import { mergePractice, setBookmarked, setMastered, wrongNoteErrorAction, type NoteStudy } from "./wrongNote";
 
 /** 다시 풀기 결과 — 실패면 field = 「답을 확인해 주세요」 를 띄울 문항(모르면 null). 토스트·다시 받기는 훅이 이미 했다 */
 export type PracticeOutcome = { ok: true; results: WrongNotePracticeResult["results"] } | { ok: false; field?: string | null };
@@ -117,5 +117,17 @@ export function useWrongNote(load: () => Promise<NoteStudy[]>, deps: readonly un
     [run],
   );
 
-  return { studies, error, loading, refetch, practice, master, busy };
+  /** 다시 볼 문제(★) — 토스트 없이 단추 모양(aria-pressed)만 바뀐다 */
+  const bookmark = useCallback(
+    async (slug: string, questionId: string, on: boolean): Promise<boolean> => {
+      const r = await run(() => bookmarkWrongNote(slug, questionId, on));
+      if (!r.ok) return false;
+      merged.current += 1;
+      setStudies((s) => (s ? setBookmarked(s, questionId, r.v.bookmarked) : s));
+      return true;
+    },
+    [run],
+  );
+
+  return { studies, error, loading, refetch, practice, master, bookmark, busy };
 }

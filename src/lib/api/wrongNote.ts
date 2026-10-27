@@ -13,3 +13,6 @@ export const practiceWrongNote = (slug: string, answers: WrongNoteAnswer[], clie
   rpc<WrongNotePracticeResult>("wrong_note_practice", { p_slug: slug, p_answers: answers.map((a) => ({ questionId: a.questionId, answer: a.answer ?? null })) }, client);
 export const masterWrongNote = (slug: string, questionId: string, on: boolean, client?: Db) =>
   rpc<{ mastered: boolean }>("wrong_note_master", { p_slug: slug, p_question: num(questionId), p_on: on }, client);
+/** 다시 볼 문제(★) 켜기·끄기 (0051) — 정오·외움과 무관한 본인 표시 */
+export const bookmarkWrongNote = (slug: string, questionId: string, on: boolean, client?: Db) =>
+  rpc<{ bookmarked: boolean }>("wrong_note_bookmark", { p_slug: slug, p_question: num(questionId), p_on: on }, client);

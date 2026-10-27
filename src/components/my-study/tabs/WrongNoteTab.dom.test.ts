@@ -34,7 +34,7 @@ const VIEW = (): WrongNote => ({
     id: "3", title: "3주차",
     exams: [{
       nodeId: "31", title: "3주차 정리 시험", endDate: "2026-10-21", reveal: "after_submit", score: 1, maxScore: 5, correctCount: 1, questionCount: 4, locked: false,
-      items: [{ question: { id: "1", ord: 0, type: "ox", prompt: "IGW 는 VPC 에 붙는다", choices: null, points: 1, answer: true, explanation: "맞다" }, no: 1, mine: false, practice: null, mastered: false }],
+      items: [{ question: { id: "1", ord: 0, type: "ox", prompt: "IGW 는 VPC 에 붙는다", choices: null, points: 1, answer: true, explanation: "맞다" }, no: 1, mine: false, practice: null, mastered: false, bookmarked: false }],
     }],
   }],
 });

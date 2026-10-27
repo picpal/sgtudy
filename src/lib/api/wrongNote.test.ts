@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "./errors";
-import { fetchWrongNote, fetchWrongNoteMine, masterWrongNote, practiceWrongNote } from "./wrongNote";
+import { bookmarkWrongNote, fetchWrongNote, fetchWrongNoteMine, masterWrongNote, practiceWrongNote } from "./wrongNote";
 
 const fake = (data: unknown = {}) => {
   const calls: [string, unknown][] = [];
@@ -16,12 +16,14 @@ describe("wrongNote adapter — RPC 이름·인자(0046)", () => {
     await practiceWrongNote("aws", [{ questionId: "12", answer: [0, 2] }, { questionId: "13", answer: undefined }], f.client);
     await masterWrongNote("spring", "12", true, f.client);
     await masterWrongNote("aws", "7", false, f.client);
+    await bookmarkWrongNote("aws", "9", true, f.client);
     expect(f.calls).toEqual([
       ["wrong_note_list", { p_slug: "aws" }],
       ["wrong_note_mine", {}],
       ["wrong_note_practice", { p_slug: "aws", p_answers: [{ questionId: "12", answer: [0, 2] }, { questionId: "13", answer: null }] }],   // questionId 는 문자열 그대로(서버 검사)
       ["wrong_note_master", { p_slug: "spring", p_question: 12, p_on: true }],
       ["wrong_note_master", { p_slug: "aws", p_question: 7, p_on: false }],
+      ["wrong_note_bookmark", { p_slug: "aws", p_question: 9, p_on: true }],
     ]);
   });
 

@@ -4,8 +4,9 @@ import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode, typ
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "@/components/ui/useFocusTrap";
 
-/** 번호 칸 하나 — text = 칸 글자(문항 번호), label = aria-label·title(색만으로 구분하지 않게 상태를 글로), tone = 칸 색 클래스, mark = 귀퉁이 표시(마지막 정오) */
-export type NavCell = { key: string; text: string; label: string; tone: string; mark?: "ok" | "bad" | null };
+/** 번호 칸 하나 — text = 칸 글자(문항 번호), label = aria-label·title(색만으로 구분하지 않게 상태를 글로), tone = 칸 색 클래스,
+ * mark = 오른쪽 위 귀퉁이 표시(마지막 정오), star = 왼쪽 위 귀퉁이 ★(오답노트 다시 볼 문제 — label 에도 글로 넣는다) */
+export type NavCell = { key: string; text: string; label: string; tone: string; mark?: "ok" | "bad" | null; star?: boolean };
 /** 칸 묶음 — 시험이 여럿이면 시험별(title = 시험 이름). 번호 칸 index 는 묶음을 이어 센다 */
 export type NavGroup = { key: string; title?: string; cells: NavCell[] };
 
@@ -60,6 +61,11 @@ export function QuestionNav({ groups, summary, current, onJump, variant, legend,
                     className={`relative grid w-full cursor-pointer place-items-center rounded-[9px] border text-[13px] font-semibold transition-[transform,box-shadow,background-color] hover:-translate-y-px hover:shadow-[0_3px_8px_rgba(27,34,48,.12)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-navy motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${side ? "h-9" : "h-11"} ${c.tone} ${cur ? "ring-2 ring-navy ring-offset-1" : ""}`}
                   >
                     {c.text}
+                    {c.star && (
+                      <span aria-hidden="true" data-nav-star className="absolute -left-[3px] -top-[4px] text-[11px] leading-none text-amber-text [text-shadow:0_0_2px_var(--surface-2),0_0_2px_var(--surface-2)]">
+                        ★
+                      </span>
+                    )}
                     {c.mark && (
                       <span aria-hidden="true" className={`absolute -right-[3px] -top-[3px] grid size-[13px] place-items-center rounded-full text-[8px] leading-none text-white ring-2 ring-surface-2 ${MARK[c.mark]}`}>
                         {c.mark === "ok" ? "✓" : "✗"}

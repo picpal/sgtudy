@@ -30,6 +30,7 @@ export function TasksNotesView({ notes, study, round, onOpenRound, onBack, perio
       busy={notes.busy}
       onPractice={notes.practice}
       onMaster={notes.master}
+      onBookmark={notes.bookmark}
       round={round}
       onOpenRound={onOpenRound}
       onBack={onBack}

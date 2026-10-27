@@ -6,6 +6,8 @@ import type { MeTasks, WrongNoteMine, WrongNoteStudy } from "@/lib/api/types";
 import { routes } from "@/lib/routes";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+// jsdom 에는 없다 — ★ 「회차에서 보기」 가 부른다
+Element.prototype.scrollIntoView ??= function () {};
 
 // useSearchParams 가 history.replaceState 를 따라가게(Next 의 Native History API 동기화 흉내)
 vi.mock("next/navigation", async () => {
@@ -22,9 +24,9 @@ vi.mock("next/navigation", async () => {
 });
 vi.mock("@/components/ui/AppHeader", () => ({ AppHeader: () => null }));
 vi.mock("@/components/ui/NotificationBell", () => ({ NotificationBell: () => null }));
-const m = vi.hoisted(() => ({ fetchMyTasks: vi.fn(), fetchWrongNoteMine: vi.fn(), practiceWrongNote: vi.fn(), masterWrongNote: vi.fn() }));
+const m = vi.hoisted(() => ({ fetchMyTasks: vi.fn(), fetchWrongNoteMine: vi.fn(), practiceWrongNote: vi.fn(), masterWrongNote: vi.fn(), bookmarkWrongNote: vi.fn() }));
 vi.mock("@/lib/api/personal", async (orig) => ({ ...(await orig<object>()), fetchMyTasks: m.fetchMyTasks }));
-vi.mock("@/lib/api/wrongNote", async (orig) => ({ ...(await orig<object>()), fetchWrongNoteMine: m.fetchWrongNoteMine, practiceWrongNote: m.practiceWrongNote, masterWrongNote: m.masterWrongNote }));
+vi.mock("@/lib/api/wrongNote", async (orig) => ({ ...(await orig<object>()), fetchWrongNoteMine: m.fetchWrongNoteMine, practiceWrongNote: m.practiceWrongNote, masterWrongNote: m.masterWrongNote, bookmarkWrongNote: m.bookmarkWrongNote }));
 
 const { TasksScreen } = await import("./TasksScreen");
 
@@ -43,7 +45,7 @@ const noteStudy = (slug: string, title: string, qid: string): WrongNoteStudy => 
     id: `${slug}-r`, title: "3주차",
     exams: [{
       nodeId: `${slug}-x`, title: `${title} 시험`, endDate: "2026-10-21", reveal: "after_submit", score: 1, maxScore: 2, correctCount: 1, questionCount: 2, locked: false,
-      items: [{ question: { id: qid, ord: 0, type: "ox", prompt: `${title} 문제`, choices: null, points: 1, answer: true, explanation: "해설" }, no: 1, mine: false, practice: null, mastered: false }],
+      items: [{ question: { id: qid, ord: 0, type: "ox", prompt: `${title} 문제`, choices: null, points: 1, answer: true, explanation: "해설" }, no: 1, mine: false, practice: null, mastered: false, bookmarked: false }],
     }],
   }],
 });
@@ -187,6 +189,22 @@ describe("TasksScreen — 「오답노트」 보기 (오답노트 D17~D21)", () 
     await click(btn(host.querySelector("[data-wn-item='2']")!, "채점"));
     expect(m.practiceWrongNote).toHaveBeenCalledWith("spring", [{ questionId: "2", answer: true }]);
     expect(host.textContent).toContain("✓ 맞혔어요");
+  });
+
+  it("★ 다시 볼 문제 — 상세에서 ☆ → bookmarkWrongNote(\"spring\", …) · 목록 「★ 다시 볼 문제 (1)」 → 그 문항(회차 무관) · 「회차에서 보기」 → ?round=", async () => {
+    m.bookmarkWrongNote.mockResolvedValue({ bookmarked: true });
+    const host = await mount("?view=notes&round=spring-r");
+    await click(host.querySelector("[data-wn-item='2'] button[data-star]"));
+    expect(m.bookmarkWrongNote).toHaveBeenCalledWith("spring", "2", true);
+    expect(host.querySelector("[data-wn-item='2'] button[data-star]")!.getAttribute("aria-pressed")).toBe("true");
+    await click(btn(host, "회차 목록"));
+    const sb = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("다시 볼 문제 ("))!;
+    expect(sb.textContent).toContain("(1)");
+    await click(sb);
+    expect([...host.querySelectorAll<HTMLElement>("[data-wn-item]")].map((e) => e.dataset.wnItem)).toEqual(["2"]);
+    expect(host.querySelector('ol[aria-label="다시 볼 문제"]')!.textContent).toContain("Spring");
+    await click(btn(host, "회차에서 보기 ›"));
+    expect(new URLSearchParams(window.location.search).get("round")).toBe("spring-r");
   });
 
   it("스터디가 하나도 없으면 TasksEmpty noStudy", async () => {

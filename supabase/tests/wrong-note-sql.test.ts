@@ -375,3 +375,92 @@ cases("wrong note 0046 · practice & master", db, [
     await expectFail(practice(q, [{ questionId: q1, answer: 0 }]), "NODE_NOT_FOUND");
   } },
 ]);
+
+// ── 0051 다시 볼 문제(★) ──
+const bookmark = (q: Q, qid: string, on: boolean, slug = "aws") => rpc(q, "public.wrong_note_bookmark($1, $2::bigint, $3)", [slug, qid, on]);
+const itemOf = (v: Row, qid: string) => (v.rounds[0].exams[0].items as Row[]).find((i) => i.question.id === qid)!;
+
+cases("wrong note 0051 · bookmark", db, [
+  { name: "bookmark: table closed · RLS on · RPC authenticated only", run: async (q) => {
+    for (const role of ["anon", "authenticated"]) for (const priv of ["select", "insert", "update", "delete"]) {
+      assertEquals((await one(q, "select has_table_privilege($1, 'public.exam_bookmark', $2) as v", [role, priv])).v, false, `${role} ${priv}`);
+    }
+    assertEquals((await one(q, "select relrowsecurity as v from pg_class where oid = 'public.exam_bookmark'::regclass")).v, true);
+    const can = async (role: string) => (await one(q, "select has_function_privilege($1, 'public.wrong_note_bookmark(text,bigint,boolean)', 'execute') as v", [role])).v;
+    assertEquals([await can("authenticated"), await can("anon")], [true, false]);
+  } },
+  { name: "bookmark: on/off idempotent · independent of practice/master · list & mine reflect · totals unchanged", run: async (q) => {
+    const node = await published(q);
+    const [q1, q2] = await qids(q, node);
+    await takeAs(q, "지은", node, JIEUN);
+    assertEquals(itemOf(await list(q), q1).bookmarked, false);
+    assertEquals(await bookmark(q, q1, true), { bookmarked: true });
+    assertEquals(await bookmark(q, q1, true), { bookmarked: true });          // 멱등
+    assertEquals((await one(q, "select count(*)::int as c from public.exam_bookmark")).c, 1);
+    await master(q, q1, true);
+    await practice(q, [{ questionId: q1, answer: 0 }]);                         // 다시 풀어 맞힘 + 외움이어도 ★ 유지
+    let v = await list(q);
+    assertEquals([itemOf(v, q1).bookmarked, itemOf(v, q1).mastered, itemOf(v, q2).bookmarked], [true, true, false]);
+    assertEquals(v.totals, { wrong: 3, retriedOk: 1, mastered: 1, locked: 0 });  // 합계 모양은 0046 그대로
+    const aws = (await mine(q)).studies.find((s: Row) => s.slug === "aws");
+    assertEquals(aws.rounds, v.rounds);
+    assertEquals(await bookmark(q, q1, false), { bookmarked: false });
+    assertEquals(await bookmark(q, q1, false), { bookmarked: false });
+    v = await list(q);
+    assertEquals(itemOf(v, q1).bookmarked, false);
+    await failCode(rpc(q, "public.wrong_note_bookmark('aws', $1::bigint, null)", [q1]), "VALIDATION_FAILED");
+  } },
+  { name: "bookmark: per user — others can't see or toggle mine · NOT_IN for correct/other's question · anon", run: async (q) => {
+    const node = await published(q);
+    const [q1, , , q4] = await qids(q, node);
+    await takeAs(q, "지은", node, JIEUN);
+    await takeAs(q, "철수", node, [0, [0, 2], false, null]);                  // 철수: 4번만 미답
+    await as(q, "지은");
+    await bookmark(q, q1, true);
+    await failCode(bookmark(q, q4, true), "WRONG_NOTE_NOT_IN");                // 맞힌 문항
+    await as(q, "철수");
+    assertEquals(itemOf(await list(q), q4).bookmarked, false);
+    assertEquals(JSON.stringify(await list(q)).includes('"bookmarked":true'), false);
+    await failCode(bookmark(q, q1, true), "WRONG_NOTE_NOT_IN");                // 철수는 1번을 맞혔다 — 남의 오답
+    await failCode(bookmark(q, q1, false), "WRONG_NOTE_NOT_IN");
+    assertEquals((await one(q, "select count(*)::int as c from public.exam_bookmark where question_id = $1::bigint", [q1])).c, 1);  // 지은 것 그대로
+    await as(q, "지훈");                                                       // 비멤버
+    await failCode(bookmark(q, q1, true), "ROOM_NOT_FOUND");
+    await asAnon(q);
+    await failCode(bookmark(q, q1, true), "AUTH_REQUIRED");
+  } },
+  { name: "bookmark: locked before reveal — LOCKED (same code for wrong & correct) · no bookmarked/items leak · relock hides", run: async (q) => {
+    const node = await published(q, { ...Q4, reveal: "after_deadline" });
+    const [q1, , , q4] = await qids(q, node);
+    await takeAs(q, "지은", node, JIEUN);
+    await setToday(q, "2026-10-20");
+    await failCode(bookmark(q, q1, true), "WRONG_NOTE_LOCKED");
+    await failCode(bookmark(q, q4, true), "WRONG_NOTE_LOCKED");                // 맞힌 문항도 같은 코드 — 정오가 새지 않는다
+    assertEquals((await one(q, "select count(*)::int as c from public.exam_bookmark")).c, 0);
+    await setToday(q, "2026-10-22");
+    await bookmark(q, q1, true);
+    assertEquals(itemOf(await list(q), q1).bookmarked, true);
+    // 마감 연장으로 다시 잠기면 items 째 빠진다 — ★ 도 안 보인다
+    await as(q, "민수");
+    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-30\"}'::jsonb)", [node]);
+    await as(q, "지은");
+    const ex = (await list(q)).rounds[0].exams[0];
+    assertEquals([ex.locked, "items" in ex, JSON.stringify(ex).includes("bookmarked")], [true, false, false]);
+  } },
+  { name: "bookmark: leaving room hides (row kept) · rejoin restores · question removed → cascade", run: async (q) => {
+    const node = await published(q);
+    const [q1] = await qids(q, node);
+    await takeAs(q, "지은", node, JIEUN);
+    await bookmark(q, q1, true);
+    const uid = await uidOf(q, "지은");
+    const room = "(select id from public.rooms where slug = 'aws')";
+    await q(`update public.room_members set status = 'CANCELED' where user_id = $1::uuid and room_id = ${room}`, [uid]);
+    assertEquals((await mine(q)).studies.some((s: Row) => s.slug === "aws"), false);
+    await failCode(bookmark(q, q1, false), "ROOM_NOT_FOUND");
+    assertEquals((await one(q, "select count(*)::int as c from public.exam_bookmark where user_id = $1::uuid", [uid])).c, 1);
+    await q(`update public.room_members set status = 'ACTIVE' where user_id = $1::uuid and room_id = ${room}`, [uid]);
+    assertEquals(itemOf(await list(q), q1).bookmarked, true);
+    await q("delete from public.exam_questions where id = $1::bigint", [q1]);
+    assertEquals((await one(q, "select count(*)::int as c from public.exam_bookmark where question_id = $1::bigint", [q1])).c, 0);
+  } },
+]);

@@ -444,7 +444,7 @@ export type ExamResults = {
 /** 연습 기록 — 한 번도 다시 풀지 않았으면(외웠어요만 눌렀어도) null. lastAnswer = 마지막 연습 답(canon, 미답 null) */
 export type WrongNotePractice = { lastCorrect: boolean | null; correctCount: number; wrongCount: number; lastAnswer: unknown; lastAt: string | null };
 /** 공개된 시험의 오답 한 문항. question 에 answer·explanation 이 항상 있다(D5). no = 시험 안 번호(ord+1), mine = 제출 때 내 답(null = 미답) */
-export type WrongNoteItem = { question: ExamQuestion; no: number; mine: unknown; practice: WrongNotePractice | null; mastered: boolean };
+export type WrongNoteItem = { question: ExamQuestion; no: number; mine: unknown; practice: WrongNotePractice | null; mastered: boolean; bookmarked: boolean };
 /** locked(정답 공개 전, D3) 이면 lockedCount·unlockDate 만 있고 items 키가 없다. 아니면 items(길이 ≥ 1) */
 export type WrongNoteExam = {
   nodeId: string;

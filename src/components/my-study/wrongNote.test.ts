@@ -4,12 +4,13 @@ import {
   applyFilter, batchSummary, emptyState, examHeadLine, FILTER_EMPTY_TEXT, itemBadges, lockedLine, mergePractice, PENDING_TEXT, practiceResultText,
   setMastered, stripKey, studyEmptyLine, toNoteStudies, toNoteStudiesMine, totalsLine, totalsOf, wrongNoteErrorAction, type NoteStudy,
   findRound, lastMark, periodLine, retryCount, retryLabel, retryTier, roundLockedLine, roundStatParts, roundStats, visibleCount, withRound,
+  roundStarCount, setBookmarked, starEntries,
 } from "./wrongNote";
 
 const q = (id: string, o: Partial<ExamQuestion> = {}): ExamQuestion => ({
   id, ord: Number(id) - 1, type: "single", prompt: `문제 ${id}`, choices: ["a", "b"], points: 1, answer: 0, explanation: `해설 ${id}`, ...o,
 });
-const item = (id: string, o: Partial<WrongNoteItem> = {}): WrongNoteItem => ({ question: q(id), no: Number(id), mine: 1, practice: null, mastered: false, ...o });
+const item = (id: string, o: Partial<WrongNoteItem> = {}): WrongNoteItem => ({ question: q(id), no: Number(id), mine: 1, practice: null, mastered: false, bookmarked: false, ...o });
 const ok = { lastCorrect: true, correctCount: 1, wrongCount: 0, lastAnswer: 0, lastAt: "2026-10-17T00:00:00.000Z" };
 const bad = { lastCorrect: false, correctCount: 0, wrongCount: 1, lastAnswer: 1, lastAt: "2026-10-17T00:00:00.000Z" };
 const exam = (nodeId: string, items: WrongNoteItem[], o: Partial<WrongNoteExam> = {}): WrongNoteExam => ({
@@ -203,5 +204,22 @@ describe("회차 카드 · 상세 (D22~D25)", () => {
     expect(lastMark(item("1", { practice: bad }))).toBe("bad");
     expect(retryLabel(item("1"))).toBe("1번 문항 · 아직 다시 풀지 않았어요");
     expect(retryLabel(item("2", { practice: p(1, 1, true), mastered: true }))).toBe("2번 문항 · 2번 다시 풀었어요 · 마지막에 맞힘 · 외움");
+  });
+});
+
+describe("다시 볼 문제 ★ (0051)", () => {
+  const starred = setBookmarked(setBookmarked([aws, spring], "4", true), "11", true);
+  it("setBookmarked · starEntries(목록 순 · 외운 문항 포함 · 잠긴 시험 없음) · ids 로 고정", () => {
+    expect(starEntries([aws, spring])).toEqual([]);
+    const e = starEntries(starred);
+    expect(e.map((x) => [x.study.slug, x.round.id, x.exam.nodeId, x.item.question.id, x.item.mastered])).toEqual([["aws", "3", "31", "4", true], ["spring", "9", "91", "11", false]]);
+    const off = setBookmarked(starred, "4", false);
+    expect(starEntries(off).map((x) => x.item.question.id)).toEqual(["11"]);
+    expect(starEntries(off, new Set(["4", "11"])).map((x) => x.item.question.id)).toEqual(["4", "11"]);
+  });
+  it("roundStarCount · retryLabel 에 「다시 볼 문제」", () => {
+    expect(roundStarCount(starred[0].rounds[0])).toBe(1);
+    expect(roundStarCount(starred[0].rounds[1])).toBe(0);
+    expect(retryLabel(item("1", { bookmarked: true }))).toBe("1번 문항 · 아직 다시 풀지 않았어요 · 다시 볼 문제");
   });
 });

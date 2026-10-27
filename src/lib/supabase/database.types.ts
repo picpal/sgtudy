@@ -392,6 +392,46 @@ export type Database = {
           },
         ]
       }
+      exam_bookmark: {
+        Row: {
+          created_at: string
+          question_id: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          question_id: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          question_id?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_bookmark_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "exam_questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_bookmark_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_bookmark_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exam_practice: {
         Row: {
           correct_count: number
@@ -2415,6 +2455,7 @@ export type Database = {
       job_completion_digest: { Args: never; Returns: number }
       job_deadline_reminder: { Args: never; Returns: number }
       job_draft_blocked: { Args: never; Returns: number }
+      job_expire_inactive_sessions: { Args: never; Returns: number }
       job_round_started: { Args: never; Returns: number }
       job_submission_digest: { Args: never; Returns: number }
       kst_deadline: { Args: { p_end: string }; Returns: string }
@@ -3544,6 +3585,10 @@ export type Database = {
       }
       task_get: { Args: { p_node: number; p_slug: string }; Returns: Json }
       task_node_json: { Args: { p_node: number; p_uid: string }; Returns: Json }
+      wrong_note_bookmark: {
+        Args: { p_on: boolean; p_question: number; p_slug: string }
+        Returns: Json
+      }
       wrong_note_has_exam: { Args: { p_room: number }; Returns: boolean }
       wrong_note_list: { Args: { p_slug: string }; Returns: Json }
       wrong_note_master: {

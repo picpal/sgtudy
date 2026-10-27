@@ -888,6 +888,8 @@ export const ROOM_CASES: Case[] = [
         "node_files_set(bigint,uuid[],uuid[])",
         // 0047: AI 인터뷰 사용량·상한(ai_limits 는 GRANT 없음, api_invoke 비노출)
         "ai_turn_check(text,boolean)", "ai_turn_done(bigint,integer,integer,integer,text)",
+        // 0051: 오답노트 다시 볼 문제(★)
+        "wrong_note_bookmark(text,bigint,boolean)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

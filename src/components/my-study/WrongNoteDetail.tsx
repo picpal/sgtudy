@@ -52,6 +52,7 @@ type Props = {
   onRun: (id: string, st: ItemRun | null) => void;
   onGrade: (id: string) => void;
   onMaster: (id: string, on: boolean) => void;
+  onBookmark: (id: string, on: boolean) => void;
   onStartBatch: (ex: WrongNoteExam) => void;
   onGradeBatch: (nodeId: string) => void;
   onEndBatch: (nodeId: string) => void;
@@ -93,9 +94,9 @@ export function WrongNoteDetail(p: Props) {
           const a = isAnswered(runs[it.question.id]?.st.answer);
           taking += 1;
           if (a) answered += 1;
-          return { key: it.question.id, text: String(it.no), label: `${it.no}번 문항 · ${a ? "답함" : "안 답함"}`, tone: a ? NAV_TONE.answered : NAV_TONE.idle };
+          return { key: it.question.id, text: String(it.no), label: `${it.no}번 문항 · ${a ? "답함" : "안 답함"}${it.bookmarked ? " · 다시 볼 문제" : ""}`, tone: a ? NAV_TONE.answered : NAV_TONE.idle, star: it.bookmarked };
         }
-        return { key: it.question.id, text: String(it.no), label: retryLabel(it), tone: TIER_TONE[retryTier(retryCount(it))], mark: lastMark(it) };
+        return { key: it.question.id, text: String(it.no), label: retryLabel(it), tone: TIER_TONE[retryTier(retryCount(it))], mark: lastMark(it), star: it.bookmarked };
       }),
     });
   }
@@ -178,6 +179,7 @@ export function WrongNoteDetail(p: Props) {
                 onRun={p.onRun}
                 onGrade={p.onGrade}
                 onMaster={p.onMaster}
+                onBookmark={p.onBookmark}
                 onStartBatch={() => p.onStartBatch(ex)}
                 onGradeBatch={() => p.onGradeBatch(ex.nodeId)}
                 onEndBatch={() => p.onEndBatch(ex.nodeId)}
@@ -244,6 +246,10 @@ function NavLegend({ taking }: { taking: boolean }) {
           <span aria-hidden="true" className="grid size-3 place-items-center rounded-full bg-warn text-[8px] leading-none text-white">✗</span>
           마지막에 틀림
         </li>
+        <li className="inline-flex items-center gap-1">
+          <span aria-hidden="true" className="grid size-3 place-items-center text-[11px] leading-none text-amber-text">★</span>
+          다시 볼 문제
+        </li>
         {taking && (
           <li className="inline-flex items-center gap-1">
             <span aria-hidden="true" className={`${sw} border-mint/40 bg-mint-soft`} />
@@ -274,13 +280,14 @@ type CardProps = {
   onRun: (id: string, st: ItemRun | null) => void;
   onGrade: (id: string) => void;
   onMaster: (id: string, on: boolean) => void;
+  onBookmark: (id: string, on: boolean) => void;
   onStartBatch: () => void;
   onGradeBatch: () => void;
   onEndBatch: () => void;
 };
 
 /** 시험 카드 — 잠금(개수·날짜만, 버튼 없음) 또는 오답 문항 목록 + [이 시험 다시 풀기] · 묶음 채점 하단 막대 */
-function ExamCard({ ex, live, runs, idxOf, batch, fieldErr, busy, barInset, onRun, onGrade, onMaster, onStartBatch, onGradeBatch, onEndBatch }: CardProps) {
+function ExamCard({ ex, live, runs, idxOf, batch, fieldErr, busy, barInset, onRun, onGrade, onMaster, onBookmark, onStartBatch, onGradeBatch, onEndBatch }: CardProps) {
   const titleId = `wn-exam-${ex.nodeId}`;
   if (ex.locked) {
     return (
@@ -330,6 +337,7 @@ function ExamCard({ ex, live, runs, idxOf, batch, fieldErr, busy, barInset, onRu
                 onGrade={() => onGrade(id)}
                 onClose={() => onRun(id, null)}
                 onMaster={(on) => onMaster(id, on)}
+                onBookmark={(on) => onBookmark(id, on)}
               />
             );
           })}
