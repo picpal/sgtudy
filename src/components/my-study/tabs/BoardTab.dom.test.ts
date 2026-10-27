@@ -8,7 +8,7 @@ import { TodayProvider } from "@/lib/today";
 import { md } from "@/lib/date";
 import type { Me } from "@/lib/api/types";
 import type { Curriculum } from "@/lib/api/types";
-import { BoardTab, boardRoundOptions } from "./BoardTab";
+import { BOARD_PEEK, BoardTab, boardRoundOptions } from "./BoardTab";
 import { EMPTY_OVERRIDES, buildTree, type Tree } from "../model";
 import { INITIAL_STATE, type ScreenState } from "../state";
 import { AWS, CHULSU, REF_DAY } from "../fixtures";
@@ -256,5 +256,80 @@ describe("BoardTab 예정 칸 — 전체 회차 보기 ↔ 접기", () => {
     click(h.querySelector<HTMLElement>('[aria-label^="회차 필터"]')!);
     click(h.querySelectorAll<HTMLElement>('[role="option"]')[3]);
     expect(collapseBtn(h)).toBeNull();
+  });
+});
+
+describe("BoardTab 칸마다 더 보기 ↔ 접기", () => {
+  /** AWS 에 과제 41(예정)·11(지연)을 복제해 칸을 길게 만든 트리 */
+  function longTree(todo: number, late: number): Tree {
+    const clone = (src: string, n: number) => {
+      const p = AWS.nodes.find((x) => x.id === src)!;
+      return Array.from({ length: n }, (_, i) => ({ ...p, id: `${src}x${i}`, sortOrder: 10 + i, title: `${p.title} ${i + 1}` }));
+    };
+    return buildTree({ ...AWS, nodes: [...AWS.nodes, ...clone("41", todo), ...clone("11", late)] } as Curriculum, EMPTY_OVERRIDES, REF_DAY);
+  }
+  function mountLive(t: Tree, start: Partial<ScreenState>) {
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const Live = () => {
+      const [S, setS] = useState<ScreenState>({ ...INITIAL_STATE, tab: "board" as const, ...start });
+      return createElement(BoardTab, { tree: t, S, update: (p) => setS((o) => ({ ...o, ...p })), goLeaf: () => {} });
+    };
+    act(() => root!.render(createElement(MeProvider, { me } as ComponentProps<typeof MeProvider>, createElement(TodayProvider, { today: REF_DAY } as ComponentProps<typeof TodayProvider>, createElement(Live)))));
+    return host;
+  }
+  const sec = (h: HTMLElement, label: string) => h.querySelector<HTMLElement>(`section[aria-label="${label}"]`)!;
+  const moreIn = (h: HTMLElement, label: string) => sec(h, label).querySelector<HTMLButtonElement>("[data-board-more]");
+  const count = (h: HTMLElement, label: string) => sec(h, label).querySelectorAll("[data-card-open]").length;
+
+  it(`${BOARD_PEEK}개 이하면 버튼 없음, 넘으면 처음 ${BOARD_PEEK}개 + 더 보기 (+k)`, () => {
+    const h = mountLive(longTree(3, 0), { bRound: "all", bMode: "team" });
+    expect(count(h, "예정")).toBe(BOARD_PEEK);
+    expect(moreIn(h, "지연")).toBeNull();
+    const b = moreIn(h, "예정")!;
+    expect(b.getAttribute("aria-expanded")).toBe("false");
+    expect(b.textContent).toContain("더 보기");
+    expect(b.textContent).toContain("(+2)");
+    expect(sec(h, "예정").querySelector("h3")!.textContent).toContain("7");
+  });
+
+  it("누르면 전부 + 접기(aria-expanded=true), 접으면 다시 5개로 돌아와 그 버튼에 포커스", () => {
+    const h = mountLive(longTree(3, 0), { bRound: "all", bMode: "team" });
+    click(moreIn(h, "예정")!);
+    expect(count(h, "예정")).toBe(7);
+    expect(moreIn(h, "예정")!.getAttribute("aria-expanded")).toBe("true");
+    expect(moreIn(h, "예정")!.textContent).toContain("접기");
+    click(moreIn(h, "예정")!);
+    expect(count(h, "예정")).toBe(BOARD_PEEK);
+    expect(document.activeElement).toBe(moreIn(h, "예정"));
+  });
+
+  it("칸마다 따로 — 예정을 펼쳐도 지연은 접힌 채", () => {
+    const h = mountLive(longTree(3, 5), { bRound: "all", bMode: "team" });
+    click(moreIn(h, "예정")!);
+    expect(count(h, "예정")).toBe(7);
+    expect(count(h, "지연")).toBe(BOARD_PEEK);
+    expect(moreIn(h, "지연")!.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("범위(내/팀)나 회차를 바꾸면 다시 접힌다", () => {
+    const h = mountLive(longTree(3, 0), { bRound: "all", bMode: "team" });
+    click(moreIn(h, "예정")!);
+    click([...h.querySelectorAll<HTMLButtonElement>('[role="radio"], button')].find((b) => b.textContent === "내 칸반")!);
+    click([...h.querySelectorAll<HTMLButtonElement>('[role="radio"], button')].find((b) => b.textContent === "팀 칸반")!);
+    expect(count(h, "예정")).toBe(BOARD_PEEK);
+  });
+
+  it("전체 회차 보기로 넓힌 뒤 예정이 5개를 넘으면 더 보기와 「원래 회차로 접기」가 함께", () => {
+    const h = mountLive(longTree(3, 0), { bRound: "2", bMode: "team" });
+    click(hint(h)!);
+    expect(moreIn(h, "예정")).not.toBeNull();
+    const back = [...sec(h, "예정").querySelectorAll("button")].find((b) => b.textContent?.includes("원래 회차로 접기"))!;
+    click(moreIn(h, "예정")!);
+    expect(count(h, "예정")).toBe(7);
+    click(back);
+    expect(hint(h)).not.toBeNull();
+    expect(document.activeElement).toBe(hint(h));
   });
 });

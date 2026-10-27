@@ -44,6 +44,9 @@ const EMPTY: Record<BoardCol, string> = {
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
 
+/** 칸마다 처음 보일 카드 수 — 1열(모바일)에선 카드 5장이 한 화면 남짓, 4열에선 칸 높이가 비슷해져 같은 값으로 둔다 */
+export const BOARD_PEEK = 5;
+
 export function BoardTab({ tree, S, update, goLeaf }: Props) {
   const today = useToday();
   // 「전체 회차 보기」로 넓히기 전 회차 — 있으면 전체 보기에서 「접기」로 그 회차에 돌아간다(드롭다운으로 직접 고른 전체엔 없음)
@@ -55,6 +58,17 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
     if (!collapsed.current) return;
     collapsed.current = false;
     expandRef.current?.focus();
+  });
+  // 칸별 「더 보기」 펼침 — 범위·회차가 바뀌면 다시 접힌다(바꾸는 핸들러에서 비우고, 키가 다르면 빈 값으로 읽는다 — 렌더 중 setState 없음)
+  const [more, setMore] = useState<{ key: string; open: Partial<Record<BoardCol, boolean>> }>({ key: "", open: {} });
+  const moreRefs = useRef<Partial<Record<BoardCol, HTMLButtonElement | null>>>({});
+  const folded = useRef<BoardCol | null>(null);
+  // 카드를 접으면 버튼이 화면 밖으로 밀려날 수 있다 — 그 칸의 더 보기 버튼으로 포커스를 옮겨 화면 안으로 끌어온다
+  useEffect(() => {
+    const c = folded.current;
+    if (!c) return;
+    folded.current = null;
+    moreRefs.current[c]?.focus();
   });
   const meId = useMe()?.id ?? null;
   const mine = S.bMode === "mine";
@@ -78,15 +92,18 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
   // 한 회차만 볼 때 예정 칸이 비면 — 이후 회차 전체의 예정 과제 수를 알려 주고 전체 회차로 넓힐 수 있게 한다
   const at = tree.roots.findIndex((r) => r.id === bRound);
   const later = new Set(at < 0 ? [] : tree.roots.slice(at + 1).map((r) => r.id));
+  const moreKey = `${S.bMode}|${bRound}`;
+  const openCols = more.key === moreKey ? more.open : {};
+  const setOpen = (c: BoardCol, v: boolean) => setMore({ key: moreKey, open: { ...openCols, [c]: v } });
   const nextTodo = scoped.filter((l) => l.roundId && later.has(l.roundId) && boardColumn(l, mine, meId) === "todo").length;
 
   return (
     <div className="mt-[18px] flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-[10px]">
-        <Seg<BoardMode> label="칸반 범위" value={S.bMode} onChange={(m) => update({ bMode: m })} options={[["mine", "내 칸반"], ["team", "팀 칸반"]]} />
+        <Seg<BoardMode> label="칸반 범위" value={S.bMode} onChange={(m) => { setMore({ key: "", open: {} }); update({ bMode: m }); }} options={[["mine", "내 칸반"], ["team", "팀 칸반"]]} />
         <span className="flex-[1_1_20px]" />
         {/* 좁은 폭: 버튼이 한 줄을 다 쓰고 목록은 아래에서 올라오는 시트. sm 이상: 버튼은 칸반 세그(40px)와 같은 높이(누르는 영역은 44px), 목록은 버튼 아래 팝오버 */}
-        <Listbox label="회차 필터" prefix="회차" value={bRound} options={rounds} onChange={(v) => { setBackTo(null); update({ bRound: v }); }} className="max-sm:w-full sm:w-[300px] sm:max-w-[360px]" />
+        <Listbox label="회차 필터" prefix="회차" value={bRound} options={rounds} onChange={(v) => { setBackTo(null); setMore({ key: "", open: {} }); update({ bRound: v }); }} className="max-sm:w-full sm:w-[300px] sm:max-w-[360px]" />
       </div>
       <p className="m-0 text-[12px] text-muted">
         {mine
@@ -100,6 +117,9 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
         <div className="grid grid-cols-1 items-start gap-[14px] @min-[420px]:grid-cols-2 @min-[850px]:grid-cols-4">
           {cols.map(([id, label, dot]) => {
             const cards = src.filter((l) => boardColumn(l, mine, meId) === id);
+            const hidden = cards.length - BOARD_PEEK;
+            const opened = hidden > 0 && !!openCols[id];
+            const shown = hidden > 0 && !opened ? cards.slice(0, BOARD_PEEK) : cards;
             return (
               <section key={id} aria-label={label} className="flex min-h-[180px] flex-col gap-[10px] rounded-[16px] bg-[#F4F7F6] p-3">
                 <h3 className="mx-1 my-[2px] flex items-center gap-2 text-[14px] font-bold">
@@ -107,16 +127,39 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
                   {label}
                   <span className="rounded-[10px] bg-[#E3E9E7] px-2 py-px text-[12px] font-semibold text-ink-3">{cards.length}</span>
                 </h3>
-                {cards.map((l) => (
+                {shown.map((l) => (
                   <Card key={l.id} l={l} mine={mine} today={today} meId={meId} onOpen={() => goLeaf(l.id)} />
                 ))}
+                {hidden > 0 && (
+                  <button
+                    ref={(b) => { moreRefs.current[id] = b; }}
+                    type="button"
+                    data-board-more={id}
+                    aria-expanded={opened}
+                    onClick={() => {
+                      if (opened) folded.current = id;
+                      setOpen(id, !opened);
+                    }}
+                    className="flex min-h-11 w-full items-center justify-center gap-1 rounded-[12px] border border-line bg-surface px-3 text-[12px] font-semibold text-ink-2 hover:border-mint hover:text-mint-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
+                  >
+                    {opened ? (
+                      <>
+                        접기 <span aria-hidden="true">↑</span>
+                      </>
+                    ) : (
+                      <>
+                        더 보기 <span className="text-mint-deep">(+{hidden})</span> <span aria-hidden="true">↓</span>
+                      </>
+                    )}
+                  </button>
+                )}
                 {cards.length === 0 && <p className="mx-1 my-[6px] text-[12px] text-faint">{EMPTY[id]}</p>}
                 {id === "todo" && cards.length === 0 && bRound !== "all" && nextTodo > 0 && (
                   <button
                     ref={expandRef}
                     type="button"
                     aria-expanded={false}
-                    onClick={() => { setBackTo(bRound); update({ bRound: "all" }); }}
+                    onClick={() => { setBackTo(bRound); setMore({ key: "", open: {} }); update({ bRound: "all" }); }}
                     className="flex min-h-11 w-full items-center justify-between gap-2 rounded-[12px] border border-dashed border-line-dash bg-surface px-3 text-left text-[12px] font-semibold text-ink-2 hover:border-mint hover:text-mint-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
                   >
                     <span>이후 회차 과제 {nextTodo}개</span>
@@ -129,10 +172,10 @@ export function BoardTab({ tree, S, update, goLeaf }: Props) {
                   <button
                     type="button"
                     aria-expanded={true}
-                    onClick={() => { update({ bRound: backTo }); setBackTo(null); collapsed.current = true; }}
+                    onClick={() => { update({ bRound: backTo }); setBackTo(null); setMore({ key: "", open: {} }); collapsed.current = true; }}
                     className="flex min-h-11 w-full items-center justify-center gap-1 rounded-[12px] border border-dashed border-line-dash bg-surface px-3 text-[12px] font-semibold text-mint-deep hover:border-mint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint"
                   >
-                    접기 <span aria-hidden="true">↑</span>
+                    원래 회차로 접기 <span aria-hidden="true">↑</span>
                   </button>
                 )}
               </section>
