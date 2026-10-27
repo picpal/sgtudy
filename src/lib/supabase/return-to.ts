@@ -22,8 +22,18 @@ export function safeReturnTo(raw: string | null | undefined): string {
 
 /** 로그인 화면 안내 사유 — 고아 세션(계정이 지워졌는데 쿠키만 남음)을 정리하고 보낼 때 붙인다 */
 export const SESSION_EXPIRED = "session_expired";
+/** 로그인 화면 안내 사유 — 오래 안 써서 서버가 세션을 지웠고(0050 pg_cron) proxy 의 refresh 가 거절됐을 때 붙인다 */
+export const SESSION_INACTIVE = "session_inactive";
 
-export function loginUrl(returnTo: string, reason?: typeof SESSION_EXPIRED): string {
+export type LoginReason = typeof SESSION_EXPIRED | typeof SESSION_INACTIVE;
+const LOGIN_REASONS: readonly string[] = [SESSION_EXPIRED, SESSION_INACTIVE];
+
+/** ?reason= 값 검증 — 허용 목록 밖(임의 문자열·배열)은 null */
+export function parseLoginReason(raw: unknown): LoginReason | null {
+  return typeof raw === "string" && LOGIN_REASONS.includes(raw) ? (raw as LoginReason) : null;
+}
+
+export function loginUrl(returnTo: string, reason?: LoginReason): string {
   const q = `/login?returnTo=${encodeURIComponent(returnTo)}`;
   return reason ? `${q}&reason=${reason}` : q;
 }

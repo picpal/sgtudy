@@ -5,13 +5,14 @@ import { NextRequest } from "next/server";
 const auth = vi.hoisted(() => ({
   claims: null as null | { sub: string },
   refreshed: null as null | { name: string; value: string }[],
+  error: null as null | { code?: string; name?: string },
 }));
 vi.mock("@supabase/ssr", () => ({
   createServerClient: (_u: string, _k: string, opts: { cookies: { setAll: (c: { name: string; value: string; options: object }[]) => void } }) => ({
     auth: {
       getClaims: async () => {
         if (auth.refreshed) opts.cookies.setAll(auth.refreshed.map((c) => ({ ...c, options: { path: "/" } })));
-        return { data: auth.claims ? { claims: auth.claims, header: {}, signature: new Uint8Array() } : null, error: null };
+        return { data: auth.claims ? { claims: auth.claims, header: {}, signature: new Uint8Array() } : null, error: auth.error };
       },
       getUser: async () => {
         throw new Error("getUser must not be called by the proxy guard");
@@ -20,7 +21,7 @@ vi.mock("@supabase/ssr", () => ({
   }),
 }));
 
-const { updateSession } = await import("./middleware");
+const { updateSession, isInactiveLogout } = await import("./middleware");
 const { safeReturnTo } = await import("./return-to");
 
 describe("updateSession without Supabase env (I2)", () => {
@@ -48,6 +49,7 @@ describe("updateSession guard via getClaims", () => {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
     auth.claims = null;
     auth.refreshed = null;
+    auth.error = null;
   });
   afterEach(() => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = saved.url;
@@ -90,5 +92,54 @@ describe("updateSession guard via getClaims", () => {
     auth.refreshed = [{ name: "sb-test-auth-token", value: "fresh" }];
     const res = await updateSession(new NextRequest("http://localhost:3000/me"));
     expect(res.cookies.get("sb-test-auth-token")?.value).toBe("fresh");
+  });
+
+  const withCookie = (path: string, cookies: string) => new NextRequest(`http://localhost:3000${path}`, { headers: { cookie: cookies } });
+
+  it("session cookie + refresh rejected (refresh_token_not_found) on a protected route → /login with reason=session_inactive, cookies cleared", async () => {
+    auth.error = { code: "refresh_token_not_found", name: "AuthApiError" };
+    auth.refreshed = [{ name: "sb-test-auth-token", value: "" }]; // auth-js _removeSession → 쿠키 비움
+    const res = await updateSession(withCookie("/my-study/aws?tab=gantt", "sb-test-auth-token=base64-abc"));
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("http://localhost:3000/login?returnTo=%2Fmy-study%2Faws%3Ftab%3Dgantt&reason=session_inactive");
+    expect(res.cookies.get("sb-test-auth-token")?.value).toBe("");
+  });
+
+  it("chunked session cookie (.0/.1) counts as a session", async () => {
+    auth.error = { code: "session_not_found", name: "AuthApiError" };
+    const res = await updateSession(withCookie("/schedule", "sb-test-auth-token.0=base64-a; sb-test-auth-token.1=b"));
+    expect(new URL(res.headers.get("location")!).searchParams.get("reason")).toBe("session_inactive");
+  });
+
+  it("retryable/network refresh failure → plain /login (no inactive notice)", async () => {
+    auth.error = { name: "AuthRetryableFetchError" }; // code 없음, auth-js 는 세션을 지우지 않는다
+    const res = await updateSession(withCookie("/schedule", "sb-test-auth-token=base64-abc"));
+    expect(res.headers.get("location")).toBe("http://localhost:3000/login?returnTo=%2Fschedule");
+  });
+
+  it("no session cookie (only a code-verifier) → plain /login", async () => {
+    auth.error = { code: "refresh_token_not_found" };
+    const res = await updateSession(withCookie("/schedule", "sb-test-auth-token-code-verifier=x"));
+    expect(res.headers.get("location")).toBe("http://localhost:3000/login?returnTo=%2Fschedule");
+  });
+
+  it("public route with a rejected session passes through (no redirect)", async () => {
+    auth.error = { code: "refresh_token_not_found" };
+    const res = await updateSession(withCookie("/rooms/aws", "sb-test-auth-token=base64-abc"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+  });
+});
+
+describe("isInactiveLogout", () => {
+  it("only when a session cookie was sent, no claims, and the server said the session is gone", () => {
+    expect(isInactiveLogout(true, undefined, { code: "refresh_token_not_found" })).toBe(true);
+    expect(isInactiveLogout(true, undefined, { code: "session_not_found" })).toBe(true);
+    expect(isInactiveLogout(true, undefined, { code: "session_expired" })).toBe(true);
+    expect(isInactiveLogout(false, undefined, { code: "refresh_token_not_found" })).toBe(false);
+    expect(isInactiveLogout(true, { sub: "u1" }, { code: "refresh_token_not_found" })).toBe(false);
+    expect(isInactiveLogout(true, undefined, { name: "AuthRetryableFetchError" })).toBe(false);
+    expect(isInactiveLogout(true, undefined, { code: "refresh_token_already_used" })).toBe(false);
+    expect(isInactiveLogout(true, undefined, null)).toBe(false);
   });
 });

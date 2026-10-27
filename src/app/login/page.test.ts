@@ -31,10 +31,12 @@ describe("/login page", () => {
     m.claims = null;
     m.orphan = false;
   });
-  it("shows the session-expired notice only for reason=session_expired", async () => {
-    expect((await render({ returnTo: "/rooms/new", reason: "session_expired" })).props).toEqual({ returnTo: "/rooms/new", sessionExpired: true });
-    expect((await render({ returnTo: "/rooms/new", reason: "other" })).props).toMatchObject({ sessionExpired: false });
-    expect((await render({})).props).toMatchObject({ returnTo: "/", sessionExpired: false });
+  it("passes only allow-listed reasons to the login screen", async () => {
+    expect((await render({ returnTo: "/rooms/new", reason: "session_expired" })).props).toEqual({ returnTo: "/rooms/new", reason: "session_expired" });
+    expect((await render({ returnTo: "/my-study", reason: "session_inactive" })).props).toEqual({ returnTo: "/my-study", reason: "session_inactive" });
+    expect((await render({ returnTo: "/rooms/new", reason: "other" })).props).toMatchObject({ reason: null });
+    expect((await render({ returnTo: "/rooms/new", reason: "<script>" })).props).toMatchObject({ reason: null });
+    expect((await render({})).props).toMatchObject({ returnTo: "/", reason: null });
   });
   it("logged in → returnTo", async () => {
     m.claims = { sub: "u1" };

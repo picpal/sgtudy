@@ -6,17 +6,24 @@ import { useId, useRef, useState, type FormEvent } from "react";
 import { fetchMe } from "@/lib/api/me";
 import { routes, safeReturnTo } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/client";
+import { SESSION_EXPIRED, SESSION_INACTIVE, type LoginReason } from "@/lib/supabase/return-to";
 import { AuthShell } from "./AuthShell";
 import { authErrorMessage, errorCode } from "./otp";
 import { PasswordInput } from "./PasswordInput";
 import { useCaptcha } from "./Turnstile";
 import { fieldClass, labelClass, primaryClass } from "./styles";
 
+const REASON_NOTICE: Record<LoginReason, string> = {
+  [SESSION_EXPIRED]: "로그인 정보가 만료됐어요. 다시 로그인해 주세요.",
+  [SESSION_INACTIVE]: "오랫동안 사용하지 않아 로그아웃됐어요. 다시 로그인해 주세요.",
+};
+
 /**
  * 기본 로그인: 이메일 + 비밀번호. 인증 코드는 가입(routes.signup)과 비밀번호 재설정(routes.resetPassword)에서만 쓴다.
- * sessionExpired = 고아 세션을 정리하고 넘어온 경우(?reason=session_expired) — 한 줄 안내를 띄운다
+ * reason = 로그인 화면으로 보낸 사유(?reason=, 허용 목록은 parseLoginReason) — 한 줄 안내를 띄운다.
+ *  session_expired: 고아 세션 정리 / session_inactive: 오래 안 써서 서버가 세션을 지움(0050)
  */
-export function LoginScreen({ returnTo, sessionExpired = false }: { returnTo: string; sessionExpired?: boolean }) {
+export function LoginScreen({ returnTo, reason = null }: { returnTo: string; reason?: LoginReason | null }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -86,9 +93,9 @@ export function LoginScreen({ returnTo, sessionExpired = false }: { returnTo: st
 
   return (
     <AuthShell title="로그인" subtitle="이메일과 비밀번호로 로그인해요.">
-      {sessionExpired && (
+      {reason && (
         <p role="status" className="m-0 rounded-[12px] bg-surface-3 px-4 py-3 text-[13px] leading-[1.6] text-ink">
-          로그인 정보가 만료됐어요. 다시 로그인해 주세요.
+          {REASON_NOTICE[reason]}
         </p>
       )}
       <form onSubmit={submit} noValidate className="flex flex-col gap-3">

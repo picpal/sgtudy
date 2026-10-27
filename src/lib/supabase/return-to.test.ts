@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isProtectedPath, loginUrl, safeReturnTo, SESSION_EXPIRED, sessionExpiredUrl } from "./return-to";
+import { isProtectedPath, loginUrl, parseLoginReason, safeReturnTo, SESSION_EXPIRED, SESSION_INACTIVE, sessionExpiredUrl } from "./return-to";
 
 describe("isProtectedPath", () => {
   it("protects my-study, schedule, tasks, me, rooms/new", () => {
@@ -43,6 +43,9 @@ describe("loginUrl", () => {
   it("encodes returnTo", () => {
     expect(loginUrl("/my-study/aws?task=3")).toBe("/login?returnTo=%2Fmy-study%2Faws%3Ftask%3D3");
   });
+  it("appends the session_inactive reason after returnTo", () => {
+    expect(loginUrl("/my-study", SESSION_INACTIVE)).toBe("/login?returnTo=%2Fmy-study&reason=session_inactive");
+  });
   it("appends the session_expired reason after returnTo", () => {
     expect(loginUrl("/rooms/new", SESSION_EXPIRED)).toBe("/login?returnTo=%2Frooms%2Fnew&reason=session_expired");
   });
@@ -51,5 +54,15 @@ describe("loginUrl", () => {
 describe("sessionExpiredUrl", () => {
   it("points at the cleanup route with an encoded returnTo", () => {
     expect(sessionExpiredUrl("/my-study/aws?task=3")).toBe("/auth/session-expired?returnTo=%2Fmy-study%2Faws%3Ftask%3D3");
+  });
+});
+
+describe("parseLoginReason", () => {
+  it("accepts only allow-listed reasons", () => {
+    expect(parseLoginReason("session_expired")).toBe(SESSION_EXPIRED);
+    expect(parseLoginReason("session_inactive")).toBe(SESSION_INACTIVE);
+    for (const bad of [undefined, null, "", "other", "SESSION_INACTIVE", "session_inactive ", ["session_inactive"], 1]) {
+      expect(parseLoginReason(bad)).toBeNull();
+    }
   });
 });
