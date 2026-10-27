@@ -29,7 +29,7 @@ export function NodeDescription({ nodeId, desc, emptyText, canRemove, toast }: {
   };
   return (
     <>
-      {desc.trim() ? <MarkdownView src={desc} images={resolver} doc className="text-[14px] leading-[1.75]" /> : <p className="m-0 text-[13px] text-muted">{emptyText}</p>}
+      {desc.trim() ? <div data-ask-ai="node"><MarkdownView src={desc} images={resolver} doc className="text-[14px] leading-[1.75]" /></div> : <p className="m-0 text-[13px] text-muted">{emptyText}</p>}
       <NodeAttachments nodeId={nodeId} files={files} setFiles={setFiles} canRemove={canRemove} toast={toast} preview={{ thumbs: urls, onPreview: (f) => setOpenId(f.id), onThumbError: refresh }} />
       {at >= 0 && (
         <ImageLightbox

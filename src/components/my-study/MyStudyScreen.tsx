@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AskAiProvider } from "@/components/ask-ai/AskAiProvider";
 import { LeaderPanel } from "@/components/room-view/LeaderPanel";
 import { AppHeader } from "@/components/ui/AppHeader";
 import { PageBody } from "@/components/ui/PageBody";
@@ -59,7 +60,11 @@ const CONFIRM_TEXT: Record<JoinCardAction, { title: string; body: string; label:
   leaveRequestCancel: { title: "탈퇴 요청을 취소할까요?", body: "취소하면 지금처럼 계속 참가해요.", label: "요청 취소" },
 };
 
-type Props = { detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string; initialItem?: string; initialNote?: CreateNote };
+type Props = {
+  detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string; initialItem?: string; initialNote?: CreateNote;
+  /** 「AI에게 물어보기」 켜짐(서버 aiExplainEnabled — 키·끄기 스위치) */
+  askAi?: boolean;
+};
 
 /** 개인 목표 id 인가 — 편집 화면 대상이 아니다(편집 URL 로 와도 보기 상세) */
 const isPersonalId = (nodes: Curriculum["nodes"], id: string) => nodes.some((n) => n.id === id && n.task?.type === "personal");
@@ -74,7 +79,7 @@ function syncListTab(tab: TabId) {
   window.history.replaceState(null, "", `${u.pathname}?${u.searchParams.toString()}${u.hash}`);
 }
 
-export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf, initialItem, initialNote }: Props) {
+export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf, initialItem, initialNote, askAi }: Props) {
   const me = useMe();
   const router = useRouter();
   const isLeader = detail.me?.state === "leader";
@@ -495,6 +500,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
 
   return (
     <TodayProvider today={today}>
+      <AskAiProvider slug={detail.slug} enabled={!!askAi}>
       <RoomArchivedProvider value={detail.archived}>
       {/* 한 페이지 스크롤 — 화면 높이에 가두지 않고 카드는 내용만큼 자라며 문서 하나가 스크롤된다(편집 화면의 저장 막대는 화면 위에 붙는다).
           옆 목록은 화면에 다 들어갈 때만 붙는다(useStickyFit) */}
@@ -558,6 +564,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
         </PageBody>
       </div>
       </RoomArchivedProvider>
+      </AskAiProvider>
     </TodayProvider>
   );
 }

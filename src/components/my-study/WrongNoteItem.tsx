@@ -63,7 +63,7 @@ export function WrongNoteItemView({ it, idx, run, inBatch, busy, fieldError, onS
   }, [phase]);
 
   return (
-    <li ref={liRef} className="flex scroll-mt-24 flex-col gap-2 border-t border-line-2 pt-4 first:border-t-0 first:pt-0" data-wn-item={q.id} data-wn-idx={idx}>
+    <li ref={liRef} className="flex scroll-mt-24 flex-col gap-2 border-t border-line-2 pt-4 first:border-t-0 first:pt-0" data-wn-item={q.id} data-wn-idx={idx} data-ask-ai="wrong">
       <div className="flex items-start gap-2">
         <p className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-[6px] pt-[10px]" aria-label="문항 상태">
           {badges.map((b) => (

@@ -7,6 +7,7 @@ import { toApiError } from "@/lib/api/errors";
 import { getMyStudies, getServerClient, requireMe } from "@/lib/api/me.server";
 import { fetchCurriculum } from "@/lib/api/my-study";
 import { getRoomDetail, roomMetadata } from "@/lib/api/room-meta.server";
+import { aiExplainEnabled } from "@/lib/ai/env";
 import type { Curriculum, MeStudies, RoomDetail } from "@/lib/api/types";
 import { screenKeyOf } from "@/lib/leaveGuard";
 import { routes } from "@/lib/routes";
@@ -45,6 +46,6 @@ export default async function MyStudyPage({ params, searchParams }: { params: Pr
   // key 로 방 변경 시 화면 상태(탭·편집 오버라이드 등)를 리셋한다. ?tab= 도 넣어, 같은 방에서 알림 링크(?tab=curriculum)를 눌러도 그 탭으로 연다
   return (
     <MyStudyScreen key={`${id}:${task ?? ""}:${tab}`} detail={detail} curriculum={curriculum} studies={studies}
-      initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} initialLeaf={task} initialItem={item} initialNote={isCreateNote(sp.note) ? sp.note : undefined} />
+      initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} initialLeaf={task} initialItem={item} initialNote={isCreateNote(sp.note) ? sp.note : undefined} askAi={aiExplainEnabled()} />
   );
 }

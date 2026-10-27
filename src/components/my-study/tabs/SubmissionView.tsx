@@ -11,7 +11,11 @@ export function SubmissionView({ s, onOpenFile }: Props) {
   const empty = s.bodyMd.trim() === "" && s.links.length === 0 && s.files.length === 0;
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {s.bodyMd.trim() !== "" && <MarkdownView src={s.bodyMd} className="text-[14px] leading-[1.75] [overflow-wrap:anywhere]" />}
+      {s.bodyMd.trim() !== "" && (
+        <div data-ask-ai="submission">
+          <MarkdownView src={s.bodyMd} className="text-[14px] leading-[1.75] [overflow-wrap:anywhere]" />
+        </div>
+      )}
       {s.links.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="text-[12px] font-semibold text-muted">링크</span>

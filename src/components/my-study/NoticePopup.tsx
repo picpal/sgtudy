@@ -154,7 +154,7 @@ export function NoticePopup({ slug, popups, hold, onAck }: Props) {
           </p>
         </div>
         {/* 본문은 대화상자 설명으로 묶지 않는다 — 제목 포커스에서 스크린리더가 본문을 두 번 읽지 않게 */}
-        <div className="thin-scroll max-h-[60dvh] overflow-y-auto max-sm:max-h-[55dvh]">
+        <div data-ask-ai="notice" className="thin-scroll max-h-[60dvh] overflow-y-auto max-sm:max-h-[55dvh]">
           <MarkdownView src={cur.bodyMd} />
         </div>
         {err && (
