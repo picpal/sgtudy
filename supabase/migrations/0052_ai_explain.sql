@@ -150,7 +150,9 @@ begin
        join public.exams x on x.node_id = a.node_id
        join public.goal_nodes n on n.id = a.node_id
        where a.user_id = v_uid and a.status = 'IN_PROGRESS' and x.room_id = r.id and x.status = 'PUBLISHED'
-         and n.archived_at is null and v_today <= n.end_date) then
+         and n.archived_at is null and v_today <= n.end_date
+         -- 마지막 활동(시작·답 저장) 3시간 안만 — 답 하나 저장하고 방치하면 마감까지 방 전체가 잠기던 것을 막는다. 다시 답을 저장하면 다시 잠긴다
+         and greatest(a.started_at, (select max(s.saved_at) from public.exam_answers s where s.attempt_id = a.id)) > v_now - interval '3 hours') then
     perform public.fail('EXAM_IN_PROGRESS', '시험을 제출한 뒤에 쓸 수 있어요');
   end if;
 
@@ -199,17 +201,31 @@ begin
      or p_term_key is distinct from encode(sha256(convert_to(p_norm_term, 'UTF8')), 'hex') then
     return;
   end if;
+  -- body 는 라우트 정제 결과(sanitizeExplain)와 같은 모양·상한만. 이 RPC 는 authenticated 에 열려 있어 멤버가 직접 부를 수 있다 —
+  -- 링크·URL·HTML 은 받지 않고, 적중 때 라우트가 다시 정제한다(이중). 순서대로 따로 검사한다(OR 는 단락 평가가 보장되지 않아 배열 함수가 터질 수 있다)
   if p_body is null or jsonb_typeof(p_body) is distinct from 'object' or p_body ->> 'kind' is distinct from 'term'
+     or octet_length(p_body::text) > 8192
+     or (select count(*) from jsonb_object_keys(p_body)) <> 6
      or jsonb_typeof(p_body -> 'term') is distinct from 'string' or jsonb_typeof(p_body -> 'oneLiner') is distinct from 'string'
      or jsonb_typeof(p_body -> 'inContext') is distinct from 'string' or jsonb_typeof(p_body -> 'points') is distinct from 'array'
-     or jsonb_typeof(p_body -> 'related') is distinct from 'array' or octet_length(p_body::text) > 8192 then
+     or jsonb_typeof(p_body -> 'related') is distinct from 'array' then
     return;
   end if;
-  insert into public.ai_explain_cache (room_id, term_key, norm_term, body, model, hits, created_at, last_hit_at)
+  if char_length(p_body ->> 'term') not between 1 and 40 or char_length(p_body ->> 'oneLiner') not between 1 and 120
+     or char_length(p_body ->> 'inContext') > 600
+     or jsonb_array_length(p_body -> 'points') > 4 or jsonb_array_length(p_body -> 'related') > 4
+     or exists (select 1 from jsonb_array_elements(p_body -> 'points') e where jsonb_typeof(e) <> 'string' or char_length(e #>> '{}') not between 1 and 120)
+     or exists (select 1 from jsonb_array_elements(p_body -> 'related') e where jsonb_typeof(e) <> 'string' or char_length(e #>> '{}') not between 1 and 30)
+     or p_body::text ~* '(https?:|www\.|\]\(|<[a-z/!])' then
+    return;
+  end if;
+  -- 살아 있는(30일 안) 행은 덮어쓰지 않는다 — 다른 용어로 begin 해 받은 id 로 이미 캐시된 용어를 바꿔치기하는 길을 막는다. 만료 행만 갈아 끼운다
+  insert into public.ai_explain_cache as ec (room_id, term_key, norm_term, body, model, hits, created_at, last_hit_at)
   values (r.id, p_term_key, p_norm_term, p_body, left(p_model, 64), 0, v_now, null)
   on conflict (room_id, term_key) do update
     set norm_term = excluded.norm_term, body = excluded.body, model = excluded.model,
-        created_at = excluded.created_at, hits = 0, last_hit_at = null;
+        created_at = excluded.created_at, hits = 0, last_hit_at = null
+    where ec.created_at <= v_now - interval '30 days';
 end $$;
 
 -- ───────── 6. GRANT (공개 RPC 만). api_invoke 허용 목록에는 넣지 않는다(MCP 비노출) ─────────

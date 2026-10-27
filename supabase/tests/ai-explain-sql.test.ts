@@ -138,6 +138,23 @@ cases("ai_explain 0052 · cache", db, [
     await done(q, m3.id);
     assertEquals((await one(q, "select count(*)::int as n from public.ai_explain_cache")).n, 1);
   } },
+  { name: "done: live row not overwritten via another term's id · link/URL/HTML · over-limit · extra key not cached", run: async (q) => {
+    await as(q, "지은");
+    const m = await begin(q);
+    await done(q, m.id);
+    const other = await begin(q, "aws", KEY2);                       // 다른 용어로 받은 id 로 이미 캐시된 KEY 를 바꿔치기
+    await done(q, other.id, { ...BODY, oneLiner: "오염된 해설" }, "aws", KEY, "cidr 블록");
+    assertEquals((await one(q, "select body->>'oneLiner' as v from public.ai_explain_cache where term_key = $1", [KEY])).v, BODY.oneLiner);
+    const bads = [
+      { ...BODY, inContext: "- [여기](https://evil.example)" }, { ...BODY, oneLiner: "https://evil.example 참고" }, { ...BODY, inContext: "- <img src=x>" },
+      { ...BODY, oneLiner: "가".repeat(121) }, { ...BODY, points: ["a", "b", "c", "d", "e"] }, { ...BODY, related: [1] }, { ...BODY, extra: 1 },
+    ];
+    for (const bad of bads) {
+      const b = await begin(q, "aws", KEY2);
+      await done(q, b.id, bad, "aws", KEY2);
+    }
+    assertEquals((await one(q, "select count(*)::int as n from public.ai_explain_cache where term_key = $1", [KEY2])).n, 0);
+  } },
 ]);
 
 cases("ai_explain 0052 · limits", db, [
@@ -219,5 +236,15 @@ cases("ai_explain 0052 · exam in progress", db, [
     await setToday(q, "2026-10-22");
     await setNow(q, "2026-10-22T12:00:00+09:00");
     assertEquals((await begin(q)).hit, false);
+  } },
+  { name: "idle > 3h since last answer save → ok · saving again → locked again", run: async (q) => {
+    const node = await inProgressExam(q);                           // 10/16 12:00 저장
+    await setNow(q, "2026-10-16T14:59:00+09:00");
+    await failHint(begin(q), "EXAM_IN_PROGRESS");
+    await setNow(q, "2026-10-16T15:00:01+09:00");
+    assertEquals((await begin(q)).hit, false);
+    const qid = (await one(q, "select id::text as id from public.exam_questions where node_id = $1::bigint", [node])).id as string;
+    await rpc(q, "public.exam_answer_save($1::bigint, $2::bigint, 'false'::jsonb)", [node, qid]);
+    await failHint(begin(q), "EXAM_IN_PROGRESS");
   } },
 ]);

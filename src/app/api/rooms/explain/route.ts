@@ -6,7 +6,8 @@ import { aiExplainEnabled, aiMock } from "@/lib/ai/env";
 import { runExplain } from "@/lib/ai/explain/explain";
 import { mockCallExplain } from "@/lib/ai/explain/explain-mock";
 import { isTermLength, normTerm } from "@/lib/ai/explain/normalize";
-import { ExplainRequest, MAX_EXPLAIN_BODY, type ExplainOut, type ExplainResponse, type RoomMeta } from "@/lib/ai/explain/schema";
+import { sanitizeExplain } from "@/lib/ai/explain/sanitize";
+import { ExplainOut, ExplainRequest, MAX_EXPLAIN_BODY, type ExplainResponse, type RoomMeta, type Source } from "@/lib/ai/explain/schema";
 import { failJson, MSG, sameOrigin } from "@/lib/ai/http";
 import { readJsonCapped } from "@/lib/mcp/http";
 import { createClient } from "@/lib/supabase/server";
@@ -15,7 +16,10 @@ export const runtime = "nodejs";
 // 모델 호출 한 번(timeout 25s, 재시도 없음, D10) + 앞뒤 RPC
 export const maxDuration = 30;
 
-type Begin = { hit: true; body: ExplainOut } | { hit: false; id: number; room: RoomMeta };
+type Begin = { hit: true; body: unknown } | { hit: false; id: number; room: RoomMeta };
+
+/** 방 공유 캐시에 남기지 않는 영역 — 시험 결과·오답노트 문맥엔 정답·해설이 들어 있어, 그 문맥으로 쓴 해설이 아직 안 푼 멤버에게 갈 수 있다 */
+const NO_SHARE: ReadonlySet<Source> = new Set(["exam", "wrong"]);
 
 /** 서버 로그 1줄(D19) — 사용자 id·선택 텍스트·문맥 없음 */
 const log = (o: { hit: boolean; ms: number; in?: number; out?: number; cached?: number; model?: string; status: number | string }) =>
@@ -61,8 +65,14 @@ export async function POST(req: Request) {
     return failJson(503, "AI_UNAVAILABLE", MSG.EXPLAIN_UNAVAILABLE);
   }
   if (begin.hit) {
+    // 캐시 행은 authenticated RPC(ai_explain_done)로 멤버가 직접 쓸 수 있다 — 내보내기 전에 모양 검사·정제를 다시 한다(링크·URL·HTML·상한)
+    const cached = ExplainOut.safeParse(begin.body);
+    if (!cached.success) {
+      log({ hit: true, ms: Date.now() - t0, status: "cache_invalid" });
+      return failJson(503, "AI_UNAVAILABLE", MSG.EXPLAIN_UNAVAILABLE);
+    }
     log({ hit: true, ms: Date.now() - t0, status: 200 });
-    return ok({ hit: true, body: begin.body });
+    return ok({ hit: true, body: sanitizeExplain(cached.data, term) });
   }
 
   const r = await runExplain({ room: begin.room, source, context, term }, { callExplain: aiMock() ? mockCallExplain : openaiCallExplain });
@@ -71,10 +81,10 @@ export async function POST(req: Request) {
     log({ hit: false, ms, status: r.status ?? "error" });
     return failJson(503, "AI_UNAVAILABLE", MSG.EXPLAIN_UNAVAILABLE);
   }
-  // 토큰 기록·캐시 저장은 실패해도 응답에 영향 없음(not_term 은 RPC 가 저장하지 않는다)
+  // 토큰 기록·캐시 저장은 실패해도 응답에 영향 없음(not_term 은 RPC 가 저장하지 않는다). 시험·오답 문맥은 body 를 넘기지 않는다(토큰만)
   await rpc(
     "ai_explain_done",
-    { p_id: begin.id, p_slug: slug, p_term_key: termKey, p_norm_term: norm, p_body: r.body, p_in: r.usage.in, p_out: r.usage.out, p_cached: r.usage.cached, p_model: r.model },
+    { p_id: begin.id, p_slug: slug, p_term_key: termKey, p_norm_term: norm, p_body: NO_SHARE.has(source) ? null : r.body, p_in: r.usage.in, p_out: r.usage.out, p_cached: r.usage.cached, p_model: r.model },
     db as unknown as Db,
   ).catch(() => undefined);
   log({ hit: false, ms, in: r.usage.in, out: r.usage.out, cached: r.usage.cached, model: r.model, status: 200 });

@@ -78,10 +78,29 @@ describe("POST /api/rooms/explain — 흐름", () => {
     const r = await post(okBody);
     expect(r.status).toBe(200);
     expect(r.headers.get("cache-control")).toBe("no-store");
-    expect(await r.json()).toEqual({ hit: true, body: out });
+    expect(await r.json()).toEqual({ hit: true, body: { ...out, related: ["서브넷"] } }); // 적중도 정제를 거친다(용어 자신 제거)
     expect(callExplain).not.toHaveBeenCalled();
     expect(dbRpc).toHaveBeenCalledTimes(1);
     expect(dbRpc.mock.calls[0]).toEqual(["ai_explain_begin", { p_slug: "aws", p_term_key: KEY }]);
+  });
+  it("캐시 적중 본문을 다시 정제 — 링크·URL·HTML 제거·상한 · 모양이 틀리면 503", async () => {
+    const dirty = { ...out, oneLiner: "자세히는 https://evil.example 참고" + "가".repeat(200), inContext: "- [여기](https://evil.example) 클릭\n- <img src=x onerror=alert(1)>안전" };
+    dbRpc.mockImplementation(async () => ({ data: { hit: true, body: dirty }, error: null }));
+    const b = (await (await post(okBody)).json()).body;
+    expect(JSON.stringify(b)).not.toMatch(/https?:|evil|<img|\]\(/);
+    expect([...b.oneLiner].length).toBeLessThanOrEqual(120);
+    expect(b.inContext).toBe("- 여기 클릭\n- 안전");
+    dbRpc.mockImplementation(async () => ({ data: { hit: true, body: { kind: "term", term: "x", extra: 1 } }, error: null }));
+    const r = await post(okBody);
+    expect([r.status, (await r.json()).error]).toEqual([503, "AI_UNAVAILABLE"]);
+  });
+  it("시험 결과·오답노트 영역은 방 공유 캐시에 body 를 넘기지 않는다(토큰만)", async () => {
+    for (const source of ["exam", "wrong"]) {
+      dbRpc.mockClear();
+      expect((await post({ ...okBody, source })).status).toBe(200);
+      const done = dbRpc.mock.calls.find((c) => c[0] === "ai_explain_done")![1];
+      expect([done.p_body, done.p_in]).toEqual([null, 500]);
+    }
   });
   it("미스 → 모델(시험 데이터 없음, <term> 포함) → 정제 → done(정규화 용어·토큰) → 200 hit:false", async () => {
     const r = await post(okBody);
