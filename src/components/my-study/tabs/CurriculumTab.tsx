@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
-import { Chip, PillButton, Seg } from "../bits";
+import { Chip, HIT_Y, PillButton, Seg } from "../bits";
 import { addDays } from "@/lib/date";
 import { dateShort, rangeShort } from "@/lib/api/format";
 import { useToday } from "@/lib/today";
@@ -235,6 +235,22 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
     btn?.scrollIntoView({ block: "center" });
   }, [openNode]);
 
+  // 이번 회차(오늘이 든 회차) 바로가기 — 회차가 길면 그 자리까지 스크롤해야 해서. 시작 전·종료 뒤엔 없음(버튼 숨김)
+  const curRound = tree.roots.find((r) => !r.archived && r.s <= today && today <= r.e) ?? null;
+  const goCurRound = () => {
+    if (!curRound) return;
+    const id = curRound.id;
+    if (closed[id]) update((p) => ({ closed: { ...p.closed, [id]: false } }));
+    // 펼친 뒤 다시 그려진 다음에 — 클릭 때 한 번만 계산(스크롤 리스너 없음). 회차 행 감싸개의 scroll-mt 만큼 띄워 맞춘다
+    requestAnimationFrame(() => {
+      const row = document.querySelector<HTMLElement>(`[data-round-anchor="${CSS.escape(id)}"]`);
+      if (!row) return;
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      row.querySelector<HTMLButtonElement>("[data-row-main]")?.focus({ preventScroll: true });
+      row.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    });
+  };
+
   // 목록에서 바로 삭제 — 행 아래 확인 상자(편집 화면과 같은 문구) → 즉시 RPC(낙관적 + 실패 시 되돌림·토스트)
   const asking = isEdit && !selNode ? (rows.find((n) => n.id === ask) ?? null) : null;
   const rowBtn = (id: string | undefined, sel: string) => (id ? document.querySelector<HTMLButtonElement>(`[data-node="${CSS.escape(id)}"] ${sel}`) : null);
@@ -321,6 +337,22 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
         <PillButton onClick={() => update({ closed: allParentsOpen(tree.nodes) })}>모두 펼치기</PillButton>
         <PillButton onClick={() => update({ closed: allParentsClosed(tree.nodes) })}>모두 접기</PillButton>
         {canEdit && <Seg<CurMode> label="보기 모드" value={S.curMode} onChange={setMode} options={[["view", "보기"], ["edit", "편집"]]} />}
+        {curRound && (
+          <button
+            type="button"
+            data-go-round
+            onClick={goCurRound}
+            aria-label={`이번 회차로 이동: ${curRound.label || curRound.title}`}
+            title={`이번 회차로 이동: ${curRound.label || curRound.title}`}
+            className={`${HIT_Y} inline-flex h-9 items-center gap-1 rounded-[18px] border border-mint bg-surface px-3 text-[13px] font-semibold text-mint-deep hover:bg-mint-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="8" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span className="max-[400px]:hidden">이번 회차로</span>
+          </button>
+        )}
       </div>
       {isEdit && (
         <p className="m-0 text-[12px] text-muted">
@@ -387,7 +419,7 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
             const open = !closed[n.id];
             const plan = removePlan(n);
             return (
-              <div key={n.id}>
+              <div key={n.id} data-round-anchor={n.d === 0 ? n.id : undefined} className={n.d === 0 ? "scroll-mt-4" : undefined}>
                 <TreeRow
                   n={n}
                   isEdit={isEdit}
