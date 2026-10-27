@@ -17,11 +17,12 @@ describe("sanitizeExplain", () => {
     const r2 = sanitizeExplain({ ...base, points: ["가".repeat(200)] }, "x");
     expect([...r2.points[0]].length).toBe(120);
   });
-  it("related: removes empty, duplicates, the term itself; ≤ 4 × 30cp", () => {
+  it("related: removes empty, duplicates, the term itself, items over 30cp; ≤ 4", () => {
     const r = sanitizeExplain({ ...base, related: ["VPC", "vpc", "", "“CIDR 블록”", "서브넷", "IGW", "NAT", "라우팅"] }, "CIDR 블록");
     expect(r.related).toEqual(["VPC", "서브넷", "IGW", "NAT"]);
-    const r2 = sanitizeExplain({ ...base, related: ["가".repeat(50)] }, "x");
-    expect([...r2.related[0]].length).toBe(30);
+    // 30cp 넘는 관련 용어는 자르지 않고 뺀다(잘린 용어로 다시 물으면 엉뚱한 해설)
+    const r2 = sanitizeExplain({ ...base, related: ["가".repeat(31), "AWS Certified Solutions Architect", "EC2", "나".repeat(30)] }, "x");
+    expect(r2.related).toEqual(["EC2", "나".repeat(30)]);
   });
   it("not_term empties sections", () => {
     const r = sanitizeExplain({ ...base, kind: "not_term", points: ["a"], related: ["b"], inContext: "x" }, "문장이에요");
