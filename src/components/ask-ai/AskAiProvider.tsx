@@ -2,7 +2,7 @@
 
 import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { normTerm } from "@/lib/ai/explain/normalize";
-import type { ExplainOut, Source } from "@/lib/ai/explain/schema";
+import { NO_SHARE_SOURCES, type ExplainOut, type Source } from "@/lib/ai/explain/schema";
 import { errorMessage, postExplain } from "./api";
 import { AskAiPill } from "./AskAiPill";
 import { AskAiSheet, type SheetState } from "./AskAiSheet";
@@ -90,6 +90,7 @@ export function AskAiProvider({ slug, enabled, children }: { slug: string; enabl
           onClose={close}
           onAskRelated={(t) => void ask(t, open.source, open.context, open.returnFocus)}
           returnFocus={open.returnFocus}
+          shared={!NO_SHARE_SOURCES.has(open.source)}
         />
       )}
     </>

@@ -52,6 +52,11 @@ describe("AskAiSheet", () => {
     expect(document.body.textContent).toContain("AI 가 쓴 글이라 틀릴 수 있어요");
     expect(document.querySelector('[role="dialog"]')!.getAttribute("aria-busy")).toBe("false");
   });
+  it("shared=false (시험 결과·오답노트): footnote doesn't claim the room shares it", () => {
+    render(props(ok, { shared: false }));
+    expect(document.body.textContent).toContain("이 화면의 해설은 방에 공유하지 않아요");
+    expect(document.body.textContent).not.toContain("같은 방 멤버와 해설을 공유해요");
+  });
   it("not_term: notice only, no sections", () => {
     render(props({ phase: "ok", body: { ...BODY, kind: "not_term" } }));
     expect(document.querySelectorAll("h3")).toHaveLength(0);

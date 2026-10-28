@@ -18,6 +18,7 @@ export const COPY = {
   inProgress: "시험을 제출한 뒤에 쓸 수 있어요",
   notMember: "참가가 승인되면 쓸 수 있어요",
   footnote: "AI 가 쓴 글이라 틀릴 수 있어요 · 같은 방 멤버와 해설을 공유해요",
+  footnoteNoShare: "AI 가 쓴 글이라 틀릴 수 있어요 · 이 화면의 해설은 방에 공유하지 않아요",
   close: "닫기",
   retryAfter: (sec: number) => (sec >= 3600 ? `${Math.ceil(sec / 3600)}시간 뒤에 다시 쓸 수 있어요` : sec >= 60 ? `${Math.ceil(sec / 60)}분 뒤에 다시 쓸 수 있어요` : `${sec}초 뒤에 다시 쓸 수 있어요`),
 } as const;

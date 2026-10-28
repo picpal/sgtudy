@@ -17,6 +17,8 @@ export const RELATED_ITEM_MAX = 30;
 /** 허용 영역(D1) — data-ask-ai 값 */
 export const SOURCES = ["node", "room", "notice", "submission", "exam", "wrong"] as const;
 export type Source = (typeof SOURCES)[number];
+/** 방 공유 캐시에 남기지 않는 영역 — 시험 결과·오답노트 문맥엔 정답·해설이 들어 있어, 그 문맥으로 쓴 해설이 아직 안 푼 멤버에게 갈 수 있다 */
+export const NO_SHARE_SOURCES: ReadonlySet<Source> = new Set(["exam", "wrong"]);
 
 export const ExplainRequest = z.object({
   slug: z.string().min(1).max(60),
