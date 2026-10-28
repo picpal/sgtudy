@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { AskAiPill, HINT_W, PILL_W, pillPosition } from "./AskAiPill";
+import { AskAiPill, HINT_W, PILL_W, barPlace, pillPosition } from "./AskAiPill";
 import type { SelectionPick } from "./selection";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -33,6 +33,14 @@ describe("pillPosition", () => {
     expect(pillPosition(rect({ top: 20, bottom: 40 }), 1024).top).toBe(48);
     expect(pillPosition(rect({ left: 0, width: 10 }), 1024).left).toBe(8);
     expect(pillPosition(rect({ left: 1010, width: 10 }), 1024).left).toBe(1024 - PILL_W - 8);
+  });
+});
+
+describe("barPlace", () => {
+  it("selection in the lower half → top bar, otherwise bottom (away from the native selection menu)", () => {
+    expect(barPlace({ top: 100, bottom: 120 }, 800)).toBe("bottom");
+    expect(barPlace({ top: 600, bottom: 620 }, 800)).toBe("top");
+    expect(barPlace({ top: 390, bottom: 400 }, 800)).toBe("bottom");
   });
 });
 

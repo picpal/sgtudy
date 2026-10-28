@@ -24,6 +24,18 @@ export function pillPosition(rect: Pick<DOMRect, "top" | "bottom" | "left" | "wi
   return { top, left };
 }
 
+/**
+ * 모바일 막대 자리 — iOS·Android 의 선택 메뉴(복사하기 등)는 선택 바로 위·아래에 뜨고 웹에서 끌 수 없다.
+ * 선택이 화면 아래쪽 절반이면 막대를 위로 올려 겹치지 않게 한다. 위치는 선택이 확정된 순간 한 번만 본다(스크롤 리스너 없음 — ed3a2a5)
+ */
+export const barPlace = (rect: Pick<DOMRect, "top" | "bottom">, vh: number): "top" | "bottom" => ((rect.top + rect.bottom) / 2 > vh / 2 ? "top" : "bottom");
+const BAR_POS = {
+  top: "top-[calc(16px+env(safe-area-inset-top))]",
+  bottom: "bottom-[calc(16px+env(safe-area-inset-bottom))]",
+} as const;
+const barCls = (rect: Pick<DOMRect, "top" | "bottom">) =>
+  `pointer-events-none fixed inset-x-0 ${BAR_POS[barPlace(rect, window.innerHeight)]} z-[46] flex justify-center px-4`;
+
 const short = (t: string) => (cpLength(t) > MOBILE_TERM_MAX ? `${clampCp(t, MOBILE_TERM_MAX)}…` : t);
 
 /**
@@ -48,7 +60,7 @@ export function AskAiPill({ pick, onAsk }: { pick: SelectionPick; onAsk: () => v
   );
   if (mobile) {
     return createPortal(
-      <div data-ask-ai-pill="bar" className="pointer-events-none fixed inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-[46] flex justify-center px-4">
+      <div data-ask-ai-pill="bar" className={barCls(pick.rect)}>
         <button {...common} className="pointer-events-auto flex min-h-11 max-w-full items-center gap-2 rounded-full bg-ink px-5 text-[14px] font-semibold text-surface shadow-[0_6px_20px_rgba(27,34,48,.28)]">
           {icon}
           <span className="truncate">{COPY.pillMobile(short(pick.term))}</span>
@@ -77,7 +89,7 @@ function TooLongHint({ pick, mobile }: { pick: SelectionPick; mobile: boolean })
   const cls = "flex items-center justify-center rounded-full bg-surface-2 px-4 text-[13px] font-medium text-ink-2 shadow-[0_6px_20px_rgba(27,34,48,.18)]";
   if (mobile) {
     return createPortal(
-      <div data-ask-ai-pill="bar" className="pointer-events-none fixed inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-[46] flex justify-center px-4">
+      <div data-ask-ai-pill="bar" className={barCls(pick.rect)}>
         <p role="status" data-ask-ai-hint className={`m-0 min-h-11 max-w-full ${cls}`}>{COPY.tooLong}</p>
       </div>,
       document.body,
