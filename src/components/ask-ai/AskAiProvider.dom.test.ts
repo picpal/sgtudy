@@ -19,6 +19,7 @@ const content = () =>
   createElement("div", null,
     createElement("div", { "data-ask-ai": "node" }, createElement("p", { id: "p" }, "VPC 의 CIDR 블록을 정해요")),
     createElement("div", { "data-ask-ai": "off" }, createElement("p", { id: "off" }, "응시 중 문항")),
+    createElement("div", { "data-ask-ai": "node" }, createElement("p", { id: "long" }, "가".repeat(50))),
   );
 const render = (enabled = true) => act(() => root.render(createElement(AskAiProvider, { slug: "aws", enabled }, content())));
 function select(id: string, s: number, e: number) {
@@ -82,6 +83,18 @@ describe("AskAiProvider", () => {
     render(false);
     select("p", 6, 13);
     expect(pill()).toBeNull();
+  });
+  it("over 40cp → hint instead of pill · shortcut does nothing · no request", () => {
+    render();
+    select("long", 0, 41);
+    expect(pill()).toBeNull();
+    expect(document.querySelector("[data-ask-ai-hint]")!.textContent).toBe("용어는 40자 이하로 선택해 주세요");
+    act(() => void document.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyA", altKey: true, shiftKey: true })));
+    expect(dialog()).toBeNull();
+    expect(m.post).not.toHaveBeenCalled();
+    select("long", 0, 40);
+    expect(document.querySelector("[data-ask-ai-hint]")).toBeNull();
+    expect(pill()).not.toBeNull();
   });
   it("off area → no pill", () => {
     render();

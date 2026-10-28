@@ -6,7 +6,8 @@ import { SOURCES, type Source } from "@/lib/ai/explain/schema";
  * 허용 = data-ask-ai="<source>" 컨테이너 안, anchor·focus 가 같은 컨테이너. 그 안이라도 제외 영역(off·입력·편집·코드·버튼)이면 없음
  */
 
-export type SelectionPick = { term: string; source: Source; context: string; rect: DOMRect; container: HTMLElement };
+/** tooLong = 허용 영역 안이지만 용어 길이(D2)를 넘은 선택 — 알약 대신 「40자 이하로」 안내만 띄운다(묻지 않는다) */
+export type SelectionPick = { term: string; source: Source; context: string; rect: DOMRect; container: HTMLElement; tooLong?: boolean };
 
 export const BLOCK_SEL = "p,li,td,th,h1,h2,h3,h4,h5,h6,blockquote";
 export const DENY_SEL = '[data-ask-ai="off"],input,textarea,[contenteditable=""],[contenteditable="true"],pre,code,button';
@@ -39,7 +40,8 @@ export function readSelection(doc: Document): SelectionPick | null {
   const frag = range.cloneContents();
   if (frag.querySelector?.(DENY_SEL)) return null;
   const term = sel.toString();
-  if (!isTermLength(term)) return null;
+  if (!term.trim()) return null;
+  if (!isTermLength(term)) return { term: "", source, context: "", rect: range.getBoundingClientRect(), container: ca, tooLong: true };
   const block = a.closest(BLOCK_SEL);
   const ctxSrc = block && ca.contains(block) ? block.textContent : ca.textContent;
   const context = clipContext(ctxSrc ?? "", term);

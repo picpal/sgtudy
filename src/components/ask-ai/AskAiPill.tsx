@@ -9,6 +9,7 @@ import type { SelectionPick } from "./selection";
 /* z: 공지 팝업(NoticePopup z-[45]) 안의 선택에서도 알약이 그 위에 떠야 한다 */
 export const MOBILE_MQ = "(width < 40rem)";
 export const PILL_W = 168;
+export const HINT_W = 248;
 const PILL_H = 44;
 const GAP = 8;
 const MOBILE_TERM_MAX = 18;
@@ -16,10 +17,10 @@ const MOBILE_TERM_MAX = 18;
 export const isMobile = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(MOBILE_MQ).matches;
 
 /** 데스크톱 플로팅 위치 — 선택 위 가운데, 위가 모자라면 선택 아래. 가로는 화면 안으로 clamp(폭은 고정값, 측정 없음) */
-export function pillPosition(rect: Pick<DOMRect, "top" | "bottom" | "left" | "width">, vw: number): { top: number; left: number } {
+export function pillPosition(rect: Pick<DOMRect, "top" | "bottom" | "left" | "width">, vw: number, w = PILL_W): { top: number; left: number } {
   const above = rect.top - PILL_H - GAP;
   const top = above < GAP ? rect.bottom + GAP : above;
-  const left = Math.min(Math.max(rect.left + rect.width / 2 - PILL_W / 2, GAP), Math.max(GAP, vw - PILL_W - GAP));
+  const left = Math.min(Math.max(rect.left + rect.width / 2 - w / 2, GAP), Math.max(GAP, vw - w - GAP));
   return { top, left };
 }
 
@@ -31,6 +32,7 @@ const short = (t: string) => (cpLength(t) > MOBILE_TERM_MAX ? `${clampCp(t, MOBI
  */
 export function AskAiPill({ pick, onAsk }: { pick: SelectionPick; onAsk: () => void }) {
   const mobile = isMobile();
+  if (pick.tooLong) return <TooLongHint pick={pick} mobile={mobile} />;
   const common = {
     type: "button" as const,
     "aria-label": COPY.pillAria,
@@ -66,6 +68,26 @@ export function AskAiPill({ pick, onAsk }: { pick: SelectionPick; onAsk: () => v
       {icon}
       {COPY.pill}
     </button>,
+    document.body,
+  );
+}
+
+/** 40자 초과 선택 — 버튼이 갑자기 안 뜨는 것처럼 보이지 않게 같은 자리에 안내만(누를 것 없음, 스크린리더엔 status) */
+function TooLongHint({ pick, mobile }: { pick: SelectionPick; mobile: boolean }) {
+  const cls = "flex items-center justify-center rounded-full bg-surface-2 px-4 text-[13px] font-medium text-ink-2 shadow-[0_6px_20px_rgba(27,34,48,.18)]";
+  if (mobile) {
+    return createPortal(
+      <div data-ask-ai-pill="bar" className="pointer-events-none fixed inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-[46] flex justify-center px-4">
+        <p role="status" data-ask-ai-hint className={`m-0 min-h-11 max-w-full ${cls}`}>{COPY.tooLong}</p>
+      </div>,
+      document.body,
+    );
+  }
+  const { top, left } = pillPosition(pick.rect, window.innerWidth, HINT_W);
+  return createPortal(
+    <p role="status" data-ask-ai-pill="float" data-ask-ai-hint style={{ top, left, width: HINT_W }} className={`pointer-events-none fixed z-[46] m-0 h-11 ${cls}`}>
+      {COPY.tooLong}
+    </p>,
     document.body,
   );
 }

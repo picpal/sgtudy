@@ -37,16 +37,17 @@ describe("readSelection", () => {
     expect(r.container.id).toBe("c");
     expect(r.rect).toBeTruthy();
   });
-  it("40cp ok · 41cp → null (code points)", () => {
+  it("40cp ok · 41cp → tooLong hint pick (code points)", () => {
     mount(`<div data-ask-ai="node"><p id="p">${"가".repeat(41)}</p><p id="e">${"😀".repeat(41)}</p></div>`);
     select("p", 0, 40);
     expect(readSelection(document)?.term).toBe("가".repeat(40));
+    expect(readSelection(document)?.tooLong).toBeUndefined();
     select("p", 0, 41);
-    expect(readSelection(document)).toBeNull();
+    expect(readSelection(document)).toMatchObject({ tooLong: true, term: "", source: "node" });
     select("e", 0, 80); // 이모지 40개 = UTF-16 80
-    expect(readSelection(document)).not.toBeNull();
+    expect(readSelection(document)?.tooLong).toBeUndefined();
     select("e", 0, 82);
-    expect(readSelection(document)).toBeNull();
+    expect(readSelection(document)?.tooLong).toBe(true);
   });
   it("inside pre/code/button/input-ish → null", () => {
     mount(`<div data-ask-ai="node"><pre id="pre">npm run build</pre><p>a <code id="code">useEffect</code></p><button id="b">버튼 글자</button></div>`);

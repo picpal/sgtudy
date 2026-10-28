@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { AskAiPill, PILL_W, pillPosition } from "./AskAiPill";
+import { AskAiPill, HINT_W, PILL_W, pillPosition } from "./AskAiPill";
 import type { SelectionPick } from "./selection";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -60,5 +60,18 @@ describe("AskAiPill", () => {
     expect(document.querySelector('[data-ask-ai-pill="bar"]')!.textContent).toBe("“CIDR 블록” AI에게 물어보기");
     act(() => root.render(createElement(AskAiPill, { pick: pick("가".repeat(20)), onAsk: () => {} })));
     expect(document.querySelector('[data-ask-ai-pill="bar"]')!.textContent).toBe(`“${"가".repeat(18)}…” AI에게 물어보기`);
+  });
+  it("tooLong: desktop floating hint (no button, wider clamp) · mobile bar hint", () => {
+    const onAsk = vi.fn();
+    act(() => root.render(createElement(AskAiPill, { pick: { ...pick(""), tooLong: true, rect: rect({ left: 1010, width: 10 }) }, onAsk })));
+    const hint = document.querySelector<HTMLElement>("[data-ask-ai-hint]")!;
+    expect(hint.textContent).toBe("용어는 40자 이하로 선택해 주세요");
+    expect(hint.getAttribute("role")).toBe("status");
+    expect(hint.style.left).toBe(`${1024 - HINT_W - 8}px`);
+    expect(document.querySelector("button")).toBeNull();
+    mq(true);
+    act(() => root.render(createElement(AskAiPill, { pick: { ...pick(""), tooLong: true }, onAsk })));
+    expect(document.querySelector('[data-ask-ai-pill="bar"]')!.textContent).toBe("용어는 40자 이하로 선택해 주세요");
+    expect(onAsk).not.toHaveBeenCalled();
   });
 });

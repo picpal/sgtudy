@@ -3,6 +3,7 @@ export const COPY = {
   pill: "AI에게 물어보기",
   pillMobile: (term: string) => `“${term}” AI에게 물어보기`,
   pillAria: "선택한 용어 AI에게 물어보기",
+  tooLong: "용어는 40자 이하로 선택해 주세요",
   subtitle: "이 스터디 관점으로 설명해요",
   secOneLiner: "한 줄 요약",
   secInContext: "이 스터디에서는",

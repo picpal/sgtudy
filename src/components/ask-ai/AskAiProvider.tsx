@@ -54,6 +54,7 @@ export function AskAiProvider({ slug, enabled, children }: { slug: string; enabl
   };
 
   const askPick = (p: SelectionPick) => {
+    if (p.tooLong) return;
     clear();
     void ask(p.term, p.source, p.context, focusBackOf(p));
   };
@@ -66,7 +67,7 @@ export function AskAiProvider({ slug, enabled, children }: { slug: string; enabl
 
   const onShortcut = useEffectEvent((e: KeyboardEvent) => {
     if (!(e.altKey && e.shiftKey && e.code === "KeyA") || e.ctrlKey || e.metaKey) return;
-    if (open || !pick || isTyping(document.activeElement)) return;
+    if (open || !pick || pick.tooLong || isTyping(document.activeElement)) return;
     e.preventDefault();
     askPick(pick);
   });
