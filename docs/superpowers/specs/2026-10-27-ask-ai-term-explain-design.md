@@ -197,3 +197,4 @@ ExplainRequest = { slug: string(1~60), term: string(1~200 — 서버가 normTerm
 | 시험·오답 영역 해설 공유 | 모든 영역 방 캐시 공유 | `source ∈ exam·wrong` 이면 캐시에 저장하지 않는다(토큰만 기록, 캐시 읽기는 함) | 결과·오답 문맥엔 정답·해설이 있어, 그 문맥으로 쓴 해설이 용어 키로 공유되면 아직 응시 전인 멤버에게 갈 수 있다 |
 | D3 모바일 숨김 | 첫 `scroll`·`resize` 에 숨김(공통) | **데스크톱 플로팅만** 첫 scroll·resize 에 숨김. 모바일 하단 막대는 리스너 없이 선택이 비면(selectionchange → null) 숨김 | iOS 길게 눌러 선택하는 중 미세 스크롤·핸들 드래그·주소창 접힘 resize 로 막대가 바로 사라져 누를 수 없었다. 막대 위치는 선택과 무관하다 |
 | 겹침 순서 | 알약 z-30 · 시트 z-40 | 알약 `z-[46]` · 시트 `z-[60]` · 시트 Esc 는 capture + `stopPropagation` | 공지 팝업(`NoticePopup` z-[45], `data-ask-ai="notice"`) 안에서 선택하면 알약·시트가 팝업 밑에 깔렸고, Esc 가 팝업까지 닫았다 |
+| D1 허용 영역 축소 (2026-10-28 사용자 결정) | `node · room · notice · submission · exam · wrong` | `node · submission · exam · wrong` — 개요 소개(room)·공지 탭/팝업(notice) 제외 | 학습 화면(진행목표·보드에서 연 상세·제출물·시험 결과·오답노트)에서만 쓰는 기능으로 둔다. 겹침 순서 수정은 다른 오버레이 대비로 유지 |

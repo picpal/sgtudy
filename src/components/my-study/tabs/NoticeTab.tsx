@@ -458,7 +458,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
                       {/* 폼이 열린 동안은 메뉴를 숨긴다 — 고치는 중인 공지를 지우거나 고정해 폼 기준과 어긋나지 않게 */}
                       {canWrite && !editing && <MoreMenu items={menuOf(n)} label={`${n.title} 메뉴`} />}
                     </div>
-                    <div data-ask-ai="notice">
+                    <div>
                       <MarkdownView src={n.bodyMd} />
                     </div>
                   </div>

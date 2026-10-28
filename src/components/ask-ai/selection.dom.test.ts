@@ -38,7 +38,7 @@ describe("readSelection", () => {
     expect(r.rect).toBeTruthy();
   });
   it("40cp ok · 41cp → null (code points)", () => {
-    mount(`<div data-ask-ai="room"><p id="p">${"가".repeat(41)}</p><p id="e">${"😀".repeat(41)}</p></div>`);
+    mount(`<div data-ask-ai="node"><p id="p">${"가".repeat(41)}</p><p id="e">${"😀".repeat(41)}</p></div>`);
     select("p", 0, 40);
     expect(readSelection(document)?.term).toBe("가".repeat(40));
     select("p", 0, 41);
@@ -70,7 +70,7 @@ describe("readSelection", () => {
     expect(readSelection(document)).toBeNull();
   });
   it("spanning two containers → null · outside any container → null · unknown source → null", () => {
-    mount(`<div data-ask-ai="node"><p id="a">VPC 서브넷</p></div><div data-ask-ai="notice"><p id="b">공지 글</p></div><p id="x">밖의 글</p><div data-ask-ai="comment"><p id="cm">댓글 글</p></div>`);
+    mount(`<div data-ask-ai="node"><p id="a">VPC 서브넷</p></div><div data-ask-ai="exam"><p id="b">시험 글</p></div><p id="x">밖의 글</p><div data-ask-ai="comment"><p id="cm">댓글 글</p></div>`);
     select("a", 4, 2, "b");
     expect(readSelection(document)).toBeNull();
     select("x", 0, 2);

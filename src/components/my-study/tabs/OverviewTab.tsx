@@ -169,7 +169,7 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, onOpenTask, p
       {/* 소개·규칙이 비어 있으면 모바일에선 섹션째 숨긴다 — 좁은 화면에 빈 안내 두 칸이 회차 정보를 밀어내지 않게 (넓은 화면은 쓰기 안내 유지) */}
       <section data-overview-about className={room.about.trim() ? undefined : "max-sm:hidden"}>
         <H3 mt={30} icon={<><path d="M12 11v6" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" /><circle cx="12" cy="7.5" r="1.4" fill="#FFFFFF" /></>}>스터디 소개</H3>
-        {room.about.trim() ? <div data-ask-ai="room"><MarkdownView src={room.about} /></div> : <Empty text="아직 스터디 소개가 없어요" href={settings} cta="방 설정에서 쓰기 →" />}
+        {room.about.trim() ? <MarkdownView src={room.about} /> : <Empty text="아직 스터디 소개가 없어요" href={settings} cta="방 설정에서 쓰기 →" />}
       </section>
 
       <section data-overview-rules className={room.rules.length ? undefined : "max-sm:hidden"}>
