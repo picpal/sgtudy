@@ -231,10 +231,15 @@ cases("ai_explain 0052 · exam in progress", db, [
     await rpc(q, "public.exam_submit($1::bigint)", [node]);
     assertEquals((await begin(q)).hit, true);
   } },
-  { name: "after deadline (today > end_date) → ok even if still IN_PROGRESS", run: async (q) => {
-    await inProgressExam(q);
+  { name: "after deadline (F3): late answer save on after_submit → still EXAM_IN_PROGRESS · idle 3h → ok", run: async (q) => {
+    const node = await inProgressExam(q);
     await setToday(q, "2026-10-22");
     await setNow(q, "2026-10-22T12:00:00+09:00");
+    assertEquals((await begin(q)).hit, false);                      // 마지막 저장 10/16 → 3시간 넘게 쉼
+    const qid = (await one(q, "select id::text as id from public.exam_questions where node_id = $1::bigint", [node])).id as string;
+    await rpc(q, "public.exam_answer_save($1::bigint, $2::bigint, 'false'::jsonb)", [node, qid]);   // 지각 응시(after_submit 허용)
+    await failHint(begin(q), "EXAM_IN_PROGRESS");
+    await setNow(q, "2026-10-22T15:00:01+09:00");
     assertEquals((await begin(q)).hit, false);
   } },
   { name: "idle > 3h since last answer save → ok · saving again → locked again", run: async (q) => {

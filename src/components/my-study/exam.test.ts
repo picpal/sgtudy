@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ExamDraft } from "@/lib/api/exam";
 import type { ExamAttempt, ExamQuestion, ExamView, ExamViewerReason } from "@/lib/api/types";
 import {
-  aiInstruction, answeredCount, draftDirty, draftReduce, EMPTY_DRAFT, examErrorAction, examHead, isAnswered, isExamDraft, lockText, newQuestion,
+  aiInstruction, answeredCount, draftDirty, draftReduce, EMPTY_DRAFT, examBadgeOf, examErrorAction, examHead, isAnswered, isExamDraft, lockText, newQuestion,
   questionResult, resultSummary, submitAsk, submittedLine, takeNote, toggleIndex,
 } from "./exam";
 
@@ -39,6 +39,7 @@ describe("takeNote", () => {
     ["not_assignee", "담당 과제가 아니에요 · 제출 현황만 볼 수 있어요"],
     ["room_not_active", "스터디가 진행 중일 때 풀 수 있어요"],
     ["closed", "마감이 지나 해설이 공개된 시험은 제출할 수 없어요"],
+    ["answers_seen", "정답·해설을 이미 본 시험은 응시할 수 없어요"],
     ["submitted", null],
   ])("%s → %s", (reason, text) => expect(takeNote(view({}, { reason }), false)).toBe(text));
   it("quiet hides not_assignee only", () => {
@@ -46,6 +47,11 @@ describe("takeNote", () => {
     expect(takeNote(view({}, { reason: "archived" }), true)).toBe("보관된 시험이에요");
   });
   it("canTake → null", () => expect(takeNote(view({}, { canTake: true }), false)).toBeNull());
+});
+
+describe("examBadgeOf", () => {
+  it("answers_seen → 미제출 · 응시 불가", () =>
+    expect(examBadgeOf(view({}, { reason: "answers_seen" }))).toEqual({ status: "missed", text: "미제출 · 응시 불가" }));
 });
 
 const submitted = (o: Partial<ExamAttempt> = {}): ExamAttempt => ({
@@ -144,6 +150,7 @@ describe("misc", () => {
     expect(examErrorAction({ code: "EXAM_CLOSED", message: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요" })).toEqual({ kind: "refetch", text: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요" });
     expect(examErrorAction({ code: "VALIDATION_FAILED", message: "보기는 2~8개예요", details: { field: "choices", index: 2 as unknown as string } })).toEqual({ kind: "field", field: "choices", index: 2, text: "보기는 2~8개예요" });
     expect(examErrorAction({ code: "EXAM_EMPTY", message: "EXAM_EMPTY" })).toEqual({ kind: "toast", text: "문항을 하나 이상 넣어야 발행할 수 있어요" });
+    expect(examErrorAction({ code: "EXAM_ANSWERS_SEEN", message: "" })).toEqual({ kind: "refetch", text: "정답·해설을 이미 본 시험은 응시할 수 없어요" });
     expect(examErrorAction({ code: "NOT_FOUND", message: "문항을 찾을 수 없어요" }).kind).toBe("refetch");
     expect(examErrorAction({ code: "UNKNOWN", message: "fetch failed" }).kind).toBe("toast");
     expect(examErrorAction({ code: "AUTH_REQUIRED", message: "로그인" }).kind).toBe("login");

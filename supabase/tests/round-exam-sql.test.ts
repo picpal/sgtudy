@@ -483,12 +483,58 @@ cases("round exam 0037 · taking & reveal", db, [
     }
     await as(q, "민수");
     await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-25\"}'::jsonb)", [node]);
-    await as(q, "철수");                                     // 연장 → 공개 닫힘 → 응시 다시 열림
+    await as(q, "지은");                                     // 연장 → 공개 닫힘 → 정답을 받지 않은 담당자는 응시 다시 열림
     const o = await get(q, node);
     assertEquals([o.exam.closed, o.viewer.canTake, "answer" in o.questions[0]], [false, true, false]);
     await save(q, node, ids[0], 0);
     const s = await submitExam(q, node);
     assertEquals([s.attempt.score, s.attempt.isLate, s.attempt.results], [1, false, null]);
+  } },
+  { name: "EXAM_ANSWERS_SEEN (F1): answer key served while closed → after extension save & submit rejected · reason answers_seen", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await put(q, node, { ...Q4, reveal: "after_deadline" });
+    await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
+    const ids = await qids(q, node);
+    await setToday(q, "2026-10-16"); await setNow(q, "2026-10-16T12:00:00+09:00");
+    await as(q, "철수");
+    await save(q, node, ids[0], 1);                          // 진행 중 응시
+    await setToday(q, "2026-10-22"); await setNow(q, "2026-10-22T09:00:00+09:00");
+    for (const n of ["철수", "하나"]) {                       // 진행 중 · 응시 전(행 없음) 모두 정답 키를 받는다
+      await as(q, n);
+      assertEquals("answer" in (await get(q, node)).questions[0], true);
+    }
+    await as(q, "민수");
+    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-25\"}'::jsonb)", [node]);
+    for (const n of ["철수", "하나"]) {
+      await as(q, n);
+      const v = await get(q, node);
+      assertEquals([v.exam.closed, v.viewer.canTake, v.viewer.reason, "answer" in v.questions[0]], [false, false, "answers_seen", false]);
+      await failCode(save(q, node, ids[0], 0), "EXAM_ANSWERS_SEEN");
+      await failCode(submitExam(q, node), "EXAM_ANSWERS_SEEN");
+    }
+    assertEquals((await q("select 1 from public.exam_attempts where node_id = $1::bigint and user_id = $2", [node, await uidOf(q, "하나")])).length, 0);
+    // 공개 시점을 after_submit 으로 바꿔 다시 열어도 같다
+    await as(q, "민수");
+    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-21\"}'::jsonb)", [node]);
+    await put(q, node, { ...Q4, reveal: "after_submit" });
+    await as(q, "하나");
+    assertEquals((await get(q, node)).viewer.reason, "answers_seen");
+    await failCode(save(q, node, ids[0], 0), "EXAM_ANSWERS_SEEN");
+    await failCode(submitExam(q, node), "EXAM_ANSWERS_SEEN");
+    // 정답 키 없이 연 사람(마감 전 열람)·편집자 열람은 기록하지 않는다
+    await as(q, "지은");
+    const j = await get(q, node);
+    assertEquals([j.viewer.canTake, j.viewer.reason], [true, null]);
+    await save(q, node, ids[0], 0);
+    assertEquals((await submitExam(q, node)).attempt.status, "submitted");
+    assertEquals((await q("select 1 from public.exam_answer_reveals where node_id = $1::bigint and user_id = $2", [node, await uidOf(q, "지은")])).length, 0,
+      "제출 뒤(after_submit) 정답을 받아도 기록하지 않는다 — 다시 응시할 수 없으니");
+  } },
+  { name: "exam_answer_reveals: closed to clients · RLS on", run: async (q) => {
+    for (const role of ["anon", "authenticated"]) for (const priv of ["select", "insert", "update", "delete"]) {
+      assertEquals((await one(q, "select has_table_privilege($1, 'public.exam_answer_reveals', $2) as v", [role, priv])).v, false, `${role} ${priv}`);
+    }
+    assertEquals((await one(q, "select relrowsecurity as v from pg_class where oid = 'public.exam_answer_reveals'::regclass")).v, true);
   } },
 ]);
 

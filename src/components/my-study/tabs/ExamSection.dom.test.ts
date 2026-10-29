@@ -106,6 +106,7 @@ describe("ExamSection — 상태 안내", () => {
     ["archived", "보관된 시험이에요"],
     ["room_not_active", "스터디가 진행 중일 때 풀 수 있어요"],
     ["not_assignee", "담당 과제가 아니에요"],
+    ["answers_seen", "정답·해설을 이미 본 시험은 응시할 수 없어요"],
   ] as const)("%s → 안내만, 문항·제출 없음", async (reason, text) => {
     await mount(view({ reason, questions: reason === "not_started" || reason === "not_published" ? null : BASE }));
     expect(host.querySelector("[role=note]")?.textContent).toContain(text);

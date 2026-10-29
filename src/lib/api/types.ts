@@ -408,7 +408,7 @@ export type ExamAttempt = {
   results: Record<string, { correct: boolean; earned: number }> | null;
 };
 /** exam_view v_reason 우선순위 순. closed = after_deadline 마감 뒤(정답 공개 → 응시 불가) */
-export type ExamViewerReason = "submitted" | "room_not_active" | "archived" | "not_assignee" | "not_published" | "not_started" | "closed";
+export type ExamViewerReason = "submitted" | "room_not_active" | "archived" | "not_assignee" | "not_published" | "not_started" | "closed" | "answers_seen";
 export type ExamView = {
   today: string;
   node: { id: string; title: string; startDate: string; endDate: string; archived: boolean };

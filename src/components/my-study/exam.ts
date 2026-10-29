@@ -25,6 +25,8 @@ export function examHead(e: ExamSummary): string {
 }
 
 export const CLOSED_NOTE = "마감이 지나 해설이 공개된 시험은 제출할 수 없어요";
+/** 정답 키를 받은 뒤 기간 연장·공개 시점 변경으로 다시 열린 시험(0053 EXAM_ANSWERS_SEEN) */
+export const ANSWERS_SEEN_NOTE = "정답·해설을 이미 본 시험은 응시할 수 없어요";
 
 /** 응시 화면 안내 문구(스펙 §4.3). 풀 수 있거나 제출했으면 null(결과 화면이 대신). personalQuiet = 담당 아님 문구를 숨기는 화면 */
 export function takeNote(v: ExamView, personalQuiet: boolean): string | null {
@@ -36,6 +38,7 @@ export function takeNote(v: ExamView, personalQuiet: boolean): string | null {
     case "not_assignee": return personalQuiet ? null : notAssignedText(false);
     case "room_not_active": return "스터디가 진행 중일 때 풀 수 있어요";
     case "closed": return CLOSED_NOTE;
+    case "answers_seen": return ANSWERS_SEEN_NOTE;
     default: return null;
   }
 }
@@ -49,6 +52,7 @@ export function examBadgeOf(v: ExamView): { status: TaskStatus; text: string } |
   if (v.viewer.canTake) return late ? { status: "missed", text: "미제출 · 마감 지남" } : { status: "open", text: `응시 전 · ${dday(v.today, v.node.endDate)}` };
   if (v.viewer.reason === "not_started") return { status: "planned", text: "예정" };
   if (v.viewer.reason === "closed") return { status: "missed", text: "미제출 · 마감 지남" };
+  if (v.viewer.reason === "answers_seen") return { status: "missed", text: "미제출 · 응시 불가" };
   return null;
 }
 
@@ -218,6 +222,7 @@ export const EXAM_ERROR_KO: Record<string, string> = {
   EXAM_PUBLISHED: "발행된 시험이에요 · 초안으로 되돌린 뒤 고쳐 주세요",
   EXAM_ALREADY_SUBMITTED: "이미 제출한 시험이에요",
   EXAM_CLOSED: CLOSED_NOTE,
+  EXAM_ANSWERS_SEEN: ANSWERS_SEEN_NOTE,
   NODE_HAS_SUBMISSIONS: "제출물이 있는 과제는 시험으로 바꿀 수 없어요",
   VALIDATION_FAILED: "입력 내용을 확인해 주세요",
 };
@@ -230,7 +235,7 @@ export type ExamErrorAction =
 
 /** 상태가 바뀌어 화면을 다시 불러와야 하는 코드(발행 취소·마감·제출됨·담당 해제·보관·문항 교체 NOT_FOUND 등) */
 const EXAM_REFETCH = new Set([
-  "EXAM_NOT_FOUND", "NOT_FOUND", "EXAM_NOT_PUBLISHED", "EXAM_CLOSED", "EXAM_ALREADY_SUBMITTED", "EXAM_LOCKED", "EXAM_PUBLISHED",
+  "EXAM_NOT_FOUND", "NOT_FOUND", "EXAM_NOT_PUBLISHED", "EXAM_CLOSED", "EXAM_ANSWERS_SEEN", "EXAM_ALREADY_SUBMITTED", "EXAM_LOCKED", "EXAM_PUBLISHED",
   "TASK_NOT_ASSIGNED", "TASK_ARCHIVED", "PARENT_ARCHIVED", "ROOM_NOT_ACTIVE", "TASK_NOT_STARTED", "NODE_NOT_FOUND",
 ]);
 
