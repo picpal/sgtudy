@@ -2,10 +2,15 @@
 
 import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 import type { ToastMsg } from "@/components/ui/Toast";
-import { EXAM_LIMITS } from "@/lib/api/exam";
-import type { ExamQType, ExamReveal, ExamSummary } from "@/lib/api/types";
+import { toApiError } from "@/lib/api/errors";
+import { EXAM_LIMITS, setExamRevealUnsubmitted } from "@/lib/api/exam";
+import type { ExamQType, ExamReveal, ExamSummary, ExamView } from "@/lib/api/types";
+import { Switch } from "@/components/ui/Switch";
 import { Seg } from "../bits";
-import { QTYPE_KO, REVEAL_KO, draftTotals, examHead, isExamDraft, unpublishLockText } from "../exam";
+import {
+  QTYPE_KO, REVEAL_KO, REVEAL_UNSUBMITTED_ASK, REVEAL_UNSUBMITTED_HINT, REVEAL_UNSUBMITTED_LABEL,
+  draftTotals, examErrorAction, examHead, isExamDraft, unpublishLockText,
+} from "../exam";
 import { useExamEditor, type ExamEditorApi } from "../useExamEditor";
 import { ExamQuestionForm } from "./ExamQuestionForm";
 import { InlineConfirm } from "./InlineConfirm";
@@ -199,11 +204,13 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
               )}
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[12px] font-semibold text-ink-3">정답·해설 공개</span>
+                <span className="text-[12px] font-semibold text-ink-3">제출자에게 정답·해설 공개</span>
                 <div className="[&_button]:h-11">
-                  <Seg<ExamReveal> label="정답·해설 공개" value={draft.reveal} onChange={(r) => ed.dispatch({ type: "setReveal", reveal: r })} options={[["after_submit", REVEAL_KO.after_submit], ["after_deadline", REVEAL_KO.after_deadline]]} />
+                  <Seg<ExamReveal> label="제출자에게 정답·해설 공개" value={draft.reveal} onChange={(r) => ed.dispatch({ type: "setReveal", reveal: r })} options={[["after_submit", REVEAL_KO.after_submit], ["after_deadline", REVEAL_KO.after_deadline]]} />
                 </div>
               </div>
+
+              {view && <RevealUnsubmittedToggle slug={slug} nodeId={nodeId} on={!!view.exam.revealUnsubmitted} toast={toast} onView={ed.applyMeta} />}
 
               {globalErr && (
                 <p role="alert" className="m-0 rounded-[9px] bg-[#FFF1EF] px-[10px] py-2 text-[12px] font-semibold text-warn">
@@ -219,5 +226,34 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
         </>
       )}
     </section>
+  );
+}
+
+/** 편집자 옵션 「미응시자에게도 정답 공개」(0054) — [문제 저장]과 따로 바로 저장한다. 켤 때만 확인 */
+function RevealUnsubmittedToggle({ slug, nodeId, on, toast, onView }: { slug: string; nodeId: string; on: boolean; toast: (m: ToastMsg) => void; onView: (v: ExamView) => void }) {
+  const [ask, setAsk] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const set = async (next: boolean) => {
+    setBusy(true);
+    try {
+      onView(await setExamRevealUnsubmitted(slug, nodeId, next));
+      setAsk(false);
+    } catch (e) {
+      toast({ text: examErrorAction(toApiError(e)).text, tone: "bad" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex min-h-11 items-center gap-3">
+        <Switch on={on} label={REVEAL_UNSUBMITTED_LABEL} disabled={busy || ask} onChange={(next) => (next ? setAsk(true) : void set(false))} />
+        <span className="flex min-w-0 flex-col">
+          <span className="text-[13px] font-semibold text-ink">{REVEAL_UNSUBMITTED_LABEL}</span>
+          <span className="text-[12px] text-ink-3">{REVEAL_UNSUBMITTED_HINT}</span>
+        </span>
+      </div>
+      {ask && <InlineConfirm text={REVEAL_UNSUBMITTED_ASK} onCancel={() => setAsk(false)} actions={[{ label: busy ? "켜는 중…" : "켜기", tone: "primary", disabled: busy, onClick: () => void set(true) }]} />}
+    </div>
   );
 }

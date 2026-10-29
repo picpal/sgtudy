@@ -5,7 +5,10 @@ import { useHashTarget } from "@/lib/hashTarget";
 import { useMe } from "@/lib/me";
 import type { ExamView } from "@/lib/api/types";
 import { CODE_STATUS } from "../model";
-import { examBadgeOf, examPanelSub, isAnswered, questionResult, resultSummary, submitAsk, submittedLine, takeNote } from "../exam";
+import {
+  ANSWERS_SEEN_BADGE, ANSWERS_SEEN_TAKE_NOTE, OPEN_ANSWERS_ASK, OPEN_ANSWERS_OFFER,
+  examBadgeOf, examPanelSub, isAnswered, questionResult, resultSummary, submitAsk, submittedLine, takeNote,
+} from "../exam";
 import { statusRows, type StatusRow } from "../submission";
 import { useExamTake, type ExamSaveState } from "../useExamTake";
 import { useTaskDetail } from "../useTaskDetail";
@@ -24,12 +27,17 @@ export type ExamSectionProps = Omit<SubmissionSectionProps, "onUploadingChange" 
 
 type Mode = "take" | "result" | "note";
 
-/** 응시 · 결과(정답·해설) · 안내 중 무엇을 그리나 — 서버 viewer·attempt 그대로 */
-export function examMode(v: ExamView): Mode {
-  if (v.viewer.canTake && v.questions) return "take";
+/** 응시 · 결과(정답·해설) · 안내 중 무엇을 그리나 — 서버 viewer·attempt 그대로. started = 정답을 본 미제출자가 [응시하기]를 눌렀다 */
+export function examMode(v: ExamView, started = false): Mode {
+  const keys = !!v.questions?.some((q) => "answer" in q);
+  if (v.viewer.canTake && v.questions) {
+    // 정답을 직접 연 미제출자(0054): 응시를 시작하기 전엔 정답·해설을 보여 주고 [응시하기]로 넘어간다
+    if (v.viewer.answersSeen && keys && !started && v.attempt?.status !== "in_progress") return "result";
+    return "take";
+  }
   if (v.attempt?.status === "submitted") return "result";
-  // after_deadline 마감 뒤: 제출 안 했어도 정답·해설이 열린다(스펙 §3.4)
-  if (v.viewer.reason === "closed" && v.questions) return "result";
+  // after_deadline 마감 뒤 미제출: 정답 키가 왔을 때만(편집자 · 옵션으로 직접 연 사람) 정답·해설(0054 — 기본은 안내만)
+  if (v.viewer.reason === "closed" && keys) return "result";
   return "note";
 }
 
@@ -41,12 +49,15 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
   const t = useExamTake(slug, n.id, toast);
   const task = useTaskDetail(slug, n.id);
   const [ask, setAsk] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [started, setStarted] = useState(false);
   const examRef = useRef<HTMLDivElement>(null);
   const statusRef = useRef<HTMLHeadingElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
   const [navOpen, setNavOpen] = useState(false);
   const v = t.view;
-  const mode = v ? examMode(v) : null;
+  const mode = v ? examMode(v, started) : null;
 
   const failed = t.save === "failed";
   useEffect(() => {
@@ -72,6 +83,13 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
     if (prevMode.current === "take" && mode === "result") examRef.current?.focus({ preventScroll: false });
     prevMode.current = mode;
   }, [mode]);
+
+  const openAnswers = async () => {
+    setOpening(true);
+    await t.openAnswers();
+    setOpening(false);
+    setAskOpen(false);
+  };
 
   const submit = async () => {
     const ok = await t.submit();
@@ -113,6 +131,9 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
   const showList = mode === "result" && !!v && (!!v.attempt?.results || qs.some((q) => "answer" in q));
   // 담당이 아니면 시험 응시 카드 없이 안내 한 줄만 — 제출 현황 위에
   const outside = v?.viewer.reason === "not_assignee";
+  // 정답을 본 미제출자가 아직 풀 수 있다 — 응시 전·응시 중 모두 한 줄(0054)
+  const seenNote = !!v?.viewer.canTake && v.viewer.answersSeen;
+  const review = mode === "result" && !!v?.viewer.canTake;
   const panel = t.loading || (!v && !!t.error) || (!!v && (mode === "take" || mode === "result" || (!!info && !outside)));
   // 그룹장·편집자만 — 점수는 본인과 편집자만 본다(D7). 발행 전에는 응시가 없다
   const results = !!v?.viewer.canEdit && v.exam.status === "published";
@@ -142,6 +163,38 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
               <p role="note" className="m-0 rounded-[12px] bg-surface-2 px-[14px] py-[10px] text-[13px] text-ink-3">
                 {info}
               </p>
+            )}
+
+            {v?.viewer.canOpenAnswers && (
+              <div className="flex flex-col gap-2 rounded-[12px] bg-surface-2 px-[14px] py-[10px]">
+                {askOpen ? (
+                  <InlineConfirm
+                    text={OPEN_ANSWERS_ASK}
+                    onCancel={() => setAskOpen(false)}
+                    actions={[{ label: opening ? "여는 중…" : "정답 보기", tone: "primary", disabled: opening, onClick: () => void openAnswers() }]}
+                  />
+                ) : (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <p className="m-0 min-w-0 flex-[1_1_200px] text-[13px] text-ink-2">{OPEN_ANSWERS_OFFER}</p>
+                    <button type="button" onClick={() => setAskOpen(true)} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink hover:bg-surface-2">
+                      정답·해설 보기
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {v && seenNote && (mode === "take" || review) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[12px] bg-surface-2 px-[14px] py-[10px]">
+                <p role="note" className="m-0 min-w-0 flex-[1_1_200px] text-[13px] text-ink-3">
+                  {ANSWERS_SEEN_TAKE_NOTE}
+                </p>
+                {review && (
+                  <button type="button" onClick={() => setStarted(true)} className="h-11 shrink-0 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white">
+                    응시하기
+                  </button>
+                )}
+              </div>
             )}
 
             {v && mode === "take" && (
@@ -216,6 +269,7 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
                     <h3 className="m-0 flex flex-wrap items-baseline gap-x-2 text-[15px] font-bold text-ink">
                       <span>내 결과</span>
                       <span className="text-[17px]">{sum.headline}</span>
+                      {v.viewer.answersSeen && <SeenBadge />}
                     </h3>
                     {stamp && <p className="m-0 text-[13px] text-ink-3">{stamp}</p>}
                     {sum.sub && <p className="m-0 text-[13px] text-ink-2">{sum.sub}</p>}
@@ -246,4 +300,9 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
       </div>
     </div>
   );
+}
+
+/** 「정답 본 뒤 응시」 — 본인 결과·그룹장 결과 멤버 행 공용(0054) */
+export function SeenBadge() {
+  return <span className="inline-flex h-6 items-center rounded-[12px] bg-warn-soft px-2 text-[12px] font-semibold text-warn">{ANSWERS_SEEN_BADGE}</span>;
 }

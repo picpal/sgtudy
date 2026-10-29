@@ -315,6 +315,23 @@ cases("comments 0041 · exam lock (D4)", db, [
     await setToday(q, "2026-10-22");
     assertEquals((await list(q, node)).locked, null);
   } },
+  { name: "0054: unsubmitted assignee stays locked after deadline · option on unlocks only after they open answers (same predicate as exam_view)", run: async (q) => {
+    await as(q, "민수");
+    const bundle = (await one(q, "select parent_id::text as id from public.goal_nodes where id = $1::bigint", [await nodeId(q, "aws", "ALB vs NLB 실습")])).id;
+    await q("select public.node_create('aws', $1::bigint, '미응시 공개 시험', null, 'common', '2026-10-15', '2026-10-21')", [bundle]);
+    const node = await nodeId(q, "aws", "미응시 공개 시험");
+    await q("select public.exam_put('aws', $1::bigint, $2::jsonb)", [node, JSON.stringify({ reveal: "after_deadline", questions: [{ type: "ox", prompt: "p", answer: true }] })]);
+    await q("select public.exam_publish('aws', $1::bigint)", [node]);
+    await setToday(q, "2026-10-22");
+    await as(q, "지은");
+    assertEquals((await list(q, node)).locked, { reason: "exam" });   // 0053 까지는 마감 뒤 풀렸다
+    await as(q, "민수");
+    await q("select public.exam_reveal_unsubmitted_set('aws', $1::bigint, true)", [node]);
+    await as(q, "지은");
+    assertEquals((await list(q, node)).locked, { reason: "exam" });   // 옵션만으로는 안 풀린다
+    await q("select public.exam_answers_open('aws', $1::bigint)", [node]);
+    assertEquals((await list(q, node)).locked, null);
+  } },
   { name: "review I1: ENDED / archived room doesn't unlock an unsubmitted assignee (lock checked apart from writeBlock)", run: async (q) => {
     await as(q, "민수");
     const bundle = (await one(q, "select parent_id::text as id from public.goal_nodes where id = $1::bigint", [await nodeId(q, "aws", "ALB vs NLB 실습")])).id;

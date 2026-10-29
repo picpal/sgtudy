@@ -5,7 +5,8 @@ import { fetchExamAttempt, fetchExamResults } from "@/lib/api/exam";
 import type { ExamResults as ExamResultsDto, ExamView } from "@/lib/api/types";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { kstMd, questionResult, rateText, resultSummary, resultsHead, submittedLine } from "../exam";
+import { kstMd, questionResult, rateText, resultSummary, resultsHead, seenExcludedText, submittedLine } from "../exam";
+import { SeenBadge } from "./ExamSection";
 import { ExamQuestionView } from "./ExamQuestionView";
 import { SlotCard } from "./SubmitPanel";
 
@@ -97,6 +98,7 @@ export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
                 </li>
               ))}
             </ol>
+            {seenExcludedText(data.answersSeenExcluded ?? 0) && <p className="m-0 text-[12px] text-ink-3">{seenExcludedText(data.answersSeenExcluded ?? 0)}</p>}
           </div>
 
           <div className="flex flex-col gap-1">
@@ -117,6 +119,7 @@ export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
                           </span>
                           <span className="text-[13px] text-ink-3">{kstMd(m.submittedAt!)}</span>
                           <span className={`text-[13px] ${m.isLate ? "font-semibold text-warn" : "text-ink-3"}`}>{m.isLate ? "지각" : "기한 내"}</span>
+                          {m.answersSeen && <SeenBadge />}
                           <button
                             type="button"
                             aria-expanded={isOpen}

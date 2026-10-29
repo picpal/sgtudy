@@ -18,6 +18,11 @@ export const putExamBrief = (slug: string, nodeId: string, brief: ExamBrief, cli
 export const saveExamAnswer = (nodeId: string, questionId: string, answer: unknown, client?: Db) =>
   rpc<ExamAnswerSaved>("exam_answer_save", { p_node: num(nodeId), p_question: num(questionId), p_answer: answer }, client);
 export const submitExam = (nodeId: string, client?: Db) => rpc<ExamView>("exam_submit", { p_node: num(nodeId) }, client);
+/** 미제출 담당자의 [정답·해설 보기](0054) — 기록이 남고 정답이 실린 view 가 온다 */
+export const openExamAnswers = (slug: string, nodeId: string, client?: Db) => rpc<ExamView>("exam_answers_open", { p_slug: slug, p_node: num(nodeId) }, client);
+/** 편집자 옵션 「미응시자에게도 정답 공개」(0054) */
+export const setExamRevealUnsubmitted = (slug: string, nodeId: string, on: boolean, client?: Db) =>
+  rpc<ExamView>("exam_reveal_unsubmitted_set", { p_slug: slug, p_node: num(nodeId), p_on: on }, client);
 export const fetchExamResults = (slug: string, nodeId: string, client?: Db) => rpc<ExamResults>("exam_results", { p_slug: slug, p_node: num(nodeId) }, client);
 /** 편집자가 남의 답안 보기 — viewer 는 그 사람 기준, canTake 는 항상 false */
 export const fetchExamAttempt = (slug: string, nodeId: string, userId: string, client?: Db) =>

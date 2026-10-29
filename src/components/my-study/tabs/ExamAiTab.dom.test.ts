@@ -24,7 +24,7 @@ const view = (o: { status?: "draft" | "published"; questions?: ExamQuestion[]; l
     today: "2026-10-12",
     node: { id: "311", title: "3주차 정리 시험", startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
     exam: { status: o.status ?? "draft", questionCount: qs.length, totalPoints: qs.length, reveal: "after_submit", publishedAt: null, closed: false, source: o.source ?? "manual", locked: o.locked ?? false, submittedCount: 0, brief: o.brief === undefined ? BRIEF : o.brief },
-    viewer: { canEdit: true, isAssignee: false, canTake: false, reason: "not_assignee" },
+    viewer: { canEdit: true, isAssignee: false, canTake: false, reason: "not_assignee", answersSeen: false, canOpenAnswers: false },
     questions: qs,
     attempt: null,
   };

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { toApiError, type ApiError } from "@/lib/api/errors";
-import { fetchExam, saveExamAnswer, submitExam } from "@/lib/api/exam";
+import { fetchExam, openExamAnswers, saveExamAnswer, submitExam } from "@/lib/api/exam";
 import type { ExamView } from "@/lib/api/types";
 import { answeredCount, examErrorAction } from "./exam";
 
@@ -182,8 +182,25 @@ export function useExamTake(slug: string, nodeId: string, toast: (m: ToastMsg) =
     }
   }, [drain, nodeId, refetch]);
 
+  /** 미제출자의 [정답·해설 보기](0054) — 정답이 실린 view 로 바꾼다. 실패는 토스트(상태가 바뀐 실패면 다시 불러온다) */
+  const openAnswers = useCallback(async (): Promise<boolean> => {
+    try {
+      const view = await openExamAnswers(slug, nodeId);
+      if (!alive.current) return true;
+      ++seq.current;
+      viewRef.current = view;
+      setGot({ nodeId, view, error: null });
+      return true;
+    } catch (e) {
+      const act = examErrorAction(toApiError(e));
+      toastRef.current({ text: act.text, tone: "bad" });
+      if (act.kind === "refetch") refetch();
+      return false;
+    }
+  }, [slug, nodeId, refetch]);
+
   const cur = got?.nodeId === nodeId ? got : null;
   const view = cur?.view ?? null;
   const answered = view?.questions ? answeredCount(view.questions, answers) : 0;
-  return { view, error: cur?.error ?? null, loading: !cur, refetch, answers, setAnswer, answered, save, retry, submit, submitting };
+  return { view, error: cur?.error ?? null, loading: !cur, refetch, answers, setAnswer, answered, save, retry, submit, submitting, openAnswers };
 }

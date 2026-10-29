@@ -383,7 +383,7 @@ cases("round exam 0037 · taking & reveal", db, [
     assertEquals([h.attempt.score, h.attempt.isLate], [1, true]);
     assertEquals((await one(q, "select is_late from public.submissions where node_id = $1::bigint and user_id = $2::uuid", [node, await uidOf(q, "철수")])).is_late, true);
   } },
-  { name: "reveal after_deadline: after submit only score · after end_date answers for everyone incl. non-submitters · extending end_date closes again", run: async (q) => {
+  { name: "reveal after_deadline: after submit only score · after end_date answers for submitters only (0054) · extending end_date closes again", run: async (q) => {
     const node = await newExamLeaf(q);
     await put(q, node, { ...Q4, reveal: "after_deadline" });
     await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
@@ -402,10 +402,9 @@ cases("round exam 0037 · taking & reveal", db, [
     v = await get(q, node);
     assertEquals(v.attempt.results[ids[0]].correct, true);
     assertEquals("answer" in v.questions[0], true);
-    await as(q, "하나");                                     // 미제출자도 마감 뒤엔 본다
+    await as(q, "하나");                                     // 미제출자는 마감 뒤에도 못 본다(0054 기본 — 옵션 꺼짐)
     const h = await get(q, node);
-    assertEquals("answer" in h.questions[0], true);
-    assertEquals(h.attempt, null);
+    assertEquals(["answer" in h.questions[0], "explanation" in h.questions[0], h.attempt, h.viewer.canOpenAnswers, h.viewer.answersSeen], [false, false, null, false, false]);
     await as(q, "민수");
     await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-25\"}'::jsonb)", [node]);
     await as(q, "지은");
@@ -477,7 +476,7 @@ cases("round exam 0037 · taking & reveal", db, [
     for (const n of ["철수", "하나"]) {                       // 진행 중 · 응시 전 모두
       await as(q, n);
       const v = await get(q, node);
-      assertEquals([v.exam.closed, v.viewer.canTake, v.viewer.reason, "answer" in v.questions[0]], [true, false, "closed", true]);
+      assertEquals([v.exam.closed, v.viewer.canTake, v.viewer.reason, "answer" in v.questions[0]], [true, false, "closed", false]);   // 0054: 미제출자는 정답 없음
       await failCode(save(q, node, ids[0], 0), "EXAM_CLOSED");
       await failCode(submitExam(q, node), "EXAM_CLOSED");
     }
@@ -490,7 +489,7 @@ cases("round exam 0037 · taking & reveal", db, [
     const s = await submitExam(q, node);
     assertEquals([s.attempt.score, s.attempt.isLate, s.attempt.results], [1, false, null]);
   } },
-  { name: "EXAM_ANSWERS_SEEN (F1): answer key served while closed → after extension save & submit rejected · reason answers_seen", run: async (q) => {
+  { name: "0054 default: unsubmitted never get answers (closed, extended, switched to after_submit) · nothing recorded · exam_answers_open EXAM_ANSWERS_CLOSED", run: async (q) => {
     const node = await newExamLeaf(q);
     await put(q, node, { ...Q4, reveal: "after_deadline" });
     await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
@@ -499,36 +498,92 @@ cases("round exam 0037 · taking & reveal", db, [
     await as(q, "철수");
     await save(q, node, ids[0], 1);                          // 진행 중 응시
     await setToday(q, "2026-10-22"); await setNow(q, "2026-10-22T09:00:00+09:00");
-    for (const n of ["철수", "하나"]) {                       // 진행 중 · 응시 전(행 없음) 모두 정답 키를 받는다
-      await as(q, n);
-      assertEquals("answer" in (await get(q, node)).questions[0], true);
-    }
-    await as(q, "민수");
-    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-25\"}'::jsonb)", [node]);
-    for (const n of ["철수", "하나"]) {
+    for (const n of ["철수", "하나"]) {                       // 진행 중 · 응시 전 모두 정답 키 없음 · 열기 버튼 없음
       await as(q, n);
       const v = await get(q, node);
-      assertEquals([v.exam.closed, v.viewer.canTake, v.viewer.reason, "answer" in v.questions[0]], [false, false, "answers_seen", false]);
-      await failCode(save(q, node, ids[0], 0), "EXAM_ANSWERS_SEEN");
-      await failCode(submitExam(q, node), "EXAM_ANSWERS_SEEN");
+      assertEquals(["answer" in v.questions[0], v.viewer.canOpenAnswers, v.viewer.answersSeen, v.exam.revealUnsubmitted], [false, false, false, false]);
+      await failCode(rpc(q, "public.exam_answers_open('aws', $1::bigint)", [node]), "EXAM_ANSWERS_CLOSED");
     }
-    assertEquals((await q("select 1 from public.exam_attempts where node_id = $1::bigint and user_id = $2", [node, await uidOf(q, "하나")])).length, 0);
-    // 공개 시점을 after_submit 으로 바꿔 다시 열어도 같다
     await as(q, "민수");
-    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-21\"}'::jsonb)", [node]);
-    await put(q, node, { ...Q4, reveal: "after_submit" });
+    await put(q, node, { ...Q4, reveal: "after_submit" });   // 공개 시점을 바꿔도 미제출자에겐 없다
     await as(q, "하나");
-    assertEquals((await get(q, node)).viewer.reason, "answers_seen");
-    await failCode(save(q, node, ids[0], 0), "EXAM_ANSWERS_SEEN");
-    await failCode(submitExam(q, node), "EXAM_ANSWERS_SEEN");
-    // 정답 키 없이 연 사람(마감 전 열람)·편집자 열람은 기록하지 않는다
-    await as(q, "지은");
-    const j = await get(q, node);
-    assertEquals([j.viewer.canTake, j.viewer.reason], [true, null]);
+    const h = await get(q, node);
+    assertEquals([h.viewer.canTake, "answer" in h.questions[0]], [true, false]);   // after_submit = 지각 응시 가능
+    assertEquals((await q("select 1 from public.exam_answer_reveals where node_id = $1::bigint", [node])).length, 0);
+    // 제출하면 바로 보인다 · 기록하지 않는다
     await save(q, node, ids[0], 0);
-    assertEquals((await submitExam(q, node)).attempt.status, "submitted");
-    assertEquals((await q("select 1 from public.exam_answer_reveals where node_id = $1::bigint and user_id = $2", [node, await uidOf(q, "지은")])).length, 0,
-      "제출 뒤(after_submit) 정답을 받아도 기록하지 않는다 — 다시 응시할 수 없으니");
+    const s = await submitExam(q, node);
+    assertEquals([s.attempt.status, "answer" in s.questions[0], s.viewer.answersSeen], ["submitted", true, false]);
+    assertEquals((await q("select 1 from public.exam_answer_reveals where node_id = $1::bigint", [node])).length, 0);
+  } },
+  { name: "0054 option reveal_unsubmitted: editor toggles · after deadline unsubmitted assignee opens answers (recorded) · may still take → flagged · extension hides again", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await put(q, node, Q4);                                  // after_submit — 마감 뒤 지각 응시 가능
+    await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
+    const ids = await qids(q, node);
+    await as(q, "지은");
+    await failCode(rpc(q, "public.exam_reveal_unsubmitted_set('aws', $1::bigint, true)", [node]), "NOT_CURRICULUM_EDITOR");
+    await as(q, "민수");
+    const e = await rpc(q, "public.exam_reveal_unsubmitted_set('aws', $1::bigint, true)", [node]);
+    assertEquals(e.exam.revealUnsubmitted, true);
+    await setToday(q, "2026-10-16"); await setNow(q, "2026-10-16T12:00:00+09:00");
+    await as(q, "하나");                                     // 마감 전: 옵션이 켜져 있어도 못 연다
+    assertEquals((await get(q, node)).viewer.canOpenAnswers, false);
+    await failCode(rpc(q, "public.exam_answers_open('aws', $1::bigint)", [node]), "EXAM_ANSWERS_CLOSED");
+    await setToday(q, "2026-10-22"); await setNow(q, "2026-10-22T09:00:00+09:00");
+    let v = await get(q, node);                              // 열기 전: 정답 없음 · 기록 없음(보기만 해서는 표시되지 않는다)
+    assertEquals([v.viewer.canTake, v.viewer.canOpenAnswers, v.viewer.answersSeen, "answer" in v.questions[0]], [true, true, false, false]);
+    assertEquals((await q("select 1 from public.exam_answer_reveals where node_id = $1::bigint", [node])).length, 0);
+    v = await rpc(q, "public.exam_answers_open('aws', $1::bigint)", [node]);
+    assertEquals([v.viewer.canTake, v.viewer.canOpenAnswers, v.viewer.answersSeen, "answer" in v.questions[0], "explanation" in v.questions[0]], [true, false, true, true, true]);
+    assertEquals((await get(q, node)).viewer.answersSeen, true);
+    // 비담당 멤버는 못 연다
+    await q("update public.task_assignments set released_at = now() where node_id = $1::bigint and user_id = $2::uuid", [node, await uidOf(q, "철수")]);
+    await as(q, "철수");
+    await failCode(rpc(q, "public.exam_answers_open('aws', $1::bigint)", [node]), "TASK_NOT_ASSIGNED");
+    // 하나: 정답을 본 뒤 응시 — 막지 않는다
+    await as(q, "하나");
+    await save(q, node, ids[0], 0);
+    const s = await submitExam(q, node);
+    assertEquals([s.attempt.status, s.attempt.score, s.viewer.answersSeen], ["submitted", 1, true]);
+    // 지은: 열지 않고 지각 응시 → 표시 없음
+    await as(q, "지은");
+    await save(q, node, ids[0], 1);
+    assertEquals((await submitExam(q, node)).viewer.answersSeen, false);
+    // 기간 연장 → 미제출자에게 다시 닫힘(기록은 남는다)
+    await as(q, "민수");
+    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-25\"}'::jsonb)", [node]);
+    const mid = await uidOf(q, "민수");
+    await as(q, "민수");
+    const m = await rpc(q, "public.exam_view($1::bigint, $2::uuid, $3::uuid)", [node, mid, mid]);
+    assertEquals([m.viewer.canOpenAnswers, m.viewer.answersSeen], [false, false]);   // 편집자는 기록·버튼 없이 항상 본다
+    assertEquals((await q("select 1 from public.exam_answer_reveals where node_id = $1::bigint and user_id = $2::uuid", [node, mid])).length, 0);
+  } },
+  { name: "0054 option on, after_deadline: opened while closed → editor extends → take allowed (no EXAM_ANSWERS_SEEN) · attempt flagged · option off hides answers again", run: async (q) => {
+    const node = await newExamLeaf(q);
+    await put(q, node, { ...Q4, reveal: "after_deadline" });
+    await rpc(q, "public.exam_publish('aws', $1::bigint)", [node]);
+    await rpc(q, "public.exam_reveal_unsubmitted_set('aws', $1::bigint, true)", [node]);
+    const ids = await qids(q, node);
+    await setToday(q, "2026-10-22"); await setNow(q, "2026-10-22T09:00:00+09:00");
+    await as(q, "하나");
+    const o = await rpc(q, "public.exam_answers_open('aws', $1::bigint)", [node]);
+    assertEquals([o.viewer.reason, o.viewer.canTake, "answer" in o.questions[0]], ["closed", false, true]);
+    await as(q, "철수");
+    await rpc(q, "public.exam_answers_open('aws', $1::bigint)", [node]);
+    await as(q, "민수");                                     // 옵션을 끄면 연 사람도 다시 못 본다(기록은 남음)
+    await rpc(q, "public.exam_reveal_unsubmitted_set('aws', $1::bigint, false)", [node]);
+    await as(q, "철수");
+    const c = await get(q, node);
+    assertEquals([c.viewer.answersSeen, c.viewer.canOpenAnswers, "answer" in c.questions[0]], [true, false, false]);
+    await as(q, "민수");
+    await q("select public.node_update('aws', $1::bigint, '{\"endDate\":\"2026-10-25\"}'::jsonb)", [node]);
+    await as(q, "하나");
+    const h = await get(q, node);
+    assertEquals([h.viewer.canTake, h.viewer.reason, h.viewer.answersSeen, "answer" in h.questions[0]], [true, null, true, false]);
+    await save(q, node, ids[0], 0);
+    const s = await submitExam(q, node);
+    assertEquals([s.attempt.status, s.viewer.answersSeen], ["submitted", true]);
   } },
   { name: "exam_answer_reveals: closed to clients · RLS on", run: async (q) => {
     for (const role of ["anon", "authenticated"]) for (const priv of ["select", "insert", "update", "delete"]) {
@@ -566,6 +621,31 @@ cases("round exam 0037 · results & tree", db, [
     // 자기 것은 exam_get 과 같다
     const self = await rpc(q, "public.exam_attempt_get('aws', $1::bigint, $2::uuid)", [node, await uidOf(q, "지은")]);
     assertEquals(self, await get(q, node));
+  } },
+  { name: "0054 exam_results: answersSeen per member · score aggregates keep flagged attempt · correctRate excludes it (answersSeenExcluded)", run: async (q) => {
+    const node = await published(q);
+    const ids = await qids(q, node);
+    await as(q, "민수");
+    await rpc(q, "public.exam_reveal_unsubmitted_set('aws', $1::bigint, true)", [node]);
+    await as(q, "지은"); await save(q, node, ids[0], 1); await submitExam(q, node);   // 기한 내 · 오답
+    await setToday(q, "2026-10-22"); await setNow(q, "2026-10-22T09:00:00+09:00");
+    await as(q, "하나");
+    await rpc(q, "public.exam_answers_open('aws', $1::bigint)", [node]);
+    await save(q, node, ids[0], 0); await submitExam(q, node);                         // 정답 본 뒤 응시 · 정답
+    await as(q, "민수");
+    const r = await rpc(q, "public.exam_results('aws', $1::bigint)", [node]);
+    assertEquals([r.submitted, r.avg, r.max, r.answersSeenExcluded], [2, 0.5, 1, 1]);   // 점수는 그대로 집계
+    assertEquals(r.questions[0].correctRate, 0);             // 정답률은 지은만
+    const flag = Object.fromEntries(r.members.map((m: Row) => [m.nickname, m.answersSeen]));
+    assertEquals(flag, { 민수: false, 지은: false, 철수: false, 하나: true });
+    const a = await rpc(q, "public.exam_attempt_get('aws', $1::bigint, $2::uuid)", [node, await uidOf(q, "하나")]);
+    assertEquals([a.viewer.answersSeen, a.viewer.canOpenAnswers], [true, false]);
+    // 열기만 하고 제출하지 않은 사람은 결과 행에 표시하지 않는다(응시가 아니다)
+    await as(q, "철수");
+    await rpc(q, "public.exam_answers_open('aws', $1::bigint)", [node]);
+    await as(q, "민수");
+    const r2 = await rpc(q, "public.exam_results('aws', $1::bigint)", [node]);
+    assertEquals([r2.members.find((m: Row) => m.nickname === "철수").answersSeen, r2.answersSeenExcluded], [false, 1]);
   } },
   { name: "exam_results: aggregates over CURRENT assignees only — released submitter excluded (submitted ≤ assigned)", run: async (q) => {
     const node = await published(q);

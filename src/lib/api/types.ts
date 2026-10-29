@@ -407,8 +407,8 @@ export type ExamAttempt = {
   /** 공개 조건 + 제출 뒤에만(after_deadline 마감 전 = null, 점수만) */
   results: Record<string, { correct: boolean; earned: number }> | null;
 };
-/** exam_view v_reason 우선순위 순. closed = after_deadline 마감 뒤(정답 공개 → 응시 불가) */
-export type ExamViewerReason = "submitted" | "room_not_active" | "archived" | "not_assignee" | "not_published" | "not_started" | "closed" | "answers_seen";
+/** exam_view v_reason 우선순위 순. closed = after_deadline 마감 뒤(응시 불가 · 정답은 제출자에게만, 0054) */
+export type ExamViewerReason = "submitted" | "room_not_active" | "archived" | "not_assignee" | "not_published" | "not_started" | "closed";
 export type ExamView = {
   today: string;
   node: { id: string; title: string; startDate: string; endDate: string; archived: boolean };
@@ -416,6 +416,8 @@ export type ExamView = {
   exam: ExamSummary & {
     publishedAt: string | null;
     closed: boolean;
+    /** 편집자 옵션 「미응시자에게도 정답 공개」(0054) — 초안을 보는 멤버에겐 없다 */
+    revealUnsubmitted?: boolean;
     source?: "manual" | "ai";
     /** 응시 행 1건~(진행 중 포함) — 구조 잠금 */
     locked?: boolean;
@@ -423,7 +425,16 @@ export type ExamView = {
     brief?: ExamBrief | null;
   };
   /** exam_attempt_get 에서는 대상 사람 기준(canTake 는 본인일 때만 참) */
-  viewer: { canEdit: boolean; isAssignee: boolean; canTake: boolean; reason: ExamViewerReason | null };
+  viewer: {
+    canEdit: boolean;
+    isAssignee: boolean;
+    canTake: boolean;
+    reason: ExamViewerReason | null;
+    /** 제출 전에 정답·해설을 본 기록이 있다 — 그 뒤 응시 = 「정답 본 뒤 응시」(0054) */
+    answersSeen: boolean;
+    /** 미제출 담당자 본인이 [정답·해설 보기]로 열 수 있다(옵션 켬 · 마감 뒤 · 아직 안 엶) */
+    canOpenAnswers: boolean;
+  };
   /** 담당 아님 · 초안 · 시작 전(담당자) → null. 편집자는 항상 */
   questions: ExamQuestion[] | null;
   attempt: ExamAttempt | null;
@@ -436,8 +447,10 @@ export type ExamResults = {
   maxScore: number;
   avg: number | null;
   max: number | null;
+  /** 정답률에서 뺀 「정답 본 뒤 응시」 수(점수 집계에는 들어간다) */
+  answersSeenExcluded: number;
   questions: { id: string; ord: number; type: ExamQType; points: number; correctRate: number | null }[];
-  members: (Person & { status: TaskStatus; score: number | null; submittedAt: string | null; isLate: boolean | null })[];
+  members: (Person & { status: TaskStatus; score: number | null; submittedAt: string | null; isLate: boolean | null; answersSeen: boolean })[];
 };
 
 /* ---------- 오답노트 (0046_wrong_note.sql) ---------- */

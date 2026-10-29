@@ -23,6 +23,7 @@ const RESULTS: ExamResultsDto = {
   maxScore: 5,
   avg: 3.6667,
   max: 5,
+  answersSeenExcluded: 1,
   questions: [
     { id: "2", ord: 1, type: "multi", points: 2, correctRate: 33 },
     { id: "1", ord: 0, type: "single", points: 1, correctRate: 100 },
@@ -32,7 +33,7 @@ const RESULTS: ExamResultsDto = {
   members: [
     { userId: "u-jieun", nickname: "지은", tone: "mint", status: "done", score: 5, submittedAt: "2026-10-18T12:03:00Z", isLate: false },
     { userId: "u-cs", nickname: "철수", tone: "mint", status: "done", score: 3, submittedAt: "2026-10-18T16:30:00Z", isLate: false },
-    { userId: "u-hana", nickname: "하나", tone: "mint", status: "late", score: 3, submittedAt: "2026-10-22T01:00:00Z", isLate: true },
+    { userId: "u-hana", nickname: "하나", tone: "mint", status: "late", score: 3, submittedAt: "2026-10-22T01:00:00Z", isLate: true, answersSeen: true },
     { userId: "u-ms", nickname: "민수", tone: "mint", status: "todo", score: null, submittedAt: null, isLate: null },
   ],
 } as unknown as ExamResultsDto;
@@ -46,7 +47,7 @@ const attemptOf = (canEdit: boolean): ExamView =>
     today: "2026-10-19",
     node: { id: "311", title: "ALB vs NLB 실습", startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
     exam: { status: "published", questionCount: 2, totalPoints: 3, reveal: "after_submit", publishedAt: "2026-10-14T00:00:00Z", closed: false },
-    viewer: { canEdit, isAssignee: true, canTake: false, reason: "submitted" },
+    viewer: { canEdit, isAssignee: true, canTake: false, reason: "submitted", answersSeen: false, canOpenAnswers: false },
     questions: QS,
     attempt: {
       status: "submitted",
@@ -141,6 +142,15 @@ describe("ExamResults", () => {
     expect(grid).toContain("sm:grid-cols-2");
   });
 
+  it("0054 — 정답 본 뒤 응시 n명 제외 줄(정답률 아래) · 0명이면 없음", async () => {
+    await mount();
+    expect(host.textContent).toContain("정답 본 뒤 응시 1명 제외");
+    act(() => root?.unmount());
+    host.remove();
+    await mount({ ...RESULTS, answersSeenExcluded: 0 });
+    expect(host.textContent).not.toContain("명 제외");
+  });
+
   it("정답률 null(제출 0명) → '—'", async () => {
     await mount({ ...RESULTS, submitted: 0, avg: null, max: null, questions: RESULTS.questions.map((q) => ({ ...q, correctRate: null })), members: [RESULTS.members[3]] });
     expect(head()).toContain("0/4 제출");
@@ -151,7 +161,7 @@ describe("ExamResults", () => {
   it("멤버 표 — 점수·제출일(KST)·지각/기한 내 · 미제출은 '— 미제출' 이고 [답안 ▸] 없음", async () => {
     await mount();
     const rows = Array.from(host.querySelectorAll("ul > li"));
-    expect(rows.map((r) => r.textContent)).toEqual(["지은5/510.18기한 내답안 ▸", "철수3/510.19기한 내답안 ▸", "하나3/510.22지각답안 ▸", "민수— 미제출"]);
+    expect(rows.map((r) => r.textContent)).toEqual(["지은5/510.18기한 내답안 ▸", "철수3/510.19기한 내답안 ▸", "하나3/510.22지각정답 본 뒤 응시답안 ▸", "민수— 미제출"]);
     expect(button("답안 ▸").length).toBe(3);
     for (const b of button("답안 ▸")) expect(b.className).toContain("h-11");
   });
@@ -226,7 +236,7 @@ describe("ExamSection — 편집자에게만 「결과」", () => {
   const section = () => createElement(ExamSection, { n: leaf, slug: "aws", roomStatus: "active", focus: null, onFocused: () => {}, onSubmitted: () => {}, toast, viewerPending: false });
   const asViewer = (canEdit: boolean, status: "published" | "draft" = "published"): ExamView => {
     const v = attemptOf(canEdit);
-    return { ...v, exam: { ...v.exam, status }, viewer: { canEdit, isAssignee: false, canTake: false, reason: "not_assignee" }, questions: null, attempt: null };
+    return { ...v, exam: { ...v.exam, status }, viewer: { canEdit, isAssignee: false, canTake: false, reason: "not_assignee", answersSeen: false, canOpenAnswers: false }, questions: null, attempt: null };
   };
 
   it("canEdit → 결과 섹션을 그리고 fetchExamResults 호출", async () => {

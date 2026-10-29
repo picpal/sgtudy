@@ -73,7 +73,7 @@ describe("toDraft", () => {
   const view = (questions: ExamView["questions"]): ExamView => ({
     today: "2026-10-12", node: { id: "311", title: "t", startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
     exam: { status: "draft", reveal: "after_deadline", questionCount: 2, totalPoints: 2, publishedAt: null, closed: false },
-    viewer: { canEdit: true, isAssignee: false, canTake: false, reason: "not_assignee" }, questions, attempt: null,
+    viewer: { canEdit: true, isAssignee: false, canTake: false, reason: "not_assignee", answersSeen: false, canOpenAnswers: false }, questions, attempt: null,
   });
   it("editor shape → draft sorted by ord; null choices → []", () => {
     const d = toDraft(view([

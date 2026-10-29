@@ -9,8 +9,8 @@ import { ExamEditor, type ExamEditorHandle } from "./ExamEditor";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const m = vi.hoisted(() => ({ fetch: vi.fn(), put: vi.fn(), publish: vi.fn() }));
-vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: m.fetch, putExam: m.put, publishExam: m.publish }));
+const m = vi.hoisted(() => ({ fetch: vi.fn(), put: vi.fn(), publish: vi.fn(), unsub: vi.fn() }));
+vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: m.fetch, putExam: m.put, publishExam: m.publish, setExamRevealUnsubmitted: m.unsub }));
 
 const QS: ExamQuestion[] = [
   { id: "1", ord: 0, type: "single", prompt: "IAM 정책 평가 순서로 옳은 것은?", choices: ["명시적 Deny → Allow", "Allow → Deny"], points: 1, answer: 0, explanation: "명시적 Deny 가 이긴다" },
@@ -18,13 +18,13 @@ const QS: ExamQuestion[] = [
   { id: "3", ord: 2, type: "ox", prompt: "S3 는 리전 서비스다.", choices: null, points: 1, answer: true, explanation: "" },
   { id: "4", ord: 3, type: "short", prompt: "VPC 를 인터넷에 잇는 것은?", choices: null, points: 1, answer: ["인터넷 게이트웨이", "IGW"], explanation: "" },
 ];
-const view = (o: { status?: "draft" | "published"; questions?: ExamQuestion[]; locked?: boolean; submittedCount?: number } = {}): ExamView => {
+const view = (o: { status?: "draft" | "published"; questions?: ExamQuestion[]; locked?: boolean; submittedCount?: number; revealUnsubmitted?: boolean } = {}): ExamView => {
   const qs = o.questions ?? QS;
   return {
     today: "2026-10-12",
     node: { id: "311", title: "3주차 정리 시험", startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
-    exam: { status: o.status ?? "draft", questionCount: qs.length, totalPoints: qs.reduce((s, q) => s + q.points, 0), reveal: "after_submit", publishedAt: null, closed: false, source: "manual", locked: o.locked ?? false, submittedCount: o.submittedCount ?? 0, brief: null },
-    viewer: { canEdit: true, isAssignee: false, canTake: false, reason: "not_assignee" },
+    exam: { status: o.status ?? "draft", questionCount: qs.length, totalPoints: qs.reduce((s, q) => s + q.points, 0), reveal: "after_submit", revealUnsubmitted: o.revealUnsubmitted ?? false, publishedAt: null, closed: false, source: "manual", locked: o.locked ?? false, submittedCount: o.submittedCount ?? 0, brief: null },
+    viewer: { canEdit: true, isAssignee: false, canTake: false, reason: "not_assignee", answersSeen: false, canOpenAnswers: false },
     questions: qs,
     attempt: null,
   };
@@ -58,6 +58,7 @@ beforeEach(() => {
   m.fetch.mockReset();
   m.put.mockReset();
   m.publish.mockReset();
+  m.unsub.mockReset();
   toast.mockReset();
   onDirty.mockReset();
   onChanged.mockReset();
@@ -276,5 +277,28 @@ describe("ExamEditor — 리뷰 보완(minor)", () => {
     await flush();
     expect(await second).toBe(true);
     expect(m.put).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ExamEditor — 미응시자에게도 정답 공개(0054)", () => {
+  const sw = () => host.querySelector<HTMLButtonElement>('[role=switch][aria-label="미응시자에게도 정답 공개"]')!;
+  it("기본 꺼짐 · 켜면 확인 문구 → [켜기] 에서만 저장 · 끄기는 바로", async () => {
+    await mount(view({ status: "published" }));
+    expect(host.textContent).toContain("제출자에게 정답·해설 공개");
+    expect(host.textContent).toContain("제출 직후");
+    expect(sw().getAttribute("aria-checked")).toBe("false");
+    act(() => sw().click());
+    expect(host.textContent).toContain("미응시자가 정답을 보면 이후 응시는 「정답 본 뒤 응시」로 표시돼요");
+    expect(m.unsub).not.toHaveBeenCalled();
+    m.unsub.mockResolvedValue(view({ status: "published", revealUnsubmitted: true }));
+    await act(async () => button("켜기")!.click());
+    await flush();
+    expect(m.unsub).toHaveBeenCalledWith("aws", "311", true);
+    expect(sw().getAttribute("aria-checked")).toBe("true");
+    m.unsub.mockResolvedValue(view({ status: "published", revealUnsubmitted: false }));
+    await act(async () => sw().click());
+    await flush();
+    expect(m.unsub).toHaveBeenLastCalledWith("aws", "311", false);
+    expect(sw().getAttribute("aria-checked")).toBe("false");
   });
 });

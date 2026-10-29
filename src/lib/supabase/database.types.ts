@@ -34,6 +34,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_explain_cache: {
+        Row: {
+          body: Json
+          created_at: string
+          hits: number
+          last_hit_at: string | null
+          model: string | null
+          norm_term: string
+          room_id: number
+          term_key: string
+        }
+        Insert: {
+          body: Json
+          created_at?: string
+          hits?: number
+          last_hit_at?: string | null
+          model?: string | null
+          norm_term: string
+          room_id: number
+          term_key: string
+        }
+        Update: {
+          body?: Json
+          created_at?: string
+          hits?: number
+          last_hit_at?: string | null
+          model?: string | null
+          norm_term?: string
+          room_id?: number
+          term_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_explain_cache_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_usage: {
         Row: {
           cached_tokens: number | null
@@ -285,6 +326,46 @@ export type Database = {
           },
           {
             foreignKeyName: "api_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "public_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_answer_reveals: {
+        Row: {
+          node_id: number
+          revealed_at: string
+          user_id: string
+        }
+        Insert: {
+          node_id: number
+          revealed_at?: string
+          user_id: string
+        }
+        Update: {
+          node_id?: number
+          revealed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_answer_reveals_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
+            referencedColumns: ["node_id"]
+          },
+          {
+            foreignKeyName: "exam_answer_reveals_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_answer_reveals_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "public_profiles"
@@ -552,6 +633,7 @@ export type Database = {
           published_at: string | null
           question_count: number
           reveal: string
+          reveal_unsubmitted: boolean
           room_id: number
           source: string
           status: string
@@ -565,6 +647,7 @@ export type Database = {
           published_at?: string | null
           question_count?: number
           reveal?: string
+          reveal_unsubmitted?: boolean
           room_id: number
           source?: string
           status?: string
@@ -578,6 +661,7 @@ export type Database = {
           published_at?: string | null
           question_count?: number
           reveal?: string
+          reveal_unsubmitted?: boolean
           room_id?: number
           source?: string
           status?: string
@@ -1912,6 +1996,24 @@ export type Database = {
       }
     }
     Functions: {
+      ai_explain_begin: {
+        Args: { p_slug: string; p_term_key: string }
+        Returns: Json
+      }
+      ai_explain_done: {
+        Args: {
+          p_body: Json
+          p_cached: number
+          p_id: number
+          p_in: number
+          p_model: string
+          p_norm_term: string
+          p_out: number
+          p_slug: string
+          p_term_key: string
+        }
+        Returns: undefined
+      }
       ai_limits: { Args: never; Returns: Json }
       ai_turn_check: {
         Args: { p_kind: string; p_started: boolean }
@@ -2207,6 +2309,13 @@ export type Database = {
           title: string
         }[]
       }
+      exam_absent_reveal_open: {
+        Args: {
+          n: Database["public"]["Tables"]["goal_nodes"]["Row"]
+          x: Database["public"]["Tables"]["exams"]["Row"]
+        }
+        Returns: boolean
+      }
       exam_answer_canon: {
         Args: {
           p_answer: Json
@@ -2224,6 +2333,10 @@ export type Database = {
           q: Database["public"]["Tables"]["exam_questions"]["Row"]
         }
         Returns: boolean
+      }
+      exam_answers_open: {
+        Args: { p_node: number; p_slug: string }
+        Returns: Json
       }
       exam_assert_creatable: { Args: { p_node: number }; Returns: undefined }
       exam_assert_unlocked: {
@@ -2279,6 +2392,15 @@ export type Database = {
         Returns: undefined
       }
       exam_results: { Args: { p_node: number; p_slug: string }; Returns: Json }
+      exam_reveal_for: {
+        Args: {
+          a: Database["public"]["Tables"]["exam_attempts"]["Row"]
+          n: Database["public"]["Tables"]["goal_nodes"]["Row"]
+          p_uid: string
+          x: Database["public"]["Tables"]["exams"]["Row"]
+        }
+        Returns: boolean
+      }
       exam_reveal_ok: {
         Args: {
           a: Database["public"]["Tables"]["exam_attempts"]["Row"]
@@ -2286,6 +2408,10 @@ export type Database = {
           x: Database["public"]["Tables"]["exams"]["Row"]
         }
         Returns: boolean
+      }
+      exam_reveal_unsubmitted_set: {
+        Args: { p_node: number; p_on: boolean; p_slug: string }
+        Returns: Json
       }
       exam_struct_key: { Args: { p_qs: Json }; Returns: string }
       exam_submit: { Args: { p_node: number }; Returns: Json }

@@ -3,7 +3,7 @@ import type { ExamDraft } from "@/lib/api/exam";
 import type { ExamAttempt, ExamQuestion, ExamView, ExamViewerReason } from "@/lib/api/types";
 import {
   aiInstruction, answeredCount, draftDirty, draftReduce, EMPTY_DRAFT, examBadgeOf, examErrorAction, examHead, isAnswered, isExamDraft, lockText, newQuestion,
-  questionResult, resultSummary, submitAsk, submittedLine, takeNote, toggleIndex,
+  questionResult, resultSummary, seenExcludedText, submitAsk, submittedLine, takeNote, toggleIndex,
 } from "./exam";
 
 const qs: ExamQuestion[] = [
@@ -17,7 +17,7 @@ const view = (o: Partial<ExamView> = {}, viewer: Partial<ExamView["viewer"]> = {
   today: "2026-10-12",
   node: { id: "311", title: "3주차 정리 시험", startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
   exam: { status: "published", reveal: "after_submit", questionCount: 4, totalPoints: 5, publishedAt: "2026-10-12T00:00:00.000Z", closed: false },
-  viewer: { canEdit: false, isAssignee: true, canTake: false, reason: null, ...viewer },
+  viewer: { canEdit: false, isAssignee: true, canTake: false, reason: null, answersSeen: false, canOpenAnswers: false, ...viewer },
   questions: qs,
   attempt: null,
   ...o,
@@ -38,8 +38,7 @@ describe("takeNote", () => {
     ["archived", "보관된 시험이에요"],
     ["not_assignee", "담당 과제가 아니에요 · 제출 현황만 볼 수 있어요"],
     ["room_not_active", "스터디가 진행 중일 때 풀 수 있어요"],
-    ["closed", "마감이 지나 해설이 공개된 시험은 제출할 수 없어요"],
-    ["answers_seen", "정답·해설을 이미 본 시험은 응시할 수 없어요"],
+    ["closed", "마감이 지나 제출할 수 없는 시험이에요"],
     ["submitted", null],
   ])("%s → %s", (reason, text) => expect(takeNote(view({}, { reason }), false)).toBe(text));
   it("quiet hides not_assignee only", () => {
@@ -50,8 +49,17 @@ describe("takeNote", () => {
 });
 
 describe("examBadgeOf", () => {
-  it("answers_seen → 미제출 · 응시 불가", () =>
-    expect(examBadgeOf(view({}, { reason: "answers_seen" }))).toEqual({ status: "missed", text: "미제출 · 응시 불가" }));
+  it("closed → 미제출 · 마감 지남 (0054: 「응시 불가」 배지 없음)", () =>
+    expect(examBadgeOf(view({}, { reason: "closed" }))).toEqual({ status: "missed", text: "미제출 · 마감 지남" }));
+  it("정답 본 미제출자도 응시 가능하면 응시 배지 그대로", () =>
+    expect(examBadgeOf(view({ today: "2026-10-22" }, { canTake: true, answersSeen: true }))).toEqual({ status: "missed", text: "미제출 · 마감 지남" }));
+});
+
+describe("seenExcludedText (0054)", () => {
+  it("0 → null · n → 정답 본 뒤 응시 n명 제외", () => {
+    expect(seenExcludedText(0)).toBeNull();
+    expect(seenExcludedText(2)).toBe("정답 본 뒤 응시 2명 제외");
+  });
 });
 
 const submitted = (o: Partial<ExamAttempt> = {}): ExamAttempt => ({
@@ -147,10 +155,10 @@ describe("misc", () => {
     expect([isExamDraft({ status: "draft" }), isExamDraft({ status: "published" }), isExamDraft(null), isExamDraft(undefined)]).toEqual([true, false, false, false]);
   });
   it("examErrorAction", () => {
-    expect(examErrorAction({ code: "EXAM_CLOSED", message: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요" })).toEqual({ kind: "refetch", text: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요" });
+    expect(examErrorAction({ code: "EXAM_CLOSED", message: "마감이 지나 제출할 수 없는 시험이에요" })).toEqual({ kind: "refetch", text: "마감이 지나 제출할 수 없는 시험이에요" });
     expect(examErrorAction({ code: "VALIDATION_FAILED", message: "보기는 2~8개예요", details: { field: "choices", index: 2 as unknown as string } })).toEqual({ kind: "field", field: "choices", index: 2, text: "보기는 2~8개예요" });
     expect(examErrorAction({ code: "EXAM_EMPTY", message: "EXAM_EMPTY" })).toEqual({ kind: "toast", text: "문항을 하나 이상 넣어야 발행할 수 있어요" });
-    expect(examErrorAction({ code: "EXAM_ANSWERS_SEEN", message: "" })).toEqual({ kind: "refetch", text: "정답·해설을 이미 본 시험은 응시할 수 없어요" });
+    expect(examErrorAction({ code: "EXAM_ANSWERS_CLOSED", message: "" })).toEqual({ kind: "refetch", text: "아직 정답·해설을 볼 수 없어요" });
     expect(examErrorAction({ code: "NOT_FOUND", message: "문항을 찾을 수 없어요" }).kind).toBe("refetch");
     expect(examErrorAction({ code: "UNKNOWN", message: "fetch failed" }).kind).toBe("toast");
     expect(examErrorAction({ code: "AUTH_REQUIRED", message: "로그인" }).kind).toBe("login");

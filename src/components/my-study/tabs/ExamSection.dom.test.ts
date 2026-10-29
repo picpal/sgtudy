@@ -12,8 +12,8 @@ import { ExamSection } from "./ExamSection";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const m = vi.hoisted(() => ({ fetch: vi.fn(), save: vi.fn(), submit: vi.fn(), task: vi.fn(), results: vi.fn() }));
-vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: m.fetch, saveExamAnswer: m.save, submitExam: m.submit, fetchExamResults: m.results }));
+const m = vi.hoisted(() => ({ fetch: vi.fn(), save: vi.fn(), submit: vi.fn(), task: vi.fn(), results: vi.fn(), open: vi.fn() }));
+vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: m.fetch, saveExamAnswer: m.save, submitExam: m.submit, fetchExamResults: m.results, openExamAnswers: m.open }));
 vi.mock("@/lib/api/submission", async (orig) => ({ ...(await orig<object>()), fetchTask: m.task }));
 
 const BASE: ExamQuestion[] = [
@@ -30,12 +30,12 @@ const KEYS: Record<string, { answer: unknown; explanation: string }> = {
 };
 const revealed = BASE.map((q) => ({ ...q, ...KEYS[q.id] }));
 
-type O = { reason?: ExamViewerReason | null; canTake?: boolean; questions?: ExamQuestion[] | null; attempt?: ExamAttempt | null; reveal?: "after_submit" | "after_deadline"; closed?: boolean };
+type O = { reason?: ExamViewerReason | null; canTake?: boolean; questions?: ExamQuestion[] | null; attempt?: ExamAttempt | null; reveal?: "after_submit" | "after_deadline"; closed?: boolean; answersSeen?: boolean; canOpenAnswers?: boolean; today?: string };
 const view = (o: O = {}): ExamView => ({
-  today: "2026-10-16",
+  today: o.today ?? "2026-10-16",
   node: { id: "311", title: "ALB vs NLB 실습", startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
   exam: { status: "published", questionCount: 4, totalPoints: 5, reveal: o.reveal ?? "after_submit", publishedAt: "2026-10-14T00:00:00Z", closed: o.closed ?? false },
-  viewer: { canEdit: false, isAssignee: true, canTake: o.canTake ?? o.reason == null, reason: o.reason ?? null },
+  viewer: { canEdit: false, isAssignee: true, canTake: o.canTake ?? o.reason == null, reason: o.reason ?? null, answersSeen: o.answersSeen ?? false, canOpenAnswers: o.canOpenAnswers ?? false },
   questions: o.questions === undefined ? BASE : o.questions,
   attempt: o.attempt ?? null,
 });
@@ -106,7 +106,6 @@ describe("ExamSection — 상태 안내", () => {
     ["archived", "보관된 시험이에요"],
     ["room_not_active", "스터디가 진행 중일 때 풀 수 있어요"],
     ["not_assignee", "담당 과제가 아니에요"],
-    ["answers_seen", "정답·해설을 이미 본 시험은 응시할 수 없어요"],
   ] as const)("%s → 안내만, 문항·제출 없음", async (reason, text) => {
     await mount(view({ reason, questions: reason === "not_started" || reason === "not_published" ? null : BASE }));
     expect(host.querySelector("[role=note]")?.textContent).toContain(text);
@@ -118,9 +117,49 @@ describe("ExamSection — 상태 안내", () => {
     await mount(view({ reason: "not_assignee", questions: null }), true);
     expect(host.querySelector("[role=note]")).toBeNull();
   });
-  it("closed(마감 뒤 정답 공개) → 안내 + 정답·해설, 제출 없음", async () => {
+  it("closed · 미제출(0054 기본) → 안내만, 정답·해설 없음 · [정답·해설 보기] 없음", async () => {
+    await mount(view({ reason: "closed", reveal: "after_deadline", closed: true, questions: BASE }));
+    expect(host.querySelector("[role=note]")?.textContent).toContain("마감이 지나 제출할 수 없는 시험이에요");
+    expect(button("제출하기")).toBeUndefined();
+    expect(button("정답·해설 보기")).toBeUndefined();
+    expect(host.querySelectorAll("details").length).toBe(0);
+    expect(host.querySelector("input")).toBeNull();
+  });
+  it("closed · 옵션 켬(canOpenAnswers) → [정답·해설 보기] → 확인 문구 → 열면 정답·해설", async () => {
+    await mount(view({ reason: "closed", reveal: "after_deadline", closed: true, questions: BASE, canOpenAnswers: true }));
+    expect(host.textContent).toContain("마감이 지나 미응시자에게도 정답·해설이 공개됐어요");
+    act(() => button("정답·해설 보기")!.click());
+    expect(host.textContent).toContain("정답을 본 뒤 응시하면 결과에 「정답 본 뒤 응시」로 표시돼요");
+    expect(m.open).not.toHaveBeenCalled();
+    m.open.mockResolvedValue(view({ reason: "closed", reveal: "after_deadline", closed: true, questions: revealed, answersSeen: true }));
+    await act(async () => button("정답 보기")!.click());
+    await flush();
+    expect(m.open).toHaveBeenCalledWith("aws", "311");
+    expect(button("정답·해설 보기")).toBeUndefined();
+    expect(host.textContent).toContain("인터넷 게이트웨이 / IGW");
+  });
+  it("after_submit 지각 · 정답 본 미제출자(canTake) → 정답·해설 + 「정답을 본 뒤 응시하면 결과에 표시돼요」 + [응시하기] → 응시 화면", async () => {
+    await mount(view({ today: "2026-10-22", questions: revealed, answersSeen: true }));
+    expect(host.textContent).toContain("정답을 본 뒤 응시하면 결과에 표시돼요");
+    expect(host.textContent).toContain("인터넷 게이트웨이 / IGW");
+    expect(button("제출하기")).toBeUndefined();
+    act(() => button("응시하기")!.click());
+    expect(button("제출하기")).toBeDefined();
+    expect(host.querySelectorAll("input[type=radio]").length).toBe(2);
+    expect(host.textContent).toContain("정답을 본 뒤 응시하면 결과에 표시돼요");
+  });
+  it("after_submit 지각 · 옵션 켬 · 아직 안 엶 → 응시 화면 + [정답·해설 보기]", async () => {
+    await mount(view({ today: "2026-10-22", canOpenAnswers: true }));
+    expect(button("제출하기")).toBeDefined();
+    expect(button("정답·해설 보기")).toBeDefined();
+  });
+  it("제출 · 정답 본 뒤 응시 → 내 결과에 「정답 본 뒤 응시」 배지", async () => {
+    await mount(view({ reason: "submitted", canTake: false, questions: revealed, attempt: submitted(RESULTS), answersSeen: true }));
+    expect(host.querySelector("[aria-label='시험 결과']")?.textContent).toContain("정답 본 뒤 응시");
+  });
+  it("closed · 정답 키가 온 경우(편집자·직접 연 사람) → 정답·해설, 제출 없음", async () => {
     await mount(view({ reason: "closed", reveal: "after_deadline", closed: true, questions: revealed }));
-    expect(host.querySelector("[role=note]")?.textContent).toContain("마감이 지나 해설이 공개된 시험은 제출할 수 없어요");
+    expect(host.querySelector("[role=note]")?.textContent).toContain("마감이 지나 제출할 수 없는 시험이에요");
     expect(button("제출하기")).toBeUndefined();
     expect(host.querySelectorAll("details").length).toBe(3);
     expect(host.textContent).toContain("인터넷 게이트웨이 / IGW");
@@ -211,12 +250,12 @@ describe("ExamSection — 응시", () => {
     expect(onUnsaved).toHaveBeenLastCalledWith(false);
   });
   it("EXAM_CLOSED 저장 실패 → 서버 문구 토스트 + 다시 불러오기", async () => {
-    m.save.mockRejectedValue(new ApiException({ code: "EXAM_CLOSED", message: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요" }));
+    m.save.mockRejectedValue(new ApiException({ code: "EXAM_CLOSED", message: "마감이 지나 제출할 수 없는 시험이에요" }));
     await mount(view());
     m.fetch.mockResolvedValue(view({ reason: "closed", closed: true, reveal: "after_deadline", questions: revealed }));
     act(() => host.querySelectorAll<HTMLInputElement>("input[type=radio]")[0].click());
     await tickSave();
-    expect(toast).toHaveBeenCalledWith({ text: "마감이 지나 해설이 공개된 시험은 제출할 수 없어요", tone: "bad" });
+    expect(toast).toHaveBeenCalledWith({ text: "마감이 지나 제출할 수 없는 시험이에요", tone: "bad" });
     expect(m.fetch).toHaveBeenCalledTimes(2);
     expect(button("제출하기")).toBeUndefined();
   });
