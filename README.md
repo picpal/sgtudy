@@ -32,11 +32,18 @@ npm run lint
 
 공용: `src/components/ui`(헤더·알림·아바타·다이얼로그·토스트), `src/lib`(routes·palette·date·types·today·me), `src/lib/api/*`(Supabase RPC 어댑터 — 화면은 `src/data/*.ts` 타입만 본다).
 
+## 최근 기능
+
+- **AI에게 물어보기** — 내 스터디 학습 화면에서 용어를 선택하면 방 관점의 해설 시트를 띄운다. 선택은 40자 이하(넘으면 안내 문구), 시험 응시 중에는 잠긴다. 스펙: `docs/superpowers/specs/`.
+- **회차 시험 정답·해설 공개 범위** — 정답·해설은 제출자만 본다. 편집자 옵션 「미응시자에게도 정답 공개」를 켜면 미응시자도 볼 수 있고, 정답을 본 뒤 응시한 기록은 「정답 본 뒤 응시」로 표시한다(0053·0054).
+- **시험 편집** — 위쪽 막대에 [저장]·[발행].
+
 ## 배포 (Vercel)
 
-- GitHub `picpal/sgtudy` 가 Vercel 프로젝트 `sgtudy` 에 연결돼 있음.
-- `main` push → 프로덕션 자동 배포. 다른 브랜치/PR → 프리뷰 URL 자동 생성.
-- 수동 배포: `vercel --prod` (로그인 필요).
+- GitHub `picpal/sgtudy` 가 Vercel 프로젝트 `sgtudy` 에 연결돼 있지만 **`git push` 로는 배포되지 않는다.** `vercel ls sgtudy` 의 배포가 모두 `source=cli` 다.
+- 실제 방식: 깨끗한 `git clone` 사본(미추적 파일이 올라가지 않게)에서 `vercel deploy --prod --skip-domain` → Ready 확인 → `vercel promote`.
+- DB 마이그레이션은 `supabase db push`(링크된 호스팅 프로젝트). 새 RPC·컬럼을 쓰는 웹이면 **DB 를 먼저, 웹을 나중에** 반영한다(순서가 바뀌면 웹이 없는 RPC 를 부른다).
+- `.vercelignore` 로 `supabase/`·`docs/`·`.superpowers`·`.claude`·`.context` 는 업로드에서 제외.
 
 ## 백엔드 (Supabase)
 
@@ -59,6 +66,7 @@ npm test                                # Vitest(프론트 순수 함수·어댑
 - 비밀번호 변경(`/me`)은 재인증: `reauthenticate()` → 이메일 6자리 코드 → `updateUser({ password, nonce })` (config.toml `secure_password_change = true` ↔ 호스팅 `security_update_password_require_reauthentication`). GoTrue 는 **24시간 안에 만든 세션은 nonce 를 검사하지 않는다** — 가입·재설정 직후 비밀번호 저장이 그래서 되지만, 막 로그인한 세션을 탈취당하면 코드 없이 바꿀 수 있다(남는 위험). 화면은 늘 코드를 받는다.
 - 인증 메일 템플릿: `supabase/templates/{magic_link,confirmation,reauthentication}.html`(6자리 `{{ .Token }}`). magic_link 는 가입(기존 계정)·재설정 공용이라 "인증 코드" 로 중립, confirmation 은 새 가입, reauthentication 은 비밀번호 변경 본인 확인. 로컬은 config.toml 로 자동 적용, 호스팅은 `scripts/apply-hosted-auth.sh`(`.env.local` 의 `SMTP_HOST/PORT/USER/PASS/SENDER_EMAIL` 필요, `--dry-run` 으로 먼저 확인). 무료 플랜 기본 발송기는 템플릿 수정이 막혀 있어 커스텀 SMTP(발송 전용 키 — Brevo·SES 등)가 필요하다.
 - 로컬 DB 는 호스팅과 같은 PG 17(`[db] major_version = 17`). `supabase link` 는 `supabase/.temp/*-version` 에 호스팅 이미지 버전을 고정하는데, CLI 2.75 에서는 `gotrue-version` 고정이 HS256 키를 거부해 로컬 관리자 API·env 테스트가 깨진다 → link 후 `rm supabase/.temp/gotrue-version`(storage/rest 고정은 유지).
+- 로컬 supabase 마이그레이션 이력이 0044 에서 멈춰 있으면 `supabase migration up --local` 이 0045 부터 실패한다 → `supabase migration repair 0045..0054 --status applied` 로 이력을 맞춘다.
 - 로컬 DB 테스트(`*-db.test.ts`)를 돌리려면:
   `eval "$(supabase status -o env)"; export SUPABASE_URL=$API_URL SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY`
 - 목업 데이터는 `src/data/*.ts` 에 화면별로 분리돼 있어, Phase 7 에서 `src/lib/api/*.ts` 어댑터가 같은 export 시그니처로 교체한다.
@@ -66,7 +74,7 @@ npm test                                # Vitest(프론트 순수 함수·어댑
 
 - 프론트 어댑터: `src/lib/api/{errors,format,me,notifications,invite,rooms,room-view,my-study,schedule}.ts`. 순수 변환 함수는 `npm test`(Vitest)로 목업 숫자(toeic 8주, aws 현재 회차 33%·D-2 — 전체 달성률은 24%, algo 87%)를 회귀 검증한다.
 - 로컬 E2E: `docs/superpowers/plans/2026-10-13-backend-05-frontend-integration.md` Task 15 체크리스트(ego-browser, http://localhost:3100, OTP 는 Mailpit).
-- Vercel: `vercel env add NEXT_PUBLIC_SUPABASE_URL production` / `vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production` (preview 도 동일). `service_role` 은 넣지 않는다. `.vercelignore` 로 `supabase/`·`docs/` 제외.
+- Vercel: `vercel env add NEXT_PUBLIC_SUPABASE_URL production` / `vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production` (preview 도 동일). `service_role` 은 넣지 않는다. 
 
 ### 테스트 마스터 계정 · 실오픈 전 삭제 체크리스트
 
