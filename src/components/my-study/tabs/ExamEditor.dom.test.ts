@@ -41,11 +41,11 @@ const flush = () =>
   act(async () => {
     for (let i = 0; i < 10; i++) await Promise.resolve();
   });
-const mount = async (v: ExamView, summary: ExamSummary = SUMMARY, ref?: React.Ref<ExamEditorHandle>, assignees = 4) => {
+const mount = async (v: ExamView, summary: ExamSummary = SUMMARY, ref?: React.Ref<ExamEditorHandle>) => {
   m.fetch.mockResolvedValue(v);
   host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
-  act(() => root!.render(createElement(ExamEditor, { slug: "aws", nodeId: "311", summary, assignees, toast, onDirty, onChanged, ref })));
+  act(() => root!.render(createElement(ExamEditor, { slug: "aws", nodeId: "311", summary, toast, onDirty, onChanged, ref })));
   await flush();
 };
 const button = (text: string) => Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.trim() === text);
@@ -167,40 +167,31 @@ describe("ExamEditor — 잠김(응시 1건~)", () => {
 });
 
 describe("ExamEditor — 발행", () => {
-  it("문항 0 — [발행] 비활성 + 이유", async () => {
+  it("초안 시험 — 「문제」 머리에 [발행] 없음(위쪽 막대 한 곳뿐), 문항 0이면 이유 문구", async () => {
+    await mount(view());
+    expect(button("발행")).toBeUndefined();
+    expect(button("초안으로")).toBeUndefined();
+    act(() => root?.unmount());
+    host.remove();
     await mount(view({ questions: [] }), { status: "draft", questionCount: 0, totalPoints: 0 });
-    expect(button("발행")!.disabled).toBe(true);
+    expect(button("발행")).toBeUndefined();
     expect(host.textContent).toContain("문항을 하나 이상 넣어야 발행할 수 있어요");
   });
 
-  it("[발행] → InlineConfirm '담당 팀원에게 알림이 가요'(수는 서버가 정한다) → publishExam(true) · 머리 줄 발행됨", async () => {
-    await mount(view());
-    act(() => button("발행")!.click());
-    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain("담당 팀원에게 알림이 가요");
-    expect(host.querySelector('[role="alertdialog"]')!.textContent).not.toMatch(/\d+명/);
-    m.publish.mockResolvedValue(view({ status: "published" }));
-    const confirm = host.querySelector('[role="alertdialog"]')!.querySelectorAll("button")[1];
-    await act(async () => confirm.click());
-    await flush();
-    expect(m.publish).toHaveBeenCalledWith("aws", "311", true);
-    expect(m.put).not.toHaveBeenCalled();
-    expect(host.textContent).toContain("발행됨 · 4문항 · 5점");
-    expect(button("초안으로")).toBeTruthy();
-    expect(onChanged).toHaveBeenCalled();
-  });
-
-  it("고친 문항이 있으면 저장한 뒤 발행", async () => {
-    await mount(view());
+  it("handle.publish — 위쪽 [발행] 경로: 고친 문항이 있으면 저장한 뒤 발행 · 머리 줄 발행됨", async () => {
+    const ref = createRef<ExamEditorHandle>();
+    await mount(view(), SUMMARY, ref);
     act(() => host.querySelectorAll<HTMLInputElement>('input[name="exam-q-0-answer"]')[1].click());
-    act(() => button("발행")!.click());
-    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain("고친 문항을 먼저 저장해요");
     m.put.mockResolvedValue(view({ questions: QS.map((q, k) => (k === 0 ? { ...q, answer: 1 } : q)) }));
     m.publish.mockResolvedValue(view({ status: "published" }));
-    await act(async () => button("저장하고 발행")!.click());
+    await act(async () => void (await ref.current!.publish()));
     await flush();
     expect(m.put).toHaveBeenCalledTimes(1);
     expect(m.publish).toHaveBeenCalledWith("aws", "311", true);
     expect(m.put.mock.invocationCallOrder[0]).toBeLessThan(m.publish.mock.invocationCallOrder[0]);
+    expect(host.textContent).toContain("발행됨 · 4문항 · 5점");
+    expect(button("초안으로")).toBeTruthy();
+    expect(onChanged).toHaveBeenCalled();
   });
 
   it("[초안으로] — 서버 EXAM_LOCKED(그새 응시 시작) → 토스트 + 다시 불러와 잠금", async () => {
@@ -236,12 +227,6 @@ describe("ExamEditor — handle (EditView 의 [저장]·떠나기 확인)", () =
 });
 
 describe("ExamEditor — 리뷰 보완(minor)", () => {
-  it("담당자 0명 — 발행 확인이 '알림은 가지 않아요'", async () => {
-    await mount(view(), SUMMARY, undefined, 0);
-    act(() => button("발행")!.click());
-    expect(host.querySelector('[role="alertdialog"]')!.textContent).toContain("담당자가 아직 없어 알림은 가지 않아요");
-  });
-
   it("문항 삭제 뒤 포커스 — 다음 카드의 삭제 버튼이 아니라 앞 카드의 문제 칸, 다 지우면 머리말", async () => {
     await mount(view());
     act(() => byLabel<HTMLButtonElement>("2번 문항 삭제")!.click());

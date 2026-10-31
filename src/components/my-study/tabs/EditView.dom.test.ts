@@ -489,6 +489,13 @@ describe("EditView 시험 리프 — 위쪽 [저장]·[발행] (임시저장 없
     expect(barButton("발행")!.disabled).toBe(false);
   });
 
+  it("초안 시험 — [발행] 은 위쪽 막대 한 곳뿐(「문제」 머리에는 없다)", async () => {
+    await mount(examLeaf);
+    const all = Array.from(host.querySelectorAll("button")).filter((b) => b.textContent?.trim() === "발행");
+    expect(all).toHaveLength(1);
+    expect(bar().contains(all[0])).toBe(true);
+  });
+
   it("시험 아님 — 위쪽 막대는 그대로 [임시저장]·[저장], [발행] 없음", async () => {
     await mount(leaf);
     expect(barButton("임시저장")).toBeTruthy();

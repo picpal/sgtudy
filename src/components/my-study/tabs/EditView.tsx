@@ -595,7 +595,6 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             slug={slug}
             nodeId={id}
             summary={exam}
-            assignees={ids.length}
             toast={toast}
             onDirty={setExamDirty}
             onChanged={() => void api.refresh()}

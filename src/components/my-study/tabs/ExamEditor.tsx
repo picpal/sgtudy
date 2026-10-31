@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/Switch";
 import { Seg } from "../bits";
 import {
   QTYPE_KO, REVEAL_KO, REVEAL_UNSUBMITTED_ASK, REVEAL_UNSUBMITTED_HINT, REVEAL_UNSUBMITTED_LABEL,
-  draftTotals, examErrorAction, examHead, isExamDraft, publishAskText, unpublishLockText,
+  draftTotals, examErrorAction, examHead, isExamDraft, unpublishLockText,
 } from "../exam";
 import { useExamEditor, type ExamEditorApi } from "../useExamEditor";
 import { ExamQuestionForm } from "./ExamQuestionForm";
@@ -28,8 +28,6 @@ type Props = {
   nodeId: string;
   /** 트리의 시험 요약 — 불러오기 전 머리 줄(초안/발행됨) */
   summary: ExamSummary;
-  /** 발행 알림을 받을 담당자 수 ("팀원 n명에게 알림이 가요") */
-  assignees: number;
   toast: (m: ToastMsg) => void;
   /** 저장하지 않은 문항 수정이 생기고 없어질 때 — EditView 가 S.examDirty 로 올린다(미저장 가드) */
   onDirty: (dirty: boolean) => void;
@@ -50,11 +48,11 @@ const EMPTY_NOTE = "문항을 하나 이상 넣어야 발행할 수 있어요";
  * 문항 편집은 즉시 저장이 아니라 [문제 저장](exam_put) 한 번 — 제목·설명 저장(node_update)과 따로다.
  * 응시가 시작되면(응시 행 1건~) 구조 입력은 aria-disabled · 추가/삭제/순서 버튼은 숨긴다 — 문제 글·해설·공개 시점만
  */
-export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, onChanged, onPublishState, ai, ref }: Props) {
+export function ExamEditor({ slug, nodeId, summary, toast, onDirty, onChanged, onPublishState, ai, ref }: Props) {
   const ed = useExamEditor(slug, nodeId, toast, onChanged);
   const { view, draft, dirty, locked, lockNote, saving, publishing, fieldErr } = ed;
   const [tab, setTab] = useState<ExamTab>("manual");
-  const [ask, setAsk] = useState<"publish" | "unpublish" | null>(null);
+  const [ask, setAsk] = useState<"unpublish" | null>(null);
 
   // AI 탭 브리프 폼의 손잡이 — 그 탭이 붙을 때·dirty 가 바뀔 때 바꿔 끼운다
   const [brief, bindBrief] = useState<BriefHandle | null>(null);
@@ -121,7 +119,7 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
 
   return (
     <section ref={sec} aria-labelledby={`exam-head-${nodeId}`} className="flex flex-col gap-3 border-t border-line-2 pt-4" data-exam-editor="">
-      {/* 머리 줄 — 문제 · 초안/발행됨 · n문항 · m점 · [발행]/[초안으로] */}
+      {/* 머리 줄 — 문제 · 초안/발행됨 · n문항 · m점 · [초안으로](발행은 위쪽 막대) */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <h3 ref={headRef} tabIndex={-1} id={`exam-head-${nodeId}`} className="m-0 outline-none text-[15px] font-bold text-ink">
           문제
@@ -130,11 +128,7 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
           {head}
         </span>
         <div className="ml-auto">
-          {draftState ? (
-            <button type="button" disabled={!canPublish || busy || !!ask} aria-describedby={view && !canPublish ? `exam-empty-${nodeId}` : undefined} onClick={() => setAsk("publish")} className="h-11 rounded-[22px] bg-navy px-5 text-[14px] font-semibold text-white disabled:opacity-50">
-              발행
-            </button>
-          ) : (
+          {!draftState && (
             <button type="button" disabled={!view || unpublishLocked || busy || !!ask} aria-describedby={unpublishLocked ? `exam-unpub-${nodeId}` : undefined} onClick={() => setAsk("unpublish")} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50">
               초안으로
             </button>
@@ -151,13 +145,6 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
         <p id={`exam-unpub-${nodeId}`} className="m-0 -mt-1 text-[12px] font-medium text-muted">
           {unpublishLockText(view?.exam.submittedCount ?? 0)}
         </p>
-      )}
-      {ask === "publish" && (
-        <InlineConfirm
-          text={publishAskText(assignees, dirty ? "고친 문항" : null)}
-          onCancel={() => setAsk(null)}
-          actions={[{ label: dirty ? "저장하고 발행" : "발행", tone: "primary", onClick: () => void doPublish(true), disabled: busy }]}
-        />
       )}
       {ask === "unpublish" && (
         <InlineConfirm text="초안으로 되돌리면 팀원에게 다시 보이지 않아요 · 응시가 시작된 시험은 되돌릴 수 없어요" onCancel={() => setAsk(null)} actions={[{ label: "초안으로", onClick: () => void doPublish(false), disabled: busy }]} />
