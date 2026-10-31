@@ -11,6 +11,7 @@ import { rangeShort } from "@/lib/api/format";
 import { fetchNodeFiles } from "@/lib/api/nodeFiles";
 import type { FileMeta } from "@/lib/api/types";
 import { Seg } from "../bits";
+import { isExamDraft, publishAskText } from "../exam";
 import { dropFieldOv, isDirty, isPersonal, leafLocks, periodWarnings, removePlan, type ParentNode, type TreeMember, type TreeNode } from "../model";
 import { NODE_ACCEPT, NODE_FILE_HINT, sameIds } from "../nodeFiles";
 import { designatedHint, moveNote, movedPeriod, reorderIndex, roundOf, roundOptions, sameShiftAsk, shiftAskOf, shiftAskText, type ShiftAsk } from "../rounds";
@@ -21,7 +22,7 @@ import { useNodeFileUploads } from "../useNodeFileUploads";
 import { DATE_NO_OVERFLOW_CLASS } from "@/components/room-new/fields";
 import { ChildList } from "./ChildList";
 import { ExamAiTab } from "./ExamAiTab";
-import { ExamEditor, type ExamEditorHandle } from "./ExamEditor";
+import { ExamEditor, type ExamEditorHandle, type ExamPublishState } from "./ExamEditor";
 import { FileUploadList } from "./FileUploadList";
 import { InlineConfirm } from "./InlineConfirm";
 
@@ -140,6 +141,9 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   const exam = n.leaf && !n.temp && n.exam ? n.exam : null;
   const examRef = useRef<ExamEditorHandle>(null);
   const [examDirty, setExamDirty] = useState(false);
+  // 위쪽 [발행] — 시험 리프만. 상태는 「문제」 섹션이 올려 준다(불러오기 전엔 트리 요약), 확인 상자는 막대 안에
+  const [examPub, setExamPub] = useState<ExamPublishState | null>(null);
+  const [publishAsk, setPublishAsk] = useState(false);
   useEffect(() => {
     if (!examDirty) return;
     update({ examDirty: id });
@@ -255,8 +259,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   }, [S.leave]);
   // 회차·묶음 시작일을 옮겼으면 저장 전에 "하위도 같은 날수만큼 옮길까요?" (시나리오 QA D2). then = 저장 뒤 이동할 곳(떠나기 전 저장)
   const [shiftAsk, setShiftAsk] = useState<{ ask: ShiftAsk; then: typeof S.leave } | null>(null);
-  const doSave = async (shift: boolean, then: typeof S.leave) => {
-    if (savingRef.current) return;
+  const doSave = async (shift: boolean, then: typeof S.leave): Promise<boolean> => {
+    if (savingRef.current) return false;
     savingRef.current = true;
     editedMid.current = false;
     setSaving(true);
@@ -281,6 +285,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         go(then);
       } else if (then) update({ leave: null });
     } else if (then) update({ leave: null });
+    return ok;
   };
   const trySave = (then: typeof S.leave) => {
     const ask = shiftAskOf(n, nodes);
@@ -291,7 +296,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   };
   const leaveSave = () => trySave(S.leave);
   // [저장] = 저장한 뒤 편집에 들어오기 전 화면으로(상세·목록, 모르면 같은 항목 상세). 바뀐 게 없으면 저장 없이 돌아간다.
-  // 이동은 go — request 가 아니라 "저장하지 않은 수정" 확인을 거치지 않는다(성공하면 수정은 이미 지워졌다). [임시저장] = 저장하고 머문다
+  // 이동은 go — request 가 아니라 "저장하지 않은 수정" 확인을 거치지 않는다(성공하면 수정은 이미 지워졌다). [임시저장] = 저장하고 머문다(시험 리프엔 없다)
   const saveAndReturn = () => {
     if (dirty || examDirty) return trySave(editReturn(S));
     // 저장한 적 없는 새 회차도 [저장] 을 눌렀으면 남긴다 (예전 "저장" 이 fresh 를 지운 것과 같게 — 빈 회차 정리 대상에서 뺀다)
@@ -300,6 +305,14 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   };
   // 확인을 띄운 뒤 날짜를 또 바꿨거나 다른 이동 확인(S.leave)이 떴으면 그 질문은 낡았다 — 숨기고 다시 "저장" 으로 묻는다 (최종 리뷰 Minor 4)
   const askShown = shiftAsk && !S.leave && sameShiftAsk(shiftAsk.ask, shiftAskOf(n, nodes)) ? shiftAsk : null;
+  // 시험 리프 [발행] = 고친 것(문항·제목·설명·첨부)을 먼저 저장하고 발행, 편집 화면에 머문다. 저장이 거절되면 발행하지 않는다.
+  // 리프는 시작일 옮기기 질문(shiftAsk)이 없어 바로 doSave
+  const examDraft = examPub ? examPub.draft : !!exam && isExamDraft(exam);
+  const canPublish = !!examPub?.canPublish && !examPub.busy;
+  const publishNow = async () => {
+    if ((dirty || examDirty) && !(await doSave(false, null))) return setPublishAsk(false);
+    if (await examRef.current?.publish()) setPublishAsk(false);
+  };
   const leaveDiscard = () => {
     const to = S.leave;
     // 올린 채 저장하지 않은 첨부도 버린다 — 선택 id(ov.files)는 dropFieldOv 가 함께 지운다
@@ -344,13 +357,26 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
                 {removeLabel}
               </button>
             )}
-            {/* [임시저장] = 저장하고 머문다(보조), [저장] = 저장하고 들어오기 전 화면으로(주). 올리는 중엔 둘 다 막는다 (리뷰 M-1) */}
-            <button type="button" disabled={n.temp || !!askShown || up.uploading || saving || (!dirty && !examDirty)} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50 max-sm:px-3">
-              임시저장
-            </button>
-            <button type="button" disabled={n.temp || !!askShown || up.uploading || saving} aria-busy={saving || undefined} onClick={saveAndReturn} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50 max-sm:px-4">
+            {/* [임시저장] = 저장하고 머문다(보조), [저장] = 저장하고 들어오기 전 화면으로(주). 올리는 중엔 둘 다 막는다 (리뷰 M-1).
+                시험 리프는 발행해야 팀원에게 보이니 [임시저장] 대신 [저장] 오른쪽에 [발행](발행했으면 비활성 [발행됨]) */}
+            {!exam && (
+              <button type="button" disabled={n.temp || !!askShown || up.uploading || saving || (!dirty && !examDirty)} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50 max-sm:px-3">
+                임시저장
+              </button>
+            )}
+            <button type="button" disabled={n.temp || !!askShown || up.uploading || saving || publishAsk} aria-busy={saving || undefined} onClick={saveAndReturn} className={`h-11 shrink-0 rounded-[22px] px-6 text-[14px] font-semibold disabled:opacity-50 max-sm:px-4 ${exam ? "border border-line-3 bg-surface text-ink" : "bg-navy text-white"}`}>
               {up.uploading ? "파일을 올리는 중이에요" : "저장"}
             </button>
+            {exam &&
+              (examDraft ? (
+                <button type="button" disabled={!canPublish || !!askShown || up.uploading || saving || publishAsk} onClick={() => setPublishAsk(true)} className="h-11 shrink-0 rounded-[22px] bg-navy px-6 text-[14px] font-semibold text-white disabled:opacity-50 max-sm:px-4">
+                  발행
+                </button>
+              ) : (
+                <button type="button" disabled className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink-3 disabled:opacity-60 max-sm:px-3">
+                  발행됨
+                </button>
+              ))}
           </div>
         </div>
         {S.saved && (
@@ -368,6 +394,13 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
               { label: "함께 옮기기", tone: "primary", onClick: () => void doSave(true, askShown.then), disabled: up.uploading || saving },
               { label: kind === "회차" ? "회차만 바꾸기" : "이 묶음만 바꾸기", onClick: () => void doSave(false, askShown.then), disabled: up.uploading || saving },
             ]}
+          />
+        )}
+        {publishAsk && examDraft && !S.leave && (
+          <InlineConfirm
+            text={publishAskText(ids.length, dirty || examDirty ? "고친 내용" : null)}
+            onCancel={() => setPublishAsk(false)}
+            actions={[{ label: dirty || examDirty ? "저장하고 발행" : "발행", tone: "primary", onClick: () => void publishNow(), disabled: saving || !!examPub?.busy || up.uploading }]}
           />
         )}
         {S.leave && (
@@ -566,6 +599,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             toast={toast}
             onDirty={setExamDirty}
             onChanged={() => void api.refresh()}
+            onPublishState={setExamPub}
             ai={(ed, goManual, bindBrief) => <ExamAiTab slug={slug} nodeId={id} ed={ed} goManual={goManual} toast={toast} onBrief={bindBrief} />}
           />
         )}

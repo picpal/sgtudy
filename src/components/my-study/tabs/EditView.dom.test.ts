@@ -429,7 +429,6 @@ describe("EditView 시험 리프 — 「문제」 섹션 · 미저장 가드 (Re
   it("위쪽 [저장] — 고친 문항을 버리지 않고 저장한 뒤 돌아간다", async () => {
     await mount(examLeaf, { editFrom: "list" });
     pickSecond();
-    expect(button("임시저장").disabled).toBe(false);
     await act(async () => button("저장").click());
     await flush();
     expect(ex.put).toHaveBeenCalledTimes(1);
@@ -447,6 +446,128 @@ describe("EditView 시험 리프 — 「문제」 섹션 · 미저장 가드 (Re
     expect(save).not.toHaveBeenCalled();
     expect(went).toEqual([]);
     expect(live.S.examDirty).toBe("21");
+  });
+});
+
+describe("EditView 시험 리프 — 위쪽 [저장]·[발행] (임시저장 없음)", () => {
+  const examLeaf = { ...leaf, exam: { status: "draft" as const, questionCount: 1, totalPoints: 1, reveal: "after_submit" as const } };
+  const examView = (answer: number, status: "draft" | "published" = "draft", questions = 1) =>
+    ({
+      today: "2026-10-12",
+      node: { id: "21", title: leaf.title, startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
+      exam: { status, questionCount: questions, totalPoints: questions, reveal: "after_submit", publishedAt: status === "published" ? "2026-10-12T00:00:00Z" : null, closed: false, locked: false, submittedCount: 0 },
+      viewer: { canEdit: true, isAssignee: false, canTake: false, reason: "not_assignee" },
+      questions: questions ? [{ id: "9", ord: 0, type: "single", prompt: "IAM?", choices: ["a", "b"], points: 1, answer, explanation: "" }] : [],
+      attempt: null,
+    }) as unknown as ExamView;
+  const pickSecond = () => act(() => host.querySelectorAll<HTMLInputElement>('input[name="exam-q-0-answer"]')[1].click());
+  // 위쪽 고정 막대의 버튼 줄 · 그 아래 확인 상자 — 「문제」 섹션 머리의 [발행] 과 섞이지 않게 막대 안에서만 찾는다
+  const bar = () => host.querySelector("section > div.sticky")!;
+  const barButton = (text: string) => Array.from(bar().querySelectorAll("button")).find((b) => b.textContent?.trim() === text);
+  const confirmBox = () => bar().querySelector<HTMLElement>('[role="alertdialog"]');
+  const confirmButton = (text: string) => Array.from(confirmBox()!.querySelectorAll("button")).find((b) => b.textContent?.trim() === text)!;
+  const typeTitle = (v: string) => {
+    const title = host.querySelector<HTMLInputElement>('input[type="text"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(title, v);
+      title.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  beforeEach(() => {
+    ex.fetch.mockReset().mockResolvedValue(examView(0));
+    ex.put.mockReset().mockResolvedValue(examView(1));
+    ex.publish.mockReset().mockResolvedValue(examView(1, "published"));
+  });
+
+  it("[임시저장] 없음 · [발행] 은 [저장] 오른쪽", async () => {
+    await mount(examLeaf);
+    const o = Array.from(bar().querySelectorAll("button")).map((b) => b.textContent?.trim());
+    expect(o).not.toContain("임시저장");
+    expect(o.indexOf("저장")).toBeGreaterThanOrEqual(0);
+    expect(o.indexOf("발행")).toBe(o.indexOf("저장") + 1);
+    expect(barButton("발행")!.disabled).toBe(false);
+  });
+
+  it("시험 아님 — 위쪽 막대는 그대로 [임시저장]·[저장], [발행] 없음", async () => {
+    await mount(leaf);
+    expect(barButton("임시저장")).toBeTruthy();
+    expect(barButton("발행")).toBeUndefined();
+  });
+
+  it("[발행] — 고친 게 없으면 확인 뒤 발행만(exam_put·node_update 없이), 편집 화면에 머문다", async () => {
+    await mount(examLeaf, { editFrom: "list" });
+    act(() => barButton("발행")!.click());
+    expect(confirmBox()!.textContent).toContain("담당 팀원에게 알림이 가요");
+    expect(confirmBox()!.textContent).not.toContain("먼저 저장해요");
+    await act(async () => confirmButton("발행").click());
+    await flush();
+    expect(ex.put).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(ex.publish).toHaveBeenCalledWith("aws", "21", true);
+    expect(went).toEqual([]);
+    expect(confirmBox()).toBeNull();
+  });
+
+  it("[발행] — 고친 문항·제목이 있으면 '저장하고 발행': 저장(exam_put·node_update) 뒤 발행", async () => {
+    await mount(examLeaf, { editFrom: "list" });
+    pickSecond();
+    typeTitle("새 제목");
+    act(() => barButton("발행")!.click());
+    expect(confirmBox()!.textContent).toContain("고친 내용을 먼저 저장해요");
+    await act(async () => confirmButton("저장하고 발행").click());
+    await flush();
+    expect(ex.put).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0][1].titles["21"]).toBe("새 제목");
+    expect(ex.publish).toHaveBeenCalledTimes(1);
+    expect(ex.put.mock.invocationCallOrder[0]).toBeLessThan(ex.publish.mock.invocationCallOrder[0]);
+    expect(save.mock.invocationCallOrder[0]).toBeLessThan(ex.publish.mock.invocationCallOrder[0]);
+    expect(went).toEqual([]);
+    expect(live.S.examDirty).toBeNull();
+  });
+
+  it("[발행] — 저장이 거절되면 발행하지 않고 머문다(고친 문항은 남는다)", async () => {
+    ex.put.mockRejectedValue(new Error("x"));
+    await mount(examLeaf, { editFrom: "list" });
+    pickSecond();
+    act(() => barButton("발행")!.click());
+    await act(async () => confirmButton("저장하고 발행").click());
+    await flush();
+    expect(ex.publish).not.toHaveBeenCalled();
+    expect(went).toEqual([]);
+    expect(live.S.examDirty).toBe("21");
+  });
+
+  it("[발행] 확인 — 취소하면 닫히고 아무것도 보내지 않는다", async () => {
+    await mount(examLeaf);
+    act(() => barButton("발행")!.click());
+    act(() => confirmButton("취소").click());
+    expect(confirmBox()).toBeNull();
+    expect(ex.publish).not.toHaveBeenCalled();
+  });
+
+  it("문항이 없으면 [발행] 비활성", async () => {
+    ex.fetch.mockResolvedValue(examView(0, "draft", 0));
+    const empty = { ...leaf, exam: { status: "draft" as const, questionCount: 0, totalPoints: 0, reveal: "after_submit" as const } };
+    await mount(empty);
+    expect(barButton("발행")!.disabled).toBe(true);
+  });
+
+  it("이미 발행된 시험 — [발행] 대신 비활성 [발행됨]", async () => {
+    ex.fetch.mockResolvedValue(examView(0, "published"));
+    const published = { ...leaf, exam: { status: "published" as const, questionCount: 1, totalPoints: 1, reveal: "after_submit" as const } };
+    await mount(published);
+    expect(barButton("발행")).toBeUndefined();
+    expect(barButton("발행됨")!.disabled).toBe(true);
+  });
+
+  it("발행하면 바로 [발행됨] 으로 바뀐다(트리 요약을 다시 받기 전에도)", async () => {
+    await mount(examLeaf);
+    act(() => barButton("발행")!.click());
+    await act(async () => confirmButton("발행").click());
+    await flush();
+    expect(barButton("발행됨")!.disabled).toBe(true);
   });
 });
 

@@ -115,6 +115,9 @@ export const lockText = (n: number) => `${n}명이 제출해 문항은 잠겼어
 export const lockTextStarted = "응시가 시작돼 문항은 잠겼어요 · 문제 글·해설·공개 시점만 고칠 수 있어요";
 /** [초안으로] 비활성 이유 — 잠금 문구와 같은 주어(제출 n명 / 응시 시작) */
 export const unpublishLockText = (n: number) => `${n > 0 ? `${n}명이 제출해` : "응시가 시작돼"} 초안으로 되돌릴 수 없어요`;
+/** [발행] 확인 문구 — 받는 사람은 서버가 정한다(담당자 − 나 − 알림을 끈 사람), 정확한 수를 말하지 않는다. unsaved = 먼저 저장할 것("고친 문항") */
+export const publishAskText = (assignees: number, unsaved: string | null) =>
+  `${assignees > 0 ? "담당 팀원에게 알림이 가요" : "담당자가 아직 없어 알림은 가지 않아요"}${unsaved ? ` · ${unsaved}을 먼저 저장해요` : ""}`;
 
 /** AI 탭 지시문(스펙 §4.2) — 사용자가 Claude Code 등에 붙여 넣는다. 도구 이름은 서버 계약 문구(create_exam_draft)와 같다 */
 export function aiInstruction(slug: string, nodeId: string, title: string, brief: ExamBrief | null): string {

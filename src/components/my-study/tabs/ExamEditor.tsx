@@ -9,14 +9,16 @@ import { Switch } from "@/components/ui/Switch";
 import { Seg } from "../bits";
 import {
   QTYPE_KO, REVEAL_KO, REVEAL_UNSUBMITTED_ASK, REVEAL_UNSUBMITTED_HINT, REVEAL_UNSUBMITTED_LABEL,
-  draftTotals, examErrorAction, examHead, isExamDraft, unpublishLockText,
+  draftTotals, examErrorAction, examHead, isExamDraft, publishAskText, unpublishLockText,
 } from "../exam";
 import { useExamEditor, type ExamEditorApi } from "../useExamEditor";
 import { ExamQuestionForm } from "./ExamQuestionForm";
 import { InlineConfirm } from "./InlineConfirm";
 
-/** EditView 가 위쪽 [저장]·떠나기 확인에서 부른다 — 저장하지 않은 문항을 저장하거나 버린다 */
-export type ExamEditorHandle = { save: () => Promise<boolean>; discard: () => void };
+/** EditView 가 위쪽 [저장]·[발행]·떠나기 확인에서 부른다 — 저장하지 않은 문항을 저장하거나 버린다, 발행한다 */
+export type ExamEditorHandle = { save: () => Promise<boolean>; discard: () => void; publish: () => Promise<boolean> };
+/** 위쪽 [발행] 의 상태 — draft = 아직 초안(발행 전), canPublish = 불러왔고 문항이 1개 이상, busy = 저장·발행 중 */
+export type ExamPublishState = { draft: boolean; canPublish: boolean; busy: boolean };
 export type ExamTab = "manual" | "ai";
 /** AI 탭의 브리프 폼 — 저장하지 않은 브리프도 미저장 가드에 들어간다(위쪽 [저장]·떠나기 확인이 함께 저장·버린다) */
 export type BriefHandle = { dirty: boolean; save: () => Promise<boolean>; discard: () => void };
@@ -33,6 +35,8 @@ type Props = {
   onDirty: (dirty: boolean) => void;
   /** 저장·발행 성공 — 트리 요약(배지·문항 수)을 다시 받는다 */
   onChanged?: () => void;
+  /** 발행 상태가 바뀔 때 — EditView 위쪽 [발행]/[발행됨] (트리 요약보다 서버 응답이 새롭다) */
+  onPublishState?: (s: ExamPublishState) => void;
   /** 「AI 로 생성」 탭 내용 (Task 8). 없으면 탭 줄 없이 직접 작성만 */
   ai?: (ed: ExamEditorApi, goManual: () => void, bindBrief: (h: BriefHandle | null) => void) => ReactNode;
   ref?: Ref<ExamEditorHandle>;
@@ -46,7 +50,7 @@ const EMPTY_NOTE = "문항을 하나 이상 넣어야 발행할 수 있어요";
  * 문항 편집은 즉시 저장이 아니라 [문제 저장](exam_put) 한 번 — 제목·설명 저장(node_update)과 따로다.
  * 응시가 시작되면(응시 행 1건~) 구조 입력은 aria-disabled · 추가/삭제/순서 버튼은 숨긴다 — 문제 글·해설·공개 시점만
  */
-export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, onChanged, ai, ref }: Props) {
+export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, onChanged, onPublishState, ai, ref }: Props) {
   const ed = useExamEditor(slug, nodeId, toast, onChanged);
   const { view, draft, dirty, locked, lockNote, saving, publishing, fieldErr } = ed;
   const [tab, setTab] = useState<ExamTab>("manual");
@@ -64,6 +68,7 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
         ed.discard();
         brief?.discard();
       },
+      publish: () => ed.publish(true),
     }),
     [ed, brief],
   );
@@ -84,6 +89,12 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
   const canPublish = !!view && totals.count > 0;
   const unpublishLocked = !!view?.exam.locked;
   const globalErr = fieldErr && fieldErr.index < 0 ? fieldErr : null;
+
+  const publishStateRef = useRef(onPublishState);
+  useEffect(() => {
+    publishStateRef.current = onPublishState;
+  });
+  useEffect(() => publishStateRef.current?.({ draft: draftState, canPublish, busy }), [draftState, canPublish, busy]);
 
   const full = draft.questions.length >= EXAM_LIMITS.questions;
   // 문항을 지우면 그 자리에 다음 카드의 🗑 이 오지 않게 — 앞 카드(없으면 새 첫 카드)의 문제 칸, 다 지웠으면 머리말로 포커스
@@ -143,8 +154,7 @@ export function ExamEditor({ slug, nodeId, summary, assignees, toast, onDirty, o
       )}
       {ask === "publish" && (
         <InlineConfirm
-          // 받는 사람은 서버가 정한다(담당자 − 나 − 알림을 끈 사람) — 정확한 수를 말하지 않는다
-          text={`${assignees > 0 ? "담당 팀원에게 알림이 가요" : "담당자가 아직 없어 알림은 가지 않아요"}${dirty ? " · 고친 문항을 먼저 저장해요" : ""}`}
+          text={publishAskText(assignees, dirty ? "고친 문항" : null)}
           onCancel={() => setAsk(null)}
           actions={[{ label: dirty ? "저장하고 발행" : "발행", tone: "primary", onClick: () => void doPublish(true), disabled: busy }]}
         />
