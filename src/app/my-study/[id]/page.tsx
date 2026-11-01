@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { isCreateNote, isUrlItem } from "@/components/my-study/editUrl";
+import { isCreateNote, isUrlItem, fromTab } from "@/components/my-study/editUrl";
 import { MyStudyScreen } from "@/components/my-study/MyStudyScreen";
 import type { TabId } from "@/components/my-study/StudyHeaderInfo";
 import { toApiError } from "@/lib/api/errors";
@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return roomMetadata((await params).id);
 }
 
-export default async function MyStudyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; mode?: string; task?: string; item?: string; note?: string }> }) {
+export default async function MyStudyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; mode?: string; task?: string; item?: string; note?: string; from?: string }> }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   // 데이터 RPC 는 로그인·온보딩 확인(me_get)을 기다리지 않고 함께 출발한다 — 거절은 아래 try 에서 받으므로 미리 삼켜 둔다.
   // room_get 은 generateMetadata 와 같은 요청 메모(getRoomDetail)를 쓴다.
@@ -43,9 +43,11 @@ export default async function MyStudyPage({ params, searchParams }: { params: Pr
   const task = key.task || undefined;
   // ?item= 은 그룹장 편집 화면에 열린 항목 — 새로고침하면 다시 연다(없는 id 는 화면이 목록으로 돌린다)
   const item = isUrlItem(sp.item) ? sp.item : undefined;
+  // ?from= 은 그 보기 상세를 연 방 탭 — 제출 뒤 router.refresh(주소가 ?tab=curriculum 이 되어 key 가 바뀐다)·새로고침에도 [← 개요] 를 지킨다
+  const from = (item && fromTab(sp.from)) || undefined;
   // key 로 방 변경 시 화면 상태(탭·편집 오버라이드 등)를 리셋한다. ?tab= 도 넣어, 같은 방에서 알림 링크(?tab=curriculum)를 눌러도 그 탭으로 연다
   return (
     <MyStudyScreen key={`${id}:${task ?? ""}:${tab}`} detail={detail} curriculum={curriculum} studies={studies}
-      initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} initialLeaf={task} initialItem={item} initialNote={isCreateNote(sp.note) ? sp.note : undefined} askAi={aiExplainEnabled()} />
+      initialTab={tab} initialMode={sp.mode === "edit" ? "edit" : "view"} initialLeaf={task} initialItem={item} initialFrom={from} initialNote={isCreateNote(sp.note) ? sp.note : undefined} askAi={aiExplainEnabled()} />
   );
 }

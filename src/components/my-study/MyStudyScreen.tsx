@@ -25,7 +25,7 @@ import { COMMENT_HASH_PREFIX, OVERVIEW_ANCHORS, peekHashPrefix, useHashAnnounce,
 import { fetchNoticeInbox } from "@/lib/api/notices";
 import { useRefetchOnFocus } from "@/lib/useRefetchOnFocus";
 import { TodayProvider } from "@/lib/today";
-import { CREATE_NOTES, itemFromUrl, readItem, readMode, syncStep, withItem, withoutNote, type CreateNote } from "./editUrl";
+import { CREATE_NOTES, itemFromUrl, readFrom, readItem, readMode, syncStep, withItem, withoutNote, type CreateNote } from "./editUrl";
 import { EMPTY_OVERRIDES, buildTree, findNode, isPersonal, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId, roundsOutsidePeriod } from "./rounds";
 import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, viewBackPatch, type CurMode, type Patch, type ScreenState } from "./state";
@@ -62,6 +62,8 @@ const CONFIRM_TEXT: Record<JoinCardAction, { title: string; body: string; label:
 
 type Props = {
   detail: RoomDetail; curriculum: Curriculum; studies: MeStudies; initialTab?: TabId; initialMode?: CurMode; initialLeaf?: string; initialItem?: string; initialNote?: CreateNote;
+  /** ?from= — 보기 상세(?item=)를 연 방 탭. 다시 마운트·새로고침된 상세의 [← 개요] (editUrl.readFrom) */
+  initialFrom?: TabId;
   /** 「AI에게 물어보기」 켜짐(서버 aiExplainEnabled — 키·끄기 스위치) */
   askAi?: boolean;
 };
@@ -79,7 +81,7 @@ function syncListTab(tab: TabId) {
   window.history.replaceState(null, "", `${u.pathname}?${u.searchParams.toString()}${u.hash}`);
 }
 
-export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf, initialItem, initialNote, askAi }: Props) {
+export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overview", initialMode = "view", initialLeaf, initialItem, initialNote, initialFrom, askAi }: Props) {
   const me = useMe();
   const router = useRouter();
   const isLeader = detail.me?.state === "leader";
@@ -95,7 +97,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     !focusLeaf && initialItem && curriculum.nodes.some((n) => n.id === initialItem)
       ? canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) && initialMode === "edit" && !isPersonalId(curriculum.nodes, initialItem)
         ? { tab: "curriculum", curMode: "edit", editSel: initialItem }
-        : { tab: "curriculum", curMode: "view", viewSel: initialItem }
+        : { tab: "curriculum", curMode: "view", viewSel: initialItem, viewFrom: initialFrom ?? null }
       : {};
   const [S, setS] = useState<ScreenState>({
     ...INITIAL_STATE,
@@ -208,7 +210,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     const url = readItem(window.location.search);
     const urlMode = readMode(window.location.search);
     const step = syncStep(url, urlMode, openItem, openMode, url !== null && pushed.current === url, new URLSearchParams(window.location.search).has("task"), overView.current);
-    const href = withItem(window.location.href, openItem, openMode);
+    const href = withItem(window.location.href, openItem, openMode, S.viewFrom);
     const gp = guardPop.current;
     guardPop.current = null;
     const below = belowView.current;
@@ -243,6 +245,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     // 상세 위 편집 기록을 쌓거나 걷을 때는 아래 상세 기록의 pushed 를 그대로 둔다
     if (!modePush && !(step === "back" && overView.current)) pushed.current = step === "push" || (step === "replace" && pushed.current) ? openItem : null;
     overView.current = modePush;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 연 곳(viewFrom)은 항목을 열 때 함께 정해진다 — 그 값만 바뀐 렌더에는 주소를 다시 맞추지 않는다
   }, [openItem, openMode]);
   useEffect(clearTaskOrigin, []);
   // 열린 항목이 없어지면(목록·다른 탭) 연 곳도 잊는다 — 다음 상세는 그때 연 곳을 새로 적는다 (렌더 중 맞추기 — 목록이 한 번 더 그려질 뿐)
@@ -293,7 +296,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       }
       if (s.personalUnsaved !== null && s.personalUnsaved === open && s.curMode === "view") {
         // 개인 목표 편집 폼에 미저장 — 상세 기록을 되돌려 놓고 먼저 묻는다
-        window.history.pushState(null, "", withItem(window.location.href, open, "view"));
+        window.history.pushState(null, "", withItem(window.location.href, open, "view", s.viewFrom));
         guardPop.current = target;
         update({ leave: { view: target.id }, confirm: false });
         return;
@@ -312,8 +315,9 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       // 앞으로 가기로 연 기록은 목록 기록 위에 있다 → 닫을 때 back. 상세에서 앞으로 가기로 연 같은 항목 편집은 상세 위 기록
       overView.current = target.id !== null && target.id === open && target.mode === "edit";
       if (!overView.current) pushed.current = target.id;
-      // 목록에서 앞으로 가기로 연 기록 — 연 곳은 뒤로 가기가 돌아갈 탭(backTab)과 같게. 상세 ↔ 편집 사이는 연 곳을 그대로
-      const from = open === null ? backTab.current : s.viewFrom;
+      // 목록에서 앞으로 가기로 연 기록 — 연 곳은 그 기록 주소의 ?from=, 없으면 뒤로 가기가 돌아갈 탭(backTab)과 같게. 상세 ↔ 편집 사이는 연 곳을 그대로
+      // (제출 뒤 다시 마운트된 화면은 backTab 을 모른다 — 주소가 기억한다)
+      const from = readFrom(window.location.search) ?? (open === null ? backTab.current : s.viewFrom);
       update(
         target.id === null
           ? { ...(backTab.current ? { tab: backTab.current } : {}), editSel: null, editFrom: null, viewSel: null, confirm: false, leave: null, saved: "" }

@@ -86,7 +86,7 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
     }
   };
   const saved = (s: Submission) => {
-    setMine(s);
+    setMine(s, meId);
     refetch();
     onSubmitted();
   };

@@ -257,6 +257,24 @@ export function statusRows(d: TaskDetail, meId: string | null): StatusRow[] {
   return rows;
 }
 
+/** 제출 저장 응답(s)을 받아 둔 상세에 접는다 — 내 제출 카드와 위쪽 제출 현황(n/m · 내 줄)이 재조회(task_get)를 기다리지 않고 같은 렌더에 바뀐다.
+ *  응답 확정값이라 되돌릴 일이 없고, 뒤이은 재조회가 서버 값으로 덮는다. 처음 제출한 담당자일 때만 제출 수를 올린다 */
+export function withMySubmission(d: TaskDetail, s: Submission, meId: string | null): TaskDetail {
+  const next: TaskDetail = { ...d, mySubmission: s };
+  const task = d.node.task;
+  const author: Person | undefined = meId ? (task?.people.find((p) => p.userId === meId) ?? d.submissions.find((x) => x.author.userId === meId)?.author) : undefined;
+  if (!meId || !author) return next;
+  const a: Person = { userId: author.userId, nickname: author.nickname, tone: author.tone };
+  const others = d.submissions.filter((x) => x.author.userId !== meId);
+  next.submissions = [...others, { ...s, author: a }];
+  if (task && !d.mySubmission && task.people.some((p) => p.userId === meId)) {
+    const submitted = Math.min(task.submitted + 1, task.assigned);
+    next.node = { ...d.node, task: { ...task, submitted } };
+    next.allSubmitted = task.assigned > 0 && submitted >= task.assigned;
+  }
+  return next;
+}
+
 /** 진입 포커스 대상 — 작성 가능한 미제출 담당자만 내 카드, 그 외 현황 (스펙 §2.6) */
 export const focusTargetOf = (s: MyCardState): "mine" | "status" => (s.kind === "compose" ? "mine" : "status");
 

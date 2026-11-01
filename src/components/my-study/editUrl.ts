@@ -3,6 +3,7 @@
  * 브라우저 뒤로 가기가 목록으로 돌아가고, 새로고침하면 같은 편집 화면이 다시 열리게 한다.
  * 화면 상태가 원본이고 URL 은 따라간다 — 실제 history 호출은 MyStudyScreen 이 한다.
  */
+import { MY_STUDY_TABS, type MyStudyTab } from "@/lib/routes";
 import type { CurMode } from "./state";
 
 /** 서버 노드 id 만 URL 에 싣는다 (낙관적 임시 노드 "root.new0" 등은 제외) */
@@ -14,19 +15,30 @@ export function readItem(search: string): string | null {
 }
 
 /** 현재 주소에서 item(·mode)만 바꾼 주소. 항목이 있으면 진행목표 탭도 싣는다. 보기 상세는 mode 를 빼고, 편집은 mode=edit.
- *  알림·일정 링크의 ?task= 는 첫 화면을 여는 데만 쓰고 지운다 — 남으면 새로고침 때 지금 항목 대신 그 과제가 열린다 */
-export function withItem(href: string, item: string | null, mode: CurMode = "edit"): string {
+ *  알림·일정 링크의 ?task= 는 첫 화면을 여는 데만 쓰고 지운다 — 남으면 새로고침 때 지금 항목 대신 그 과제가 열린다.
+ *  from = 보기 상세를 연 곳(state.viewFrom) — 진행목표 밖 방 탭이면 ?from= 으로 싣는다. 제출 뒤 router.refresh 가 화면을 다시 마운트하거나
+ *  새로고침·앞으로 가기로 그 기록을 다시 열어도 [← 개요] 가 그대로다. 목록·편집 주소에서는 지운다 */
+export function withItem(href: string, item: string | null, mode: CurMode = "edit", from: string | null = null): string {
   const u = new URL(href, "http://x");
   u.searchParams.delete("task");
+  u.searchParams.delete("from");
   if (item) {
     u.searchParams.set("tab", "curriculum");
     if (mode === "edit") u.searchParams.set("mode", "edit");
     else u.searchParams.delete("mode");
     u.searchParams.set("item", item);
+    const f = mode === "view" ? fromTab(from) : null;
+    if (f) u.searchParams.set("from", f);
   } else u.searchParams.delete("item");
   const q = u.searchParams.toString();
   return `${u.pathname}${q ? `?${q}` : ""}${u.hash}`;
 }
+
+/** 보기 상세를 연 방 탭(?from=) — 진행목표 밖(개요·보드…)에서 연 상세만 싣는다. 모르는 값(내 과제 등 다른 화면)·진행목표 = null(기본 「진행목표」) */
+export const fromTab = (v: string | null | undefined): MyStudyTab | null =>
+  v && v !== "curriculum" && (MY_STUDY_TABS as readonly string[]).includes(v) ? (v as MyStudyTab) : null;
+
+export const readFrom = (search: string): MyStudyTab | null => fromTab(new URLSearchParams(search).get("from"));
 
 export const readMode = (search: string): CurMode => (new URLSearchParams(search).get("mode") === "edit" ? "edit" : "view");
 

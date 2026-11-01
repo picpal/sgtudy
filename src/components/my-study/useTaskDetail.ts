@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toApiError, type ApiError } from "@/lib/api/errors";
 import { fetchTask } from "@/lib/api/submission";
 import type { Submission, TaskDetail } from "@/lib/api/types";
+import { withMySubmission } from "./submission";
 
 type Got = { nodeId: string; detail: TaskDetail | null; error: ApiError | null };
 
@@ -29,8 +30,8 @@ export function useTaskDetail(slug: string, nodeId: string) {
     );
   }, [slug, nodeId, tick]);
   const refetch = useCallback(() => setTick((t) => t + 1), []);
-  /** 저장 응답(Submission)으로 내 제출만 바로 바꾼다 — 응답 확정값이라 낙관적 갱신이 아니다 (R4) */
-  const setMine = useCallback((s: Submission) => setGot((p) => (p?.detail ? { ...p, detail: { ...p.detail, mySubmission: s } } : p)), []);
+  /** 저장 응답(Submission)으로 내 제출과 제출 현황(n/m · 내 줄)을 바로 바꾼다 — 응답 확정값이라 낙관적 갱신이 아니다 (R4) */
+  const setMine = useCallback((s: Submission, meId: string | null) => setGot((p) => (p?.detail ? { ...p, detail: withMySubmission(p.detail, s, meId) } : p)), []);
   const cur = got?.nodeId === nodeId ? got : null;
   return { detail: cur?.detail ?? null, error: cur?.error ?? null, loading: !cur, refetch, setMine };
 }

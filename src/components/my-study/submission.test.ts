@@ -3,7 +3,7 @@ import type { Submission, TaskDetail } from "@/lib/api/types";
 import {
   SUB_LIMITS, addLink, checkFile, extOf, focusTargetOf, metaLine, mimeOf, myBadgeOf, myCardStateOf, emptyDescText, objectKey,
   sizeText, stampKst, statusRows, submitBlocker, submitErrorAction, submitLabel,
-  composerHint, emptyAllowed, lateNote, withPendingLink, savedToast, notAssignedText, rowStatusText, showAllSubmitted, statusHeadOf,
+  composerHint, emptyAllowed, lateNote, withPendingLink, savedToast, notAssignedText, rowStatusText, showAllSubmitted, statusHeadOf, withMySubmission,
 } from "./submission";
 
 const sub = (o: Partial<Submission> = {}): Submission =>
@@ -312,5 +312,28 @@ describe("withPendingLink — 추가 안 누른 입력칸 링크 (시나리오 Q
   it("빈 본문이어도 유효한 입력칸 링크가 있으면 빈 제출이 아니다", () => {
     const eff = withPendingLink("https://b", []);
     expect(submitBlocker({ body: "", links: eff.links, files: [] }, true)).toBeNull();
+  });
+});
+
+describe("withMySubmission — 제출 응답을 현황에 바로 접는다", () => {
+  it("처음 제출: 제출 수 +1 · 내 줄 제출 · 전원 제출", () => {
+    const d = withMySubmission(detail(), sub(), "u1");
+    expect(d.mySubmission?.id).toBe("s1");
+    expect(d.node.task?.submitted).toBe(2);
+    expect(d.allSubmitted).toBe(true);
+    expect(statusRows(d, "u1").find((r) => r.me)?.status).toBe("done");
+  });
+  it("다시 제출(수정): 수는 그대로, 내 제출 줄은 하나로 바뀐다", () => {
+    const first = withMySubmission(detail(), sub(), "u1");
+    const d = withMySubmission(first, sub({ bodyMd: "고침", isLate: true }), "u1");
+    expect(d.node.task?.submitted).toBe(2);
+    expect(d.submissions.filter((x) => x.author.userId === "u1")).toHaveLength(1);
+    expect(statusRows(d, "u1").find((r) => r.me)?.status).toBe("late");
+  });
+  it("담당이 아니면(현황에 내 줄 없음) 내 제출만 바꾼다", () => {
+    const d = withMySubmission(detail(), sub(), "u9");
+    expect(d.mySubmission?.id).toBe("s1");
+    expect(d.node.task?.submitted).toBe(1);
+    expect(d.submissions).toHaveLength(0);
   });
 });
