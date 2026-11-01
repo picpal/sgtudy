@@ -3160,6 +3160,7 @@ describe("tokens", () => {
   2. Vercel 환경변수: `MCP_ALLOWED_ORIGINS=https://<운영 도메인>`(그 밖의 키는 기존 `NEXT_PUBLIC_SUPABASE_*` 재사용, **service role 불필요**).
   3. 배포 후 마스터 계정으로 배포 URL `/me` → 토큰 생성 → `claude mcp add --scope user --transport http sgtudy https://<배포 URL>/api/mcp --header "Authorization: Bearer …"` → Claude Code 에서 재검토 문서 §5 의 4개 시나리오를 그대로 말해 본다: "내 스터디 보여 줘" · "이번 주 내 할 일 알려줘" · (테스트 방) "3주차부터 일정 1주씩 밀어 줘" → 미리보기 요약 확인 → 승인 → 적용 → "방금 거 되돌려 줘"(undo 미리보기 — 〔C#4〕 일정만) · "이번 회차 복습 개인 목표 3개 넣어 줘" → "그거 지워 줘". 도구 호출 수·결과 크기가 재검토 문서 표와 크게 다르면 노트.
   4. 호스티드 PostgREST 의 함수 `statement_timeout` 반영 확인(Task 0 Step 5 미확인 시) — 200노드 dry-run 이 3초를 넘으면 `api_limits`/`plan_validate` 상한을 100 으로 낮추는 후속 마이그레이션.
+     **갱신(2026-11-01) 확인됨**: 호스티드 역할 설정(Management API read_only) anon=`statement_timeout=3s` · authenticated=8s · authenticator=8s. `curriculum_plan_preview/apply` 에는 15s 가 걸려 있으나 `api_invoke` 에는 함수 설정이 없다. PAT 경로(anon 키) 실제 상한 = **3초**, 함수의 15s 는 PAT 경로에 효과 없음(오류 문구도 "처리 시간(3초)" — `src/lib/mcp/errors.ts`). **미확인**: 호스티드 PostgREST 버전, 200노드 dry-run 실측 시간(3초 초과 여부) — 초과하면 위 상한 100 후속 마이그레이션.
 - [ ] **Step 3: `superpowers:finishing-a-development-branch`** 로 마무리.
 
 ---

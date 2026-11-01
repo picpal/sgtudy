@@ -322,7 +322,8 @@ aws | AWS SAA 자격증 3개월 완주 | 진행 중 | 2026-10-01~2026-12-24 | �
 
 | 항목 | 대응 |
 |---|---|
-| anon 역할 기본 `statement_timeout`(호스티드 3s) — 200노드 계획. 함수 `SET statement_timeout` 은 함수 안에서 바꿔도 이미 시작된 문장의 타이머를 늘리지 못한다 → **PostgREST 가 트랜잭션 시작 시 함수 설정을 적용해 줄 때만** 효과 | `api_invoke`·`curriculum_plan_preview`·`curriculum_plan_apply` 에 `set statement_timeout='15s'`(PostgREST 가 함수 설정을 트랜잭션에 반영) — Task 0 에서 호스티드 PostgREST 버전 확인, 안 되면 노드 상한을 100 으로 |
+| anon 역할 기본 `statement_timeout`(호스티드 3s) — 200노드 계획. 함수 `SET statement_timeout` 은 함수 안에서 바꿔도 이미 시작된 문장의 타이머를 늘리지 못한다 → **PostgREST 가 트랜잭션 시작 시 함수 설정을 적용해 줄 때만** 효과 | `api_invoke`·`curriculum_plan_preview`·`curriculum_plan_apply` 에 `set statement_timeout='15s'`(PostgREST 가 함수 설정을 트랜잭션에 반영) — Task 0 에서 호스티드 PostgREST 버전 확인, 안 되면 노드 상한을 100 으로
+**변경(2026-11-01): 위 15s 해법은 PAT 경로에 적용되지 않는다.** PAT 요청은 쿠키·세션 없는 anon 키 클라이언트로 `api_invoke` 하나만 부르므로(`src/lib/mcp/invoke.ts`) 한도는 호출 역할(anon)의 `statement_timeout` 이다. 호스티드 확인(Management API read_only, 2026-11-01): anon=3s · authenticated=8s · authenticator=8s. `curriculum_plan_preview/apply` 의 15s 는 함수에 남아 있지만 `api_invoke` 안에서 중첩 호출되면 이미 시작된 문장의 타이머를 늘리지 못한다. `api_invoke` 자체에는 함수 설정이 없다(0035 가 의도적으로 제거). 현재 대응: 57014 → 도구 오류 `TIMEOUT` "처리 시간(3초)을 넘어 취소됐어요. 계획을 나눠 다시 미리 봐 주세요"(`src/lib/mcp/errors.ts`). 200노드 dry-run 실측은 아직 없다 — 3초 초과 시 노드 상한 100 으로 낮춘다. |
 | `node_update`/`node_move` 가 호출마다 `curriculum_json` 을 만든다 | 무거운 op 상한 50(update·move·담당 지정 create·shift 회차 합계) + PGlite 성능 측정. 3단계에서 core 분리. 〔UX 재검토〕 `personal_create_many` 도 `personal_create` 마다 `curriculum_json`(최대 20회) — 측정 후 1초 넘으면 후속 core 분리 |
 | 〔UX 재검토〕 Claude Code 가 `structuredContent` 와 text 중 무엇을 모델에 넣는지 버전마다 다를 수 있음 | v1 은 text 1벌만 보내 무관하게 함(D12) |
 | 〔UX 재검토〕 `api_plan_drafts` 누적 | 24시간 만료 + 사용자당 미적용 초안 50개 초과 시 오래된 것부터 지움(preview 안에서). 정리 cron 은 2단계 |
