@@ -242,7 +242,8 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
             {/* 저장 막대 — 바뀐 게 있으면 긴 폼에서도 보이게 화면 아래에 붙는다 */}
             <div className={`${dirtyCount ? "sticky bottom-0 z-10 shadow-[0_-8px_20px_rgba(27,34,48,.06)]" : ""} -mx-7 flex flex-wrap items-center justify-end gap-2 border-t border-line-2 bg-surface px-7 py-3 max-sm:-mx-5 max-sm:px-5`}>
               <span aria-live="polite" className="mr-auto text-[13px] text-muted">
-                {dirtyCount ? `바뀐 항목 ${dirtyCount}개` : "바뀐 내용이 없어요"}
+                {/* 저장 직후엔 「저장했어요」 토스트가 안내 — 막대에 「바뀐 내용이 없어요」 를 겹쳐 띄우지 않는다 */}
+                {dirtyCount ? `바뀐 항목 ${dirtyCount}개` : toast?.text === "저장했어요" ? "" : "바뀐 내용이 없어요"}
               </span>
               <button type="button" onClick={reset} disabled={!dirtyCount || busy} className="h-11 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-medium text-ink disabled:opacity-50">
                 되돌리기

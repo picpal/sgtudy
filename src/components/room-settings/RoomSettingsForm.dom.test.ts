@@ -22,6 +22,9 @@ vi.mock("@/components/ui/markdown-editor", () => ({ MarkdownEditor: () => null }
 vi.mock("./NotifySettings", () => ({ NotifySettingsSection: () => null }));
 vi.mock("@/lib/today", () => ({ useToday: () => "2026-10-19" }));
 
+const settingsApi = vi.hoisted(() => ({ updateRoom: vi.fn() }));
+vi.mock("./settings", async (orig) => ({ ...(await orig<typeof import("./settings")>()), updateRoom: settingsApi.updateRoom }));
+
 const recruitApi = vi.hoisted(() => ({ openExtraRecruit: vi.fn(), closeExtraRecruit: vi.fn(), setInviteBypass: vi.fn(), fetchInvite: vi.fn(), rotateInvite: vi.fn() }));
 vi.mock("@/lib/api/recruit", async (orig) => ({ ...(await orig<typeof import("@/lib/api/recruit")>()), openExtraRecruit: recruitApi.openExtraRecruit, closeExtraRecruit: recruitApi.closeExtraRecruit, setInviteBypass: recruitApi.setInviteBypass }));
 vi.mock("@/lib/api/leader", async (orig) => ({ ...(await orig<typeof import("@/lib/api/leader")>()), fetchInvite: recruitApi.fetchInvite, rotateInvite: recruitApi.rotateInvite }));
@@ -189,5 +192,25 @@ describe("방 설정 — 기간 두 날짜 칸이 서로 겹치지 않는다(iOS
     const grid = start.closest("label")!.parentElement!;
     expect(end.closest("label")!.parentElement).toBe(grid);
     expect(grid.className.split(/\s+/)).toEqual(expect.arrayContaining(["grid", "grid-cols-2", "max-sm:grid-cols-1"]));
+  });
+});
+
+/* 한 번 저장에 안내는 하나 — 저장 직후 토스트 「저장했어요」 옆에 막대 「바뀐 내용이 없어요」 가 겹쳐 보이면 안 된다 */
+describe("방 설정 — 저장 직후 안내가 겹치지 않는다", () => {
+  it("저장하면 「저장했어요」 토스트만 보이고 「바뀐 내용이 없어요」 는 나오지 않는다", async () => {
+    settingsApi.updateRoom.mockResolvedValue({ ...base, title: "AWS 스터디 2" });
+    const { host, root, input } = mount({});
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(input("title"), "AWS 스터디 2");
+      input("title").dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === "저장") as HTMLButtonElement;
+    await act(async () => {
+      save.click();
+    });
+    expect(document.body.textContent).toContain("저장했어요");
+    expect(document.body.textContent).not.toContain("바뀐 내용이 없어요");
+    act(() => root.unmount());
   });
 });
