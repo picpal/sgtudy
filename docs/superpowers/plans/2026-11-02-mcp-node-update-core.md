@@ -62,7 +62,7 @@
   - `personal_create_many 는 curriculum_json 을 부르지 않는다`: 목표 3개 → 증가 0. 결과 `count = 3`, `createdIds` 3개.
   - `웹 RPC 는 한 번만`: `node_update` 1회 → 증가 1.
   - `core 는 authenticated 가 직접 못 부른다`: `has_function_privilege('authenticated', 'public.node_update_core(text,bigint,jsonb)', 'execute')` 등 3개 false.
-  - `큰 방 성능`: mkRoom → 회차 20 × 리프 50(~1,020노드, generate_series INSERT) + 멤버 2명 ACTIVE·방 ACTIVE → 담당 지정 create 48 개 계획 preview 시간 측정, `assert(ms < BOUND)`. BOUND 는 Step 2 에서 분리 전 시간을 재고 분리 후 목표(분리 전의 1/2 이하)로 정한다.
+  - `큰 방 성능`: mkRoom → 회차 20 × 리프 50(~1,020노드, generate_series INSERT) + 멤버 2명 ACTIVE·방 ACTIVE → 담당 지정 create 48 개 계획 preview 시간 측정, `assert(ms < BOUND)`. BOUND 는 Step 2 에서 분리 전 시간을 재고 정한다. 〔실행 결과〕 PGlite 는 분리 전 10.4s → 후 6.9s(1,050노드면 120s → 53s) 이고 남은 시간의 대부분이 assignment_resync 라서, 차이가 기계 부하보다 작다. 그래서 상한은 15s 로 느슨하게 두고(회귀 감지용) 분리 여부는 호출 수 사례로 판정한다.
 - [ ] **Step 2: 실패 확인** — `deno test -A --config supabase/tests/deno.json supabase/tests/plan-core-sql.test.ts` → core 미존재·호출 수 ≠ 0 으로 FAIL, 웹 응답 사례는 PASS(현재 동작 고정).
 
 ### Task 2: 0056 마이그레이션
@@ -85,3 +85,8 @@
 1. 0055(exam-ai-toggle) 가 먼저 나가든 같이 나가든 무관(겹치는 함수 없음). 0056 은 함수 교체만 → 무중단, 앱 배포 불필요(TS 변경 없음).
 2. 적용 후 확인: `select has_function_privilege('authenticated','public.node_update(text,bigint,jsonb)','execute')` true, core 3개 false. MCP preview 1회.
 3. 롤백: 0057 로 0028·0006·0014·0038·0035 판을 다시 `create or replace`(core 는 남겨도 무해) — 데이터 변경 없음.
+
+## 실행 결과 (2026-11-02)
+
+- 로컬 Supabase, 같은 DB·한 트랜잭션, `set role anon` + `statement_timeout 3s` 로 `api_invoke` 직접 호출(MCP 라우트와 같은 DB 경로), 끝에 롤백했다. 방 1,115노드 + 담당 지정 48 미리보기: 0054 `TIMEOUT` ×3 → 0056 600·615·609ms. 개인 목표 20개: 1,033·1,027·1,040ms → 4.5·4.1·4.0ms.
+- `*-db`(api-invoke·curriculum) 8/8 은 0056 적용 상태에서 통과했다. 이어서 되돌림 스크립트(위 「롤백」과 같은 내용)로 0054 정의를 복원하고 GRANT 유지까지 확인했다.
