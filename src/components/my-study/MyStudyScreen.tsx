@@ -26,6 +26,7 @@ import { fetchNoticeInbox } from "@/lib/api/notices";
 import { useRefetchOnFocus } from "@/lib/useRefetchOnFocus";
 import { TodayProvider } from "@/lib/today";
 import { CREATE_NOTES, itemFromUrl, readFrom, readItem, readMode, syncStep, withItem, withoutNote, type CreateNote } from "./editUrl";
+import { handOff, keepMark, pushedState, readMark } from "./pushedMark";
 import { EMPTY_OVERRIDES, buildTree, findNode, isPersonal, stripFieldOv, thisRoundId } from "./model";
 import { currentRoundId, roundsOutsidePeriod } from "./rounds";
 import { INITIAL_STATE, SHOW_OTHERS_PATCH, blocksLeave, editUnsaved, goLeafPatch, modeSwitchPatch, tabPatch, viewBackPatch, type CurMode, type Patch, type ScreenState } from "./state";
@@ -206,6 +207,12 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // belowView: 편집 기록 바로 아래에 있는 보기 상세 기록(상세 → "편집" 으로 쌓았다)과 그 상세 기록의 pushed — 편집 안에서 다른 항목으로 옮겨(replace) 그 위가
   // 다른 항목의 편집이 되어도 남는다. [저장] 이 그 상세로 돌아가면 replace 대신 back 해서 상세 기록이 둘이 되지 않게 한다
   const belowView = useRef<{ id: string; pushed: string | null } | null>(null);
+  // 다시 마운트(제출 뒤 refresh 로 key 가 바뀜)·새로고침돼도 이 문서가 목록 위에 쌓은 보기 상세 기록이면 pushed 를 되살린다 — 아래 동기화 effect 보다 먼저
+  useEffect(() => {
+    const p = pushed;
+    p.current = readMark();
+    return () => handOff(p.current);
+  }, []);
   useEffect(() => {
     const url = readItem(window.location.search);
     const urlMode = readMode(window.location.search);
@@ -235,7 +242,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     if (modePush && openItem) belowView.current = { id: openItem, pushed: pushed.current };
     // 목록 기록 위에 상세·편집을 쌓을 때, 그 목록 기록이 보여 주던 탭(보드 카드 → 상세 등) — 뒤로 가기로 돌아오면 그 탭으로
     if (step === "push" && url === null) backTab.current = shownTab.current;
-    if (step === "push") window.history.pushState(null, "", href);
+    if (step === "push") window.history.pushState(!modePush && openItem && openMode === "view" ? pushedState(openItem) : null, "", href);
     else if (step === "replace") window.history.replaceState(null, "", href);
     else if (step === "back") {
       closedByBack.current = true;
@@ -247,6 +254,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     overView.current = modePush;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 연 곳(viewFrom)은 항목을 열 때 함께 정해진다 — 그 값만 바뀐 렌더에는 주소를 다시 맞추지 않는다
   }, [openItem, openMode]);
+  // Next 가 refresh 커밋에서 history.state 를 갈아 끼워도 표식을 다시 적는다
+  useEffect(() => keepMark(pushed.current));
   useEffect(clearTaskOrigin, []);
   // 열린 항목이 없어지면(목록·다른 탭) 연 곳도 잊는다 — 다음 상세는 그때 연 곳을 새로 적는다 (렌더 중 맞추기 — 목록이 한 번 더 그려질 뿐)
   if (openItem === null && S.viewFrom !== null) update({ viewFrom: null });

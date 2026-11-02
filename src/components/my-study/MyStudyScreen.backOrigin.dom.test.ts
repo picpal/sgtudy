@@ -79,6 +79,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root?.unmount());
   root = null;
+  vi.restoreAllMocks();
   document.body.innerHTML = "";
   window.history.replaceState(null, "", "/");
 });
@@ -118,6 +119,12 @@ const submit = async () => {
   });
   act(() => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === "제출하기")!.click());
   await flush();
+  await settle(); // 작성 중 쌓았던 기록을 걷는 back 의 popstate 뒤에 방 화면 갱신(router.refresh)
+};
+/** jsdom 의 history.back 은 뒤 태스크에서 이동·popstate 한다 */
+const settle = async () => {
+  for (let i = 0; i < 2; i++) await act(() => new Promise((r) => setTimeout(r, 0)));
+  await flush();
 };
 
 describe("과제 상세 [← …] 는 들어온 곳으로 — 진입 경로가 화면 안 동작·다시 마운트·뒤로/앞으로·새로고침에도 그대로", () => {
@@ -137,12 +144,15 @@ describe("과제 상세 [← …] 는 들어온 곳으로 — 진입 경로가 �
     expect(nav.refresh).toHaveBeenCalled();
     mountFromUrl(); // router.refresh: 주소가 ?tab=curriculum 이 되어 서버 key 가 바뀌었다
     await flush();
+    const backs = vi.spyOn(window.history, "back");
     expect(backButton()?.textContent).toContain("개요");
     act(() => backButton()!.click());
     await flush();
+    await settle();
+    expect(backs).toHaveBeenCalledTimes(1); // 이 문서가 개요 기록 위에 쌓은 상세 — 그 개요 기록으로 돌아간다(개요가 둘 남지 않는다)
     expect(backButton()).toBeNull();
     const sp = new URLSearchParams(window.location.search);
-    expect(sp.get("tab")).toBe("overview");
+    expect(sp.get("tab") ?? "overview").toBe("overview");
     expect(sp.has("item")).toBe(false);
     expect(sp.has("from")).toBe(false);
   });
@@ -178,6 +188,55 @@ describe("과제 상세 [← …] 는 들어온 곳으로 — 진입 경로가 �
     mountFromUrl();
     await flush();
     expect(backButton()?.textContent).toContain("진행목표");
+  });
+});
+
+// Next 는 refresh 를 커밋하며 history.state 를 자기 값만으로 갈아 끼운다(사용자 값이 빠진다)
+const nextRefreshWipe = () => window.history.replaceState({ __NA: true }, "");
+const listEntryTab = () => new URLSearchParams(window.location.search).get("tab");
+
+describe("상세 [← …] 는 이 문서가 목록 위에 쌓은 기록이면 back — 다시 마운트·새로고침 뒤에도 기록에 개요가 둘 남지 않는다", () => {
+  it("개요에서 연 상세 → 제출 → 다시 마운트 → [← 개요] 는 back (replace 아님)", async () => {
+    api.fetchTask.mockResolvedValue(before);
+    api.upsertSubmission.mockResolvedValue(SUB);
+    await openFromOverview();
+    await submit();
+    nextRefreshWipe();
+    mountFromUrl();
+    await flush();
+    const backs = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    const replaces = vi.spyOn(window.history, "replaceState");
+    act(() => backButton()!.click());
+    await flush();
+    expect(backs).toHaveBeenCalledTimes(1);
+    expect(replaces.mock.calls.filter((c) => c[2] !== undefined)).toEqual([]); // 주소를 바꾸는 replace 없음
+  });
+
+  it("새로고침(같은 기록, 표식이 남은 history.state)으로 다시 열린 상세도 back", async () => {
+    api.fetchTask.mockResolvedValue(before);
+    await openFromOverview();
+    if (root) act(() => root!.unmount());
+    root = null;
+    await flush(); // 마이크로태스크 — 같은 커밋 넘김(carried)은 비었다
+    mountFromUrl();
+    await flush();
+    const backs = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    act(() => backButton()!.click());
+    await flush();
+    expect(backs).toHaveBeenCalledTimes(1);
+  });
+
+  it("주소로 바로 연 상세(표식 없음)는 replace — 아래가 목록이라는 보장이 없다", async () => {
+    api.fetchTask.mockResolvedValue(before);
+    window.history.replaceState(null, "", `/my-study/aws?tab=curriculum&item=${LEAF}&from=overview`);
+    mountFromUrl();
+    await flush();
+    const backs = vi.spyOn(window.history, "back");
+    act(() => backButton()!.click());
+    await flush();
+    expect(backs).not.toHaveBeenCalled();
+    expect(listEntryTab()).toBe("overview");
+    expect(readItem(window.location.search)).toBeNull();
   });
 });
 
