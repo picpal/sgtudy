@@ -3,12 +3,12 @@
 import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { toApiError } from "@/lib/api/errors";
-import { EXAM_LIMITS, setExamRevealUnsubmitted } from "@/lib/api/exam";
+import { EXAM_LIMITS, setExamAiDuringTake, setExamRevealUnsubmitted } from "@/lib/api/exam";
 import type { ExamQType, ExamReveal, ExamSummary, ExamView } from "@/lib/api/types";
 import { Switch } from "@/components/ui/Switch";
 import { Seg } from "../bits";
 import {
-  QTYPE_KO, REVEAL_KO, REVEAL_UNSUBMITTED_ASK, REVEAL_UNSUBMITTED_HINT, REVEAL_UNSUBMITTED_LABEL,
+  AI_DURING_TAKE_ASK, AI_DURING_TAKE_HINT, AI_DURING_TAKE_LABEL, QTYPE_KO, REVEAL_KO, REVEAL_UNSUBMITTED_ASK, REVEAL_UNSUBMITTED_HINT, REVEAL_UNSUBMITTED_LABEL,
   draftTotals, examErrorAction, examHead, isExamDraft, unpublishLockText,
 } from "../exam";
 import { useExamEditor, type ExamEditorApi } from "../useExamEditor";
@@ -207,7 +207,28 @@ export function ExamEditor({ slug, nodeId, summary, toast, onDirty, onChanged, o
                 </div>
               </div>
 
-              {view && <RevealUnsubmittedToggle slug={slug} nodeId={nodeId} on={!!view.exam.revealUnsubmitted} toast={toast} onView={ed.applyMeta} />}
+              {view && (
+                <OptionToggle
+                  label={REVEAL_UNSUBMITTED_LABEL}
+                  hint={REVEAL_UNSUBMITTED_HINT}
+                  ask={REVEAL_UNSUBMITTED_ASK}
+                  on={!!view.exam.revealUnsubmitted}
+                  save={(next) => setExamRevealUnsubmitted(slug, nodeId, next)}
+                  toast={toast}
+                  onView={ed.applyMeta}
+                />
+              )}
+              {view && (
+                <OptionToggle
+                  label={AI_DURING_TAKE_LABEL}
+                  hint={AI_DURING_TAKE_HINT}
+                  ask={AI_DURING_TAKE_ASK}
+                  on={!!view.exam.aiDuringTake}
+                  save={(next) => setExamAiDuringTake(slug, nodeId, next)}
+                  toast={toast}
+                  onView={ed.applyMeta}
+                />
+              )}
 
               {globalErr && (
                 <p role="alert" className="m-0 rounded-[9px] bg-[#FFF1EF] px-[10px] py-2 text-[12px] font-semibold text-warn">
@@ -226,14 +247,16 @@ export function ExamEditor({ slug, nodeId, summary, toast, onDirty, onChanged, o
   );
 }
 
-/** 편집자 옵션 「미응시자에게도 정답 공개」(0054) — [문제 저장]과 따로 바로 저장한다. 켤 때만 확인 */
-function RevealUnsubmittedToggle({ slug, nodeId, on, toast, onView }: { slug: string; nodeId: string; on: boolean; toast: (m: ToastMsg) => void; onView: (v: ExamView) => void }) {
+type OptionToggleProps = { label: string; hint: string; ask: string; on: boolean; save: (next: boolean) => Promise<ExamView>; toast: (m: ToastMsg) => void; onView: (v: ExamView) => void };
+
+/** 편집자 시험 옵션 — 「미응시자에게도 정답 공개」(0054) · 「응시 중 AI 질문 허용」(0055). [문제 저장]과 따로 바로 저장한다. 켤 때만 확인 */
+function OptionToggle({ label, hint, ask: askText, on, save, toast, onView }: OptionToggleProps) {
   const [ask, setAsk] = useState(false);
   const [busy, setBusy] = useState(false);
   const set = async (next: boolean) => {
     setBusy(true);
     try {
-      onView(await setExamRevealUnsubmitted(slug, nodeId, next));
+      onView(await save(next));
       setAsk(false);
     } catch (e) {
       toast({ text: examErrorAction(toApiError(e)).text, tone: "bad" });
@@ -244,13 +267,13 @@ function RevealUnsubmittedToggle({ slug, nodeId, on, toast, onView }: { slug: st
   return (
     <div className="flex flex-col gap-2">
       <div className="flex min-h-11 items-center gap-3">
-        <Switch on={on} label={REVEAL_UNSUBMITTED_LABEL} disabled={busy || ask} onChange={(next) => (next ? setAsk(true) : void set(false))} />
+        <Switch on={on} label={label} disabled={busy || ask} onChange={(next) => (next ? setAsk(true) : void set(false))} />
         <span className="flex min-w-0 flex-col">
-          <span className="text-[13px] font-semibold text-ink">{REVEAL_UNSUBMITTED_LABEL}</span>
-          <span className="text-[12px] text-ink-3">{REVEAL_UNSUBMITTED_HINT}</span>
+          <span className="text-[13px] font-semibold text-ink">{label}</span>
+          <span className="text-[12px] text-ink-3">{hint}</span>
         </span>
       </div>
-      {ask && <InlineConfirm text={REVEAL_UNSUBMITTED_ASK} onCancel={() => setAsk(false)} actions={[{ label: busy ? "켜는 중…" : "켜기", tone: "primary", disabled: busy, onClick: () => void set(true) }]} />}
+      {ask && <InlineConfirm text={askText} onCancel={() => setAsk(false)} actions={[{ label: busy ? "켜는 중…" : "켜기", tone: "primary", disabled: busy, onClick: () => void set(true) }]} />}
     </div>
   );
 }

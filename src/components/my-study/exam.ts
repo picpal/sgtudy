@@ -35,6 +35,10 @@ export const OPEN_ANSWERS_ASK = "정답을 본 뒤 응시하면 결과에 「정
 export const REVEAL_UNSUBMITTED_LABEL = "미응시자에게도 정답 공개";
 export const REVEAL_UNSUBMITTED_HINT = "마감이 지나면 아직 응시하지 않은 담당자도 정답·해설을 볼 수 있어요";
 export const REVEAL_UNSUBMITTED_ASK = "미응시자가 정답을 보면 이후 응시는 「정답 본 뒤 응시」로 표시돼요";
+/* 응시 중 AI 질문 허용(0055) — 켜면 응시 화면 문항에서 「AI에게 물어보기」. 결과에는 쓴 여부를 표시하지 않는다 */
+export const AI_DURING_TAKE_LABEL = "응시 중 AI 질문 허용";
+export const AI_DURING_TAKE_HINT = "응시 화면에서 문제 속 용어를 선택해 AI에게 뜻을 물을 수 있어요";
+export const AI_DURING_TAKE_ASK = "AI는 용어·개념만 설명하고 정답이나 풀이는 알려 주지 않아요. 응시자가 AI를 썼는지는 결과에 표시되지 않아요";
 /** 문항별 정답률 아래 — 정답 본 뒤 응시는 정답률에서 뺀다 */
 export const seenExcludedText = (n: number): string | null => (n > 0 ? `${ANSWERS_SEEN_BADGE} ${n}명 제외` : null);
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ExplainOut, ExplainRequest } from "./schema";
+import { ExplainOut, ExplainRequest, NO_SHARE_SOURCES } from "./schema";
 
 const req = { slug: "aws", term: "CIDR", source: "node", context: "" };
 
@@ -12,6 +12,13 @@ describe("ExplainRequest", () => {
     expect(ExplainRequest.safeParse({ ...req, context: "x".repeat(1201) }).success).toBe(false);
     expect(ExplainRequest.safeParse({ ...req, term: "x".repeat(201) }).success).toBe(false);
     expect(ExplainRequest.safeParse({ ...req, slug: "" }).success).toBe(false);
+  });
+  it("exam_take(0055 응시 화면) needs nodeId (digits) · other sources must not send it · not shared", () => {
+    expect(ExplainRequest.safeParse({ ...req, source: "exam_take", nodeId: "311" }).success).toBe(true);
+    expect(ExplainRequest.safeParse({ ...req, source: "exam_take" }).success).toBe(false);
+    expect(ExplainRequest.safeParse({ ...req, source: "exam_take", nodeId: "3a" }).success).toBe(false);
+    expect(ExplainRequest.safeParse({ ...req, nodeId: "311" }).success).toBe(false);
+    expect(NO_SHARE_SOURCES.has("exam_take")).toBe(true);
   });
 });
 

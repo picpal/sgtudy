@@ -102,6 +102,20 @@ describe("POST /api/rooms/explain — 흐름", () => {
       expect([done.p_body, done.p_in]).toEqual([null, 500]);
     }
   });
+  it("응시 화면(exam_take, 0055): begin 에 p_take_node · body 를 캐시에 넘기지 않음 · 보기·정답 지목 문장 제거 · nodeId 없으면 400", async () => {
+    callExplain.mockResolvedValue({ ok: true, output: { ...out, oneLiner: "IP 범위를 적는 방식이에요. 정답은 2번이에요", points: ["2번 보기가 맞아요", "/16 ~ /28"] }, usage: { in: 500, out: 450, cached: 300 }, model: "gpt-6-luna" });
+    const r = await post({ ...okBody, source: "exam_take", nodeId: "311" });
+    expect(r.status).toBe(200);
+    const b = (await r.json()).body;
+    expect([b.oneLiner, b.points]).toEqual(["IP 범위를 적는 방식이에요.", ["/16 ~ /28"]]);
+    expect(dbRpc.mock.calls[0]).toEqual(["ai_explain_begin", { p_slug: "aws", p_term_key: KEY, p_take_node: 311 }]);
+    const done = dbRpc.mock.calls.find((c) => c[0] === "ai_explain_done")![1];
+    expect(done.p_body).toBeNull();
+    expect(callExplain.mock.calls[0][0].messages[0].content).toContain("<source>exam_take</source>");
+    dbRpc.mockClear();
+    expect((await post({ ...okBody, source: "exam_take" })).status).toBe(400);
+    expect(dbRpc).not.toHaveBeenCalled();
+  });
   it("미스 → 모델(시험 데이터 없음, <term> 포함) → 정제 → done(정규화 용어·토큰) → 200 hit:false", async () => {
     const r = await post(okBody);
     expect(r.status).toBe(200);

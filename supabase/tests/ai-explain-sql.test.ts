@@ -1,4 +1,4 @@
-// supabase/tests/ai-explain-sql.test.ts — 0052 AI 용어 해설 (스펙 2026-10-27-ask-ai-term-explain-design D13~D16)
+// supabase/tests/ai-explain-sql.test.ts — 0052 AI 용어 해설(0055 begin 에 p_take_node — 시그니처 (text,text,bigint)) (스펙 2026-10-27-ask-ai-term-explain-design D13~D16)
 import { assert, assertEquals } from "@std/assert";
 import { applySeed, asAnon, asUser, expectFail, openDb, setToday } from "./_harness.ts";
 import { cases, one, setNow, uidOf, type Q, type Row } from "./_fixtures.ts";
@@ -38,7 +38,7 @@ cases("ai_explain 0052 · schema & grants", db, [
     }
     assertEquals((await one(q, "select relrowsecurity as v from pg_class where oid = 'public.ai_explain_cache'::regclass")).v, true);
     const can = async (role: string, f: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, `public.${f}`])).v;
-    for (const f of ["ai_explain_begin(text,text)", "ai_explain_done(bigint,text,text,text,jsonb,integer,integer,integer,text)"]) {
+    for (const f of ["ai_explain_begin(text,text,bigint)", "ai_explain_done(bigint,text,text,text,jsonb,integer,integer,integer,text)"]) {
       assertEquals(await can("authenticated", f), true, f);
       assertEquals(await can("anon", f), false, f);
     }
@@ -251,5 +251,79 @@ cases("ai_explain 0052 · exam in progress", db, [
     const qid = (await one(q, "select id::text as id from public.exam_questions where node_id = $1::bigint", [node])).id as string;
     await rpc(q, "public.exam_answer_save($1::bigint, $2::bigint, 'false'::jsonb)", [node, qid]);
     await failHint(begin(q), "EXAM_IN_PROGRESS");
+  } },
+]);
+
+// 0055 「응시 중 AI 질문 허용」 — 시험별 옵션. 응시 화면(p_take_node)은 그 시험만 잠금 제외 · 캐시 읽지 않음
+const beginTake = (q: Q, node: string, slug = "aws", key = KEY) => rpc(q, "public.ai_explain_begin($1, $2, $3::bigint)", [slug, key, node]);
+const setAiTake = async (q: Q, node: string, on: boolean) => {
+  await as(q, "민수");
+  const v = await rpc(q, "public.exam_ai_take_set('aws', $1::bigint, $2)", [node, on]);
+  await as(q, "지은");
+  return v;
+};
+const seedCache = (q: Q) =>
+  q(`insert into public.ai_explain_cache (room_id, term_key, norm_term, body, created_at)
+     select id, $1, 'cidr 블록', $2::jsonb, now() from public.rooms where slug = 'aws'`, [KEY, JSON.stringify({ ...BODY, oneLiner: "정답은 X 예요" })]);
+
+cases("ai_explain 0055 · 응시 중 AI 질문 허용", db, [
+  { name: "column default false · setter: editor only · null VALIDATION_FAILED · exam_view exam.aiDuringTake · grants", run: async (q) => {
+    const node = await inProgressExam(q);
+    assertEquals((await one(q, "select ai_during_take as v from public.exams where node_id = $1::bigint", [node])).v, false);
+    assertEquals((await rpc(q, "public.exam_get('aws', $1::bigint)", [node])).exam.aiDuringTake, false);
+    await failHint(rpc(q, "public.exam_ai_take_set('aws', $1::bigint, true)", [node]), "NOT_CURRICULUM_EDITOR");
+    await as(q, "민수");
+    await failHint(rpc(q, "public.exam_ai_take_set('aws', $1::bigint, null)", [node]), "VALIDATION_FAILED");
+    const v = await rpc(q, "public.exam_ai_take_set('aws', $1::bigint, true)", [node]);   // 응시가 있어도 바뀐다
+    assertEquals(v.exam.aiDuringTake, true);
+    const can = async (role: string, f: string) => (await one(q, "select has_function_privilege($1, $2, 'execute') as v", [role, `public.${f}`])).v;
+    for (const f of ["ai_explain_begin(text,text,bigint)", "exam_ai_take_set(text,bigint,boolean)"]) {
+      assertEquals(await can("authenticated", f), true, f);
+      assertEquals(await can("anon", f), false, f);
+    }
+    assertEquals((await q("select 1 from pg_proc where proname = 'ai_explain_begin'")).length, 1);   // 2인자 판은 없다(겹치는 오버로드 없음)
+  } },
+  { name: "option off: take screen → EXAM_IN_PROGRESS (even when not taking) · no usage row", run: async (q) => {
+    const node = await inProgressExam(q);
+    await failHint(beginTake(q, node), "EXAM_IN_PROGRESS");
+    await rpc(q, "public.exam_submit($1::bigint)", [node]);
+    await failHint(beginTake(q, node), "EXAM_IN_PROGRESS");                 // 옵션이 꺼진 시험 node 로는 묻지 못한다
+    assertEquals(await usageCount(q, "지은"), 0);
+  } },
+  { name: "option on: take screen → miss (cache not read · hits unchanged) · other tabs still EXAM_IN_PROGRESS (F3) · turning off locks again", run: async (q) => {
+    const node = await inProgressExam(q);
+    await seedCache(q);
+    await setAiTake(q, node, true);
+    const r = await beginTake(q, node);
+    assertEquals([r.hit, typeof r.id, "body" in r], [false, "number", false]);
+    assertEquals(r.room.title, "AWS SAA 자격증 3개월 완주");
+    assertEquals((await one(q, "select hits from public.ai_explain_cache where term_key = $1", [KEY])).hits, 0);
+    await failHint(begin(q), "EXAM_IN_PROGRESS");                            // p_take_node 없는 다른 탭은 그대로
+    await setAiTake(q, node, false);
+    await failHint(beginTake(q, node), "EXAM_IN_PROGRESS");
+  } },
+  { name: "option on but another (option off) exam in progress → EXAM_IN_PROGRESS · other room's / unknown node → EXAM_IN_PROGRESS", run: async (q) => {
+    const node = await inProgressExam(q);
+    await setAiTake(q, node, true);
+    await as(q, "민수");                                                     // 옵션 꺼진 두 번째 시험
+    const leaf = (await one(q, `select n.parent_id::text as id from public.goal_nodes n join public.rooms r on r.id = n.room_id
+                                 where r.slug = 'aws' and n.title = 'ALB vs NLB 실습'`)).id as string;
+    await q("select public.node_create('aws', $1::bigint, '둘째 시험', null, 'common', '2026-10-15', '2026-10-21')", [leaf]);
+    const n2 = (await one(q, `select n.id::text as id from public.goal_nodes n join public.rooms r on r.id = n.room_id
+                               where r.slug = 'aws' and n.title = '둘째 시험'`)).id as string;
+    await rpc(q, "public.exam_put('aws', $1::bigint, $2::jsonb)", [n2, JSON.stringify(EXAM)]);
+    await rpc(q, "public.exam_publish('aws', $1::bigint)", [n2]);
+    await as(q, "지은");
+    assertEquals((await beginTake(q, node)).hit, false);
+    const q2 = (await one(q, "select id::text as id from public.exam_questions where node_id = $1::bigint", [n2])).id as string;
+    await rpc(q, "public.exam_answer_save($1::bigint, $2::bigint, 'true'::jsonb)", [n2, q2]);
+    await failHint(beginTake(q, node), "EXAM_IN_PROGRESS");
+    await failHint(beginTake(q, n2), "EXAM_IN_PROGRESS");
+    await rpc(q, "public.exam_submit($1::bigint)", [n2]);
+    assertEquals((await beginTake(q, node)).hit, false);
+    await failHint(beginTake(q, "999999"), "EXAM_IN_PROGRESS");
+    await as(q, "철수");                                                     // aws·algo 멤버: 다른 방(slug)으로 aws 시험 node 를 넘기면 거부
+    await failHint(beginTake(q, node, "algo"), "EXAM_IN_PROGRESS");
+    assertEquals((await beginTake(q, node)).hit, false);
   } },
 ]);

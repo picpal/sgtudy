@@ -36,3 +36,35 @@ export function sanitizeExplain(raw: ExplainOut, term: string): ExplainOut {
     related: uniqLines(raw.related, RELATED_ITEM_MAX, RELATED_MAX, term, true),
   };
 }
+
+/** 보기·정답 지목(응시 화면 exam_take, 0055) — 「정답은」·「오답」·「답은 B」·원 숫자·「2번 보기」·「보기 1」·「맞는 선택지」. 「2번 이상」·「대답」·「답변」은 남긴다 */
+const ANSWER_HINT =
+  /정답|오답|(?:^|[^가-힣])답(?:은|이|으로)(?![가-힣])|[①-⑳]|\d+\s*번\s*(?:보기|선택지)|\d+\s*번(?:이|은|을|가|이에요|예요)(?![가-힣])|(?:보기|선택지)\s*[0-9A-Ea-e]|(?:맞는|옳은|틀린|정확한)\s*(?:보기|선택지|것은|답)/;
+export const TAKE_FALLBACK = "이 용어의 일반적인 뜻만 설명할 수 있어요";
+
+const dropHintSentences = (line: string): string =>
+  line
+    .split(/(?<=[.!?。])\s+/)
+    .filter((x) => !ANSWER_HINT.test(x))
+    .join(" ")
+    .trim();
+
+/** 응시 중 해설 후처리 — 프롬프트 규칙(문제를 풀지 않는다)의 두 번째 겹. 지목한 문장·항목을 통째로 뺀다(정제 뒤에 부른다) */
+export function stripAnswerHints(b: ExplainOut): ExplainOut {
+  const inContext = b.inContext
+    .split("\n")
+    .map((l) => {
+      const m = /^(\s*-\s+)?(.*)$/.exec(l)!;
+      const rest = dropHintSentences(m[2]);
+      return rest ? `${m[1] ?? ""}${rest}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+  return {
+    ...b,
+    oneLiner: dropHintSentences(b.oneLiner) || TAKE_FALLBACK,
+    inContext,
+    points: b.points.filter((x) => !ANSWER_HINT.test(x)),
+    related: b.related.filter((x) => !ANSWER_HINT.test(x)),
+  };
+}

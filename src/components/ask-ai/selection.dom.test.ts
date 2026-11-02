@@ -37,6 +37,13 @@ describe("readSelection", () => {
     expect(r.container.id).toBe("c");
     expect(r.rect).toBeTruthy();
   });
+  it("exam_take(응시 화면, 0055) → nodeId from data-ask-ai-node · other sources have none", () => {
+    mount(`<li data-ask-ai="exam_take" data-ask-ai-node="311"><p id="p">VPC 의 CIDR 블록</p></li><div data-ask-ai="node"><p id="n">CIDR 블록</p></div>`);
+    select("p", 6, 13);
+    expect([readSelection(document)?.source, readSelection(document)?.nodeId]).toEqual(["exam_take", "311"]);
+    select("n", 0, 4);
+    expect(readSelection(document)?.nodeId).toBeUndefined();
+  });
   it("40cp ok · 41cp → tooLong hint pick (code points)", () => {
     mount(`<div data-ask-ai="node"><p id="p">${"가".repeat(41)}</p><p id="e">${"😀".repeat(41)}</p></div>`);
     select("p", 0, 40);

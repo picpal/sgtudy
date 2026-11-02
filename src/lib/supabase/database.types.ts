@@ -627,6 +627,7 @@ export type Database = {
       }
       exams: {
         Row: {
+          ai_during_take: boolean
           brief: Json | null
           created_by: string | null
           node_id: number
@@ -641,6 +642,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_during_take?: boolean
           brief?: Json | null
           created_by?: string | null
           node_id: number
@@ -655,6 +657,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_during_take?: boolean
           brief?: Json | null
           created_by?: string | null
           node_id?: number
@@ -1997,7 +2000,7 @@ export type Database = {
     }
     Functions: {
       ai_explain_begin: {
-        Args: { p_slug: string; p_term_key: string }
+        Args: { p_slug: string; p_take_node?: number; p_term_key: string }
         Returns: Json
       }
       ai_explain_done: {
@@ -2315,6 +2318,10 @@ export type Database = {
           x: Database["public"]["Tables"]["exams"]["Row"]
         }
         Returns: boolean
+      }
+      exam_ai_take_set: {
+        Args: { p_node: number; p_on: boolean; p_slug: string }
+        Returns: Json
       }
       exam_answer_canon: {
         Args: {

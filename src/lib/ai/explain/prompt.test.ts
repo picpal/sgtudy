@@ -34,6 +34,11 @@ describe("EXPLAIN_SYSTEM", () => {
     expect(EXPLAIN_SYSTEM).toContain("확실하지 않아요");
     expect(EXPLAIN_SYSTEM).toContain("not_term");
   });
+  it("exam_take(응시 중) rule: concept only, no choice numbers or answers (0055)", () => {
+    expect(EXPLAIN_SYSTEM).toContain("exam_take");
+    expect(EXPLAIN_SYSTEM).toContain("보기 번호");
+    expect(buildExplainMessages({ room, source: "exam_take", context: "", term: "VPC" })[0].content).toContain("<source>exam_take</source>");
+  });
   it("is a constant (byte-identical across calls)", async () => {
     const a = (await import("./prompt")).EXPLAIN_SYSTEM;
     expect(a).toBe(EXPLAIN_SYSTEM);

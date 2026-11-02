@@ -4,7 +4,7 @@ import { COPY } from "./copy";
 
 /* POST /api/rooms/explain — 같은 출처 쿠키 세션. 실패는 { error, message, details } 그대로 + status (room-new/interview/api.ts 와 같은 모양) */
 
-export type ExplainBody = { slug: string; term: string; source: Source; context: string };
+export type ExplainBody = { slug: string; term: string; source: Source; context: string; nodeId?: string };
 export type ExplainError = TurnErrorBody & { status: number };
 export type ExplainResult = { ok: true; data: ExplainResponse } | { ok: false; err: ExplainError };
 

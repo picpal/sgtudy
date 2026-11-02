@@ -6,8 +6,9 @@ import { SOURCES, type Source } from "@/lib/ai/explain/schema";
  * 허용 = data-ask-ai="<source>" 컨테이너 안, anchor·focus 가 같은 컨테이너. 그 안이라도 제외 영역(off·입력·편집·코드·버튼)이면 없음
  */
 
-/** tooLong = 허용 영역 안이지만 용어 길이(D2)를 넘은 선택 — 알약 대신 「40자 이하로」 안내만 띄운다(묻지 않는다) */
-export type SelectionPick = { term: string; source: Source; context: string; rect: DOMRect; container: HTMLElement; tooLong?: boolean };
+/** tooLong = 허용 영역 안이지만 용어 길이(D2)를 넘은 선택 — 알약 대신 「40자 이하로」 안내만 띄운다(묻지 않는다).
+ * nodeId = 응시 화면(exam_take)의 시험 — 컨테이너의 data-ask-ai-node(0055) */
+export type SelectionPick = { term: string; source: Source; context: string; rect: DOMRect; container: HTMLElement; nodeId?: string; tooLong?: boolean };
 
 export const BLOCK_SEL = "p,li,td,th,h1,h2,h3,h4,h5,h6,blockquote";
 export const DENY_SEL = '[data-ask-ai="off"],input,textarea,[contenteditable=""],[contenteditable="true"],pre,code,button';
@@ -45,5 +46,6 @@ export function readSelection(doc: Document): SelectionPick | null {
   const block = a.closest(BLOCK_SEL);
   const ctxSrc = block && ca.contains(block) ? block.textContent : ca.textContent;
   const context = clipContext(ctxSrc ?? "", term);
-  return { term: term.replace(/\s+/g, " ").trim(), source, context, rect: range.getBoundingClientRect(), container: ca };
+  const node = source === "exam_take" ? { nodeId: ca.dataset.askAiNode } : {};
+  return { term: term.replace(/\s+/g, " ").trim(), source, context, rect: range.getBoundingClientRect(), container: ca, ...node };
 }

@@ -418,6 +418,8 @@ export type ExamView = {
     closed: boolean;
     /** 편집자 옵션 「미응시자에게도 정답 공개」(0054) — 초안을 보는 멤버에겐 없다 */
     revealUnsubmitted?: boolean;
+    /** 편집자 옵션 「응시 중 AI 질문 허용」(0055) — 켜면 응시 화면 문항이 「AI에게 물어보기」 영역(exam_take). 초안을 보는 멤버에겐 없다 */
+    aiDuringTake?: boolean;
     source?: "manual" | "ai";
     /** 응시 행 1건~(진행 중 포함) — 구조 잠금 */
     locked?: boolean;

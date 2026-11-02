@@ -30,11 +30,11 @@ const KEYS: Record<string, { answer: unknown; explanation: string }> = {
 };
 const revealed = BASE.map((q) => ({ ...q, ...KEYS[q.id] }));
 
-type O = { reason?: ExamViewerReason | null; canTake?: boolean; questions?: ExamQuestion[] | null; attempt?: ExamAttempt | null; reveal?: "after_submit" | "after_deadline"; closed?: boolean; answersSeen?: boolean; canOpenAnswers?: boolean; today?: string };
+type O = { reason?: ExamViewerReason | null; canTake?: boolean; questions?: ExamQuestion[] | null; attempt?: ExamAttempt | null; reveal?: "after_submit" | "after_deadline"; closed?: boolean; answersSeen?: boolean; canOpenAnswers?: boolean; today?: string; aiDuringTake?: boolean };
 const view = (o: O = {}): ExamView => ({
   today: o.today ?? "2026-10-16",
   node: { id: "311", title: "ALB vs NLB 실습", startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
-  exam: { status: "published", questionCount: 4, totalPoints: 5, reveal: o.reveal ?? "after_submit", publishedAt: "2026-10-14T00:00:00Z", closed: o.closed ?? false },
+  exam: { status: "published", questionCount: 4, totalPoints: 5, reveal: o.reveal ?? "after_submit", publishedAt: "2026-10-14T00:00:00Z", closed: o.closed ?? false, ...(o.aiDuringTake === undefined ? {} : { aiDuringTake: o.aiDuringTake }) },
   viewer: { canEdit: false, isAssignee: true, canTake: o.canTake ?? o.reason == null, reason: o.reason ?? null, answersSeen: o.answersSeen ?? false, canOpenAnswers: o.canOpenAnswers ?? false },
   questions: o.questions === undefined ? BASE : o.questions,
   attempt: o.attempt ?? null,
@@ -193,6 +193,15 @@ describe("ExamSection — 응시", () => {
     expect(host.textContent).not.toContain("명시적 Deny 가 이긴다");
     expect(bar()).toContain("0/4 답함");
     expect(button("제출하기")?.className).toContain("h-11");
+  });
+  it("「AI에게 물어보기」 — 옵션(aiDuringTake) 켬이면 문항이 exam_take + 시험 node, 꺼짐·없음이면 off(0055)", async () => {
+    await mount(view({ aiDuringTake: true }));
+    const lis = Array.from(host.querySelectorAll<HTMLElement>("li[data-qi]"));
+    expect(lis.map((l) => [l.dataset.askAi, l.dataset.askAiNode])).toEqual(BASE.map(() => ["exam_take", "311"]));
+    act(() => root?.unmount());
+    host.remove();
+    await mount(view({ aiDuringTake: false }));
+    expect(Array.from(host.querySelectorAll<HTMLElement>("li[data-qi]")).map((l) => l.dataset.askAi)).toEqual(BASE.map(() => "off"));
   });
   it("저장된 답을 복원하고 n/총 은 서버 규칙(빈 칸·빈 배열은 답 아님)", async () => {
     await mount(view({ attempt: { status: "in_progress", answers: { "1": 1, "2": [], "4": "" }, score: null, maxScore: null, correctCount: null, submittedAt: null, isLate: null, results: null } }));

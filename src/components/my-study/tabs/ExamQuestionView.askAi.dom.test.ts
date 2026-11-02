@@ -26,6 +26,10 @@ describe("ExamQuestionView — 「AI에게 물어보기」 영역(D16)", () => {
     const li = mount(createElement(ExamQuestionView, { mode: "take", q, no: 1, mine: null, onChange: () => {} }));
     expect(li.dataset.askAi).toBe("off");
   });
+  it('take mode + askAiNode(시험 옵션 「응시 중 AI 질문 허용」, 0055) → data-ask-ai="exam_take" + node', () => {
+    const li = mount(createElement(ExamQuestionView, { mode: "take", q, no: 1, mine: null, onChange: () => {}, askAiNode: "311" }));
+    expect([li.dataset.askAi, li.dataset.askAiNode]).toEqual(["exam_take", "311"]);
+  });
   it('result mode → data-ask-ai="exam"', () => {
     const li = mount(createElement(ExamQuestionView, { mode: "result", q, no: 1, mine: true, correct: null, earned: null }));
     expect(li.dataset.askAi).toBe("exam");

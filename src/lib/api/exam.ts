@@ -23,6 +23,9 @@ export const openExamAnswers = (slug: string, nodeId: string, client?: Db) => rp
 /** 편집자 옵션 「미응시자에게도 정답 공개」(0054) */
 export const setExamRevealUnsubmitted = (slug: string, nodeId: string, on: boolean, client?: Db) =>
   rpc<ExamView>("exam_reveal_unsubmitted_set", { p_slug: slug, p_node: num(nodeId), p_on: on }, client);
+/** 편집자 옵션 「응시 중 AI 질문 허용」(0055) */
+export const setExamAiDuringTake = (slug: string, nodeId: string, on: boolean, client?: Db) =>
+  rpc<ExamView>("exam_ai_take_set", { p_slug: slug, p_node: num(nodeId), p_on: on }, client);
 export const fetchExamResults = (slug: string, nodeId: string, client?: Db) => rpc<ExamResults>("exam_results", { p_slug: slug, p_node: num(nodeId) }, client);
 /** 편집자가 남의 답안 보기 — viewer 는 그 사람 기준, canTake 는 항상 false */
 export const fetchExamAttempt = (slug: string, nodeId: string, userId: string, client?: Db) =>

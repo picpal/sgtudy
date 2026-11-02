@@ -877,6 +877,8 @@ export const ROOM_CASES: Case[] = [
         "exam_results(text,bigint)", "exam_attempt_get(text,bigint,uuid)",
         // 0054: 미제출자 [정답·해설 보기] · 편집자 옵션 「미응시자에게도 정답 공개」(판정식 exam_reveal_for 등은 GRANT 없음)
         "exam_answers_open(text,bigint)", "exam_reveal_unsubmitted_set(text,bigint,boolean)",
+        // 0055: 편집자 옵션 「응시 중 AI 질문 허용」
+        "exam_ai_take_set(text,bigint,boolean)",
         // 0040: 그룹장 공지(내부 notice_* 헬퍼는 GRANT 없음)
         "notice_list(text)", "notice_inbox(text)", "notice_read(text,bigint[],integer[])",
         "notice_create(text,jsonb)", "notice_update(text,bigint,jsonb)", "notice_delete(text,bigint)",
@@ -892,8 +894,8 @@ export const ROOM_CASES: Case[] = [
         "ai_turn_check(text,boolean)", "ai_turn_done(bigint,integer,integer,integer,text)",
         // 0051: 오답노트 다시 볼 문제(★)
         "wrong_note_bookmark(text,bigint,boolean)",
-        // 0052: AI 용어 해설(ai_limits 는 GRANT 없음, api_invoke 비노출)
-        "ai_explain_begin(text,text)", "ai_explain_done(bigint,text,text,text,jsonb,integer,integer,integer,text)",
+        // 0052: AI 용어 해설(ai_limits 는 GRANT 없음, api_invoke 비노출) · 0055 begin 에 p_take_node(응시 화면)
+        "ai_explain_begin(text,text,bigint)", "ai_explain_done(bigint,text,text,text,jsonb,integer,integer,integer,text)",
       ].sort();
       assertEquals(await sweep("anon"), ANON.sort());
       assertEquals(await sweep("authenticated"), AUTH);

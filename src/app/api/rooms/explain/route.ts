@@ -6,7 +6,7 @@ import { aiExplainEnabled, aiMock } from "@/lib/ai/env";
 import { runExplain } from "@/lib/ai/explain/explain";
 import { mockCallExplain } from "@/lib/ai/explain/explain-mock";
 import { isTermLength, normTerm } from "@/lib/ai/explain/normalize";
-import { sanitizeExplain } from "@/lib/ai/explain/sanitize";
+import { sanitizeExplain, stripAnswerHints } from "@/lib/ai/explain/sanitize";
 import { ExplainOut, ExplainRequest, MAX_EXPLAIN_BODY, NO_SHARE_SOURCES, type ExplainResponse, type RoomMeta } from "@/lib/ai/explain/schema";
 import { failJson, MSG, sameOrigin } from "@/lib/ai/http";
 import { readJsonCapped } from "@/lib/mcp/http";
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   if (!raw.ok) return raw.status === 413 ? failJson(413, "PAYLOAD_TOO_LARGE", MSG.VALIDATION_FAILED) : failJson(400, "VALIDATION_FAILED", MSG.VALIDATION_FAILED);
   const parsed = ExplainRequest.safeParse(raw.value);
   if (!parsed.success) return failJson(400, "VALIDATION_FAILED", MSG.VALIDATION_FAILED);
-  const { slug, term, source, context } = parsed.data;
+  const { slug, term, source, context, nodeId } = parsed.data;
   if (!isTermLength(term)) return failJson(400, "VALIDATION_FAILED", MSG.EXPLAIN_TOO_LONG, { field: "term" });
   if (!aiExplainEnabled()) return failJson(503, "AI_UNAVAILABLE", MSG.EXPLAIN_UNAVAILABLE);
 
@@ -47,7 +47,9 @@ export async function POST(req: Request) {
   const t0 = Date.now();
   let begin: Begin;
   try {
-    begin = await rpc<Begin>("ai_explain_begin", { p_slug: slug, p_term_key: termKey }, db as unknown as Db);
+    // 응시 화면(exam_take)만 그 시험 node 를 넘긴다 — begin 이 옵션·잠금을 다시 보고, 그때는 캐시를 읽지 않는다(0055)
+    const take = nodeId === undefined ? {} : { p_take_node: Number(nodeId) };
+    begin = await rpc<Begin>("ai_explain_begin", { p_slug: slug, p_term_key: termKey, ...take }, db as unknown as Db);
   } catch (e) {
     if (e instanceof ApiException) {
       if (e.code === "RATE_LIMITED" || e.code === "AI_BUDGET_EXCEEDED") return failJson(429, e.code, e.message, e.details);
@@ -85,7 +87,7 @@ export async function POST(req: Request) {
     db as unknown as Db,
   ).catch(() => undefined);
   log({ hit: false, ms, in: r.usage.in, out: r.usage.out, cached: r.usage.cached, model: r.model, status: 200 });
-  return ok({ hit: false, body: r.body });
+  return ok({ hit: false, body: source === "exam_take" ? stripAnswerHints(r.body) : r.body });
 }
 
 const notAllowed = () => new Response(null, { status: 405, headers: { Allow: "POST" } });

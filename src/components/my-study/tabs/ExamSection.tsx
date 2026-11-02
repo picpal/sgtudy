@@ -203,7 +203,7 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
                 <div className="flex items-start gap-6">
                   <ol ref={listRef} className="m-0 flex min-w-0 flex-1 list-none flex-col gap-6 p-0 pb-5">
                     {qs.map((q, i) => (
-                      <ExamQuestionView key={q.id} mode="take" q={q} no={i + 1} mine={t.answers[q.id] ?? null} onChange={(a) => t.setAnswer(q.id, a)} disabled={t.submitting} />
+                      <ExamQuestionView key={q.id} mode="take" q={q} no={i + 1} mine={t.answers[q.id] ?? null} onChange={(a) => t.setAnswer(q.id, a)} disabled={t.submitting} askAiNode={v.exam.aiDuringTake ? v.node.id : undefined} />
                     ))}
                   </ol>
                   <ExamNav

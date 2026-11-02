@@ -9,7 +9,7 @@ import { AskAiSheet, type SheetState } from "./AskAiSheet";
 import type { SelectionPick } from "./selection";
 import { useAskAiSelection } from "./useAskAiSelection";
 
-type Open = { term: string; source: Source; context: string; returnFocus: HTMLElement | null };
+type Open = { term: string; source: Source; context: string; nodeId?: string; returnFocus: HTMLElement | null };
 
 const FOCUS_SEL = "[tabindex],a[href],button,input,textarea,select";
 const isTyping = (el: Element | null) => !!el && (el.matches("input,textarea,select") || (el as HTMLElement).isContentEditable);
@@ -28,10 +28,11 @@ export function AskAiProvider({ slug, enabled, children }: { slug: string; enabl
   const memo = useRef(new Map<string, ExplainOut>());
   const ctrl = useRef<AbortController | null>(null);
 
-  const ask = async (term: string, source: Source, context: string, returnFocus: HTMLElement | null) => {
+  const ask = async (term: string, source: Source, context: string, returnFocus: HTMLElement | null, nodeId?: string) => {
     ctrl.current?.abort();
-    setOpen({ term, source, context, returnFocus });
-    const key = normTerm(term);
+    setOpen({ term, source, context, nodeId, returnFocus });
+    // 응시 화면 해설은 따로 기억한다 — 다른 영역 해설(정답 문맥 포함 가능)을 응시 중에 꺼내지 않게, 응시 해설이 다른 영역에 섞이지 않게
+    const key = `${source === "exam_take" ? "take:" : ""}${normTerm(term)}`;
     const hit = memo.current.get(key);
     if (hit) {
       ctrl.current = null;
@@ -41,7 +42,7 @@ export function AskAiProvider({ slug, enabled, children }: { slug: string; enabl
     setState({ phase: "loading" });
     const ac = new AbortController();
     ctrl.current = ac;
-    const r = await postExplain({ slug, term, source, context }, { signal: ac.signal });
+    const r = await postExplain({ slug, term, source, context, ...(nodeId ? { nodeId } : {}) }, { signal: ac.signal });
     if (ac.signal.aborted) return;
     ctrl.current = null;
     if (r.ok) {
@@ -56,7 +57,7 @@ export function AskAiProvider({ slug, enabled, children }: { slug: string; enabl
   const askPick = (p: SelectionPick) => {
     if (p.tooLong) return;
     clear();
-    void ask(p.term, p.source, p.context, focusBackOf(p));
+    void ask(p.term, p.source, p.context, focusBackOf(p), p.nodeId);
   };
 
   const close = () => {
@@ -89,7 +90,7 @@ export function AskAiProvider({ slug, enabled, children }: { slug: string; enabl
           term={open.term}
           state={state}
           onClose={close}
-          onAskRelated={(t) => void ask(t, open.source, open.context, open.returnFocus)}
+          onAskRelated={(t) => void ask(t, open.source, open.context, open.returnFocus, open.nodeId)}
           returnFocus={open.returnFocus}
           shared={!NO_SHARE_SOURCES.has(open.source)}
         />

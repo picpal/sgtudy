@@ -9,8 +9,8 @@ import { ExamEditor, type ExamEditorHandle } from "./ExamEditor";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const m = vi.hoisted(() => ({ fetch: vi.fn(), put: vi.fn(), publish: vi.fn(), unsub: vi.fn() }));
-vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: m.fetch, putExam: m.put, publishExam: m.publish, setExamRevealUnsubmitted: m.unsub }));
+const m = vi.hoisted(() => ({ fetch: vi.fn(), put: vi.fn(), publish: vi.fn(), unsub: vi.fn(), aiTake: vi.fn() }));
+vi.mock("@/lib/api/exam", async (orig) => ({ ...(await orig<typeof import("@/lib/api/exam")>()), fetchExam: m.fetch, putExam: m.put, publishExam: m.publish, setExamRevealUnsubmitted: m.unsub, setExamAiDuringTake: m.aiTake }));
 
 const QS: ExamQuestion[] = [
   { id: "1", ord: 0, type: "single", prompt: "IAM 정책 평가 순서로 옳은 것은?", choices: ["명시적 Deny → Allow", "Allow → Deny"], points: 1, answer: 0, explanation: "명시적 Deny 가 이긴다" },
@@ -18,12 +18,12 @@ const QS: ExamQuestion[] = [
   { id: "3", ord: 2, type: "ox", prompt: "S3 는 리전 서비스다.", choices: null, points: 1, answer: true, explanation: "" },
   { id: "4", ord: 3, type: "short", prompt: "VPC 를 인터넷에 잇는 것은?", choices: null, points: 1, answer: ["인터넷 게이트웨이", "IGW"], explanation: "" },
 ];
-const view = (o: { status?: "draft" | "published"; questions?: ExamQuestion[]; locked?: boolean; submittedCount?: number; revealUnsubmitted?: boolean } = {}): ExamView => {
+const view = (o: { status?: "draft" | "published"; questions?: ExamQuestion[]; locked?: boolean; submittedCount?: number; revealUnsubmitted?: boolean; aiDuringTake?: boolean } = {}): ExamView => {
   const qs = o.questions ?? QS;
   return {
     today: "2026-10-12",
     node: { id: "311", title: "3주차 정리 시험", startDate: "2026-10-15", endDate: "2026-10-21", archived: false },
-    exam: { status: o.status ?? "draft", questionCount: qs.length, totalPoints: qs.reduce((s, q) => s + q.points, 0), reveal: "after_submit", revealUnsubmitted: o.revealUnsubmitted ?? false, publishedAt: null, closed: false, source: "manual", locked: o.locked ?? false, submittedCount: o.submittedCount ?? 0, brief: null },
+    exam: { status: o.status ?? "draft", questionCount: qs.length, totalPoints: qs.reduce((s, q) => s + q.points, 0), reveal: "after_submit", revealUnsubmitted: o.revealUnsubmitted ?? false, aiDuringTake: o.aiDuringTake ?? false, publishedAt: null, closed: false, source: "manual", locked: o.locked ?? false, submittedCount: o.submittedCount ?? 0, brief: null },
     viewer: { canEdit: true, isAssignee: false, canTake: false, reason: "not_assignee", answersSeen: false, canOpenAnswers: false },
     questions: qs,
     attempt: null,
@@ -284,6 +284,28 @@ describe("ExamEditor — 미응시자에게도 정답 공개(0054)", () => {
     await act(async () => sw().click());
     await flush();
     expect(m.unsub).toHaveBeenLastCalledWith("aws", "311", false);
+    expect(sw().getAttribute("aria-checked")).toBe("false");
+  });
+});
+
+describe("ExamEditor — 응시 중 AI 질문 허용(0055)", () => {
+  const sw = () => host.querySelector<HTMLButtonElement>('[role=switch][aria-label="응시 중 AI 질문 허용"]')!;
+  it("기본 꺼짐 · 켜면 확인 문구 → [켜기] 에서만 저장 · 끄기는 바로 · 응시가 있어도(locked) 바꿀 수 있다", async () => {
+    await mount(view({ status: "published", locked: true, submittedCount: 1 }));
+    expect(sw().getAttribute("aria-checked")).toBe("false");
+    expect(host.textContent).toContain("응시 화면에서 문제 속 용어를 선택해 AI에게 뜻을 물을 수 있어요");
+    act(() => sw().click());
+    expect(host.textContent).toContain("AI는 용어·개념만 설명하고 정답이나 풀이는 알려 주지 않아요");
+    expect(m.aiTake).not.toHaveBeenCalled();
+    m.aiTake.mockResolvedValue(view({ status: "published", locked: true, submittedCount: 1, aiDuringTake: true }));
+    await act(async () => button("켜기")!.click());
+    await flush();
+    expect(m.aiTake).toHaveBeenCalledWith("aws", "311", true);
+    expect(sw().getAttribute("aria-checked")).toBe("true");
+    m.aiTake.mockResolvedValue(view({ status: "published", locked: true, submittedCount: 1, aiDuringTake: false }));
+    await act(async () => sw().click());
+    await flush();
+    expect(m.aiTake).toHaveBeenLastCalledWith("aws", "311", false);
     expect(sw().getAttribute("aria-checked")).toBe("false");
   });
 });
