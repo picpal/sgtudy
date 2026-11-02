@@ -13,12 +13,13 @@ import { DetailView } from "./DetailView";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 Element.prototype.scrollIntoView = () => {};
-const m = vi.hoisted(() => ({ push: vi.fn(), report: null as null | ((d: SubmitDraft | null) => void) }));
+const m = vi.hoisted(() => ({ push: vi.fn(), report: null as null | ((d: SubmitDraft | null) => void), submitted: null as null | (() => void) }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push: m.push }), useSearchParams: () => new URLSearchParams() }));
 // 제출 카드 대신 — 상세가 넘긴 onDraftChange 만 잡는다
 vi.mock("./LeafBody", () => ({
-  LeafBody: (p: { onDraftChange?: (d: SubmitDraft | null) => void }) => {
+  LeafBody: (p: { onDraftChange?: (d: SubmitDraft | null) => void; onSubmitted: () => void }) => {
     m.report = p.onDraftChange ?? null;
+    m.submitted = p.onSubmitted;
     return null;
   },
 }));
@@ -30,10 +31,12 @@ let root: Root | null = null;
 let host: HTMLElement;
 const onBack = vi.fn();
 const onUnsaved = vi.fn();
+const onSubmitted = vi.fn();
 let draft: { uploading: boolean; keep: ReturnType<typeof vi.fn<() => boolean>>; discard: ReturnType<typeof vi.fn<() => void>> };
 beforeEach(() => {
   onBack.mockClear();
   onUnsaved.mockClear();
+  onSubmitted.mockClear();
   m.push.mockClear();
   draft = { uploading: false, keep: vi.fn(() => true), discard: vi.fn() };
 });
@@ -51,7 +54,7 @@ const view = (pendingLeave: { go: () => void; cancel: () => void } | null = null
       MeProvider,
       { me: { id: CHULSU, nickname: "x", tone: "mint" } } as unknown as Parameters<typeof MeProvider>[0],
       createElement(DetailView, {
-        n: leaf, nodes: tree.nodes, canEdit: false, onOpen: () => {}, onBack, onEdit: () => {}, slug: "aws", roomStatus: "active", focus: null, onFocused: () => {}, onSubmitted: () => {}, toast: () => {},
+        n: leaf, nodes: tree.nodes, canEdit: false, onOpen: () => {}, onBack, onEdit: () => {}, slug: "aws", roomStatus: "active", focus: null, onFocused: () => {}, onSubmitted, toast: () => {},
         viewerPending: false, isLeader: false, quietNotAssigned: false, roots: tree.roots, period: { start: "2026-10-01", end: "2026-11-30" }, personal: { canAdd: true, perRound: 20 }, api: {} as CurriculumApi,
         onUnsavedChange: onUnsaved, pendingLeave,
       }),
@@ -162,5 +165,28 @@ describe("과제 제출 작성 중 나가기 확인", () => {
     expect(onUnsaved).toHaveBeenLastCalledWith(null);
     back();
     expect(onBack).toHaveBeenCalled();
+  });
+  // 제출하면 카드가 onSubmitted(→ 방 화면 router.refresh) 를 부른 뒤 바뀐 내용이 없어져 쌓았던 기록을 back 으로 걷는다.
+  // 그 back 의 popstate(Next 기록 복원)와 refresh 가 겹치면 Next 가 문서를 통째로 다시 불러온다 — refresh 는 기록을 걷은 뒤에
+  it("제출 → 쌓았던 기록을 먼저 걷고(popstate 뒤) 방 화면 갱신을 부른다 — back 은 한 번", () => {
+    mount(true);
+    const backs = vi.spyOn(window.history, "back").mockImplementation(() => {});
+    act(() => m.submitted!());
+    expect(onSubmitted).not.toHaveBeenCalled();
+    act(() => m.report!(null));
+    expect(backs).toHaveBeenCalledTimes(1);
+    expect(onSubmitted).not.toHaveBeenCalled();
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(onSubmitted).toHaveBeenCalledTimes(1);
+    expect(backs).toHaveBeenCalledTimes(1);
+  });
+  it("쌓은 기록이 없으면(시험·바뀐 내용 없음) 방 화면 갱신을 바로 부른다", () => {
+    mount(false);
+    const backs = vi.spyOn(window.history, "back");
+    act(() => m.submitted!());
+    expect(onSubmitted).toHaveBeenCalledTimes(1);
+    expect(backs).not.toHaveBeenCalled();
   });
 });

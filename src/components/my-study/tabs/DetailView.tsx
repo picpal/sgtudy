@@ -142,7 +142,8 @@ function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActio
 /** 보기 모드 상세 — 목록 자리를 쓰는 읽기 전용 화면 (?tab=curriculum&item=). 회차는 기간·진척·설명·과제 목록, 과제는 설명·담당자별 상태 */
 /**
  * 뒤로 가기 보류 — active 인 동안 같은 주소 기록을 하나 쌓아 둔다. 뒤로 가기로 그 기록이 빠지면 다시 쌓고 onHeld(묻기).
- * 돌려준 unwind(then): 쌓아 둔 기록을 먼저 걷고 then — 화면 안 이동(← 연 곳·탭·링크)이 그 기록에 걸리지 않게. active 가 풀리면(제출·취소) 조용히 걷는다
+ * 돌려준 unwind(then): 쌓아 둔 기록을 먼저 걷고 then — 화면 안 이동(← 연 곳·탭·링크)이 그 기록에 걸리지 않게, 제출 뒤 갱신이 그 back 과 겹치지 않게.
+ * active 가 풀리면(취소) 조용히 걷는다
  */
 function useBackHold(active: boolean, onHeld: () => void): (then: () => void) => void {
   const entry = useRef(false);
@@ -560,7 +561,8 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
               onFocused={onFocused}
               onSubmitted={() => {
                 if (pn && !done && code) setCardSkip({ from: code, at: n }); // 처음 제출이면 코드가 바뀐다 — 이 코드에서 바뀐 한 번만 다시 마운트를 건너뛴다
-                onSubmitted();
+                // 방 화면 갱신(router.refresh)은 쌓아 둔 기록을 걷은 뒤에 — 그 back 의 기록 복원과 refresh 가 겹치면 Next 가 문서를 통째로 다시 불러온다
+                unwind(onSubmitted);
               }}
               toast={toast}
               viewerPending={viewerPending}
