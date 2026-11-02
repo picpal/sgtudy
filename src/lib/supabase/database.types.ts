@@ -2896,6 +2896,15 @@ export type Database = {
         }
         Returns: Json
       }
+      node_move_core: {
+        Args: {
+          p_index: number
+          p_node_id: number
+          p_parent_id: number
+          p_slug: string
+        }
+        Returns: number
+      }
       node_outdent: {
         Args: { p_node_id: number; p_slug: string }
         Returns: Json
@@ -2911,6 +2920,10 @@ export type Database = {
         Returns: Json
       }
       node_update: {
+        Args: { p_node_id: number; p_patch: Json; p_slug: string }
+        Returns: Json
+      }
+      node_update_core: {
         Args: { p_node_id: number; p_patch: Json; p_slug: string }
         Returns: Json
       }
@@ -3123,6 +3136,17 @@ export type Database = {
           p_round_id: number
           p_slug: string
           p_start_date?: string
+          p_title: string
+        }
+        Returns: Json
+      }
+      personal_create_core: {
+        Args: {
+          p_description_md: string
+          p_end_date: string
+          p_round_id: number
+          p_slug: string
+          p_start_date: string
           p_title: string
         }
         Returns: Json
