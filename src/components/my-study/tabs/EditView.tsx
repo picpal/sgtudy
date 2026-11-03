@@ -299,6 +299,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   // 이동은 go — request 가 아니라 "저장하지 않은 수정" 확인을 거치지 않는다(성공하면 수정은 이미 지워졌다). [임시저장] = 저장하고 머문다(시험 리프엔 없다)
   const saveAndReturn = () => {
     if (dirty || examDirty) return trySave(editReturn(S));
+    // 시험은 [저장] 을 눌러 반영됐는지 확인하려 한다 — 말없이 돌아가면 저장이 안 되는 줄 안다(시험 313)
+    if (exam) toast({ text: "바뀐 내용이 없어요", tone: "ok" });
     // 저장한 적 없는 새 회차도 [저장] 을 눌렀으면 남긴다 (예전 "저장" 이 fresh 를 지운 것과 같게 — 빈 회차 정리 대상에서 뺀다)
     if (S.fresh === id) update({ fresh: null });
     go(editReturn(S));
@@ -379,6 +381,11 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
               ))}
           </div>
         </div>
+        {exam && !examDraft && examPub?.note && (
+          <p data-exam-published-note="" className="m-0 text-right text-[12px] font-medium text-ink-3 max-sm:text-left">
+            {examPub.note}
+          </p>
+        )}
         {S.saved && (
           <div role="status" className="rounded-[10px] bg-mint-soft px-3 py-2 text-[13px] font-semibold text-mint-deep">
             {S.saved}

@@ -569,6 +569,32 @@ describe("EditView 시험 리프 — 위쪽 [저장]·[발행] (임시저장 없
     expect(barButton("발행됨")!.disabled).toBe(true);
   });
 
+  // 시험 313: 발행된 시험을 고친 뒤 "다시 저장·발행해야 하나" 헤맸다 — [발행됨] 아래에 저장이 곧 반영이라고 알린다
+  it("발행된 시험 — [발행됨] 아래 '저장하면 바로 반영돼요', 시작 전이면 문항이 언제 보이는지까지", async () => {
+    ex.fetch.mockResolvedValue(examView(0, "published"));
+    const published = { ...leaf, exam: { status: "published" as const, questionCount: 1, totalPoints: 1, reveal: "after_submit" as const } };
+    await mount(published);
+    const note = bar().querySelector<HTMLElement>("[data-exam-published-note]")!;
+    expect(note.textContent).toBe("발행된 시험이에요 · 고친 내용은 [저장]하면 바로 반영돼요 · 다시 발행하지 않아도 돼요 · 문항은 10.15(목)부터 멤버에게 보여요");
+  });
+
+  it("초안 시험 — 발행 안내 줄 없음", async () => {
+    await mount(examLeaf);
+    expect(bar().querySelector("[data-exam-published-note]")).toBeNull();
+  });
+
+  it("시험 리프 · 바뀐 것 없음 — [저장] 은 '바뀐 내용이 없어요' 를 알리고 저장 없이 돌아간다", async () => {
+    ex.fetch.mockResolvedValue(examView(0, "published"));
+    const published = { ...leaf, exam: { status: "published" as const, questionCount: 1, totalPoints: 1, reveal: "after_submit" as const } };
+    await mount(published, { editFrom: "list" });
+    act(() => barButton("저장")!.click());
+    await flush();
+    expect(ex.put).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledWith({ text: "바뀐 내용이 없어요", tone: "ok" });
+    expect(went).toHaveLength(1);
+  });
+
   it("발행하면 바로 [발행됨] 으로 바뀐다(트리 요약을 다시 받기 전에도)", async () => {
     await mount(examLeaf);
     act(() => barButton("발행")!.click());

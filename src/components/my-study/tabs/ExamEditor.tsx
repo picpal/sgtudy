@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/Switch";
 import { Seg } from "../bits";
 import {
   AI_DURING_TAKE_ASK, AI_DURING_TAKE_HINT, AI_DURING_TAKE_LABEL, QTYPE_KO, REVEAL_KO, REVEAL_UNSUBMITTED_ASK, REVEAL_UNSUBMITTED_HINT, REVEAL_UNSUBMITTED_LABEL,
-  draftTotals, examErrorAction, examHead, isExamDraft, unpublishLockText,
+  draftTotals, examErrorAction, examHead, isExamDraft, publishedEditNote, unpublishLockText,
 } from "../exam";
 import { useExamEditor, type ExamEditorApi } from "../useExamEditor";
 import { ExamQuestionForm } from "./ExamQuestionForm";
@@ -17,8 +17,8 @@ import { InlineConfirm } from "./InlineConfirm";
 
 /** EditView 가 위쪽 [저장]·[발행]·떠나기 확인에서 부른다 — 저장하지 않은 문항을 저장하거나 버린다, 발행한다 */
 export type ExamEditorHandle = { save: () => Promise<boolean>; discard: () => void; publish: () => Promise<boolean> };
-/** 위쪽 [발행] 의 상태 — draft = 아직 초안(발행 전), canPublish = 불러왔고 문항이 1개 이상, busy = 저장·발행 중 */
-export type ExamPublishState = { draft: boolean; canPublish: boolean; busy: boolean };
+/** 위쪽 [발행] 의 상태 — draft = 아직 초안(발행 전), canPublish = 불러왔고 문항이 1개 이상, busy = 저장·발행 중, note = 발행된 시험의 [발행됨] 아래 안내 */
+export type ExamPublishState = { draft: boolean; canPublish: boolean; busy: boolean; note: string | null };
 export type ExamTab = "manual" | "ai";
 /** AI 탭의 브리프 폼 — 저장하지 않은 브리프도 미저장 가드에 들어간다(위쪽 [저장]·떠나기 확인이 함께 저장·버린다) */
 export type BriefHandle = { dirty: boolean; save: () => Promise<boolean>; discard: () => void };
@@ -92,7 +92,8 @@ export function ExamEditor({ slug, nodeId, summary, toast, onDirty, onChanged, o
   useEffect(() => {
     publishStateRef.current = onPublishState;
   });
-  useEffect(() => publishStateRef.current?.({ draft: draftState, canPublish, busy }), [draftState, canPublish, busy]);
+  const note = view ? publishedEditNote(view) : null;
+  useEffect(() => publishStateRef.current?.({ draft: draftState, canPublish, busy, note }), [draftState, canPublish, busy, note]);
 
   const full = draft.questions.length >= EXAM_LIMITS.questions;
   // 문항을 지우면 그 자리에 다음 카드의 🗑 이 오지 않게 — 앞 카드(없으면 새 첫 카드)의 문제 칸, 다 지웠으면 머리말로 포커스

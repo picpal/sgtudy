@@ -47,13 +47,26 @@ export function takeNote(v: ExamView, personalQuiet: boolean): string | null {
   if (v.viewer.canTake) return null;
   switch (v.viewer.reason) {
     case "not_published": return "아직 발행되지 않은 시험이에요";
-    case "not_started": return `${md(v.node.startDate)} 부터 풀 수 있어요`;
+    // 편집자는 문항을 보기 상세가 아니라 편집 화면에서 본다 — 시작 전 발행 시험을 발행 안 된 줄 알지 않게(시험 313)
+    case "not_started": return v.viewer.canEdit ? `발행했어요 · ${mdw(v.node.startDate)}부터 멤버가 풀 수 있어요 · 문항은 [편집]에서 볼 수 있어요` : `${md(v.node.startDate)} 부터 풀 수 있어요`;
     case "archived": return "보관된 시험이에요";
     case "not_assignee": return personalQuiet ? null : notAssignedText(false);
     case "room_not_active": return "스터디가 진행 중일 때 풀 수 있어요";
     case "closed": return CLOSED_NOTE;
     default: return null;
   }
+}
+
+const mdw = (d: string) => `${md(d)}(${weekdayKo(d)})`;
+
+/**
+ * 발행된 시험 편집 화면의 [발행됨] 아래 한 줄 — 저장이 곧 반영이라 다시 발행할 필요가 없다는 것.
+ * 응시가 시작됐으면 무엇을 고칠 수 있는지는 「문제」 섹션의 잠금 안내가 말한다. 시작 전이면 문항이 언제 멤버에게 보이는지까지
+ */
+export function publishedEditNote(v: ExamView): string | null {
+  if (isExamDraft(v.exam)) return null;
+  const head = v.exam.locked ? "발행된 시험이에요 · [저장]하면 응시한 멤버에게도 바로 반영돼요" : "발행된 시험이에요 · 고친 내용은 [저장]하면 바로 반영돼요 · 다시 발행하지 않아도 돼요";
+  return v.today < v.node.startDate ? `${head} · 문항은 ${mdw(v.node.startDate)}부터 멤버에게 보여요` : head;
 }
 
 /** 시험 응시 카드 머리 배지 — 과제 제출 배지(myBadgeOf)와 같은 말. 담당이 아니거나 아직 풀 수 없는 상태(발행 전·스터디 대기·보관)는 없음 */

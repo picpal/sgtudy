@@ -3,7 +3,7 @@ import type { ExamDraft } from "@/lib/api/exam";
 import type { ExamAttempt, ExamQuestion, ExamView, ExamViewerReason } from "@/lib/api/types";
 import {
   aiInstruction, answeredCount, draftDirty, draftReduce, EMPTY_DRAFT, examBadgeOf, examErrorAction, examHead, isAnswered, isExamDraft, lockText, newQuestion,
-  questionResult, resultSummary, seenExcludedText, submitAsk, submittedLine, takeNote, toggleIndex,
+  publishedEditNote, questionResult, resultSummary, seenExcludedText, submitAsk, submittedLine, takeNote, toggleIndex,
 } from "./exam";
 
 const qs: ExamQuestion[] = [
@@ -46,6 +46,23 @@ describe("takeNote", () => {
     expect(takeNote(view({}, { reason: "archived" }), true)).toBe("보관된 시험이에요");
   });
   it("canTake → null", () => expect(takeNote(view({}, { canTake: true }), false)).toBeNull());
+  // 시험 313: 시작 전 회차의 발행 시험 — 편집자가 보기 상세에서 문항이 없다고 발행이 안 된 줄 알았다
+  it("편집자 · 발행됨 · 시작 전 → 발행했다는 것과 문항은 [편집]에서 본다는 것까지", () =>
+    expect(takeNote(view({}, { reason: "not_started", canEdit: true }), false)).toBe("발행했어요 · 10.15(목)부터 멤버가 풀 수 있어요 · 문항은 [편집]에서 볼 수 있어요"));
+});
+
+describe("publishedEditNote — 발행된 시험 편집 화면의 [발행됨] 아래 안내", () => {
+  const ed = (o: Partial<ExamView> = {}, exam: Partial<ExamView["exam"]> = {}) => {
+    const v = view({ today: "2026-10-16", ...o }, { canEdit: true });
+    return { ...v, exam: { ...v.exam, locked: false, submittedCount: 0, ...exam } };
+  };
+  it("초안 → null", () => expect(publishedEditNote(ed({}, { status: "draft" }))).toBeNull());
+  it("진행 중 · 응시 없음 → 저장하면 바로 반영 · 다시 발행 안 해도", () =>
+    expect(publishedEditNote(ed())).toBe("발행된 시험이에요 · 고친 내용은 [저장]하면 바로 반영돼요 · 다시 발행하지 않아도 돼요"));
+  it("응시가 시작됐으면 → 응시 중인 멤버에게도 반영(무엇을 고칠 수 있는지는 잠금 안내가 말한다)", () =>
+    expect(publishedEditNote(ed({}, { locked: true, submittedCount: 1 }))).toBe("발행된 시험이에요 · [저장]하면 응시한 멤버에게도 바로 반영돼요"));
+  it("시작 전 회차 → 시작일부터 멤버에게 문항이 보인다는 것까지", () =>
+    expect(publishedEditNote(ed({ today: "2026-10-12" }))).toBe("발행된 시험이에요 · 고친 내용은 [저장]하면 바로 반영돼요 · 다시 발행하지 않아도 돼요 · 문항은 10.15(목)부터 멤버에게 보여요"));
 });
 
 describe("examBadgeOf", () => {

@@ -113,6 +113,14 @@ describe("ExamSection — 상태 안내", () => {
     expect(button("제출하기")).toBeUndefined();
     expect(host.textContent).toContain("제출 현황");
   });
+  // 시험 313: 시작 전 회차의 발행 시험 — 편집자(담당 겸)도 보기 상세엔 문항이 없다(스펙 §4.3). 발행됐고 문항은 [편집]에서 본다고 알린다
+  it("편집자 · 시작 전 발행 시험 → '발행했어요 · 10.15(목)부터 멤버가 풀 수 있어요 · 문항은 [편집]에서', 문항 없음", async () => {
+    m.results.mockReturnValue(new Promise(() => {}));
+    const v = view({ reason: "not_started", today: "2026-10-12" });
+    await mount({ ...v, viewer: { ...v.viewer, canEdit: true }, questions: revealed });
+    expect(host.querySelector("[role=note]")?.textContent).toBe("발행했어요 · 10.15(목)부터 멤버가 풀 수 있어요 · 문항은 [편집]에서 볼 수 있어요");
+    expect(host.querySelector("input")).toBeNull();
+  });
   it("그룹장(담당 아님 문구 숨김) → 안내 없음", async () => {
     await mount(view({ reason: "not_assignee", questions: null }), true);
     expect(host.querySelector("[role=note]")).toBeNull();
