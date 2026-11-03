@@ -320,24 +320,24 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
   );
   return (
     <section ref={sectionRef} aria-labelledby={pn && editing ? `pf-${pn.id}` : "detail-title"} onKeyDown={onKey} className="flex flex-col">
-      <div ref={stickyBar} className="sticky top-0 z-[2] -mx-1 flex flex-wrap items-center gap-2 border-b border-line-2 bg-surface px-1 py-3">
+      <div ref={stickyBar} className="sticky top-0 z-[2] flex flex-wrap items-center gap-2 border-b border-line-2 bg-surface py-3">
         <button type="button" onClick={() => guard(onBack)} className="inline-flex h-11 shrink-0 items-center gap-[6px] rounded-[22px] border border-line-3 bg-surface pl-3 pr-4 text-[14px] font-semibold text-ink">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M19 12H5M11 6l-6 6 6 6" />
           </svg>
           {backLabel}
         </button>
-        {/* 개인 목표는 머리 버튼이 2~3개 — 좁으면 경로가 세로로 찌그러지지 않게 버튼 줄을 아래로 내린다 */}
-        <nav aria-label="경로" className={`flex min-w-0 flex-wrap items-center gap-x-1 text-[13px] text-muted ${pn ? "flex-[1_1_14rem]" : "flex-1"}`}>
+        {/* 개인 목표는 머리 버튼이 2~3개 — 좁으면 경로가 세로로 찌그러지지 않게 버튼 줄을 아래로 내린다. 경로 자체는 한 줄 — 앞부분이 길면 …로 줄고 마지막 종류(› 과제)는 그대로 */}
+        <nav aria-label="경로" className={`flex min-w-0 flex-nowrap items-center gap-x-1 text-[13px] text-muted ${pn ? "flex-[1_1_14rem]" : "flex-1"}`}>
           {ancestors.map((a) => (
-            <span key={a.id} className="inline-flex items-center gap-1">
-              <button type="button" onClick={() => guard(() => onOpen(a.id))} className="inline-flex min-h-11 items-center rounded-[8px] px-1 font-medium text-ink-2 underline-offset-2 hover:underline">
-                {a.d === 0 && !a.leaf && a.label ? `${a.label} ${a.title}` : a.title}
+            <span key={a.id} className="inline-flex min-w-0 shrink items-center gap-1">
+              <button type="button" onClick={() => guard(() => onOpen(a.id))} className="inline-flex min-h-11 min-w-0 items-center rounded-[8px] px-1 font-medium text-ink-2 underline-offset-2 hover:underline">
+                <span className="truncate">{a.d === 0 && !a.leaf && a.label ? `${a.label} ${a.title}` : a.title}</span>
               </button>
-              <span aria-hidden="true">›</span>
+              <span aria-hidden="true" className="shrink-0">›</span>
             </span>
           ))}
-          <span>{kind}</span>
+          <span className="shrink-0 whitespace-nowrap">{kind}</span>
         </nav>
         {pn && acts && !editing && (
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">

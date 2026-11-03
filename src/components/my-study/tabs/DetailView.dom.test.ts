@@ -116,3 +116,17 @@ describe("DetailView 시험 리프 머리", () => {
     expect(render(leaf("311"), CHULSU, false).querySelector("nav[aria-label=경로]")?.textContent).toMatch(/과제$/);
   });
 });
+
+describe("DetailView 경로 한 줄 · 가로 넘침 방지 (클래스 수준)", () => {
+  it("경로는 줄바꿈 없이 앞부분만 …로 줄고, 마지막 종류는 줄지 않는다", () => {
+    const nav = render(leaf("32"), CHULSU, false).querySelector("nav[aria-label=경로]")!;
+    expect(nav.classList.contains("flex-nowrap")).toBe(true);
+    expect(nav.classList.contains("flex-wrap")).toBe(false);
+    expect(nav.querySelector("button span.truncate")).not.toBeNull();
+    expect(nav.lastElementChild?.classList.contains("shrink-0")).toBe(true);
+  });
+  it("sticky 막대에 음수 가로 마진(-mx-1)을 두지 않는다 — 본문이 4px 넘쳤다", () => {
+    const bar = render(leaf("32"), CHULSU, false).querySelector("section > div")!;
+    expect(bar.className).not.toMatch(/-mx-/);
+  });
+});
