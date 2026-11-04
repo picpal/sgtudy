@@ -129,7 +129,7 @@ export function WrongNoteDetail(p: Props) {
   const nav = ids.length > 0;
 
   return (
-    <div className="mt-[18px] flex flex-col gap-4 @container">
+    <div className="flex flex-col gap-4 @container">
       <div>
         <button type="button" onClick={p.onBack} className="-ml-2 inline-flex min-h-11 items-center gap-1 rounded-[10px] px-2 text-[13px] font-semibold text-ink-2 hover:bg-surface-2">
           <BackIcon />

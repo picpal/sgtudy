@@ -33,20 +33,26 @@ export function WrongNoteTab({ slug, viewerPending, toast, periods }: Props) {
   const nav = useNoteRound();
   const pending = viewerPending || serverPending;
 
-  if (!pending && !w.studies) return w.error && !w.loading ? <WrongNoteError onRetry={w.refetch} /> : <WrongNoteLoading />;
+  // 탭 줄과 본문 사이 여백은 방 탭의 것 — 내 과제는 main 의 gap 을 그대로 쓴다
   return (
-    <WrongNoteList
-      studies={w.studies ?? []}
-      pending={pending}
-      scope="room"
-      busy={w.busy}
-      onPractice={w.practice}
-      onMaster={w.master}
-      onBookmark={w.bookmark}
-      round={nav.round}
-      onOpenRound={nav.open}
-      onBack={nav.back}
-      periods={periods}
-    />
+    <div className="mt-[18px]">
+      {!pending && !w.studies ? (
+        w.error && !w.loading ? <WrongNoteError onRetry={w.refetch} /> : <WrongNoteLoading />
+      ) : (
+        <WrongNoteList
+          studies={w.studies ?? []}
+          pending={pending}
+          scope="room"
+          busy={w.busy}
+          onPractice={w.practice}
+          onMaster={w.master}
+          onBookmark={w.bookmark}
+          round={nav.round}
+          onOpenRound={nav.open}
+          onBack={nav.back}
+          periods={periods}
+        />
+      )}
+    </div>
   );
 }

@@ -180,4 +180,26 @@ describe("WrongNoteTab", () => {
     expect(api.fetchWrongNote).toHaveBeenCalledTimes(3);
     expect(host.textContent).toContain("다시 풀어 맞힘 1");
   });
+
+  it("탭 줄 아래 18px 여백은 방 탭이 한 번만 든다 — 불러오는 중·목록·상세·승인 대기 모두", async () => {
+    const once = (host: HTMLElement) => {
+      const wrap = host.firstElementChild!;
+      expect(wrap.className).toContain("mt-[18px]");
+      expect(wrap.innerHTML).not.toContain("mt-[18px]");
+    };
+    api.fetchWrongNote.mockReturnValueOnce(new Promise(() => {}));
+    const loading = await mount(false, "?tab=wrong");
+    expect(loading.host.querySelector("[aria-busy=true]")).not.toBeNull();
+    once(loading.host);
+    act(() => root!.unmount());
+    const list = await mount(false, "?tab=wrong");
+    expect(list.host.querySelector("[data-round-card='3']")).not.toBeNull();
+    once(list.host);
+    act(() => root!.unmount());
+    const detail = await mount();
+    expect(detail.host.querySelector("[data-wn-item='1']")).not.toBeNull();
+    once(detail.host);
+    act(() => root!.unmount());
+    once((await mount(true)).host);
+  });
 });

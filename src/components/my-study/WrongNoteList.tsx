@@ -240,7 +240,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   if (round === null && starIds && !pending) {
     const entries = starEntries(selected, starIds);
     return (
-      <div ref={rootRef} className="mt-[18px] flex flex-col gap-4">
+      <div ref={rootRef} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
             {starButton}
@@ -281,7 +281,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
 
   if (empty && empty.text !== FILTER_EMPTY_TEXT) {
     return (
-      <div className="mt-[18px] rounded-[14px] border border-dashed border-line-dash p-5 text-center text-[13px] text-muted">
+      <div className="rounded-[14px] border border-dashed border-line-dash p-5 text-center text-[13px] text-muted">
         {starCount > 0 && !pending && <div className="mb-3 flex justify-center">{starButton}</div>}
         <p className="m-0">{empty.text}</p>
         {empty.masteredLink && (
@@ -336,7 +336,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
     const hit = findRound(studies, round);
     if (!hit) {
       return (
-        <div ref={rootRef} className="mt-[18px] flex flex-col items-start gap-2">
+        <div ref={rootRef} className="flex flex-col items-start gap-2">
           <p className="m-0 w-full rounded-[14px] border border-dashed border-line-dash p-5 text-center text-[13px] text-muted">이 회차의 오답을 찾을 수 없어요</p>
           <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center px-2 text-[13px] font-semibold text-mint-deep underline underline-offset-2">
             회차 목록으로
@@ -378,7 +378,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
 
   const line = totalsLine(totals);
   return (
-    <div ref={rootRef} className="mt-[18px] flex flex-col gap-4">
+    <div ref={rootRef} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         {line && <p className="m-0 text-[14px] font-semibold text-ink-2">{line}</p>}
         <div>{starButton}</div>
@@ -541,7 +541,7 @@ function StarRow({ e, scope, busy, run, fieldError, onOpen, h }: StarRowProps) {
 /** 처음 받는 중 — 시험 응시 카드와 같은 자리표시 */
 export function WrongNoteLoading() {
   return (
-    <div aria-busy="true" aria-label="오답노트 불러오는 중" className="mt-[18px] flex flex-col gap-3">
+    <div aria-busy="true" aria-label="오답노트 불러오는 중" className="flex flex-col gap-3">
       <div className="h-5 w-40 rounded-[6px] bg-line-2" />
       <div className="h-[120px] rounded-[14px] bg-surface-3" />
     </div>
@@ -550,7 +550,7 @@ export function WrongNoteLoading() {
 
 export function WrongNoteError({ onRetry }: { onRetry: () => void }) {
   return (
-    <div role="alert" className="mt-[18px] flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
+    <div role="alert" className="flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
       <span className="min-w-0 flex-[1_1_200px]">오답노트를 불러오지 못했어요</span>
       <button type="button" onClick={onRetry} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">
         다시 시도

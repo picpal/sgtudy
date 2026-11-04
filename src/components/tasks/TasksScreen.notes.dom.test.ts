@@ -120,6 +120,32 @@ describe("TasksScreen — 「오답노트」 보기 (오답노트 D17~D21)", () 
     expect(row.className).toContain("min-h-11");
   });
 
+  it("요약이 하나면 ≤640 에서도 원문 그대로(줄임 표기 없음)", async () => {
+    const host = await mount("");
+    const p = host.querySelector("h1")!.nextElementSibling!;
+    expect(p.textContent).toBe("남은 팀 과제 1개");
+    expect(p.className).toContain("truncate");
+    expect(p.querySelector(".sm\\:hidden")).toBeNull();
+  });
+
+  it("요약이 둘 이상이면 ≤640 은 줄임 표기 · 전체 문구는 title", async () => {
+    const dueToday = { ...TASKS, items: [{ ...TASKS.items[0], endDate: "2026-10-16" }] };
+    const host = await mount("", dueToday);
+    const p = host.querySelector("h1")!.nextElementSibling!;
+    expect(p.getAttribute("title")).toBe("남은 팀 과제 1개 · 오늘 마감 1개");
+    expect([...p.querySelectorAll(".sm\\:hidden")].map((s) => s.textContent)).toEqual(["남은 1", "오늘 1"]);
+    expect([...p.querySelectorAll(".max-sm\\:hidden")].map((s) => s.textContent)).toEqual(["남은 팀 과제 1개", "오늘 마감 1개"]);
+  });
+
+  it("오답노트 본문은 과제 보기와 같은 자리에서 시작 — 목록·상세 모두 자체 위 여백 없음", async () => {
+    const host = await mount("?view=notes");
+    expect(host.querySelector("main")!.innerHTML).not.toContain("mt-[18px]");
+    act(() => root!.unmount());
+    const detail = await mount("?view=notes&round=aws-r");
+    expect(detail.querySelector("[data-wn-item='1']")).not.toBeNull();
+    expect(detail.querySelector("main")!.innerHTML).not.toContain("mt-[18px]");
+  });
+
   it("과제 보기(기본)에서는 받지 않는다", async () => {
     const host = await mount("");
     expect(m.fetchWrongNoteMine).not.toHaveBeenCalled();

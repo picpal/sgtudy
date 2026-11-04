@@ -181,7 +181,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const empty = emptyKind(data, filter, items);
   // 오답노트 보기: 과제 스터디도 오답 스터디도 없을 때만(이탈한 방만 남아도 오답은 보이고, 툴바로 과제 보기에 돌아갈 수 있게)
   const noStudy = empty === "noStudy" && (!notesView || noteStudies?.length === 0);
-  // 제목 옆 한 줄 요약 — ≤640 은 자리가 좁아 short(전체 문구는 title)
+  // 제목 옆 한 줄 요약 — ≤640 은 둘 이상이면 다 들어가게 short, 하나면 원문 그대로(전체 문구는 title)
   const pieces = [
     sum.left > 0 && { long: `남은 팀 과제 ${sum.left}개`, short: `남은 ${sum.left}` },
     sum.dueToday > 0 && { long: `오늘 마감 ${sum.dueToday}개`, short: `오늘 ${sum.dueToday}`, warn: true },
@@ -280,8 +280,14 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
                     <Fragment key={p.long}>
                       {i > 0 && " · "}
                       <span className={p.warn ? "font-semibold text-warn" : undefined}>
-                        <span className="max-sm:hidden">{p.long}</span>
-                        <span className="sm:hidden">{p.short}</span>
+                        {pieces.length === 1 ? (
+                          p.long
+                        ) : (
+                          <>
+                            <span className="max-sm:hidden">{p.long}</span>
+                            <span className="sm:hidden">{p.short}</span>
+                          </>
+                        )}
                       </span>
                     </Fragment>
                   ))}
