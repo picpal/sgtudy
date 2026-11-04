@@ -108,6 +108,18 @@ describe("TasksScreen — 「오답노트」 보기 (오답노트 D17~D21)", () 
     expect(host.textContent).toContain("오답 3문항");
   });
 
+  it("요약은 제목 바로 옆 · 전체 문구는 title · 오답노트 보기로 가면 빠져도 머리 줄은 44px 그대로", async () => {
+    const host = await mount("");
+    const h1 = host.querySelector("h1")!;
+    expect(h1.nextElementSibling!.getAttribute("title")).toBe("남은 팀 과제 1개");
+    const row = h1.parentElement!.parentElement!;
+    expect(row.className).toContain("min-h-11");
+    await click(btn(view(host), "오답노트"));
+    expect(h1.nextElementSibling).toBeNull();
+    expect(h1.parentElement!.parentElement).toBe(row);
+    expect(row.className).toContain("min-h-11");
+  });
+
   it("과제 보기(기본)에서는 받지 않는다", async () => {
     const host = await mount("");
     expect(m.fetchWrongNoteMine).not.toHaveBeenCalled();

@@ -181,19 +181,12 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const empty = emptyKind(data, filter, items);
   // 오답노트 보기: 과제 스터디도 오답 스터디도 없을 때만(이탈한 방만 남아도 오답은 보이고, 툴바로 과제 보기에 돌아갈 수 있게)
   const noStudy = empty === "noStudy" && (!notesView || noteStudies?.length === 0);
+  // 제목 옆 한 줄 요약 — ≤640 은 자리가 좁아 short(전체 문구는 title)
   const pieces = [
-    sum.left > 0 && <Fragment key="l">남은 팀 과제 {sum.left}개</Fragment>,
-    sum.dueToday > 0 && (
-      <strong key="t" className="font-semibold text-warn">
-        오늘 마감 {sum.dueToday}개
-      </strong>
-    ),
-    sum.personalTotal > 0 && (
-      <Fragment key="p">
-        이번 회차 개인 목표 {sum.personalDone}/{sum.personalTotal} 완료
-      </Fragment>
-    ),
-  ].filter(Boolean);
+    sum.left > 0 && { long: `남은 팀 과제 ${sum.left}개`, short: `남은 ${sum.left}` },
+    sum.dueToday > 0 && { long: `오늘 마감 ${sum.dueToday}개`, short: `오늘 ${sum.dueToday}`, warn: true },
+    sum.personalTotal > 0 && { long: `이번 회차 개인 목표 ${sum.personalDone}/${sum.personalTotal} 완료`, short: `목표 ${sum.personalDone}/${sum.personalTotal}` },
+  ].filter((p) => p !== false);
 
   const renderBody = () => {
     if (empty === "noStudy") return <TasksEmpty kind="noStudy" />;
@@ -277,15 +270,19 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
       <AppHeader active="tasks" bell={<NotificationBell />} />
       <PageBody>
         <main aria-busy={pending > 0} className="mx-auto flex w-full max-w-[1080px] flex-col gap-4 rounded-[20px] bg-surface px-7 pb-[30px] pt-[26px] max-sm:px-2 max-sm:pb-7 max-sm:pt-5">
-          <div className="flex items-start gap-3 max-sm:px-2">
-            <div className="min-w-0 flex-1">
-              <h1 ref={title} tabIndex={-1} className="m-0 text-[26px] font-bold focus:outline-none tracking-[-0.02em] max-sm:text-[22px]">내 과제</h1>
+          {/* 보기를 바꿔도 아래가 밀리지 않게 — 요약·버튼 유무와 상관없이 버튼 높이(44px) 한 줄 */}
+          <div className="flex min-h-11 items-center gap-3 max-sm:gap-2 max-sm:px-2">
+            <div className="flex min-w-0 flex-1 items-baseline gap-3 max-sm:gap-2">
+              <h1 ref={title} tabIndex={-1} className="m-0 shrink-0 whitespace-nowrap text-[26px] font-bold focus:outline-none tracking-[-0.02em] max-sm:text-[22px]">내 과제</h1>
               {!notesView && pieces.length > 0 && (
-                <p className="m-0 mt-[6px] text-[14px] text-muted max-sm:text-[13px]">
+                <p title={pieces.map((p) => p.long).join(" · ")} className="m-0 min-w-0 truncate text-[14px] text-muted max-sm:text-[13px]">
                   {pieces.map((p, i) => (
-                    <Fragment key={i}>
+                    <Fragment key={p.long}>
                       {i > 0 && " · "}
-                      {p}
+                      <span className={p.warn ? "font-semibold text-warn" : undefined}>
+                        <span className="max-sm:hidden">{p.long}</span>
+                        <span className="sm:hidden">{p.short}</span>
+                      </span>
                     </Fragment>
                   ))}
                 </p>
