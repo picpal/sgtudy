@@ -215,13 +215,13 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   };
 
   const openStars = () => setStarIds(new Set(starEntries(selected).map((e) => e.item.question.id)));
-  // 필터 줄·★ 보기에선 오른쪽 끝(ml-auto) — 빈 상태만 가운데
+  // 필터 줄·★ 보기에선 오른쪽 끝(ml-auto) — 빈 상태만 가운데. 필터가 아니라 동작이라 민트(navy 는 켜진 칩 ink 와 구분이 안 된다)
   const starButton = (place = "ml-auto") => (
     <button
       type="button"
       aria-pressed={starIds !== null}
       onClick={() => (starIds ? setStarIds(null) : openStars())}
-      className={`${CHIP} ${place} gap-1 ${starIds ? "border-amber-text bg-amber-soft font-semibold text-amber-text" : "border-line-3 bg-surface font-medium text-ink-3"}`}
+      className={`${CHIP} ${place} gap-1 font-semibold ${starIds ? "border-amber-text bg-amber-soft text-amber-text" : "border-mint bg-mint text-white hover:border-mint-dark hover:bg-mint-dark"}`}
     >
       <span aria-hidden="true">★</span> 다시 볼 문제 ({starCount})
     </button>

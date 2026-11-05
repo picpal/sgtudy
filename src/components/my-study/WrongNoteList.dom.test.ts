@@ -589,8 +589,13 @@ describe("WrongNoteList — 다시 볼 문제 ★ (0051)", () => {
     expect(row.lastElementChild).toBe(sb);                                     // 필터 → 외운 문제 보기 → ★
     expect(row.querySelector("label")).not.toBeNull();
     expect(sb.className).toContain("ml-auto");
+    // 필터 칩과 다른 색 — 꺼짐은 민트, 켜짐은 호박색
+    expect(sb.className).toContain("bg-mint");
+    expect(group.querySelector("[aria-checked='true']")!.className).toContain("bg-ink");
     await click(sb);
     const on = starBtn(host)!;
+    expect(on.className).toContain("bg-amber-soft");
+    expect(on.className).not.toContain("bg-mint");
     expect(on.parentElement!.lastElementChild).toBe(on);                       // 누른 자리(오른쪽)에 그대로
     expect(on.className).toContain("ml-auto");
     expect(on.previousElementSibling?.textContent).toBe("회차 목록으로");
