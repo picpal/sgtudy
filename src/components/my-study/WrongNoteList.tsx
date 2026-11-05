@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { GuardedLink as Link } from "@/components/ui/GuardedLink";
 import { studyTone } from "@/components/tasks/tone";
 import type { WrongNoteExam, WrongNoteRound } from "@/lib/api/types";
@@ -215,12 +215,13 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   };
 
   const openStars = () => setStarIds(new Set(starEntries(selected).map((e) => e.item.question.id)));
-  const starButton = (
+  // 필터 줄·★ 보기에선 오른쪽 끝(ml-auto) — 빈 상태만 가운데
+  const starButton = (place = "ml-auto") => (
     <button
       type="button"
       aria-pressed={starIds !== null}
       onClick={() => (starIds ? setStarIds(null) : openStars())}
-      className={`${CHIP} gap-1 ${starIds ? "border-amber-text bg-amber-soft font-semibold text-amber-text" : "border-line-3 bg-surface font-medium text-ink-3"}`}
+      className={`${CHIP} ${place} gap-1 ${starIds ? "border-amber-text bg-amber-soft font-semibold text-amber-text" : "border-line-3 bg-surface font-medium text-ink-3"}`}
     >
       <span aria-hidden="true">★</span> 다시 볼 문제 ({starCount})
     </button>
@@ -243,10 +244,10 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
       <div ref={rootRef} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            {starButton}
             <button type="button" onClick={() => setStarIds(null)} className="inline-flex min-h-11 items-center px-2 text-[13px] font-semibold text-mint-deep underline underline-offset-2">
               회차 목록으로
             </button>
+            {starButton()}
           </div>
           <p className="m-0 text-[13px] text-ink-3">다시 풀어 맞혔거나 외운 문항도 ★ 표시를 끄기 전까지 여기에 모여요</p>
         </div>
@@ -282,7 +283,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   if (empty && empty.text !== FILTER_EMPTY_TEXT) {
     return (
       <div className="rounded-[14px] border border-dashed border-line-dash p-5 text-center text-[13px] text-muted">
-        {starCount > 0 && !pending && <div className="mb-3 flex justify-center">{starButton}</div>}
+        {starCount > 0 && !pending && <div className="mb-3 flex justify-center">{starButton("")}</div>}
         <p className="m-0">{empty.text}</p>
         {empty.masteredLink && (
           <button type="button" onClick={() => changeView(filter, true)} className="mt-1 inline-flex min-h-11 items-center px-2 font-semibold text-mint-deep underline underline-offset-2">
@@ -301,8 +302,8 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
     changeView(next, showMastered);
     e.currentTarget.querySelector<HTMLElement>(`[data-filter="${next}"]`)?.focus();
   };
-  // 상세의 「외운 문제 n개 보기」 는 그 회차 기준
-  const filterBar = (mastered: number) => (
+  // 상세의 「외운 문제 n개 보기」 는 그 회차 기준 · trailing 은 줄 오른쪽 끝(좁으면 다음 줄로 내려가 오른쪽)
+  const filterBar = (mastered: number, trailing?: ReactNode) => (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       <div role="radiogroup" aria-label="오답 필터" onKeyDown={onChipKey} className="flex min-w-0 max-w-full gap-2 overflow-x-auto">
         {FILTERS.map((f) => {
@@ -329,6 +330,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
           외운 문제 {mastered}개 보기
         </label>
       )}
+      {trailing}
     </div>
   );
 
@@ -381,8 +383,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
     <div ref={rootRef} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
         {line && <p className="m-0 text-[14px] font-semibold text-ink-2">{line}</p>}
-        <div>{starButton}</div>
-        {filterBar(totals.mastered)}
+        {filterBar(totals.mastered, starButton())}
       </div>
 
       {empty ? (

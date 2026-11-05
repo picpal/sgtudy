@@ -578,6 +578,30 @@ describe("WrongNoteList — 다시 볼 문제 ★ (0051)", () => {
     expect(host.querySelector('[data-round-card="3"]')).not.toBeNull();
   });
 
+  it("「★ 다시 볼 문제 (N)」 은 목록 필터 줄 오른쪽 끝(필터·외운 문제 뒤) · ★ 보기에서도 오른쪽", async () => {
+    const s = AWS();
+    s.rounds[0].exams[0].items![0] = { ...s.rounds[0].exams[0].items![0], mastered: true };
+    const { host } = mount({ studies: [s], round: null });
+    const group = host.querySelector("[role='radiogroup']")!;
+    const row = group.parentElement!;
+    const sb = starBtn(host)!;
+    expect(sb.parentElement).toBe(row);
+    expect(row.lastElementChild).toBe(sb);                                     // 필터 → 외운 문제 보기 → ★
+    expect(row.querySelector("label")).not.toBeNull();
+    expect(sb.className).toContain("ml-auto");
+    await click(sb);
+    const on = starBtn(host)!;
+    expect(on.parentElement!.lastElementChild).toBe(on);                       // 누른 자리(오른쪽)에 그대로
+    expect(on.className).toContain("ml-auto");
+    expect(on.previousElementSibling?.textContent).toBe("회차 목록으로");
+  });
+
+  it("회차 상세의 필터 줄엔 「★ 다시 볼 문제 (N)」 이 없다", () => {
+    const { host } = mount({ round: "3" });
+    expect(host.querySelector("[role='radiogroup']")).not.toBeNull();
+    expect(starBtn(host)).toBeNull();
+  });
+
   it("★ 0 개 → 보기 안내 · 잠긴 회차 카드엔 ★ 없음", async () => {
     const { host } = mount({ round: null });
     expect(text(host.querySelector('[data-round-card="3"]')!.closest("article"))).not.toContain("다시 볼 문제");
