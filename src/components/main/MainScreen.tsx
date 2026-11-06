@@ -21,6 +21,19 @@ const urlFilters = (anonymous: boolean): HomeFilters => {
   return anonymous ? { ...f, scope: "public" } : f;
 };
 
+function SearchField({ q, onChange, className }: { q: string; onChange: (q: string) => void; className: string }) {
+  return (
+    <label className={`flex items-center gap-2 rounded-[12px] border px-[14px] ${className}`}>
+      <span className="sr-only">스터디 검색</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6675" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="shrink-0">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
+      <input type="search" value={q} onChange={(e) => onChange(e.target.value)} maxLength={50} placeholder="스터디 제목, 태그 검색" className="w-full min-w-0 border-0 bg-transparent text-[14px] outline-none placeholder:text-faint" />
+    </label>
+  );
+}
+
 /** filters: 서버가 주소에서 읽어 initial 을 조회한 조건 */
 export function MainScreen({ initial, filters }: { initial: RoomListResponse; filters: HomeFilters }) {
   const me = useMe();
@@ -102,21 +115,15 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
   return (
     <div className="min-h-screen text-ink">
       <AppHeader active="home" bell={<NotificationBell />}>
-        <label className="flex h-10 min-w-40 flex-[0_1_280px] items-center gap-2 rounded-[12px] border border-line bg-surface-3 px-[14px]">
-          <span className="sr-only">스터디 검색</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6675" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="shrink-0">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} maxLength={50} placeholder="스터디 제목, 태그 검색" className="w-full min-w-0 border-0 bg-transparent text-[14px] outline-none placeholder:text-faint" />
-        </label>
+        <SearchField q={q} onChange={setQ} className="h-10 min-w-40 flex-[0_1_280px] border-line bg-surface-3" />
       </AppHeader>
 
       <PageBody as="main">
-        <div className="mb-7 flex flex-wrap items-end justify-between gap-4 max-sm:mb-5 max-sm:gap-3">
-          <div>
+        {/* ≤640: 제목·방 만들기 한 줄 → 설명 → 전폭 검색(내 과제처럼 제목 왼쪽·주 버튼 오른쪽, 그 아래 조건). 검색이 탭보다 위인 건 세 탭 모두에 걸리기 때문이다 */}
+        <div className="mb-7 flex flex-wrap items-end justify-between gap-4 max-sm:mb-5 max-sm:items-center max-sm:gap-3">
+          <div className="max-sm:contents">
             <h1 className="m-0 text-[28px] font-bold tracking-[-0.02em] max-sm:text-[22px]">슥터디 룸</h1>
-            <p className="mb-0 mt-[6px] text-[15px] text-muted max-sm:mt-1 max-sm:text-[14px]">함께 목표를 세우고, 누가 어디까지 왔는지 한눈에 확인하세요.</p>
+            <p className="mb-0 mt-[6px] text-[15px] text-muted max-sm:order-1 max-sm:-mt-2 max-sm:basis-full max-sm:text-[14px]">함께 목표를 세우고, 누가 어디까지 왔는지 한눈에 확인하세요.</p>
           </div>
           <Link href={createHref} className="flex h-[46px] items-center gap-2 rounded-[14px] bg-navy px-5 text-[15px] font-semibold text-white hover:text-white max-sm:h-11 max-sm:rounded-[12px] max-sm:px-4 max-sm:text-[14px]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
@@ -124,6 +131,7 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
             </svg>
             방 만들기
           </Link>
+          <SearchField q={q} onChange={setQ} className="h-11 basis-full border-line-3 bg-surface focus-within:border-mint focus-within:shadow-[0_0_0_3px_#DDF4EE] sm:hidden max-sm:order-2" />
         </div>
 
         <FilterBar tab={tab} tabCounts={res.tabCounts} onTab={setTab} status={status} onStatus={setStatus} tagCounts={tagCounts} tags={tags} onToggleTag={toggleTag} onResetTags={() => setTags([])} anonymous={!me} />

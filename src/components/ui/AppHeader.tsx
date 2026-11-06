@@ -80,7 +80,7 @@ const NAV: { key: NavKey; label: string; href: string; authOnly: boolean; icon: 
 type Props = {
   /** 생략하면 어느 메뉴도 강조하지 않는다 (/me, /rooms/new 처럼 nav 키가 없는 화면) */
   active?: NavKey;
-  /** nav 와 알림 사이에 끼울 요소 (Main 의 검색창 등) */
+  /** nav 와 알림 사이에 끼울 요소 (Main 의 검색창 등). ≤640 에서는 그리지 않는다 */
   children?: ReactNode;
   /** 알림 벨 (Task 4 의 <NotificationBell/>). 없으면 벨을 그리지 않는다 */
   bell?: ReactNode;
@@ -195,8 +195,9 @@ export function AppHeader({ active, children, bell }: Props) {
         })}
       </nav>
       <div className="flex-[1_1_24px] max-sm:flex-1" />
-      {/* ≤900: 한 줄에 다 들어가지 않아(768·820 에서 벨·아바타가 둘째 줄로 밀렸다) 검색 등 끼운 요소를 맨 아래 전폭 줄로 내린다 */}
-      {children && <div className="flex min-w-0 max-[901px]:order-9 max-[901px]:w-full [&>*]:max-[901px]:flex-auto">{children}</div>}
+      {/* ≤900: 한 줄에 다 들어가지 않아(768·820 에서 벨·아바타가 둘째 줄로 밀렸다) 검색 등 끼운 요소를 맨 아래 전폭 줄로 내린다.
+          ≤640 은 헤더에 그리지 않는다 — 이 줄만큼 메뉴가 밀려 메뉴를 누를 때마다 화면이 움찔했다(검색은 방 둘러보기 본문에 따로 있다) */}
+      {children && <div className="flex min-w-0 max-sm:hidden max-[901px]:order-9 max-[901px]:w-full [&>*]:max-[901px]:flex-auto">{children}</div>}
       {me ? (
         <>
           {/* 의견 보내기(0044) — 벨 왼쪽. 로그인했을 때만(스펙 D1). 390 폭에서도 로고와 한 줄(스펙 D2) */}

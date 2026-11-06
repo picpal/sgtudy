@@ -79,12 +79,14 @@ export function HomeSkeleton() {
       </AppHeader>
       <span className="sr-only" role="status">불러오는 중</span>
       <PageBody as="main" aria-hidden="true">
-        <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
-          <div className="flex flex-col gap-2">
-            <Bar className="h-8 w-40" />
-            <Bar className="h-5 w-72 max-w-full" />
+        <div className="mb-7 flex flex-wrap items-end justify-between gap-4 max-sm:mb-5 max-sm:items-center max-sm:gap-3">
+          <div className="flex flex-col gap-2 max-sm:contents">
+            <Bar className="h-8 w-40 max-sm:w-24" />
+            {/* 설명 한 줄 21px — 375 미만에서는 두 줄 42px. 골격이 끝날 때 검색이 움찔하지 않게 실제와 같은 높이로 */}
+            <Bar className="h-5 w-72 max-w-full max-sm:order-1 max-sm:-mt-2 max-sm:basis-full min-[375px]:max-sm:h-[21px] max-[375px]:h-[42px]" />
           </div>
-          <Bar className="h-[46px] w-32 rounded-[14px]" />
+          <Bar className="h-[46px] w-32 rounded-[14px] max-sm:h-11 max-sm:w-[113px] max-sm:rounded-[12px]" />
+          <Bar className="h-11 basis-full rounded-[12px] sm:hidden max-sm:order-2" />
         </div>
         <Bar className="mb-6 h-10 w-full max-w-[520px] rounded-[12px]" />
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
