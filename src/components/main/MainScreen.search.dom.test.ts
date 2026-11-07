@@ -42,6 +42,15 @@ describe("방 둘러보기 검색 위치", () => {
     expect(d.querySelector("main .min-\\[902px\\]\\:hidden.h-11")).not.toBeNull();
   });
 
+  it("골격의 필터 두 줄은 실제 FilterBar 와 같은 틀이다 — 골격이 끝날 때 카드가 밀리지 않게", () => {
+    const real = render(screen()).querySelector("main")!;
+    const skel = render(createElement(MeProvider, ANON, createElement(HomeSkeleton))).querySelector("main")!;
+    const strip = (c: string) => c.replace("max-sm:overflow-x-auto", "max-sm:overflow-hidden").replace(/thin-scroll /, "");
+    for (const i of [1, 2]) expect(skel.children[i].className).toBe(real.children[i].className);
+    const row = real.children[2].querySelector(".thin-scroll")!;
+    expect(skel.children[2].children[1].className).toBe(strip(row.className));
+  });
+
   it("본문 검색에 친 글자는 헤더 검색과 같은 값이다(폭이 바뀌어도 검색어 유지)", async () => {
     const host = document.createElement("div");
     document.body.append(host);

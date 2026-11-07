@@ -70,6 +70,12 @@ function DetailMain({ tabs }: { tabs: boolean }) {
   );
 }
 
+/** FilterBar 탭 3개·상태 칩 4개의 실제 폭 — 탭과 칩이 같은 폭에서 줄바꿈된다 */
+const SKELETON_TABS = ["w-[129px] max-sm:w-[116px]", "w-[143px] max-sm:w-[129px]", "w-[129px] max-sm:w-[116px]"];
+const SKELETON_STATUSES = ["w-[53px]", "w-[65px]", "w-[65px]", "w-[53px]"];
+/** 태그 칩 개수(평균 89px) — 실제 개수는 응답이 와야 안다. 폭 768 세 줄·1280 두 줄 */
+const SKELETON_TAG_COUNT = 16;
+
 /** / — 방 카드 격자 (MainScreen 의 헤더 + 카드 그리드) */
 export function HomeSkeleton() {
   return (
@@ -80,16 +86,38 @@ export function HomeSkeleton() {
       <span className="sr-only" role="status">불러오는 중</span>
       <PageBody as="main" aria-hidden="true">
         <div className="mb-7 flex flex-wrap items-end justify-between gap-4 max-sm:mb-5 max-sm:items-center max-sm:gap-3">
-          <div className="flex flex-col gap-2 max-sm:contents">
-            <Bar className="h-8 w-40 max-sm:w-24" />
-            {/* 설명 한 줄 21px — 375 미만에서는 두 줄 42px. 골격이 끝날 때 검색이 움찔하지 않게 실제와 같은 높이로 */}
-            <Bar className="h-5 w-72 max-w-full max-sm:order-1 max-sm:-mt-2 max-sm:basis-full min-[375px]:max-sm:h-[21px] max-[375px]:h-[42px]" />
+          {/* 제목 42px·설명 22.5px·간격 6px = 70.5px(폭 <640 은 설명 21px, 375 미만 두 줄 42px) — 실제 머리 줄과 같은 높이로 */}
+          <div className="flex flex-col gap-[6px] max-sm:contents">
+            <Bar className="my-[5px] h-8 w-40 max-sm:my-0 max-sm:w-24" />
+            <Bar className="h-[22.5px] w-72 max-w-full max-sm:order-1 max-sm:-mt-2 max-sm:basis-full min-[375px]:max-sm:h-[21px] max-[375px]:h-[42px]" />
           </div>
           <Bar className="h-[46px] w-32 rounded-[14px] max-sm:h-11 max-sm:w-[113px] max-sm:rounded-[12px]" />
           <Bar className="h-11 basis-full rounded-[12px] max-sm:order-2 min-[902px]:hidden" />
         </div>
-        <Bar className="mb-6 h-10 w-full max-w-[520px] rounded-[12px]" />
-        <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+        {/* 여기부터 FilterBar 와 같은 틀(줄 클래스·탭/칩 폭) — 골격이 끝날 때 카드가 밀리지 않게. 태그 줄 수만 데이터에 달렸다(폭 ≥640 은 태그가 줄어들면 줄당 44px 차이) */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line">
+          <span className="flex min-w-0 max-w-full gap-1 max-sm:-mx-4 max-sm:w-[calc(100%+2rem)] max-sm:max-w-none max-sm:overflow-hidden max-sm:px-4 max-sm:pb-px">
+            {SKELETON_TABS.map((w, i) => (
+              <span key={i} className={`-mb-px flex h-12 shrink-0 items-center px-[14px] max-sm:px-[10px] ${w}`}>
+                <Bar className="h-5 w-full" />
+              </span>
+            ))}
+          </span>
+          <span className="flex flex-wrap gap-x-[6px] gap-y-[10px] pb-[10px]">
+            {SKELETON_STATUSES.map((w, i) => (
+              <Bar key={i} className={`h-[34px] rounded-[17px] ${w}`} />
+            ))}
+          </span>
+        </div>
+        <div className="-mt-2 mb-6 flex flex-wrap items-center gap-x-2 gap-y-3 max-sm:mb-4 max-sm:-mt-3 max-sm:gap-y-1">
+          <Bar className="mr-1 h-[19.5px] w-[42px]" />
+          <span className="contents max-sm:-mr-4 max-sm:flex max-sm:min-w-0 max-sm:flex-1 max-sm:gap-2 max-sm:overflow-hidden max-sm:py-[6px] max-sm:pr-4">
+            {Array.from({ length: SKELETON_TAG_COUNT }, (_, i) => (
+              <Bar key={i} className="h-8 w-[89px] shrink-0 rounded-2xl" />
+            ))}
+          </span>
+        </div>
+        <div className="grid gap-6 max-sm:gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
           {Array.from({ length: 8 }, (_, i) => (
             <span key={i} className="flex flex-col gap-[10px] rounded-[18px] border border-line bg-surface px-[18px] pb-4 pt-[18px]">
               <Bar className="h-6 w-20" />
