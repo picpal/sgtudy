@@ -112,6 +112,19 @@
     min-height: 100%;
   }
 
+  /* 스크롤바가 자리를 차지하는 환경(Windows 등)에서 페이지가 길어져 스크롤바가 나타날 때 내용이 밀리지 않게, 페이지마다 폭이 달라지지 않게 자리를 늘 비워 둔다 */
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  /* body 를 잠그는 전체 화면 막(fixed inset-0)은 비워 둔 자리까지 덮지 못한다 — 그 띠가 튀지 않게 막과 같은 색으로 칠한다 */
+  html:has([data-notice-popup]) {
+    background: #92979d; /* --bg-main 위 rgba(27,34,48,.45) */
+  }
+  html:has([data-image-lightbox]) {
+    background: #0b0f17;
+  }
+
   body {
     background: var(--bg-main);
     color: var(--ink);
