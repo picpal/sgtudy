@@ -92,7 +92,7 @@ export function HomeSkeleton() {
             <Bar className="h-[22.5px] w-72 max-w-full max-sm:order-1 max-sm:-mt-2 max-sm:basis-full min-[375px]:max-sm:h-[21px] max-[375px]:h-[42px]" />
           </div>
           <Bar className="h-[46px] w-32 rounded-[14px] max-sm:h-11 max-sm:w-[113px] max-sm:rounded-[12px]" />
-          <Bar className="h-11 basis-full rounded-[12px] max-sm:order-2 min-[902px]:hidden" />
+          <Bar className="h-11 basis-full rounded-[12px] max-sm:order-2 min-[1056px]:hidden" />
         </div>
         {/* 여기부터 FilterBar 와 같은 틀(줄 클래스·탭/칩 폭) — 골격이 끝날 때 카드가 밀리지 않게. 태그 줄 수만 데이터에 달렸다(폭 ≥640 은 태그가 줄어들면 줄당 44px 차이) */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line">

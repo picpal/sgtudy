@@ -119,7 +119,7 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
       </AppHeader>
 
       <PageBody as="main">
-        {/* 폭 ≤901(min-[902px] 에서 숨김 — 헤더 검색과 정확히 한쪽만 보인다): 머리 줄 아래 전폭 검색. 검색이 탭보다 위인 건 세 탭 모두에 걸리기 때문이다.
+        {/* 폭 ≤1055(min-[1056px] 에서 숨김 — 헤더 검색과 정확히 한쪽만 보인다): 머리 줄 아래 전폭 검색. 검색이 탭보다 위인 건 세 탭 모두에 걸리기 때문이다.
             폭 <640 은 제목·방 만들기 한 줄 → 설명 → 검색(내 과제처럼 제목 왼쪽·주 버튼 오른쪽, 그 아래 조건) */}
         <div className="mb-7 flex flex-wrap items-end justify-between gap-4 max-sm:mb-5 max-sm:items-center max-sm:gap-3">
           <div className="max-sm:contents">
@@ -132,7 +132,7 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
             </svg>
             방 만들기
           </Link>
-          <SearchField q={q} onChange={setQ} className="h-11 basis-full border-line-3 bg-surface focus-within:border-mint focus-within:shadow-[0_0_0_3px_#DDF4EE] max-sm:order-2 min-[902px]:hidden" />
+          <SearchField q={q} onChange={setQ} className="h-11 basis-full border-line-3 bg-surface focus-within:border-mint focus-within:shadow-[0_0_0_3px_#DDF4EE] max-sm:order-2 min-[1056px]:hidden" />
         </div>
 
         <FilterBar tab={tab} tabCounts={res.tabCounts} onTab={setTab} status={status} onStatus={setStatus} tagCounts={tagCounts} tags={tags} onToggleTag={toggleTag} onResetTags={() => setTags([])} anonymous={!me} />
