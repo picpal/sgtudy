@@ -73,8 +73,8 @@ function DetailMain({ tabs }: { tabs: boolean }) {
 /** FilterBar 탭 3개·상태 칩 4개의 실제 폭 — 탭과 칩이 같은 폭에서 줄바꿈된다 */
 const SKELETON_TABS = ["w-[129px] max-sm:w-[116px]", "w-[143px] max-sm:w-[129px]", "w-[129px] max-sm:w-[116px]"];
 const SKELETON_STATUSES = ["w-[53px]", "w-[65px]", "w-[65px]", "w-[53px]"];
-/** 태그 칩 개수(평균 89px) — 실제 개수는 응답이 와야 안다. 폭 768 세 줄·1280 두 줄 */
-const SKELETON_TAG_COUNT = 16;
+/** 태그 칩 개수(평균 89px) — 실제 개수는 응답이 와야 안다. 운영 태그가 적어(전체 6개, 한 방 3개) 실제도 한 줄이라 폭 640 이상 어디서나 한 줄로 둔다 */
+const SKELETON_TAG_COUNT = 4;
 
 /** / — 방 카드 격자 (MainScreen 의 헤더 + 카드 그리드) */
 export function HomeSkeleton() {
@@ -94,7 +94,7 @@ export function HomeSkeleton() {
           <Bar className="h-[46px] w-32 rounded-[14px] max-sm:h-11 max-sm:w-[113px] max-sm:rounded-[12px]" />
           <Bar className="h-11 basis-full rounded-[12px] max-sm:order-2 min-[1056px]:hidden" />
         </div>
-        {/* 여기부터 FilterBar 와 같은 틀(줄 클래스·탭/칩 폭) — 골격이 끝날 때 카드가 밀리지 않게. 태그 줄 수만 데이터에 달렸다(폭 ≥640 은 태그가 줄어들면 줄당 44px 차이) */}
+        {/* 여기부터 FilterBar 와 같은 틀(줄 클래스·탭/칩 폭) — 골격이 끝날 때 카드가 밀리지 않게. 태그 줄 수만 데이터에 달렸다(폭 ≥640 은 실제가 두 줄이 되면 줄당 44px 차이) */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-line">
           <span className="flex min-w-0 max-w-full gap-1 max-sm:-mx-4 max-sm:w-[calc(100%+2rem)] max-sm:max-w-none max-sm:overflow-hidden max-sm:px-4 max-sm:pb-px">
             {SKELETON_TABS.map((w, i) => (
