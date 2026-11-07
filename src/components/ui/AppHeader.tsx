@@ -195,9 +195,8 @@ export function AppHeader({ active, children, bell }: Props) {
         })}
       </nav>
       <div className="flex-[1_1_24px] max-sm:flex-1" />
-      {/* ≤900: 한 줄에 다 들어가지 않아(768·820 에서 벨·아바타가 둘째 줄로 밀렸다) 검색 등 끼운 요소를 맨 아래 전폭 줄로 내린다.
-          ≤640 은 헤더에 그리지 않는다 — 이 줄만큼 메뉴가 밀려 메뉴를 누를 때마다 화면이 움찔했다(검색은 방 둘러보기 본문에 따로 있다) */}
-      {children && <div className="flex min-w-0 max-sm:hidden max-[901px]:order-9 max-[901px]:w-full [&>*]:max-[901px]:flex-auto">{children}</div>}
+      {/* 폭 ≤901(max-[902px] 는 width < 902): 끼운 요소를 헤더에 그리지 않는다 — 들어갈 자리가 없어 줄이 늘어난 만큼 메뉴·본문이 밀려 메뉴를 누를 때마다 화면이 움찔했다(검색은 방 둘러보기 본문에 따로 있다) */}
+      {children && <div className="flex min-w-0 max-[902px]:hidden">{children}</div>}
       {me ? (
         <>
           {/* 의견 보내기(0044) — 벨 왼쪽. 로그인했을 때만(스펙 D1). 390 폭에서도 로고와 한 줄(스펙 D2) */}

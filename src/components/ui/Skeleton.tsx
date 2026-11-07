@@ -86,7 +86,7 @@ export function HomeSkeleton() {
             <Bar className="h-5 w-72 max-w-full max-sm:order-1 max-sm:-mt-2 max-sm:basis-full min-[375px]:max-sm:h-[21px] max-[375px]:h-[42px]" />
           </div>
           <Bar className="h-[46px] w-32 rounded-[14px] max-sm:h-11 max-sm:w-[113px] max-sm:rounded-[12px]" />
-          <Bar className="h-11 basis-full rounded-[12px] sm:hidden max-sm:order-2" />
+          <Bar className="h-11 basis-full rounded-[12px] max-sm:order-2 min-[902px]:hidden" />
         </div>
         <Bar className="mb-6 h-10 w-full max-w-[520px] rounded-[12px]" />
         <div className="grid gap-6 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
