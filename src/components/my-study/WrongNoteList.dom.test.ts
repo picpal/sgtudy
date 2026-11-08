@@ -578,7 +578,7 @@ describe("WrongNoteList — 다시 볼 문제 ★ (0051)", () => {
     expect(host.querySelector('[data-round-card="3"]')).not.toBeNull();
   });
 
-  it("「★ 다시 볼 문제 (N)」 은 목록 필터 줄 오른쪽 끝(필터·외운 문제 뒤) · ★ 보기에서도 오른쪽", async () => {
+  it("「★ 다시 볼 문제 (N)」 은 목록 필터 줄 오른쪽 끝(필터·외운 문제 뒤) · ★ 보기에서도 오른쪽 · 모바일(<640)은 두 화면 다 줄 전체 폭", async () => {
     const s = AWS();
     s.rounds[0].exams[0].items![0] = { ...s.rounds[0].exams[0].items![0], mastered: true };
     const { host } = mount({ studies: [s], round: null });
@@ -588,7 +588,9 @@ describe("WrongNoteList — 다시 볼 문제 ★ (0051)", () => {
     expect(sb.parentElement).toBe(row);
     expect(row.lastElementChild).toBe(sb);                                     // 필터 → 외운 문제 보기 → ★
     expect(row.querySelector("label")).not.toBeNull();
-    expect(sb.className).toContain("ml-auto");
+    expect(sb.className).toContain("sm:ml-auto");
+    expect(sb.className).toContain("max-sm:w-full");                            // 모바일: 칩 아래 혼자 오른쪽 끝에 매달리지 않게 한 줄 전체
+    expect(sb.className).toContain("justify-center");
     // 필터 칩과 다른 색 — 꺼짐은 민트, 켜짐은 호박색
     expect(sb.className).toContain("bg-mint");
     expect(group.querySelector("[aria-checked='true']")!.className).toContain("bg-ink");
@@ -597,7 +599,8 @@ describe("WrongNoteList — 다시 볼 문제 ★ (0051)", () => {
     expect(on.className).toContain("bg-amber-soft");
     expect(on.className).not.toContain("bg-mint");
     expect(on.parentElement!.lastElementChild).toBe(on);                       // 누른 자리(오른쪽)에 그대로
-    expect(on.className).toContain("ml-auto");
+    expect(on.className).toContain("sm:ml-auto");
+    expect(on.className).toContain("max-sm:w-full");
     expect(on.previousElementSibling?.textContent).toBe("회차 목록으로");
   });
 

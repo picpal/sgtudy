@@ -215,8 +215,9 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   };
 
   const openStars = () => setStarIds(new Set(starEntries(selected).map((e) => e.item.question.id)));
-  // 필터 줄·★ 보기에선 오른쪽 끝(ml-auto) — 빈 상태만 가운데. 필터가 아니라 동작이라 민트(navy 는 켜진 칩 ink 와 구분이 안 된다)
-  const starButton = (place = "ml-auto") => (
+  // 필터 줄·★ 보기에선 오른쪽 끝(sm:ml-auto) — 빈 상태만 가운데. 필터가 아니라 동작이라 민트(navy 는 켜진 칩 ink 와 구분이 안 된다)
+  // 모바일(<640)은 칩(~281px)과 한 줄에 못 들어가 혼자 오른쪽 끝에 매달렸다 — 두 화면 다 줄 전체 폭으로 칩 아래(★ 보기는 「회차 목록으로」 아래)
+  const starButton = (place = "justify-center max-sm:w-full sm:ml-auto") => (
     <button
       type="button"
       aria-pressed={starIds !== null}
@@ -304,7 +305,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   };
   // 상세의 「외운 문제 n개 보기」 는 그 회차 기준 · trailing 은 줄 오른쪽 끝(좁으면 다음 줄로 내려가 오른쪽)
   const filterBar = (mastered: number, trailing?: ReactNode) => (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 max-sm:gap-y-2">
       <div role="radiogroup" aria-label="오답 필터" onKeyDown={onChipKey} className="flex min-w-0 max-w-full gap-2 overflow-x-auto">
         {FILTERS.map((f) => {
           const on = f === filter;
