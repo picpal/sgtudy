@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { placeCalPopover } from "./calPopover";
+import { naturalHeight, placeCalPopover, samePlacement } from "./calPopover";
 
 const bar = (top: number, left: number, right: number) => ({ top, bottom: top + 26, left, right });
 
@@ -37,5 +37,18 @@ describe("placeCalPopover — 누른 막대 기준 자리", () => {
 
   it("좁은 화면에서는 너비를 화면 안으로 줄인다", () => {
     expect(placeCalPopover(bar(100, 0, 100), 50, 200, 280, 800)).toMatchObject({ width: 264, left: 8 });
+  });
+
+  it("낮은 창: 제한된 상자를 다시 재도 자리가 그대로다(커졌다 줄었다 반복 없음)", () => {
+    const a = bar(150, 400, 700);
+    const natural = 408;
+    const first = placeCalPopover(a, 500, natural, 1280, 420);
+    expect(first.maxHeight).not.toBeNull();
+    // 제한된 뒤의 상자: 보이는 높이 = maxHeight, 내용(scrollHeight)은 그대로 — 테두리 1px 씩
+    const clamped = { offsetHeight: first.maxHeight!, clientHeight: first.maxHeight! - 2, scrollHeight: natural - 2 };
+    const second = placeCalPopover(a, 500, naturalHeight(clamped), 1280, 420);
+    expect(samePlacement(first, second)).toBe(true);
+    // 예전처럼 보이는 높이를 넣으면 제한이 풀려 자리가 바뀐다 — 이 반복이 깜빡임이었다
+    expect(samePlacement(first, placeCalPopover(a, 500, clamped.offsetHeight, 1280, 420))).toBe(false);
   });
 });

@@ -29,3 +29,9 @@ export function placeCalPopover(a: Rect, x: number | null, h: number, vw: number
     ? { top: a.bottom + GAP, left, width, side: "below", maxHeight: Math.max(0, below) }
     : { top: MARGIN, left, width, side: "above", maxHeight: Math.max(0, above) };
 }
+
+/** 상자의 원래(제한 전) 높이 — max-height 로 줄어든 높이를 다시 넣으면 다음 계산이 제한을 풀어 상자가 매 프레임 커졌다 줄었다 한다 */
+export const naturalHeight = (b: { scrollHeight: number; offsetHeight: number; clientHeight: number }) => b.scrollHeight + (b.offsetHeight - b.clientHeight);
+
+export const samePlacement = (a: Placement | null, b: Placement) =>
+  !!a && a.top === b.top && a.left === b.left && a.width === b.width && a.side === b.side && a.maxHeight === b.maxHeight;

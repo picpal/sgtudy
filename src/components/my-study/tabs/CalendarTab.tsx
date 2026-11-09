@@ -24,7 +24,7 @@ import {
 } from "../model";
 import { calendarSource, calendarStart } from "../sources";
 import type { ScreenState, Update } from "../state";
-import { placeCalPopover, POP_W, type Placement } from "./calPopover";
+import { naturalHeight, placeCalPopover, POP_W, samePlacement, type Placement } from "./calPopover";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
 
@@ -58,7 +58,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
     update({ calPick: id });
   };
   const closePick = (refocus: boolean) => {
-    if (refocus && popAt?.el.isConnected) popAt.el.focus({ preventScroll: true });
+    if (refocus && popAt) liveBar(popAt)?.focus({ preventScroll: true });
     update({ calPick: null });
   };
   const shift = (dir: 1 | -1) => update({ calAnchor: shiftAnchor(anchor, S.calMode, dir), calPick: null });
@@ -228,11 +228,16 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
 }
 
 type Anchor = { el: HTMLElement; id: string; x: number | null };
+/** 누른 막대 — 데이터가 다시 그려져 막대가 바뀌었으면 같은 과제 막대를 다시 찾는다 */
+const liveBar = (a: Anchor) => (a.el.isConnected ? a.el : document.querySelector<HTMLElement>(`[data-cal-bar="${CSS.escape(a.id)}"]`));
+const MOBILE_MQ = "(width < 40rem)";
 
 /**
  * 막대 상세 팝오버 — body 로 포털, 화면 고정 좌표로 누른 막대 바로 아래(모자라면 위)에 뜬다.
  * 스크롤·창 크기가 바뀌면 막대를 따라 다시 잡는다. 모바일(<640)은 아래 시트(공지 팝업과 같은 꼴) — 어디서 눌러도 스크롤 없이 보인다.
- * 열리면 상자로 포커스, Esc·X 는 닫고 누른 막대로 포커스를 돌려준다, 바깥을 누르면 닫힌다.
+ * 열리면 상자로 포커스, Esc·X 는 닫고 누른 막대로 포커스를 돌려준다. PC 는 바깥을 누르면 닫힌다.
+ * 모바일 시트는 공지 시트처럼 흐린 배경 + 바탕 스크롤 잠금 — 바탕을 쓸어 스크롤하려다 닫히지 않게, 배경을 톡 누르면(click) 닫힌다.
+ * 비모달이라 Tab 트랩은 없다.
  */
 function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onClose: (refocus: boolean) => void; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
@@ -244,29 +249,39 @@ function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onClose: (r
 
   useLayoutEffect(() => {
     const place = () => {
-      // 데이터가 다시 그려져 막대가 바뀌었으면 같은 과제 막대를 다시 찾는다
-      const el = anchor.el.isConnected ? anchor.el : document.querySelector<HTMLElement>(`[data-cal-bar="${CSS.escape(anchor.id)}"]`);
-      const h = box.current?.offsetHeight ?? 0;
-      const cal = el?.closest<HTMLElement>("[data-cal-grid]")?.getBoundingClientRect();
-      if (el) setPos(placeCalPopover(el.getBoundingClientRect(), anchor.x, h, document.documentElement.clientWidth, window.innerHeight, cal));
+      const el = liveBar(anchor);
+      const b = box.current;
+      if (!el || !b) return;
+      const cal = el.closest<HTMLElement>("[data-cal-grid]")?.getBoundingClientRect();
+      const next = placeCalPopover(el.getBoundingClientRect(), anchor.x, naturalHeight(b), document.documentElement.clientWidth, window.innerHeight, cal);
+      setPos((prev) => (samePlacement(prev, next) ? prev : next));
+    };
+    // 팝오버 안을 스크롤할 때는 자리가 그대로 — 다시 계산하지 않는다
+    const onScroll = (e: Event) => {
+      if (e.target instanceof Node && box.current?.contains(e.target)) return;
+      place();
     };
     place();
     const ro = new ResizeObserver(place);
     if (box.current) ro.observe(box.current);
-    window.addEventListener("scroll", place, { capture: true, passive: true });
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
     window.addEventListener("resize", place);
     return () => {
       ro.disconnect();
-      window.removeEventListener("scroll", place, { capture: true });
+      window.removeEventListener("scroll", onScroll, { capture: true });
       window.removeEventListener("resize", place);
     };
   }, [anchor]);
 
   useEffect(() => {
     box.current?.focus({ preventScroll: true });
+    const mobile = !!window.matchMedia?.(MOBILE_MQ).matches;
+    const overflow = document.body.style.overflow;
+    if (mobile) document.body.style.overflow = "hidden";
     const onDown = (e: PointerEvent) => {
+      if (window.matchMedia?.(MOBILE_MQ).matches) return; // 모바일은 배경 click 으로만
       const t = e.target as Node;
-      if (!box.current?.contains(t) && !anchor.el.contains(t)) close.current(false);
+      if (!box.current?.contains(t) && !liveBar(anchor)?.contains(t)) close.current(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close.current(true);
@@ -274,23 +289,27 @@ function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onClose: (r
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
+      if (mobile) document.body.style.overflow = overflow;
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
   }, [anchor]);
 
   return createPortal(
-    <div
-      ref={box}
-      role="dialog"
-      aria-label="과제 상세"
-      tabIndex={-1}
-      data-side={pos?.side}
-      style={{ "--pt": `${pos?.top ?? 0}px`, "--pl": `${pos?.left ?? 0}px`, "--pw": `${pos?.width ?? POP_W}px`, "--pmh": pos?.maxHeight != null ? `${pos.maxHeight}px` : "none" } as CSSProperties}
-      className={`fixed z-[35] flex flex-col gap-[10px] overflow-y-auto border border-line bg-surface p-4 shadow-[0_16px_40px_rgba(27,34,48,.18)] outline-none sm:left-(--pl) sm:top-(--pt) sm:max-h-(--pmh) sm:w-(--pw) sm:rounded-[16px] max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[75dvh] max-sm:rounded-t-[18px] max-sm:pb-[max(16px,env(safe-area-inset-bottom))] max-sm:motion-safe:animate-[notice-sheet_.22s_ease-out] ${pos ? "" : "sm:opacity-0"}`}
-    >
-      {children}
-    </div>,
+    <>
+      <div data-cal-backdrop aria-hidden="true" onClick={() => close.current(false)} className="fixed inset-0 z-[34] bg-[rgba(27,34,48,.45)] sm:hidden" />
+      <div
+        ref={box}
+        role="dialog"
+        aria-label="과제 상세"
+        tabIndex={-1}
+        data-side={pos?.side}
+        style={{ "--pt": `${pos?.top ?? 0}px`, "--pl": `${pos?.left ?? 0}px`, "--pw": `${pos?.width ?? POP_W}px`, "--pmh": pos?.maxHeight != null ? `${pos.maxHeight}px` : "none" } as CSSProperties}
+        className={`fixed z-[35] flex flex-col gap-[10px] overflow-y-auto border border-line bg-surface p-4 shadow-[0_16px_40px_rgba(27,34,48,.18)] outline-none sm:left-(--pl) sm:top-(--pt) sm:max-h-(--pmh) sm:w-(--pw) sm:rounded-[16px] max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[75dvh] max-sm:rounded-t-[18px] max-sm:pb-[max(16px,env(safe-area-inset-bottom))] max-sm:motion-safe:animate-[notice-sheet_.22s_ease-out] ${pos ? "" : "sm:opacity-0"}`}
+      >
+        {children}
+      </div>
+    </>,
     document.body,
   );
 }
