@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Avatar } from "@/components/ui/Avatar";
 import { addDays, md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
@@ -22,6 +24,7 @@ import {
 } from "../model";
 import { calendarSource, calendarStart } from "../sources";
 import type { ScreenState, Update } from "../state";
+import { placeCalPopover, POP_W, type Placement } from "./calPopover";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
 
@@ -48,6 +51,16 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
   const whoCode = (l: LeafNode): Code | null => (whoId ? (l.people.find((p) => p.userId === whoId)?.c ?? null) : null);
   const calLeaves = calendarSource(tree, S.calWho, meId);
   const pick = calLeaves.find((l) => l.id === S.calPick) ?? null;
+  // 누른 막대(여러 주에 걸친 과제는 그 주 조각)와 누른 가로 위치 — 팝오버를 그 자리에 띄운다
+  const [popAt, setPopAt] = useState<Anchor | null>(null);
+  const openPick = (id: string, e: MouseEvent<HTMLButtonElement>) => {
+    setPopAt({ el: e.currentTarget, id, x: e.detail > 0 ? e.clientX : null });
+    update({ calPick: id });
+  };
+  const closePick = (refocus: boolean) => {
+    if (refocus && popAt?.el.isConnected) popAt.el.focus({ preventScroll: true });
+    update({ calPick: null });
+  };
   const shift = (dir: 1 | -1) => update({ calAnchor: shiftAnchor(anchor, S.calMode, dir), calPick: null });
   const who: [string, string, TreeMember | null][] = [["all", "전체", null], ["me", "내 과제만", null], ...tree.members.filter((m) => m.userId !== meId).map((m): [string, string, TreeMember] => [m.userId, m.name, m])];
 
@@ -73,9 +86,8 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
         ))}
       </div>
 
-      {/* 팝오버는 overflow-hidden 그리드 밖(바깥 relative)에 둔다 — 주간 보기에서 잘리지 않게 (Q1-06) */}
-      <div className="relative">
-        <div className="overflow-hidden rounded-[16px] border border-line">
+      <div>
+        <div data-cal-grid className="overflow-hidden rounded-[16px] border border-line">
           <div className="grid grid-cols-7 border-b border-line bg-surface-2">
             {DOW.map((d, c) => (
               <div key={d} className="p-[10px] text-[12px] font-semibold" style={{ color: dowColor(c) }}>
@@ -135,7 +147,8 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                         key={l.id}
                         type="button"
                         title={`${l.personal ? "[개인] " : ""}${l.crumb} · ${l.title} (${md(l.s)}–${md(l.e)})`}
-                        onClick={() => update({ calPick: l.id })}
+                        data-cal-bar={l.id}
+                        onClick={(e) => openPick(l.id, e)}
                         className={`${HIT_Y} flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-left text-[12px] transition-shadow duration-100 hover:z-[2] hover:shadow-[0_3px_8px_rgba(27,34,48,.18)]`}
                         style={{
                           gridColumn: `${col + 1} / span ${span}`,
@@ -162,12 +175,12 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
           })}
         </div>
 
-        {pick && (
-          <div role="dialog" aria-label="과제 상세" className="absolute right-3 top-12 z-[5] flex w-[300px] max-w-[calc(100%-24px)] flex-col gap-[10px] rounded-[16px] border border-line bg-surface p-4 shadow-[0_16px_40px_rgba(27,34,48,.18)]">
+        {pick && popAt?.id === pick.id && (
+          <CalPopover anchor={popAt} onClose={closePick}>
             <div className="flex items-start gap-2">
               <TypeBadge type={pick.type} />
               <span className="min-w-0 flex-1 text-[15px] font-bold leading-[1.35]">{pick.title}</span>
-              <button type="button" aria-label="닫기" onClick={() => update({ calPick: null })} className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] bg-transparent text-ink-3">
+              <button type="button" aria-label="닫기" onClick={() => closePick(true)} className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] bg-transparent text-ink-3">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
                   <path d="M6 6l12 12M18 6 6 18" />
                 </svg>
@@ -195,7 +208,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
             <button type="button" onClick={() => goLeaf(pick.id)} className="h-[42px] rounded-[21px] bg-navy text-[14px] font-semibold text-white">
               진행목표에서 보기
             </button>
-          </div>
+          </CalPopover>
         )}
       </div>
 
@@ -211,6 +224,74 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
         <span className="text-muted">· 막대 끝 아이콘 = 담당자별 제출 상태</span>
       </div>
     </div>
+  );
+}
+
+type Anchor = { el: HTMLElement; id: string; x: number | null };
+
+/**
+ * 막대 상세 팝오버 — body 로 포털, 화면 고정 좌표로 누른 막대 바로 아래(모자라면 위)에 뜬다.
+ * 스크롤·창 크기가 바뀌면 막대를 따라 다시 잡는다. 모바일(<640)은 아래 시트(공지 팝업과 같은 꼴) — 어디서 눌러도 스크롤 없이 보인다.
+ * 열리면 상자로 포커스, Esc·X 는 닫고 누른 막대로 포커스를 돌려준다, 바깥을 누르면 닫힌다.
+ */
+function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onClose: (refocus: boolean) => void; children: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<Placement | null>(null);
+  const close = useRef(onClose);
+  useLayoutEffect(() => {
+    close.current = onClose;
+  });
+
+  useLayoutEffect(() => {
+    const place = () => {
+      // 데이터가 다시 그려져 막대가 바뀌었으면 같은 과제 막대를 다시 찾는다
+      const el = anchor.el.isConnected ? anchor.el : document.querySelector<HTMLElement>(`[data-cal-bar="${CSS.escape(anchor.id)}"]`);
+      const h = box.current?.offsetHeight ?? 0;
+      const cal = el?.closest<HTMLElement>("[data-cal-grid]")?.getBoundingClientRect();
+      if (el) setPos(placeCalPopover(el.getBoundingClientRect(), anchor.x, h, document.documentElement.clientWidth, window.innerHeight, cal));
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    if (box.current) ro.observe(box.current);
+    window.addEventListener("scroll", place, { capture: true, passive: true });
+    window.addEventListener("resize", place);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("scroll", place, { capture: true });
+      window.removeEventListener("resize", place);
+    };
+  }, [anchor]);
+
+  useEffect(() => {
+    box.current?.focus({ preventScroll: true });
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!box.current?.contains(t) && !anchor.el.contains(t)) close.current(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close.current(true);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [anchor]);
+
+  return createPortal(
+    <div
+      ref={box}
+      role="dialog"
+      aria-label="과제 상세"
+      tabIndex={-1}
+      data-side={pos?.side}
+      style={{ "--pt": `${pos?.top ?? 0}px`, "--pl": `${pos?.left ?? 0}px`, "--pw": `${pos?.width ?? POP_W}px`, "--pmh": pos?.maxHeight != null ? `${pos.maxHeight}px` : "none" } as CSSProperties}
+      className={`fixed z-[35] flex flex-col gap-[10px] overflow-y-auto border border-line bg-surface p-4 shadow-[0_16px_40px_rgba(27,34,48,.18)] outline-none sm:left-(--pl) sm:top-(--pt) sm:max-h-(--pmh) sm:w-(--pw) sm:rounded-[16px] max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[75dvh] max-sm:rounded-t-[18px] max-sm:pb-[max(16px,env(safe-area-inset-bottom))] max-sm:motion-safe:animate-[notice-sheet_.22s_ease-out] ${pos ? "" : "sm:opacity-0"}`}
+    >
+      {children}
+    </div>,
+    document.body,
   );
 }
 
