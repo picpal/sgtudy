@@ -35,3 +35,10 @@ export const naturalHeight = (b: { scrollHeight: number; offsetHeight: number; c
 
 export const samePlacement = (a: Placement | null, b: Placement) =>
   !!a && a.top === b.top && a.left === b.left && a.width === b.width && a.side === b.side && a.maxHeight === b.maxHeight;
+
+/** PC: 바탕을 이만큼(막대가 움직인 거리 누적) 스크롤하면 닫는다 — 휠 한 칸(≈100px) 정도. 살짝 건드린 건 그대로 */
+export const SCROLL_CLOSE_PX = 100;
+/** 막대가 지난번 자리에서 움직인 거리 */
+export const barMoved = (a: Rect, b: Rect) => Math.abs(b.top - a.top) + Math.abs(b.left - a.left);
+/** 막대가 화면 밖으로 완전히 나갔는가 */
+export const offScreen = (r: Rect, vw: number, vh: number) => r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw;

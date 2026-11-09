@@ -24,7 +24,7 @@ import {
 } from "../model";
 import { calendarSource, calendarStart } from "../sources";
 import type { ScreenState, Update } from "../state";
-import { naturalHeight, placeCalPopover, POP_W, samePlacement, type Placement } from "./calPopover";
+import { barMoved, naturalHeight, offScreen, placeCalPopover, POP_W, samePlacement, SCROLL_CLOSE_PX, type Placement } from "./calPopover";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void };
 
@@ -234,12 +234,12 @@ const MOBILE_MQ = "(width < 40rem)";
 
 /**
  * 막대 상세 팝오버 — body 로 포털, 화면 고정 좌표로 누른 막대 바로 아래(모자라면 위)에 뜬다.
- * 스크롤·창 크기가 바뀌면 막대를 따라 다시 잡는다. 모바일(<640)은 아래 시트(공지 팝업과 같은 꼴) — 어디서 눌러도 스크롤 없이 보인다.
+ * 창 크기·내용이 바뀌면 다시 잡고, 바탕 스크롤은 따라가지 않는다 — 처음 뜬 자리에 머물다 막대가 SCROLL_CLOSE_PX 넘게 움직이거나 화면 밖으로 나가면 닫힌다. 모바일(<640)은 아래 시트(공지 팝업과 같은 꼴) — 어디서 눌러도 스크롤 없이 보인다.
  * 열리면 상자로 포커스, Esc·X 는 닫고 누른 막대로 포커스를 돌려준다. PC 는 바깥을 누르면 닫힌다.
  * 모바일 시트는 공지 시트처럼 흐린 배경 + 바탕 스크롤 잠금 — 바탕을 쓸어 스크롤하려다 닫히지 않게, 배경을 톡 누르면(click) 닫힌다.
  * 비모달이라 Tab 트랩은 없다.
  */
-function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onClose: (refocus: boolean) => void; children: ReactNode }) {
+export function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onClose: (refocus: boolean) => void; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<Placement | null>(null);
   const close = useRef(onClose);
@@ -248,18 +248,29 @@ function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onClose: (r
   });
 
   useLayoutEffect(() => {
+    let last: DOMRect | null = null; // 막대의 지난 자리 — 스크롤로 움직인 거리를 잰다
+    let scrolled = 0;
     const place = () => {
       const el = liveBar(anchor);
       const b = box.current;
       if (!el || !b) return;
+      last = el.getBoundingClientRect(); // 창 크기·내용 변화로 옮겨진 건 스크롤로 치지 않는다
       const cal = el.closest<HTMLElement>("[data-cal-grid]")?.getBoundingClientRect();
-      const next = placeCalPopover(el.getBoundingClientRect(), anchor.x, naturalHeight(b), document.documentElement.clientWidth, window.innerHeight, cal);
+      const next = placeCalPopover(last, anchor.x, naturalHeight(b), document.documentElement.clientWidth, window.innerHeight, cal);
       setPos((prev) => (samePlacement(prev, next) ? prev : next));
     };
-    // 팝오버 안을 스크롤할 때는 자리가 그대로 — 다시 계산하지 않는다
+    // 바탕 스크롤은 따라가지 않고 누적 거리만 잰다. 팝오버 안 스크롤·모바일 시트(바탕 잠금)는 무시
     const onScroll = (e: Event) => {
       if (e.target instanceof Node && box.current?.contains(e.target)) return;
-      place();
+      if (window.matchMedia?.(MOBILE_MQ).matches) return;
+      const r = liveBar(anchor)?.getBoundingClientRect();
+      if (!r || !last) return;
+      scrolled += barMoved(last, r);
+      last = r;
+      if (scrolled > SCROLL_CLOSE_PX || offScreen(r, document.documentElement.clientWidth, window.innerHeight)) {
+        window.removeEventListener("scroll", onScroll, { capture: true });
+        close.current(true); // 포커스는 막대로 — preventScroll 이라 화면이 튀지 않는다
+      }
     };
     place();
     const ro = new ResizeObserver(place);
@@ -305,7 +316,7 @@ function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onClose: (r
         tabIndex={-1}
         data-side={pos?.side}
         style={{ "--pt": `${pos?.top ?? 0}px`, "--pl": `${pos?.left ?? 0}px`, "--pw": `${pos?.width ?? POP_W}px`, "--pmh": pos?.maxHeight != null ? `${pos.maxHeight}px` : "none" } as CSSProperties}
-        className={`fixed z-[35] flex flex-col gap-[10px] overflow-y-auto border border-line bg-surface p-4 shadow-[0_16px_40px_rgba(27,34,48,.18)] outline-none sm:left-(--pl) sm:top-(--pt) sm:max-h-(--pmh) sm:w-(--pw) sm:rounded-[16px] max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[75dvh] max-sm:rounded-t-[18px] max-sm:pb-[max(16px,env(safe-area-inset-bottom))] max-sm:motion-safe:animate-[notice-sheet_.22s_ease-out] ${pos ? "" : "sm:opacity-0"}`}
+        className={`fixed z-[35] flex flex-col gap-[10px] overflow-y-auto border border-line bg-surface p-4 shadow-[0_16px_40px_rgba(27,34,48,.18)] outline-none sm:overscroll-contain sm:left-(--pl) sm:top-(--pt) sm:max-h-(--pmh) sm:w-(--pw) sm:rounded-[16px] max-sm:inset-x-0 max-sm:bottom-0 max-sm:max-h-[75dvh] max-sm:rounded-t-[18px] max-sm:pb-[max(16px,env(safe-area-inset-bottom))] max-sm:motion-safe:animate-[notice-sheet_.22s_ease-out] ${pos ? "" : "sm:opacity-0"}`}
       >
         {children}
       </div>
