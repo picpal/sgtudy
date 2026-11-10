@@ -7,8 +7,8 @@ import type { WrongNoteExam, WrongNoteRound } from "@/lib/api/types";
 import type { WrongNoteAnswer } from "@/lib/api/wrongNote";
 import { routes } from "@/lib/routes";
 import type { PracticeOutcome } from "./useWrongNote";
-import { BACK_BTN, BackIcon, LockIcon, WrongNoteDetail, type Batch, type Run } from "./WrongNoteDetail";
-import { WrongNoteItemView, type ItemRun } from "./WrongNoteItem";
+import { BackIcon, LockIcon, WrongNoteDetail, type Batch, type Run } from "./WrongNoteDetail";
+import { BTN, WrongNoteItemView, type ItemRun } from "./WrongNoteItem";
 import {
   applyFilter, batchSummary, emptyState, FILTER_EMPTY_TEXT, FILTER_KO, FILTERS, findRound, periodLine, roundLockedLine, roundStarCount, roundStatParts, roundStats, starEntries, studyEmptyLine,
   totalsLine, totalsOf, visibleCount, type Filter, type NoteStudy, type RoundPeriods, type StarEntry,
@@ -245,7 +245,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
       <div ref={rootRef} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => setStarIds(null)} className={BACK_BTN}>
+            <button type="button" onClick={() => setStarIds(null)} className={`${BTN} gap-1`}>
               <BackIcon />
               회차 목록으로
             </button>
@@ -342,7 +342,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
       return (
         <div ref={rootRef} className="flex flex-col items-start gap-2">
           <p className="m-0 w-full rounded-[14px] border border-dashed border-line-dash p-5 text-center text-[13px] text-muted">이 회차의 오답을 찾을 수 없어요</p>
-          <button type="button" onClick={onBack} className={BACK_BTN}>
+          <button type="button" onClick={onBack} className={`${BTN} gap-1`}>
             <BackIcon />
             회차 목록으로
           </button>

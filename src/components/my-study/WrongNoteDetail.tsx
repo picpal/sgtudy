@@ -58,10 +58,7 @@ type Props = {
   onEndBatch: (nodeId: string) => void;
 };
 
-/** 「회차 목록(으로)」 되돌아가기 — 밑줄 글자는 눈에 안 띄어 보조(외곽선) 버튼으로. 「다시 시도」(WrongNoteList) 와 같은 외곽선 · 44px */
-export const BACK_BTN =
-  "inline-flex h-11 shrink-0 items-center gap-1 rounded-[22px] border border-line-3 bg-surface pl-3 pr-4 text-[13px] font-semibold text-ink-2 hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint";
-
+/** 「회차 목록(으로)」 앞 ‹ — 버튼은 공용 흰 BTN(WrongNoteItem) + gap-1 */
 export const BackIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M15 18l-6-6 6-6" />
@@ -135,7 +132,7 @@ export function WrongNoteDetail(p: Props) {
   return (
     <div className="flex flex-col gap-4 @container">
       <div>
-        <button type="button" onClick={p.onBack} className={BACK_BTN}>
+        <button type="button" onClick={p.onBack} className={`${BTN} gap-1`}>
           <BackIcon />
           회차 목록
         </button>

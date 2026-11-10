@@ -13,6 +13,7 @@ Element.prototype.scrollIntoView ??= function () {};
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {}, refresh: () => {} }) }));
 
 const { WrongNoteList } = await import("./WrongNoteList");
+const { BTN } = await import("./WrongNoteItem");
 
 const q = (id: string, o: Partial<ExamQuestion> = {}): ExamQuestion => ({
   id, ord: Number(id) - 1, type: "single", prompt: `문제 ${id}`, choices: ["가", "나", "다"], points: 2, answer: 0, explanation: `해설 **${id}**`, ...o,
@@ -602,8 +603,7 @@ describe("WrongNoteList — 다시 볼 문제 ★ (0051)", () => {
     expect(on.className).toContain("sm:ml-auto");
     expect(on.className).toContain("max-sm:w-full");
     expect(on.previousElementSibling?.textContent).toBe("회차 목록으로");
-    expect(on.previousElementSibling!.className).toContain("border-line-3");      // 밑줄 글자 대신 외곽선 버튼
-    expect(on.previousElementSibling!.className).toContain("h-11");
+    expect(on.previousElementSibling!.className).toBe(`${BTN} gap-1`);           // 밑줄 글자 대신 공용 흰 버튼
   });
 
   it("회차 상세의 필터 줄엔 「★ 다시 볼 문제 (N)」 이 없다", () => {
