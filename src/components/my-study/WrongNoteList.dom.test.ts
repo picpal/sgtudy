@@ -602,6 +602,8 @@ describe("WrongNoteList — 다시 볼 문제 ★ (0051)", () => {
     expect(on.className).toContain("sm:ml-auto");
     expect(on.className).toContain("max-sm:w-full");
     expect(on.previousElementSibling?.textContent).toBe("회차 목록으로");
+    expect(on.previousElementSibling!.className).toContain("border-line-3");      // 밑줄 글자 대신 외곽선 버튼
+    expect(on.previousElementSibling!.className).toContain("h-11");
   });
 
   it("회차 상세의 필터 줄엔 「★ 다시 볼 문제 (N)」 이 없다", () => {
