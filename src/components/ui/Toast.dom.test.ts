@@ -35,6 +35,7 @@ describe("Toast", () => {
     const onClose = vi.fn();
     render({ text: "완료했어요", tone: "ok", action: { label: "되돌리기", onClick: () => {} } }, onClose);
     expect(box().className).toContain("pointer-events-auto");
+    act(() => void vi.advanceTimersByTime(3000));
     act(() => box().querySelector("button")!.focus());
     act(() => void vi.advanceTimersByTime(20000));
     expect(onClose).not.toHaveBeenCalled();
@@ -48,8 +49,15 @@ describe("Toast", () => {
   it("마우스를 올린 동안도 닫히지 않는다", () => {
     const onClose = vi.fn();
     render({ text: "완료했어요", tone: "ok", action: { label: "되돌리기", onClick: () => {} } }, onClose);
+    act(() => void vi.advanceTimersByTime(3000));
     act(() => void box().dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
     act(() => void vi.advanceTimersByTime(20000));
     expect(onClose).not.toHaveBeenCalled();
+    // 멈춤이 아니라 처음부터 다시 잰다 — 남은 3초가 아니라 6초 뒤에 닫힌다
+    act(() => void box().dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body })));
+    act(() => void vi.advanceTimersByTime(5999));
+    expect(onClose).not.toHaveBeenCalled();
+    act(() => void vi.advanceTimersByTime(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

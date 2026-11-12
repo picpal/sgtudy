@@ -117,6 +117,15 @@ describe("FeedbackButton", () => {
     expect(dialog()).toBeNull();
   });
 
+  it("바깥(배경)을 누르면 닫히고, 상자 안을 누르면 닫히지 않는다", async () => {
+    await mount();
+    await act(async () => trigger().click());
+    await act(async () => dialog()!.click());
+    expect(dialog()).not.toBeNull();
+    await act(async () => dialog()!.parentElement!.click());
+    expect(dialog()).toBeNull();
+  });
+
   it("모바일(< sm)은 대화상자 대신 /feedback 페이지로 — 연 화면 주소를 from 으로", async () => {
     window.matchMedia = ((q: string) => ({ matches: q === "(width < 40rem)" })) as unknown as typeof window.matchMedia;
     window.history.replaceState(null, "", "/my-study/aws?tab=tasks");
