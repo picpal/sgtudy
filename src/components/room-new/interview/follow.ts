@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 
-/* 대화 자동 따라가기(§9) — 문서가 스크롤된다(안쪽 스크롤 없음). 맨 아래 말·칩(end)이 sticky 입력 막대(bar) 위에 보이게 창을 내린다.
+/* 대화 자동 따라가기 — 문서가 스크롤된다(안쪽 스크롤 없음). 맨 아래 말·칩(end)이 sticky 입력 막대(bar) 위에 보이게 창을 내린다.
    막대는 sticky 라 늘 화면 안에 있어서 막대에 scrollIntoView 를 걸면 아무 일도 없다 — 그래서 직접 잰다 */
 
 /** 하단 근처로 보는 거리(px) — 이 안에 있을 때만 새 말을 따라간다 */

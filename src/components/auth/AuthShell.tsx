@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Logo } from "@/components/ui/Logo";
 
-/** 로그인·온보딩·초대 공용 껍데기 — 가운데 420px 카드, 390px 에서 좌우 16px */
 export function AuthShell({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col items-center px-4 pb-16 pt-10 text-ink">

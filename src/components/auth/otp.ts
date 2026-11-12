@@ -97,7 +97,7 @@ function networkText(e: unknown): string | null {
   return null;
 }
 
-/** supabase-js AuthApiError { code } → 문구. 네트워크 실패는 연결 안내, 그 외는 흐름별 머리말에 원문을 붙인다(Review Focus 4). */
+/** supabase-js AuthApiError { code } → 문구. 네트워크 실패는 연결 안내, 그 외는 흐름별 머리말에 원문을 붙인다. */
 export function authErrorMessage(e: unknown, flow: AuthFlow = "login"): string {
   if (typeof e === "object" && e !== null && "code" in e && typeof (e as { code: unknown }).code === "string") {
     const code = (e as { code: string }).code;

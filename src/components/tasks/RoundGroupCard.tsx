@@ -13,8 +13,8 @@ const mdw = (s: string) => `${md(s)}(${weekdayKo(s)})`;
 
 /**
  * 회차 끝 빠른 추가 — my-study QuickAdd 와 같은 IME(shouldSubmitQuickAdd)·Esc·빈 입력 blur 닫힘 규칙.
- * 개인 목표는 낙관적 임시 행 없이 응답을 기다린다(스펙 §7: 서버 한도·기간 오류를 바로 보여 주려고) → 입력 aria-busy.
- * my-study QuickAdd 와 합치지 않는다(Task 14 판단): 그쪽은 role="tree" 안의 treeitem div·ParentNode(회차 기간 안내)·연달아 보내기(입력을 바로 비움)이고,
+ * 개인 목표는 낙관적 임시 행 없이 응답을 기다린다(서버 한도·기간 오류를 바로 보여 주려고) → 입력 aria-busy.
+ * my-study QuickAdd 와 합치지 않는다: 그쪽은 role="tree" 안의 treeitem div·ParentNode(회차 기간 안내)·연달아 보내기(입력을 바로 비움)이고,
  * 여기는 ul 안의 li·me_tasks 회차·응답 뒤 목록 재조회라 보내는 동안 입력을 잠근다. 공통 규칙(제목 정리·IME Enter)은 rounds.ts 함수를 같이 쓴다.
  */
 function PersonalQuickAdd({ label, onAdd, onClose }: { label: string; onAdd: (title: string) => Promise<boolean>; onClose: () => void }) {
@@ -78,14 +78,12 @@ type Props = {
   onToggleCollapsed: () => void;
   busyIds: ReadonlySet<string>;
   onToggleDone: (item: MeTaskItem) => void;
-  /** 이 회차 끝 빠른 추가가 열려 있는지 */
   adding: boolean;
   onOpenAdd: () => void;
   onCloseAdd: () => void;
   onAdd: (title: string) => Promise<boolean>;
 };
 
-/** 회차 묶음 카드 — 머리(회차 라벨·제목·기간·상태·x/y 완료, 접기) + 행 + 끝 줄(＋ 내 목표 추가 / 한도 안내) */
 export function RoundGroupCard({ group, today, perRound, limited, collapsed, onToggleCollapsed, busyIds, onToggleDone, adding, onOpenAdd, onCloseAdd, onAdd }: Props) {
   const { study, round, items, done, canAdd } = group;
   const label = round ? [round.label, round.title].filter(Boolean).join(" ") : "회차 밖";

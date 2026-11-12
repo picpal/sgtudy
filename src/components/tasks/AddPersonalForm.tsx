@@ -12,7 +12,7 @@ const lbl = "flex min-w-0 flex-col gap-[6px] text-[12px] font-semibold text-ink-
 
 const box = "rounded-[16px] border-[1.5px] border-slate-text/25 bg-slate-soft/40 p-[14px]";
 
-/** 스터디 이름(점 + 제목) — 어느 방에 더하는지 늘 보이게 (QA Q3-2) */
+/** 스터디 이름(점 + 제목) — 어느 방에 더하는지 늘 보이게 */
 function StudyName({ title, tone }: { title: string; tone: Parameters<typeof studyTone>[0] }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-[6px] text-[14px] font-semibold text-ink">
@@ -24,7 +24,7 @@ function StudyName({ title, tone }: { title: string; tone: Parameters<typeof stu
 
 /**
  * 머리 "＋ 내 목표 추가" 폼 — 스터디 · 회차(그 방 canAdd 회차, 기본 = 현재 회차) · 제목.
- * 스터디 칩으로 방을 골랐으면(chosenSlug) 그 방에만 더한다 — 못 더하는 방이면 폼 대신 이유 (QA Q3-2).
+ * 스터디 칩으로 방을 골랐으면(chosenSlug) 그 방에만 더한다 — 못 더하는 방이면 폼 대신 이유.
  * "전체" 이고 추가 가능한 방이 여럿이면 스터디 고르기, 하나면 이름만.
  */
 export function AddPersonalForm({ data, chosenSlug, onAdd, onClose }: { data: MeTasks; chosenSlug?: string; onAdd: (slug: string, roundId: string, title: string) => Promise<boolean>; onClose: () => void }) {
@@ -121,7 +121,7 @@ export function AddPersonalForm({ data, chosenSlug, onAdd, onClose }: { data: Me
           회차
           <select value={round?.id ?? ""} onChange={(e) => setRoundId(e.target.value)} className={field}>
             {rounds.map((r) => {
-              // 시작 전 회차는 "지금 회차" 라 부르지 않는다 — 모집 중 첫 회차도 (시나리오 QA #15)
+              // 시작 전 회차는 "지금 회차" 라 부르지 않는다 — 모집 중 첫 회차도
               const tag = r.startDate > data.today ? " (시작 전)" : currentId === r.id ? " (지금 회차)" : "";
               return (
                 <option key={r.id} value={r.id}>

@@ -62,7 +62,7 @@ function Cta({ room, act, busy, loginHref, onJoin, onApply, onCancel }: Props) {
         </div>
       );
     case "pending":
-      // 백로그 F①: 보관된 방에 남은 승인 대기 — 보관 안내와 함께 신청만 취소할 수 있다
+      // 보관된 방에 남은 승인 대기 — 보관 안내와 함께 신청만 취소할 수 있다
       if (room.archived) {
         return (
           <div className="flex flex-col gap-2">
@@ -147,10 +147,10 @@ function MemberRow({ mb }: { mb: RoomMember }) {
 export function JoinCard(props: Props) {
   const { room } = props;
   const recruit = room.status === "recruit";
-  // 어댑터가 내 pending 행까지 넣어 준다 → 확정 참가자와 승인 대기를 나눠 보여 준다 (Q2-23)
+  // 어댑터가 내 pending 행까지 넣어 준다 → 확정 참가자와 승인 대기를 나눠 보여 준다
   const rows = room.members.filter((m) => !m.pending);
   const waiting = room.members.filter((m) => m.pending);
-  const capCur = room.capCur;           // 서버 값 그대로 (roomview §3.5)
+  const capCur = room.capCur;           // 서버 값 그대로
   const full = capCur >= room.capMax;
   const minOk = room.minNeed === 0 || capCur >= room.minNeed;
 

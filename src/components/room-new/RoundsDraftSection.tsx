@@ -4,11 +4,7 @@ import { useState } from "react";
 import type { RoundsResponse } from "@/lib/ai/rounds/schema";
 import { slashRange } from "@/lib/api/format";
 
-/*
- * 미리보기(직접 입력 모드) 의 「회차 초안」 섹션(2단계 D30·D33). 회차마다 포함/제외 체크 + [다시 생성].
- * 글은 텍스트 노드로만 보인다(마크다운 해석 없음) — 적용 뒤 진행목표 화면에서 마크다운으로 렌더된다.
- * 데스크톱은 펼친 채, 모바일은 접힌 채 시작한다
- */
+/* 글은 텍스트 노드로만 보인다(마크다운 해석 없음) — 적용 뒤 진행목표 화면에서 마크다운으로 렌더된다 */
 
 /** 포함한 회차 기준 개수 — 섹션 요약·버튼 라벨·모집 가능 여부가 같은 셈을 쓴다 */
 export function includedStats(data: RoundsResponse, excluded: ReadonlySet<number>) {
@@ -18,7 +14,7 @@ export function includedStats(data: RoundsResponse, excluded: ReadonlySet<number
   return { rounds: inc.length, tasks, exams, leaves: tasks + exams };
 }
 
-/** AI 가 끝내 못 채운 회차(D40) — "11주차·12주차는 비어 있어요 …" */
+/** AI 가 끝내 못 채운 회차 — "11주차·12주차는 비어 있어요 …" */
 function paddedNote(data: RoundsResponse): string {
   const labels = data.rounds.filter((r) => r.padded).map((r) => r.label);
   return `${labels.length ? labels.join("·") : `${data.padded}개 회차`}는 비어 있어요 · 다시 생성하거나 만든 뒤 진행목표에서 채워 주세요`;

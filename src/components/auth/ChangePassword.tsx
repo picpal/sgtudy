@@ -31,7 +31,7 @@ export function ChangePassword({ email }: { email: string }) {
     return () => clearTimeout(id);
   }, [left]);
 
-  /** 재인증 코드 발송. 1분 안에 다시 누르면 남은 시간만 보여 주고 이미 받은 코드를 쓰게 한다 */
+  /** 1분 안에 다시 누르면 남은 시간만 보여 주고 이미 받은 코드를 쓰게 한다 */
   const sendCode = async () => {
     setBusy(true);
     setMsg(null);

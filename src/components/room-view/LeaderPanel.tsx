@@ -43,17 +43,17 @@ type Props = { detail: Detail; toast: (m: ToastMsg) => void; onDetail?: (d: Room
 const PRIMARY = "flex h-11 w-full items-center justify-center rounded-[22px] text-[14px] font-semibold text-white disabled:opacity-60";
 const SECONDARY = "flex h-11 items-center justify-center gap-[6px] rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-medium text-ink disabled:opacity-60";
 
-/** 그룹장 패널 (plan 06 P0) — 모집 시작 / 지금 시작 · 초대 링크 · 승인 대기. 그룹장에게만 렌더한다 */
+/** 모집 시작 / 지금 시작 · 초대 링크 · 승인 대기. 그룹장에게만 렌더한다 */
 export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
   const router = useRouter();
   const action = statusActionOf(detail);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"open" | "start" | "rotate" | null>(null);
   const [inviteUrl, setInviteUrl] = useState(detail.invite?.url ?? null);
-  // 예정보다 일찍 시작 — 일정을 오늘로 당길지 (시나리오 QA D1, 기본 당기기). 0 이면 묻지 않는다
+  // 예정보다 일찍 시작 — 일정을 오늘로 당길지 (기본 당기기). 0 이면 묻지 않는다
   const early = earlyStartDays(detail);
   const [shift, setShift] = useState<"shift" | "keep">("shift");
-  // "지금 시작"이 1년 상한에 막힘(0016 — 일찍 시작하면 시작일이 오늘로 당겨진다): 전용 안내를 패널에 남기고 종료일 바꾸기로 잇는다
+  // "지금 시작"이 1년 상한에 막힘(일찍 시작하면 시작일이 오늘로 당겨진다): 전용 안내를 패널에 남기고 종료일 바꾸기로 잇는다
   const [block, setBlock] = useState<{ text: string; maxEndDate: string | null } | null>(null);
   const [editEnd, setEditEnd] = useState(false);
   const refocusEnd = useRefocusOnClose(editEnd);
@@ -136,7 +136,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
           {detail.recruit?.extraUntil && (
             <span className="whitespace-nowrap rounded-[7px] bg-[#EEE7FB] px-2 py-[2px] text-[12px] font-semibold text-[#6B45B8]">추가 모집 ~{mmdd(detail.recruit.extraUntil)}</span>
           )}
-          {/* 방 정보·태그·기간 수정, 삭제·보관 (Q3-1·Q2-2) */}
+          {/* 방 정보·태그·기간 수정, 삭제·보관 */}
           <Link href={routes.roomSettings(detail.slug, routes.room(detail.slug))} className="-mr-2 inline-flex h-11 items-center gap-1 whitespace-nowrap rounded-[10px] px-2 text-[13px] font-semibold text-ink-3 hover:text-ink">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="3" />
@@ -187,7 +187,7 @@ export function LeaderPanel({ detail, toast, onDetail, onMembership }: Props) {
         </div>
       )}
 
-      {/* 담당 미정 과제(지정 과제 담당 0명 — 내보내기 "담당 미정으로 두기" 등, 0027) → 진행목표 편집으로 */}
+      {/* 담당 미정 과제(지정 과제 담당 0명 — 내보내기 "담당 미정으로 두기" 등) → 진행목표 편집으로 */}
       {!detail.archived && detail.status !== "ended" && (detail.stats?.unassignedCount ?? 0) > 0 && (
         <p data-unassigned role="note" className="m-0 flex flex-wrap items-center gap-x-2 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-1 text-[13px] font-medium leading-[1.5] text-[#6B4700]">
           <span className="py-2">담당 미정 과제 {detail.stats!.unassignedCount}개 · 담당자를 정해 주세요</span>
@@ -294,7 +294,7 @@ function Applications({ slug, initialCount, toast, onMembership }: { slug: strin
   };
 
   const count = items?.length ?? initialCount;
-  // 참가 신청 알림 딥링크 /my-study/{slug}#applications — 목록이 오면 여기로 (시나리오 QA #8)
+  // 참가 신청 알림 딥링크 /my-study/{slug}#applications — 목록이 오면 여기로
   useHashTarget("applications", items !== null || !!error);
   return (
     <div id="applications" role="region" tabIndex={-1} aria-labelledby="applications-title" className="flex scroll-mt-4 flex-col gap-2 border-t border-line-2 pt-4 outline-none">
@@ -321,7 +321,7 @@ function Applications({ slug, initialCount, toast, onMembership }: { slug: strin
                   거절
                 </button>
               </span>
-              {/* 참가 신청 한마디 (D4 — 선택, 200자) */}
+              {/* 참가 신청 한마디 (선택, 200자) */}
               {a.message && <p data-apply-message className="m-0 mb-1 basis-full whitespace-pre-wrap break-words rounded-[10px] bg-surface-2 px-3 py-2 text-[13px] leading-[1.5] text-ink-2">{a.message}</p>}
             </li>
           ))}

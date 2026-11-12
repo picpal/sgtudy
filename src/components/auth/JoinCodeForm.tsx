@@ -5,7 +5,6 @@ import { useState, type FormEvent } from "react";
 import { toApiError } from "@/lib/api/errors";
 import { codeInputView, isCodeShape, lookupInviteCode, normalizeCode, recruitErrorText } from "@/lib/api/recruit";
 
-/** 초대 코드 입력 — 맞으면 /invite/{token} 랜딩으로 보낸다 */
 export function JoinCodeForm({ initial }: { initial: string }) {
   const router = useRouter();
   const [value, setValue] = useState(() => codeInputView(initial));

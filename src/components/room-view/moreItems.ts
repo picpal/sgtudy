@@ -17,7 +17,7 @@ export const MORE_LABEL: Record<MoreItem, string> = {
 };
 
 /**
- * 신청 취소 확인 본문 — 방 화면·내 스터디 공용. 보관된 방은 다시 신청할 수 없으니 되돌릴 수 없다고 알린다 (백로그 F 리뷰 I2)
+ * 신청 취소 확인 본문 — 방 화면·내 스터디 공용. 보관된 방은 다시 신청할 수 없으니 되돌릴 수 없다고 알린다
  */
 export const cancelConfirmBody = (archived: boolean): string =>
   archived ? "보관된 스터디라 취소하면 다시 신청할 수 없어요." : "취소해도 모집 중이면 다시 신청할 수 있어요.";
@@ -39,8 +39,8 @@ export function roomMoreItems(act: Action): MoreItem[] {
 }
 
 /**
- * 내 스터디(/my-study/[slug]) — 빈 배열이면 더보기 버튼을 숨긴다. 진행 중 참가자(canRequestLeave)는 탈퇴 요청 · 요청 중이면 요청 취소 (시나리오 QA D3).
- * 맨 앞은 항상 "방 정보"(방 화면 링크) — 상단 방 정보가 기본으로 접히면서(2026-10-21) 공개 방 화면으로 가는 길을 다시 둔다
+ * 내 스터디(/my-study/[slug]) — 빈 배열이면 더보기 버튼을 숨긴다. 진행 중 참가자(canRequestLeave)는 탈퇴 요청 · 요청 중이면 요청 취소.
+ * 맨 앞 "방 정보"(방 화면 링크) — 상단 방 정보가 기본으로 접혀 있어 공개 방 화면으로 가는 길을 다시 둔다
  */
 export function studyMoreItems(act: StudyAction, o: { canRequestLeave?: boolean; leaveRequested?: boolean } = {}): MoreItem[] {
   if (act === "joined" && o.canRequestLeave) return ["roomInfo", o.leaveRequested ? "leaveRequestCancel" : "leaveRequest"];

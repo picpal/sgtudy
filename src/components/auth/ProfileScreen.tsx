@@ -49,7 +49,7 @@ export function ProfileScreen({ me }: { me: Me }) {
     setMailBusy(true);
     setMailError("");
     setMailOk("");
-    if (msg?.tone === "ok") setMsg(null); // 지난 "닉네임을 바꿨어요" 가 토글 결과처럼 남지 않게(Q1-18)
+    if (msg?.tone === "ok") setMsg(null); // 지난 "닉네임을 바꿨어요" 가 토글 결과처럼 남지 않게
     setMail(next);
     try {
       await updateMe({ optionalMailEnabled: next });
@@ -64,7 +64,7 @@ export function ProfileScreen({ me }: { me: Me }) {
 
   const onNick = (v: string) => {
     setNick(v);
-    if (msg) setMsg(null); // 결과 문구("바꿨어요"·지난 저장 오류)는 다시 고치기 시작하면 지운다(Q1-18)
+    if (msg) setMsg(null); // 결과 문구("바꿨어요"·지난 저장 오류)는 다시 고치기 시작하면 지운다
   };
 
   return (

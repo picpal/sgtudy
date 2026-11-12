@@ -28,7 +28,7 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
   }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState(""); // 참가 신청 한마디 (승인제 — D4)
+  const [message, setMessage] = useState(""); // 참가 신청 한마디 (승인제)
   const act: InviteAction = inviteActionOf(p);
   const r = p.room;
 
@@ -46,7 +46,7 @@ export function InviteScreen({ token, preview }: { token: string; preview: Invit
       if (err.code === "ONBOARDING_REQUIRED") return router.push(routes.onboarding(routes.invite(token)));
       if (err.code === "INVITE_EXPIRED" || err.code === "ROOM_NOT_RECRUITING") {
         setError(recruitErrorText(err.code, err.message));
-        router.refresh(); // 미리보기를 다시 받는다
+        router.refresh();
         return;
       }
       setError(err.message);

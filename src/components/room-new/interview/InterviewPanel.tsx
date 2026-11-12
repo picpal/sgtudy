@@ -16,8 +16,8 @@ import { MultiChips, OtherInput, otherLabel, SingleChips } from "./Chips";
 import { useFollowBottom } from "./follow";
 import { toMessages, userLines, type Action, type InterviewState } from "./state";
 
-/* AI 인터뷰 대화(§9) — 말풍선 + 칩 + 입력. 방은 만들지 않는다: 끝나면 [미리보기로] 가 수동 폼으로 넘긴다(D11).
-   끝난 뒤 로컬 질문 두 개(2단계 D33·D36, AI 호출 없음): 회차 초안을 잡을까요? → (잡았으면) 바로 모집할까요? → 미리보기 */
+/* 방은 만들지 않는다: 끝나면 [미리보기로] 가 수동 폼으로 넘긴다.
+   끝난 뒤 로컬 질문 두 개(AI 호출 없음): 회차 초안을 잡을까요? → (잡았으면) 바로 모집할까요? → 미리보기 */
 
 const INPUT_MAX = 500;
 /** 건너뛰기가 되는 질문(필수가 아닌 칸) */
@@ -67,7 +67,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
     dispatch({ type: "fail", err: r.err });
   };
 
-  // 첫 진입: 빈 대화로 첫 질문을 받는다. 이미 채운 칸은 초안으로 같이 가서 다시 묻지 않는다(D13)
+  // 첫 진입: 빈 대화로 첫 질문을 받는다. 이미 채운 칸은 초안으로 같이 가서 다시 묻지 않는다
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
@@ -115,7 +115,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
   };
 
   const { ask, busy, error, done, limit, rounds, roundsError } = state;
-  // 회차를 물을 수 있는가 — 제목·기간이 있어야 서버가 나눈다(없으면 이론상 불가지만 바로 미리보기로, §7)
+  // 회차를 물을 수 있는가 — 제목·기간이 있어야 서버가 나눈다(없으면 이론상 불가지만 바로 미리보기로)
   const canRounds = done && !!draft.title && isYmd(draft.startDate) && isYmd(draft.endDate);
   const roundsBusy = rounds === "busy";
   const recruitQuestion = `회차 초안을 잡았어요. 방을 만들면서 바로 모집도 시작할까요? ${openRecruitNote({ isPublic: draft.isPublic ?? true, joinMode: draft.joinMode ?? "direct" })}`;
@@ -135,7 +135,7 @@ export function InterviewPanel({ state, dispatch, draft, today, onDraft, onFinis
           {state.lines.map((l) => (
             <li key={l.id} className={`flex ${l.role === "user" ? "justify-end" : "justify-start"}`}>
               <span className="sr-only">{l.role === "user" ? "나: " : "AI: "}</span>
-              {/* 텍스트 노드로만 — 마크다운·HTML 해석 없음(§6) */}
+              {/* 텍스트 노드로만 — 마크다운·HTML 해석 없음 */}
               <p className={`m-0 max-w-[85%] whitespace-pre-wrap break-words rounded-[16px] px-4 py-3 text-[15px] leading-[1.55] ${l.role === "user" ? "bg-navy text-white" : "bg-surface-2 text-ink"}`}>{l.text}</p>
             </li>
           ))}

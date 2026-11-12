@@ -5,7 +5,7 @@ import { fieldClass } from "./styles";
 
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "className"> & { inputRef?: Ref<HTMLInputElement> };
 
-/** 비밀번호 칸 + 보기/숨기기. 버튼은 칸 안 오른쪽 44px — 입력 글자가 버튼 밑으로 들어가지 않게 오른쪽 여백을 둔다 */
+/** 보기 버튼이 칸 안 오른쪽 44px 을 덮으니 입력 글자가 그 밑으로 들어가지 않게 오른쪽 여백을 둔다 */
 export function PasswordInput({ inputRef, disabled, ...rest }: Props) {
   const [shown, setShown] = useState(false);
   return (

@@ -1,16 +1,16 @@
 import type { Ask, ChatLine, Dropped, Field, RequiredField, TurnResponse } from "@/lib/ai/schema";
 import type { TurnError } from "./api";
 
-/* 인터뷰 화면 상태(순수 리듀서) — 대화는 페이지 안에만 있다(D8). 모드를 오가도 NewRoomScreen 이 들고 있어 남는다(D13) */
+/* 대화는 페이지 안에만 있다(저장 안 함). 모드를 오가도 NewRoomScreen 이 들고 있어 남는다 */
 
 /**
- * 인터뷰가 끝난 뒤의 로컬 질문(2단계 D33·D36) — AI 호출 없이 화면이 묻는다.
+ * 인터뷰가 끝난 뒤의 로컬 질문 — AI 호출 없이 화면이 묻는다.
  * idle(아직 안 끝남) → asking(회차 초안 잡을까요?) → busy → recruitAsking(바로 모집할까요?) → settled([미리보기로]).
  * 아니요·그냥 미리보기로는 바로 settled. 실패는 error(다시 시도 → busy)
  */
 export type RoundsStep = "idle" | "asking" | "busy" | "error" | "recruitAsking" | "settled";
 
-/** local = 화면이 물은 로컬 질문과 그 답(D33·D36) — 대화 로그에는 남기되 서버(인터뷰·회차 입력)로는 보내지 않는다 */
+/** local = 화면이 물은 로컬 질문과 그 답 — 대화 로그에는 남기되 서버(인터뷰·회차 입력)로는 보내지 않는다 */
 export type Bubble = { id: number; role: "user" | "assistant"; text: string; local?: true };
 export type InterviewState = {
   lines: Bubble[];
@@ -26,11 +26,11 @@ export type InterviewState = {
   /** 409 턴 상한 — 입력을 닫고 [미리보기로]/[직접 입력으로] 만 남긴다 */
   limit: boolean;
   turnsLeft: number;
-  /** 진행 방식 칩(multi) 답 — 회차 초안 입력(D27). 마지막 답이 덮는다 */
+  /** 진행 방식 칩(multi) 답 — 회차 초안 입력. 마지막 답이 덮는다 */
   style: string[];
   rounds: RoundsStep;
   roundsError: TurnError | null;
-  /** 바로 모집 시작 답(D36) — null = 안 물음 */
+  /** 바로 모집 시작 답 — null = 안 물음 */
   openRecruit: boolean | null;
 };
 
@@ -95,5 +95,5 @@ export function reduce(s: InterviewState, a: Action): InterviewState {
 export const toMessages = (s: InterviewState): ChatLine[] => s.lines.filter((l) => !l.local).map((l) => ({ role: l.role, text: l.text }));
 /** 이탈 가드 — 사용자가 한 번이라도 답했으면 */
 export const isDirty = (s: InterviewState) => s.lines.some((l) => l.role === "user");
-/** 회차 초안에 보낼 사용자 발화(D27) — user 줄만, 뒤에서 12개 */
+/** 회차 초안에 보낼 사용자 발화 — 로컬 답 빼고 뒤에서 12개 */
 export const userLines = (s: InterviewState): string[] => s.lines.filter((l) => l.role === "user" && !l.local).map((l) => l.text).slice(-12);

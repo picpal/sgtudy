@@ -24,14 +24,14 @@ import { LeaderPanel } from "./LeaderPanel";
 import { cancelConfirmBody, menuItemsOf, roomMoreItems } from "./moreItems";
 
 /** invite: ?invite= 로 연 비공개 방의 토큰 — 참가/신청 RPC 와 로그인 복귀 주소에 그대로 이어 붙인다 */
-/** filters: 둘러보기에서 이어받은 필터 — 왼쪽 목록(list)이 이 조건으로 조회됐다 (시나리오 QA #19) */
+/** filters: 둘러보기에서 이어받은 필터 — 왼쪽 목록(list)이 이 조건으로 조회됐다 */
 export function RoomViewScreen({ detail, list, invite, filters = DEFAULT_FILTERS }: { detail: RoomDetail; list: RoomListResponse; invite?: string; filters?: HomeFilters }) {
   const me = useMe();
   const router = useRouter();
   const [dto, setDto] = useState(detail);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<"leave" | "cancel" | "apply" | null>(null);
-  const [message, setMessage] = useState(""); // 참가 신청 한마디 (D4 — 선택)
+  const [message, setMessage] = useState(""); // 참가 신청 한마디 (선택)
   const [toast, setToast] = useState<ToastMsg>(null);
   const room = useMemo(() => toRoom(dto, dto.today, me?.id ?? null), [dto, me]);
   const act = actionOf(dto);
@@ -39,7 +39,7 @@ export function RoomViewScreen({ detail, list, invite, filters = DEFAULT_FILTERS
   const closeToast = useCallback(() => setToast(null), []);
   const closeConfirm = useCallback(() => setConfirm(null), []);
   const returnTo = roomReturnTo(dto.slug, invite);
-  // 승인 대기 중에 열어 둔 방 화면 — 창으로 돌아오면 다시 불러 승인(참가중)을 반영한다 (시나리오 QA #9). 화면이 dto 를 state 로 들고 있어 router.refresh 만으로는 안 바뀐다
+  // 승인 대기 중에 열어 둔 방 화면 — 창으로 돌아오면 다시 불러 승인(참가중)을 반영한다. 화면이 dto 를 state 로 들고 있어 router.refresh 만으로는 안 바뀐다
   useRefetchOnFocus(act === "pending", () => {
     fetchRoomDetail(dto.slug, undefined, invite)
       .then((d) => {
@@ -85,7 +85,7 @@ export function RoomViewScreen({ detail, list, invite, filters = DEFAULT_FILTERS
     <div className="flex min-h-screen flex-col">
       <AppHeader active="home" bell={<NotificationBell />} />
       <PageBody>
-        {/* ≤900(포함): 선택한 방이 먼저, 목록은 그 아래에서 접힌다 (Q1-08/Q3-07). Tailwind max-[901px] = width < 901 */}
+        {/* ≤900(포함): 선택한 방이 먼저, 목록은 그 아래에서 접힌다. Tailwind max-[901px] = width < 901 */}
         <div className="flex w-full flex-1 items-start gap-4 max-[901px]:flex-wrap max-[901px]:content-start">
           <RoomSidebar selected={dto.slug} items={sidebar} total={list.tabCounts.public} filters={filters} found={list.totalElements} tagLabels={filters.tags.map((t) => list.tagFacets.find((f) => f.slug === t)?.label ?? t)} />
           <main className="min-w-0 flex-[999_1_640px] self-stretch rounded-[20px] bg-surface px-7 pb-9 pt-7 max-[901px]:order-first max-sm:px-4 max-sm:pb-7 max-sm:pt-5">

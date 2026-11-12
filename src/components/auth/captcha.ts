@@ -25,10 +25,7 @@ export const CAPTCHA_MISSING_TEXT = "보안 확인이 끝나지 않았어요 · 
 export const CAPTCHA_FAILED_TEXT = "보안 확인이 만료됐거나 실패했어요 · 다시 확인한 뒤 시도해 주세요";
 export const CAPTCHA_LOAD_TEXT = "보안 확인을 불러오지 못했어요 · 새로고침하거나 잠시 후 다시 시도해 주세요";
 
-/**
- * 보내기 전에 확인: CAPTCHA 가 켜져 있는데 토큰이 없으면(아직 안 끝남·만료) 막을 문구, 아니면 null.
- * 꺼져 있으면 언제나 null — 지금 동작 그대로.
- */
+/** CAPTCHA 가 켜져 있는데 토큰이 없으면(아직 안 끝남·만료) 보내기 전에 막을 문구 */
 export function captchaBlock(enabled: boolean, token: string | null): string | null {
   return enabled && !token ? CAPTCHA_MISSING_TEXT : null;
 }

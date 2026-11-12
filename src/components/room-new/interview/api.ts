@@ -20,7 +20,7 @@ export async function postTurn(body: TurnBody, fetcher: typeof fetch = fetch): P
   }
 }
 
-/* POST /api/rooms/rounds — 회차 초안(2단계 §5.1). 같은 실패 모양 */
+/* POST /api/rooms/rounds — 회차 초안. 같은 실패 모양 */
 export type RoundsBody = { draft: Draft; userLines: string[]; style: string[] };
 export type RoundsResult = { ok: true; data: RoundsResponse } | { ok: false; err: TurnError };
 const ROUNDS_NETWORK: TurnErrorBody = { error: "AI_UNAVAILABLE", message: "회차 초안은 지금 어려워요 · 방만 먼저 만들고 진행목표에서 채울 수 있어요" };

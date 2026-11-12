@@ -8,21 +8,20 @@ import { DATE_NO_OVERFLOW_CLASS } from "@/components/room-new/fields";
 
 type Props = {
   slug: string;
-  /** 바꿀 칸 — 기본 종료일. 시작일은 진행목표/개요 「시작일 앞당기기」(0048) */
+  /** 바꿀 칸 — 기본 종료일. 시작일은 진행목표/개요 「시작일 앞당기기」 */
   field?: "startDate" | "endDate";
   /** 처음 채울 날짜 — 시작이 막혔으면 상한, 회차가 넘치면 마지막 회차 마감 */
   initial: string;
   min?: string;
   max?: string;
-  /** 입력 아래 안내 한 줄 */
   hint?: string;
   onSaved: (d: RoomDetail) => void;
   onCancel: () => void;
 };
 
 /**
- * 방 종료일(또는 시작일)만 바꾸는 작은 폼 (room_update {endDate|startDate}, 그룹장 전용) — 방 설정 화면이 아직 없어 필요한 자리에서 바로 연다.
- * 그룹장 패널("지금 시작"이 1년 상한에 막힘)·진행목표/개요("기간 맞추기")가 같이 쓴다. 검사는 서버가 하고 문구를 그대로 보여 준다
+ * 그룹장 패널("지금 시작"이 1년 상한에 막힘)·진행목표/개요("기간 맞추기")에서 방 설정으로 가지 않고 바로 고치는 작은 폼.
+ * 검사는 서버가 하고 문구를 그대로 보여 준다
  */
 export function EndDateForm({ slug, field = "endDate", initial, min, max, hint, onSaved, onCancel }: Props) {
   const isStart = field === "startDate";

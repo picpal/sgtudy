@@ -15,7 +15,7 @@ import { PasswordFields } from "./PasswordFields";
 import { fieldClass, labelClass, primaryClass } from "./styles";
 import { useCaptcha } from "./Turnstile";
 
-/** 코드 단계는 ?step=code 히스토리 항목 — 브라우저 뒤로가기가 이메일 단계로 돌아오게 한다(Q2-08) */
+/** 코드 단계는 ?step=code 히스토리 항목 — 브라우저 뒤로가기가 이메일 단계로 돌아오게 한다 */
 const STEP_KEY = "step";
 const withStep = (on: boolean) => {
   const sp = new URLSearchParams(window.location.search);
@@ -47,7 +47,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
   const params = useSearchParams();
   const flow = mode;
   const [email, setEmail] = useState("");
-  // 코드를 보냈(거나 빈도 제한으로 이미 보낸 것으로 보이는) 주소. 계정은 소문자로 저장되니 소문자로 쓴다(Q2-18)
+  // 코드를 보냈(거나 빈도 제한으로 이미 보낸 것으로 보이는) 주소. 계정은 소문자로 저장되니 소문자로 쓴다
   const [sentTo, setSentTo] = useState<string | null>(resume?.email ?? null);
   const [digits, setDigits] = useState<Digits>(EMPTY_DIGITS);
   const [busy, setBusy] = useState(false);
@@ -109,7 +109,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
     setBusy(false);
     // 재설정: 없는 주소도 보낸 것처럼 코드 단계로 — 화면 분기로 계정 존재를 드러내지 않는다(코드 확인은 "맞지 않거나 만료" 로 끝난다)
     if (e && !(mode === "reset" && isResetNoAccount(e))) {
-      // 1분 안에 다시 요청: 남은 시간을 보여 주고, 이미 받은 코드를 입력하러 갈 수 있게 한다(Q2-08, Q2-30)
+      // 1분 안에 다시 요청: 남은 시간을 보여 주고, 이미 받은 코드를 입력하러 갈 수 있게 한다
       const wait = rateLimitWait(e, sentTo === to ? sentAt.current : null, Date.now());
       if (wait !== null) {
         setLeft(wait);
@@ -130,7 +130,7 @@ export function OtpPasswordFlow({ mode, returnTo, resume }: { mode: OtpFlowMode;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
       setRateLimited(false);
       setError("이메일 주소를 확인해 주세요");
-      emailRef.current?.focus(); // Q2-19: 오류 필드로 포커스
+      emailRef.current?.focus();
       return;
     }
     void send(addr);

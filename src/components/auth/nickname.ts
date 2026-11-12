@@ -29,13 +29,13 @@ const fit = (base: string, suffix: string): string => {
 };
 
 /**
- * 닉네임이 이미 쓰일 때 내놓을 후보 (시나리오 QA D4·#22) — 숫자·_숫자·.숫자 를 붙인다. 규칙에 맞는 것만, 서로 다르게.
+ * 닉네임이 이미 쓰일 때 내놓을 후보 — 숫자·_숫자·.숫자 를 붙인다. 규칙에 맞는 것만, 서로 다르게.
  * 쓸 수 있는지는 pickAvailable 이 기존 nickname_check 로 확인한다. rand 는 테스트용.
  */
 export function nicknameCandidates(base: string, rand: () => number = Math.random): string[] {
   const b = base.trim().normalize("NFC");
   if (nicknameProblem(b)) return [];
-  const n2 = () => String(10 + Math.floor(rand() * 90)); // 10~99
+  const n2 = () => String(10 + Math.floor(rand() * 90));
   const raw = [fit(b, String(2 + Math.floor(rand() * 8))), fit(b, `_${n2()}`), fit(b, `.${n2()}`), fit(b, n2()), fit(b, `_${n2()}`), fit(b, `.${n2()}`)];
   return [...new Set(raw)].filter((x) => x !== b && nicknameProblem(x) === null);
 }

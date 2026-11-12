@@ -1,4 +1,3 @@
-/** 내 과제(/tasks) 순수 로직 — 필터 파싱, 거르기, 회차/마감일 묶기, 요약. React·네트워크와 무관. */
 import { addDays, parseISO } from "@/lib/date";
 import type { MeTaskItem, MeTaskRound, MeTaskStudy, MeTasks } from "@/lib/api/types";
 import type { TaskStatus } from "@/lib/types";
@@ -10,7 +9,7 @@ export type TasksFilter = {
   type: "all" | "team" | "personal";
   hideDone: boolean;
   study: string | "all";
-  /** 「과제 · 오답노트」 보기 전환(오답노트 스펙 D17) — notes 면 기간·묶기·유형·완료 숨기기는 뜻이 없어 툴바에서 빠진다 */
+  /** 「과제 · 오답노트」 보기 전환 — notes 면 기간·묶기·유형·완료 숨기기는 뜻이 없어 툴바에서 빠진다 */
   view: "tasks" | "notes";
 };
 
@@ -64,7 +63,7 @@ export function applyFilter(m: MeTasks, f: TasksFilter): MeTaskItem[] {
   });
 }
 
-/** ord 없는 옛 서버(0042 전) 정렬: 미완료 먼저 → 마감 빠른 순 → 팀 과제 먼저 → 제목(ko) */
+/** ord 없는 옛 서버 정렬: 미완료 먼저 → 마감 빠른 순 → 팀 과제 먼저 → 제목(ko) */
 const cmpItem = (a: MeTaskItem, b: MeTaskItem) =>
   Number(isDone(a.st)) - Number(isDone(b.st)) ||
   a.endDate.localeCompare(b.endDate) ||
@@ -83,7 +82,7 @@ const cmpOrd = (x: [number, number][], y: [number, number][]): number => {
 export const curriculumCmp = (a: MeTaskItem, b: MeTaskItem): number =>
   Number(a.type === "personal") - Number(b.type === "personal") || cmpOrd(a.ord ?? [], b.ord ?? []);
 
-/** 서버가 ord 를 주면(0042~) 진행목표 순서, 아니면 옛 정렬 */
+/** 서버가 ord 를 주면 진행목표 순서, 아니면 옛 정렬 */
 const hasOrd = (its: MeTaskItem[]) => its.every((it) => Array.isArray(it.ord));
 
 export type RoundGroup = { study: MeTaskStudy; round: MeTaskRound | null; items: MeTaskItem[]; done: number; canAdd: boolean };
@@ -159,7 +158,7 @@ export function summary(m: MeTasks, items: MeTaskItem[]): { left: number; dueTod
   const open = items.filter((it) => !isDone(it.st) && live.has(it.slug));
   const cur = m.items.filter((it) => it.type === "personal" && live.get(it.slug) === it.roundId);
   return {
-    // 팀 과제만 — 개인 목표는 personalDone/personalTotal 로 따로 보인다 (시나리오 QA #16)
+    // 팀 과제만 — 개인 목표는 personalDone/personalTotal 로 따로 보인다
     left: open.filter((it) => it.type !== "personal").length,
     dueToday: open.filter((it) => it.endDate === m.today).length,
     personalDone: cur.filter((it) => isDone(it.st)).length,
@@ -192,7 +191,7 @@ export const addableStudies = (m: MeTasks): MeTaskStudy[] => m.studies.filter((s
 
 export const DRAFT_ADD_NOTE = "모집을 시작하면 개인 목표를 추가할 수 있어요";
 
-/** 그 방에 지금 내 목표를 못 더하는 이유 (null = 더할 수 있음) — 머리 폼이 고른 스터디 칩을 따를 때 (QA Q3-2) */
+/** 그 방에 지금 내 목표를 못 더하는 이유 (null = 더할 수 있음) — 머리 폼이 고른 스터디 칩을 따를 때 */
 export function addBlockReason(m: MeTasks, slug: string): string | null {
   const s = m.studies.find((x) => x.slug === slug);
   if (!s) return null;
@@ -204,7 +203,7 @@ export function addBlockReason(m: MeTasks, slug: string): string | null {
   return `모든 회차에 내 목표가 ${m.personalPerRound}개씩 있어 더 추가할 수 없어요`;
 }
 
-/** 스터디 묶음 머리 아래 안내 — 준비중(모집 전) 방에는 "＋ 내 목표 추가" 줄이 없는 이유를 한 번만 (QA Q3-2) */
+/** 스터디 묶음 머리 아래 안내 — 준비중(모집 전) 방에는 "＋ 내 목표 추가" 줄이 없는 이유를 한 번만 */
 export const studyNote = (s: MeTaskStudy): string | null => (s.status === "draft" ? DRAFT_ADD_NOTE : null);
 
 /** 추가 폼 기본 회차 = 그 방 현재 회차(추가 가능할 때) → 아니면 첫 추가 가능 회차 → "" */
@@ -221,7 +220,7 @@ export const atLimit = (m: MeTasks, g: RoundGroup): boolean =>
 /** "전체" 범위의 지난 회차는 접힌 채 시작 */
 export const defaultCollapsed = (g: RoundGroup, f: TasksFilter, today: string): boolean => f.scope === "all" && !!g.round && g.round.endDate < today;
 
-/** 빈 상태 종류 (스펙 §6). 결과가 있으면 null. 묶기·기간은 "필터"로 치지 않는다 */
+/** 빈 상태 종류. 결과가 있으면 null. 묶기·기간은 "필터"로 치지 않는다 */
 export function emptyKind(m: MeTasks, f: TasksFilter, items: MeTaskItem[]): "noStudy" | "noTasks" | "filtered" | null {
   if (m.studies.length === 0) return "noStudy";
   if (items.length > 0) return null;
@@ -237,6 +236,6 @@ export function rowState(it: MeTaskItem, today: string): { tone: RowTone; dueHot
   return { tone, dueHot: !done && it.endDate <= today };
 }
 
-/** 개인 목표 완료 체크 버튼: 진행 중 = 누름, 시작 전(모집·초안) = 비활성 + 안내, 종료 = 숨김(읽기 전용, 시안 E-4) */
+/** 개인 목표 완료 체크 버튼: 진행 중 = 누름, 시작 전(모집·초안) = 비활성 + 안내, 종료 = 숨김(읽기 전용) */
 export const checkMode = (s: MeTaskStudy): "enabled" | "disabled" | "hidden" =>
   s.status === "active" ? "enabled" : s.status === "ended" ? "hidden" : "disabled";

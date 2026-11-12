@@ -1,4 +1,4 @@
-/* 「AI에게 물어보기」 문구(스펙 §6, 해요체) */
+/* 해요체 */
 export const COPY = {
   pill: "AI에게 물어보기",
   pillMobile: (term: string) => `“${term}” AI에게 물어보기`,

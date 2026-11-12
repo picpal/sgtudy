@@ -13,10 +13,10 @@ import { putRoomTags, toPutArgs, type TagItem } from "./tags";
 import { clampCp, firstErrorKey, maxEndDate, revalidateOnChange, serverFieldError, toCreateRoom, validateNewRoom, type NewRoomValues } from "./validate";
 
 /**
- * 방 만들기 폼 — 값(values·tags)은 밖(NewRoomScreen)이 들고 있다. AI 인터뷰와 같은 상태를 공유해 모드를 오가도 값이 남는다(D13).
+ * 방 만들기 폼 — 값(values·tags)은 밖(NewRoomScreen)이 들고 있다. AI 인터뷰와 같은 상태를 공유해 모드를 오가도 값이 남는다.
  * banner: 폼 위 안내(인터뷰로 채운 초안 등). initialMore: 「더 설정하기」 를 펼친 채 시작. initialFocus: 처음 포커스할 칸 이름(없으면 제목)
  * beforeSubmit: [방 만들기] 바로 위(회차 초안·바로 모집). afterCreate: 방을 만든 뒤 회차 적용·모집 시작 — 돌려준 note 를 이동 주소에 붙인다.
- * afterCreate 가 실패해도 방은 만들어졌으니 반드시 편집 화면으로 간다(2단계 D22·Review Focus 1)
+ * afterCreate 가 실패해도 방은 만들어졌으니 편집 화면으로 간다
  */
 export function NewRoomForm({ values: v, tags, onChange, onTagsChange, banner, initialMore = false, initialFocus, beforeSubmit, afterCreate, submitLabel = "방 만들기" }: {
   values: NewRoomValues;
@@ -40,10 +40,10 @@ export function NewRoomForm({ values: v, tags, onChange, onTagsChange, banner, i
   const set = <K extends keyof NewRoomValues>(k: K, val: NewRoomValues[K]) => {
     const next = { ...v, [k]: val };
     onChange(next);
-    setErrors((e) => revalidateOnChange(e, k, next, today)); // 고친 칸의 오류·aria-invalid 를 바로 걷는다 (V1-01)
+    setErrors((e) => revalidateOnChange(e, k, next, today)); // 고친 칸의 오류·aria-invalid 를 바로 걷는다
   };
   const formRef = useRef<HTMLFormElement>(null);
-  // 제출로 생긴 오류의 첫 칸 — 렌더(더 설정하기 펼침 포함) 뒤 그 칸으로 포커스(Q2-19). 입력 중 오류 갱신에는 움직이지 않는다
+  // 제출로 생긴 오류의 첫 칸 — 렌더(더 설정하기 펼침 포함) 뒤 그 칸으로 포커스. 입력 중 오류 갱신에는 움직이지 않는다
   const focusKey = useRef<string | null>(null);
   useEffect(() => {
     const k = focusKey.current;
@@ -58,7 +58,7 @@ export function NewRoomForm({ values: v, tags, onChange, onTagsChange, banner, i
     const el = formRef.current?.elements.namedItem(initialFocus);
     if (el instanceof HTMLElement) el.focus();
   }, [initialFocus]);
-  // 날짜 칸은 달력·키보드로 고르는 중간값이 onChange 로 안 올 수 있어 칸을 떠날 때도 떠 있는 오류를 다시 본다 (Q3-11)
+  // 날짜 칸은 달력·키보드로 고르는 중간값이 onChange 로 안 올 수 있어 칸을 떠날 때도 떠 있는 오류를 다시 본다
   const recheck = (k: keyof NewRoomValues) => setErrors((e) => revalidateOnChange(e, k, v, today));
 
   const submit = async (e: FormEvent) => {
@@ -99,7 +99,7 @@ export function NewRoomForm({ values: v, tags, onChange, onTagsChange, banner, i
   return (
     <form ref={formRef} onSubmit={submit} className="flex flex-col gap-4" noValidate>
       {banner}
-      {/* 한도는 서버와 같은 코드 포인트(60/100)로 자른다 — maxLength 는 UTF-16 단위라 이모지에서 어긋난다(Q2-16) */}
+      {/* 한도는 서버와 같은 코드 포인트(60/100)로 자른다 — maxLength 는 UTF-16 단위라 이모지에서 어긋난다 */}
       <Field label="제목 (= 최상위 목표)" required error={errors.title}><input name="title" className={field} value={v.title} onChange={(e) => set("title", clampCp(e.target.value, 60))} placeholder="예) AWS SAA 자격증 3개월 완주" autoFocus aria-required aria-invalid={!!errors.title} /></Field>
       <Field label="한 줄 소개" required hint="방 목록 카드에 제목과 함께 보여요 · 100자까지" error={errors.intro}><input name="intro" className={field} value={v.intro} onChange={(e) => set("intro", clampCp(e.target.value, 100))} placeholder="예) 매주 한 챕터씩 읽고 기출 20문제를 풀어요" aria-required aria-invalid={!!errors.intro} /></Field>
       <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">

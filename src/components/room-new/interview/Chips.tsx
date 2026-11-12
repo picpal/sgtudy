@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { Ask, ChipOption } from "@/lib/ai/schema";
 import { DATE_NO_OVERFLOW_CLASS, FIELD_CLASS } from "../fields";
 
-/* 선택지 칩(D14·§9.1) — 단일 = radiogroup(roving tabindex, ←/→ 로 고르고 Enter·Space·클릭으로 보냄), 복수 = aria-pressed + [선택 완료],
+/* 선택지 칩 — 단일 = radiogroup(roving tabindex, ←/→ 로 고르고 Enter·Space·클릭으로 보냄), 복수 = aria-pressed + [선택 완료],
    「직접」 = 같은 자리에 날짜·숫자 입력 + [확인]. 높이 44px, 값이 라벨에 보인다(색만으로 구분하지 않음) */
 
 const CHIP = "inline-flex min-h-11 scroll-mb-36 items-center gap-1 rounded-[22px] border px-4 text-[14px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint disabled:opacity-50";
@@ -84,7 +84,6 @@ export function MultiChips({ options, onDone, disabled }: { options: ChipOption[
   );
 }
 
-/** 「직접」 — 날짜·숫자 칸 + [확인] */
 export function OtherInput({ kind, onSubmit, onCancel, min, disabled }: { kind: "date" | "number" | "text"; onSubmit: (v: string) => void; onCancel: () => void; min?: string; disabled?: boolean }) {
   const [v, setV] = useState("");
   const ref = useRef<HTMLInputElement>(null);

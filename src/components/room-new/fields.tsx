@@ -18,11 +18,10 @@ export const FIELD_CLASS =
   "h-12 w-full min-w-0 rounded-[12px] border border-line-3 bg-surface px-4 text-[15px] text-ink outline-none focus:border-mint focus:shadow-[0_0_0_3px_#DDF4EE] disabled:bg-surface-2 disabled:text-muted";
 
 /**
- * 날짜 칸 — iOS Safari 는 기본 모양(appearance:auto)의 date input 에 border-box 를 적용하지 않아
- * 칸 너비 + 좌우 패딩·테두리(34px)만큼 넓게(330→364px, 높이 50px) 그린다. 두 칸이 나란하면 시작일이 종료일을 덮는다.
- * 기본 모양을 끄면 border-box 로 칸 안에 맞는다. 값은 왼쪽 정렬(iOS 기본은 가운데).
+ * iOS Safari 는 기본 모양(appearance:auto)의 date input 에 border-box 를 적용하지 않아 패딩·테두리만큼 넓게 그린다 —
+ * 두 칸이 나란하면 시작일이 종료일을 덮는다. 기본 모양을 끄면 칸 안에 맞는다(값은 왼쪽 정렬, iOS 기본은 가운데).
+ * 높이·모양은 건드리지 않으니 다른 크기의 날짜 칸에도 덧붙인다.
  */
-/** 기존 높이·모양은 그대로 두고 iOS 넘침만 막는 조각 — 다른 크기의 날짜 칸에 덧붙인다. */
 export const DATE_NO_OVERFLOW_CLASS = "appearance-none [&::-webkit-date-and-time-value]:text-left";
 export const DATE_FIELD_CLASS = `${FIELD_CLASS} ${DATE_NO_OVERFLOW_CLASS}`;
 
@@ -171,9 +170,8 @@ export function TagPicker({ value, onChange, disabled, autoNote }: { value: TagI
   };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
-    e.preventDefault(); // 폼 제출 막기
+    e.preventDefault();
     if (!q.trim()) return;
-    // 사전에 같은 이름이 있으면 그 태그로
     const same = found.find((t) => t.label.toLowerCase() === q.trim().toLowerCase());
     add(same ?? { label: q });
   };

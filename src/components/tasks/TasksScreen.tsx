@@ -49,9 +49,9 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const raw = parseFilter(new URLSearchParams(sp.toString()));
   const notesView = raw.view === "notes";
   const [toast, setToast] = useState<ToastMsg>(null);
-  // 오답노트 보기(D17~D21) — 처음 그 보기가 될 때 받고, 과제 보기로 갔다 와도 유지(훅을 화면이 든다)
+  // 오답노트 보기 — 처음 그 보기가 될 때 받고, 과제 보기로 갔다 와도 유지(훅을 화면이 든다)
   const notes = useWrongNote(() => fetchWrongNoteMine().then(toNoteStudiesMine), [], { toast: setToast, enabled: notesView });
-  // 오답노트 회차 상세(?round=, D23) — 과제 보기에서는 뜻이 없다
+  // 오답노트 회차 상세(?round=) — 과제 보기에서는 뜻이 없다
   const noteRound = useNoteRound(notesView);
   // 오답노트 보기의 스터디 칩은 오답 응답 기준 — me_tasks 에 없는 이탈(INACTIVE) 방도 오답 섹션이 있으니 칩도 있어야 한다.
   // 받기 전에는 과제 칩을 잠시 보이고, study 정리도 받은 뒤에 한다(이탈 방 slug 가 "전체"로 지워지지 않게)
@@ -181,7 +181,7 @@ export function TasksScreen({ initial }: { initial: MeTasks }) {
   const empty = emptyKind(data, filter, items);
   // 오답노트 보기: 과제 스터디도 오답 스터디도 없을 때만(이탈한 방만 남아도 오답은 보이고, 툴바로 과제 보기에 돌아갈 수 있게)
   const noStudy = empty === "noStudy" && (!notesView || noteStudies?.length === 0);
-  // 제목 옆 한 줄 요약 — ≤640 은 둘 이상이면 다 들어가게 short, 하나면 원문 그대로(전체 문구는 title)
+  // 제목 옆 한 줄 요약 — <640 은 둘 이상이면 다 들어가게 short, 하나면 원문 그대로(전체 문구는 title)
   const pieces = [
     sum.left > 0 && { long: `남은 팀 과제 ${sum.left}개`, short: `남은 ${sum.left}` },
     sum.dueToday > 0 && { long: `오늘 마감 ${sum.dueToday}개`, short: `오늘 ${sum.dueToday}`, warn: true },

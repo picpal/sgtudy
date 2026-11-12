@@ -16,16 +16,13 @@ type Props = {
   state: SheetState;
   onClose: () => void;
   onAskRelated: (t: string) => void;
-  /** 닫은 뒤 포커스 자리(D18) — 알약은 이미 사라졌으니 선택이 있던 곳 */
+  /** 알약은 이미 사라졌으니 선택이 있던 곳으로 돌아간다 */
   returnFocus: HTMLElement | null;
   /** false = 시험 결과·오답노트(NO_SHARE_SOURCES) — 서버가 방 캐시에 남기지 않으니 각주도 공유한다고 말하지 않는다 */
   shared?: boolean;
 };
 
-/**
- * 해설 대화상자(D6·D7·D18). 모바일 = 바텀시트(QuestionNavSheet 와 같은 결), 데스크톱(sm 이상) = 가운데 카드.
- * body 포털 · 어두운 바탕(누르면 닫힘) · Esc · 포커스 트랩 · 바탕 스크롤 잠금. 입력 요소 없음(키보드 fixed 함정 해당 없음)
- */
+/** 모바일 = 바텀시트(QuestionNavSheet 와 같은 결), sm 이상 = 가운데 카드. 입력 요소가 없어 키보드 fixed 함정은 해당 없음 */
 export function AskAiSheet({ term, state, onClose, onAskRelated, returnFocus, shared = true }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const head = useRef<HTMLHeadingElement>(null);

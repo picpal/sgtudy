@@ -2,7 +2,7 @@ import type { ExplainResponse, Source } from "@/lib/ai/explain/schema";
 import type { TurnErrorBody } from "@/lib/ai/schema";
 import { COPY } from "./copy";
 
-/* POST /api/rooms/explain — 같은 출처 쿠키 세션. 실패는 { error, message, details } 그대로 + status (room-new/interview/api.ts 와 같은 모양) */
+/* 실패는 서버 본문 { error, message, details } 그대로 + status (room-new/interview/api.ts 와 같은 모양) */
 
 export type ExplainBody = { slug: string; term: string; source: Source; context: string; nodeId?: string };
 export type ExplainError = TurnErrorBody & { status: number };
@@ -28,7 +28,7 @@ export async function postExplain(body: ExplainBody, opts: { fetcher?: typeof fe
   }
 }
 
-/** 화면 문구(§6) — 코드·상한 창으로 고른다. 모르는 코드는 서버 문구, 그것도 없으면 일반 실패 문구 */
+/** 모르는 코드는 서버 문구, 그것도 없으면 일반 실패 문구 */
 export function errorMessage(err: Pick<ExplainError, "error" | "message" | "details">): string {
   const w = err.details?.window;
   switch (err.error) {

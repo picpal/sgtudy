@@ -5,8 +5,6 @@ import { clampCp, cpLength } from "@/components/room-new/validate";
 import { COPY } from "./copy";
 import type { SelectionPick } from "./selection";
 
-/** 모바일 판정(D4) — 640px 미만이면 하단 고정 막대 */
-/* z: 공지 팝업(NoticePopup z-[45]) 안의 선택에서도 알약이 그 위에 떠야 한다 */
 export const MOBILE_MQ = "(width < 40rem)";
 export const PILL_W = 168;
 export const HINT_W = 248;
@@ -26,22 +24,20 @@ export function pillPosition(rect: Pick<DOMRect, "top" | "bottom" | "left" | "wi
 
 /**
  * 모바일 막대 자리 — iOS·Android 의 선택 메뉴(복사하기 등)는 선택 바로 위·아래에 뜨고 웹에서 끌 수 없다.
- * 선택이 화면 아래쪽 절반이면 막대를 위로 올려 겹치지 않게 한다. 위치는 선택이 확정된 순간 한 번만 본다(스크롤 리스너 없음 — ed3a2a5)
+ * 선택이 화면 아래쪽 절반이면 막대를 위로 올려 겹치지 않게 한다. 위치는 선택이 확정된 순간 한 번만 본다(스크롤 리스너 없음 — Safari 크래시 이력)
  */
 export const barPlace = (rect: Pick<DOMRect, "top" | "bottom">, vh: number): "top" | "bottom" => ((rect.top + rect.bottom) / 2 > vh / 2 ? "top" : "bottom");
 const BAR_POS = {
   top: "top-[calc(16px+env(safe-area-inset-top))]",
   bottom: "bottom-[calc(16px+env(safe-area-inset-bottom))]",
 } as const;
+/* z-[46]: 공지 팝업(NoticePopup z-[45]) 안의 선택에서도 알약이 그 위에 떠야 한다 */
 const barCls = (rect: Pick<DOMRect, "top" | "bottom">) =>
   `pointer-events-none fixed inset-x-0 ${BAR_POS[barPlace(rect, window.innerHeight)]} z-[46] flex justify-center px-4`;
 
 const short = (t: string) => (cpLength(t) > MOBILE_TERM_MAX ? `${clampCp(t, MOBILE_TERM_MAX)}…` : t);
 
-/**
- * 「AI에게 물어보기」 알약(D4·D5·D18). 데스크톱 = 선택 위 플로팅, 모바일 = 화면 아래 고정 막대(네이티브 콜아웃과 겹치지 않게).
- * 누를 때 선택이 풀리지 않게 pointerdown 만 막는다 — 용어는 이미 state 에 있으니 풀려도 동작한다
- */
+/** 누를 때 선택이 풀리지 않게 pointerdown 만 막는다 — 용어는 이미 state 에 있으니 풀려도 동작한다 */
 export function AskAiPill({ pick, onAsk }: { pick: SelectionPick; onAsk: () => void }) {
   const mobile = isMobile();
   if (pick.tooLong) return <TooLongHint pick={pick} mobile={mobile} />;
@@ -84,7 +80,7 @@ export function AskAiPill({ pick, onAsk }: { pick: SelectionPick; onAsk: () => v
   );
 }
 
-/** 40자 초과 선택 — 버튼이 갑자기 안 뜨는 것처럼 보이지 않게 같은 자리에 안내만(누를 것 없음, 스크린리더엔 status) */
+/** 40자 초과 선택 — 버튼이 갑자기 안 뜨는 것처럼 보이지 않게 같은 자리에 안내만 */
 function TooLongHint({ pick, mobile }: { pick: SelectionPick; mobile: boolean }) {
   const cls = "flex items-center justify-center rounded-full bg-surface-2 px-4 text-[13px] font-medium text-ink-2 shadow-[0_6px_20px_rgba(27,34,48,.18)]";
   if (mobile) {

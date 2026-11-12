@@ -28,7 +28,6 @@ function Seg<T extends string>({ label, value, options, onChange }: { label: str
   );
 }
 
-/** 필터 칩 — 모든 폭에서 44px 높이 (QA Q1-6) */
 function Chip({ on, onClick, children, title }: { on: boolean; onClick: () => void; children: ReactNode; title?: string }) {
   return (
     <button
@@ -45,7 +44,7 @@ function Chip({ on, onClick, children, title }: { on: boolean; onClick: () => vo
   );
 }
 
-/** "전체" 가 범위·유형·스터디 세 곳에 같은 낱말로 겹치지 않게 — 유형은 390 에서도 "모든 유형" (QA Q3-9) */
+/** "전체" 가 범위·유형·스터디 세 곳에 같은 낱말로 겹치지 않게 — 유형은 390 에서도 "모든 유형" */
 const TYPES: [TasksFilter["type"], string, string][] = [
   ["all", "모든 유형", "모든 유형"],
   ["team", "팀 과제", "팀 과제"],
@@ -94,7 +93,7 @@ export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilte
               onChange={(group) => set({ group })}
             />
           </span>
-          {/* 390: 묶기는 select 하나 (스펙 §4.2) */}
+          {/* <640: 묶기는 select 하나 */}
           <label className="inline-flex min-h-11 items-center gap-[6px] rounded-[12px] border border-line-3 bg-surface px-3 text-[13px] font-medium text-ink-2 sm:hidden">
             묶기
             <select value={filter.group} onChange={(e) => set({ group: e.target.value as TasksFilter["group"] })} className="border-0 bg-transparent text-[13px] font-semibold text-ink">
@@ -119,7 +118,7 @@ export function TasksToolbar({ filter, studies, onChange }: { filter: TasksFilte
           </>
         )}
       </div>
-      {/* ≤640: 스터디가 많으면 칩이 한 줄씩 쌓여 목록이 한참 밀린다 — 한 줄 가로 스크롤(상자 끝까지) */}
+      {/* <640: 스터디가 많으면 칩이 한 줄씩 쌓여 목록이 한참 밀린다 — 한 줄 가로 스크롤(상자 끝까지) */}
       {studies.length > 1 && (
         <div role="group" aria-label="스터디" className="thin-scroll flex flex-wrap items-center gap-x-[6px] gap-y-[10px] max-sm:-mx-2 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-2 max-sm:[&>*]:shrink-0">
           <span aria-hidden="true" className="mr-1 text-[13px] font-semibold text-ink-3">스터디</span>

@@ -4,7 +4,7 @@ import type { Draft, Dropped } from "@/lib/ai/schema";
 import { slashDate } from "@/lib/api/format";
 import { PAL, type Tone } from "@/lib/palette";
 
-/* 초안 카드(D16·§9) — 필수 6개 체크 + 선택 항목 + 태그 + 반영 안 된 값 메모. 항목을 누르면 "…을 바꿀래요" 를 보낸다.
+/* 초안 카드 — 필수 6개 체크 + 선택 항목 + 태그 + 반영 안 된 값 메모. 항목을 누르면 "…을 바꿀래요" 를 보낸다.
    데스크톱(≥1024) = 오른쪽 sticky 카드, 모바일 = 위에 붙는 접힘 바 「초안 n/6 · 펼치기」 */
 
 type Row = { key: string; label: string; obj: string; value: string | null };

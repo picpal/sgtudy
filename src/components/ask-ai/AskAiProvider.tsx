@@ -14,13 +14,9 @@ type Open = { term: string; source: Source; context: string; nodeId?: string; re
 const FOCUS_SEL = "[tabindex],a[href],button,input,textarea,select";
 const isTyping = (el: Element | null) => !!el && (el.matches("input,textarea,select") || (el as HTMLElement).isContentEditable);
 
-/** 닫은 뒤 포커스 자리(D18) — 선택이 있던 곳의 가장 가까운 포커스 가능 조상, 없으면 body */
 const focusBackOf = (p: SelectionPick): HTMLElement => p.container.closest<HTMLElement>(FOCUS_SEL) ?? document.body;
 
-/**
- * 「AI에게 물어보기」(스펙 2026-10-27-ask-ai-term-explain-design). 내 스터디 화면을 감싼다 — 허용 영역(data-ask-ai) 안 선택 → 알약 → 해설 시트.
- * 세션 메모리(D20, 정규화 용어 키, term 해설만) · 시트가 열린 동안 새 선택 무시(D21) · 닫으면 진행 중 요청 abort · 단축키 Alt+Shift+A(D18)
- */
+/** 세션 메모는 term 해설만(정규화 용어 키) · 시트가 열린 동안 새 선택 무시 · 닫으면 진행 중 요청 abort */
 export function AskAiProvider({ slug, enabled, children }: { slug: string; enabled: boolean; children?: ReactNode }) {
   const { pick, clear } = useAskAiSelection(enabled);
   const [open, setOpen] = useState<Open | null>(null);

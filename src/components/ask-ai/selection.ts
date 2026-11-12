@@ -2,12 +2,11 @@ import { clipContext, isTermLength } from "@/lib/ai/explain/normalize";
 import { SOURCES, type Source } from "@/lib/ai/explain/schema";
 
 /*
- * 지금 선택을 「AI에게 물어보기」 후보로 읽는다(D1·D2·D8). 순수 — document 만 받는다(jsdom 테스트).
  * 허용 = data-ask-ai="<source>" 컨테이너 안, anchor·focus 가 같은 컨테이너. 그 안이라도 제외 영역(off·입력·편집·코드·버튼)이면 없음
  */
 
-/** tooLong = 허용 영역 안이지만 용어 길이(D2)를 넘은 선택 — 알약 대신 「40자 이하로」 안내만 띄운다(묻지 않는다).
- * nodeId = 응시 화면(exam_take)의 시험 — 컨테이너의 data-ask-ai-node(0055) */
+/** tooLong = 허용 영역 안이지만 용어 길이를 넘은 선택 — 알약 대신 안내만 띄운다(묻지 않는다).
+ * nodeId = 응시 화면(exam_take)의 시험 — 컨테이너의 data-ask-ai-node */
 export type SelectionPick = { term: string; source: Source; context: string; rect: DOMRect; container: HTMLElement; nodeId?: string; tooLong?: boolean };
 
 export const BLOCK_SEL = "p,li,td,th,h1,h2,h3,h4,h5,h6,blockquote";

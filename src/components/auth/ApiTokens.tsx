@@ -33,7 +33,7 @@ const OK = "#0D7A64";
 const codeClass = "m-0 block select-all whitespace-pre-wrap break-all rounded-[10px] bg-surface-3 px-3 py-[10px] font-mono text-[12px] leading-[1.6] text-ink";
 const ghostBtn = "flex min-h-11 shrink-0 items-center justify-center rounded-[22px] border border-line-3 bg-surface px-4 text-[13px] font-semibold text-ink";
 
-/** 복사 줄 — 위에 제목, 아래 코드(긴 토큰은 줄바꿈), 오른쪽 [복사]. 클립보드가 막히면 코드를 그대로 두고 직접 복사하라고 알린다 */
+/** 클립보드가 막히면 코드를 그대로 두고 직접 복사하라고 알린다 */
 function CopyBlock({ label, text, copied, failed, onCopy }: { label: string; text: string; copied: boolean; failed: boolean; onCopy: () => void }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -50,7 +50,7 @@ function CopyBlock({ label, text, copied, failed, onCopy }: { label: string; tex
 }
 
 /**
- * /me 「AI 연결」 — 개인 액세스 토큰(PAT) 만들기·목록·폐기와 Claude Code 연결 안내(AI 연동 Task 9, 〔D21〕).
+ * /me 「AI 연결」 — 개인 액세스 토큰(PAT) 만들기·목록·폐기와 Claude Code 연결 안내.
  * 원문은 만든 직후 이 컴포넌트 상태에만 있다(저장·로그 없음) — 화면을 떠나면 다시 볼 수 없다.
  */
 export function ApiTokens() {

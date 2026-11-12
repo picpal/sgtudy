@@ -14,7 +14,7 @@ const HINT_COLOR: Record<NickHint["tone"], string> = { idle: "#7A8594", checking
 /**
  * 결과는 검사 요청 키(입력 세대 gen + 값)로 단다. 입력할 때마다 gen 이 올라가므로 같은 값으로 돌아와도
  * 지난 결과는 재검사 결과가 올 때까지 쓰이지 않는다(낡은 available 로 저장 버튼이 켜지지 않게).
- * C10: effect 안 동기 setState 없음 — gen 은 이벤트 핸들러에서만 올린다.
+ * effect 안 동기 setState 없음 — gen 은 이벤트 핸들러에서만 올린다.
  */
 type Check = { key: string; r: NicknameCheck; error?: string };
 
@@ -31,7 +31,7 @@ export function NicknameField({ value, onChange, original, onHint, autoFocus }: 
     let live = true;
     checkNickname(debounced)
       .then((r) => live && setCheck({ key: dKey, r }))
-      // E4: nickname_check 는 사유를 값으로 돌려주고, 던지는 건 AUTH_REQUIRED·네트워크뿐 — 메시지를 그대로 보여 준다
+      // nickname_check 는 사유를 값으로 돌려주고, 던지는 건 AUTH_REQUIRED·네트워크뿐 — 메시지를 그대로 보여 준다
       .catch((e) => live && setCheck({ key: dKey, r: { available: false, reason: "invalid" }, error: toApiError(e).message }));
     return () => {
       live = false;
@@ -39,7 +39,7 @@ export function NicknameField({ value, onChange, original, onHint, autoFocus }: 
   }, [dKey, debounced, original]);
 
   const mine = check?.key === key ? check : null;
-  // 이미 쓰이는 닉네임이면 쓸 수 있는 대안 2~3개 (시나리오 QA D4·#22) — 같은 nickname_check 로 확인, 입력 세대(key)에 단다
+  // 이미 쓰이는 닉네임이면 쓸 수 있는 대안 2~3개 — 같은 nickname_check 로 확인, 입력 세대(key)에 단다
   const taken = mine?.r.reason === "taken" && !mine.error;
   const [alts, setAlts] = useState<{ key: string; list: string[] } | null>(null);
   useEffect(() => {

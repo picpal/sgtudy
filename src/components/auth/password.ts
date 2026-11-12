@@ -18,7 +18,6 @@ export function passwordProblem(pw: string): "length" | "too_long" | "letters_di
   return null;
 }
 
-/** 새 비밀번호 + 확인 입력 → 첫 문제 문구, 없으면 null */
 export function passwordFormError(pw: string, confirm: string): string | null {
   const p = passwordProblem(pw);
   if (p === "length") return `비밀번호는 ${PASSWORD_MIN}자 이상이어야 해요`;

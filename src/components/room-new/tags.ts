@@ -49,7 +49,7 @@ export const fromDto = (t: RoomTagDto): TagItem => ({ slug: t.slug, label: t.lab
 
 /* ── RPC ── */
 export const searchTags = async (q: string) => (await rpc<{ items: RoomTagDto[] }>("tags_search", { p_q: q.trim() || null })).items;
-/** 전체 교체(그룹장). 목록에서 뺀 자동 태그는 다시 자동으로 붙지 않고, 남긴 태그는 모두 직접 고른 태그가 된다(0009 room_tags_put) */
+/** 전체 교체(그룹장). 목록에서 뺀 자동 태그는 다시 자동으로 붙지 않고, 남긴 태그는 모두 직접 고른 태그가 된다(서버 room_tags_put 규칙) */
 export const putRoomTags = async (slug: string, list: TagItem[]) => {
   const { slugs, freeLabels } = toPutArgs(list);
   return (await rpc<{ items: RoomTagDto[] }>("room_tags_put", { p_slug: slug, p_slugs: slugs, p_free_labels: freeLabels })).items;

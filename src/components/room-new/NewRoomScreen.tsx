@@ -24,7 +24,7 @@ import { EMPTY_VALUES, firstErrorKey, validateNewRoom, type NewRoomValues } from
 export type Mode = "manual" | "ai";
 
 /**
- * 방 만들기 화면 — 「직접 입력 | AI 인터뷰」(D12). 두 모드가 values·tags 하나를 공유한다(D13).
+ * 「직접 입력 | AI 인터뷰」 두 모드가 values·tags 하나를 공유한다.
  * aiEnabled=false(키 없음)면 세그먼트 없이 지금 폼 그대로. 인터뷰는 방을 만들지 않고, 끝나면 직접 입력 모드(미리보기)로 넘긴다
  */
 export function NewRoomScreen({ aiEnabled, initialMode }: { aiEnabled: boolean; initialMode: Mode }) {
@@ -41,11 +41,11 @@ export function NewRoomScreen({ aiEnabled, initialMode }: { aiEnabled: boolean; 
   const [banner, setBanner] = useState<string | null>(null);
   const [focusField, setFocusField] = useState<string | undefined>();
   const tabsId = useId();
-  // 회차 초안(2단계) — 받은 때의 기간을 함께 둔다. 폼에서 기간을 바꾸면 stale(적용 안 함, [다시 생성] 안내)
+  // 회차 초안 — 받은 때의 기간을 함께 둔다. 폼에서 기간을 바꾸면 stale(적용 안 함, [다시 생성] 안내)
   const [rounds, setRounds] = useState<{ data: RoundsResponse; start: string; end: string } | null>(null);
   const [excluded, setExcluded] = useState<ReadonlySet<number>>(new Set());
   const [regen, setRegen] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
-  // 바로 모집 시작(D37) — 회차 초안이 있으면 켜진 채, 인터뷰에서 "아니요" 면 꺼진 채
+  // 바로 모집 시작 — 회차 초안이 있으면 켜진 채, 인터뷰에서 "아니요" 면 꺼진 채
   const [openRecruit, setOpenRecruit] = useState(true);
 
   const addFilled = (keys: FilledKey[]) => setFilled((s) => (keys.every((k) => s.has(k)) ? s : new Set([...s, ...keys])));
@@ -105,7 +105,7 @@ export function NewRoomScreen({ aiEnabled, initialMode }: { aiEnabled: boolean; 
       }
     : undefined;
   const onBudgetExceeded = (message: string) => {
-    setAiHidden(true); // 이번 방문 동안 세그먼트를 숨긴다(§10)
+    setAiHidden(true); // 이번 방문 동안 세그먼트를 숨긴다
     toManual(message);
   };
 

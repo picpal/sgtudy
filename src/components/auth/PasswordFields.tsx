@@ -16,7 +16,6 @@ type Props = {
   confirmRef?: Ref<HTMLInputElement>;
 };
 
-/** 새 비밀번호 + 확인. 정책 문구는 늘 보이고, 맞으면 초록으로 바뀐다 */
 export function PasswordFields({ password, confirm, onPassword, onConfirm, label = "비밀번호", autoFocus, disabled, confirmRef }: Props) {
   const id = useId();
   const problem = password === "" ? null : passwordProblem(password);

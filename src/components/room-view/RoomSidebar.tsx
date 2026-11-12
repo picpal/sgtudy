@@ -19,7 +19,7 @@ const CHIPS: { id: Filter; label: string }[] = [
   { id: "ended", label: "종료" },
 ];
 
-/** filters: 둘러보기에서 이어받은 조건 — items 는 그 조건으로 받은 목록, found = 그 조건의 전체 개수 (시나리오 QA #19) */
+/** filters: 둘러보기에서 이어받은 조건 — items 는 그 조건으로 받은 목록, found = 그 조건의 전체 개수 */
 type Props = { selected: string; items: SidebarRoom[]; total: number; filters?: HomeFilters; found?: number; tagLabels?: string[] };
 
 const SCOPE_HEADING: Record<HomeFilters["scope"], string> = { public: "공개 스터디", mine: "참가한 스터디", created: "만든 스터디" };

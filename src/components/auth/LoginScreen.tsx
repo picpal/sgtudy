@@ -21,7 +21,7 @@ const REASON_NOTICE: Record<LoginReason, string> = {
 /**
  * 기본 로그인: 이메일 + 비밀번호. 인증 코드는 가입(routes.signup)과 비밀번호 재설정(routes.resetPassword)에서만 쓴다.
  * reason = 로그인 화면으로 보낸 사유(?reason=, 허용 목록은 parseLoginReason) — 한 줄 안내를 띄운다.
- *  session_expired: 고아 세션 정리 / session_inactive: 오래 안 써서 서버가 세션을 지움(0050)
+ *  session_expired: 고아 세션 정리 / session_inactive: 오래 안 써서 서버가 세션을 지움
  */
 export function LoginScreen({ returnTo, reason = null }: { returnTo: string; reason?: LoginReason | null }) {
   const router = useRouter();
@@ -54,7 +54,7 @@ export function LoginScreen({ returnTo, reason = null }: { returnTo: string; rea
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
       setError("이메일 주소를 확인해 주세요");
       setBad("email");
-      emailRef.current?.focus(); // Q2-19: 오류 필드로 포커스
+      emailRef.current?.focus();
       return;
     }
     if (!password) {
