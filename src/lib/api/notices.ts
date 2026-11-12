@@ -1,7 +1,7 @@
 import { rpc, type ApiError, type Db } from "./errors";
 import type { Notice, NoticeInbox, NoticeInput, NoticeList, NoticePatch } from "./types";
 
-/* 그룹장 공지 어댑터 (0040_room_notices.sql). 컴포넌트는 이 파일만 부른다 */
+/* 그룹장 공지 어댑터. 컴포넌트는 이 파일만 부른다 */
 const num = (id: string) => Number(id);
 
 /** 서버 notice_validate 와 같은 상한 — 폼 사전 검사·카운터용 */
@@ -20,7 +20,7 @@ export const deleteNotice = (slug: string, id: string, client?: Db) =>
 export const markNoticesRead = (slug: string, ids: string[], revs?: number[], client?: Db) =>
   rpc<{ unread: boolean }>("notice_read", { p_slug: slug, p_ids: ids.map(num), ...(revs ? { p_revs: revs } : {}) }, client);
 
-/** 저장 전 클라이언트 검증 — 서버 notice_validate 와 같은 규칙·문구. 첫 오류만 */
+/** 저장 전 클라이언트 검증 — 서버 notice_validate 와 같은 규칙·문구 */
 export type NoticeFieldErrors = Partial<Record<"title" | "bodyMd", string>>;
 /** 두 칸을 함께 본다 — 빈 채 등록하면 제목·본문 문구가 한 번에 뜬다. 문제없으면 null */
 export function validateNotice(v: Pick<NoticeInput, "title" | "bodyMd">): NoticeFieldErrors | null {
@@ -31,7 +31,7 @@ export function validateNotice(v: Pick<NoticeInput, "title" | "bodyMd">): Notice
   return out.title || out.bodyMd ? out : null;
 }
 
-/** 0040 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */
+/** 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */
 export const NOTICE_ERROR_KO: Record<string, string> = {
   NOTICE_NOT_FOUND: "공지를 찾을 수 없어요 · 이미 삭제됐을 수 있어요",
   NOTICE_LIMIT: "공지 개수 상한에 닿았어요",
@@ -41,7 +41,7 @@ export const NOTICE_ERROR_KO: Record<string, string> = {
   ROOM_NOT_FOUND: "방을 찾을 수 없어요",
   VALIDATION_FAILED: "입력 내용을 확인해 주세요",
 };
-/** NOTICE_LIMIT details.kind 별 문구(스펙 §6.6) */
+/** NOTICE_LIMIT details.kind 별 문구 */
 const LIMIT_KO: Record<string, string> = {
   total: "공지는 100개까지예요",
   pinned: "고정은 3개까지예요",

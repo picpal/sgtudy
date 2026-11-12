@@ -1,7 +1,7 @@
 import { browserDb } from "./errors";
 import { BUCKET } from "./submission";
 
-/* 진행률이 보이는 첨부 업로드 — Storage REST 직접 호출 (스펙 R7: supabase-js upload 는 진행률이 없다) */
+/* 진행률이 보이는 첨부 업로드 — Storage REST 직접 호출 (supabase-js upload 는 진행률이 없다) */
 
 export type UploadFailure = { status: number; aborted?: true };
 
@@ -57,7 +57,7 @@ export function uploadObject(o: UploadOptions): Promise<void> {
   });
 }
 
-/** HTTP 상태 → 줄 오류 문구 (스펙 §2.3) */
+/** HTTP 상태 → 줄 오류 문구 */
 export function uploadErrorText(status: number): string {
   if (status === 413) return "10MB를 넘는 파일이에요";
   if (status === 415 || status === 400) return "올릴 수 없는 형식이에요";

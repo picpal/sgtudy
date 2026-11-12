@@ -8,7 +8,7 @@ import type { Marker, Study, Task } from "@/data/schedule";
 export const MAX_WINDOW_DAYS = 62;
 export type Window = { from: string; to: string; sel: string };
 
-/** 달 격자(일~토) 를 기본 창으로, sel 이 밖이면 sel 까지 넓힌다. 62일을 넘으면 sel 을 격자 첫날로 리셋한다(schedule §7-8). */
+/** 달 격자(일~토) 를 기본 창으로, sel 이 밖이면 sel 까지 넓힌다. 62일을 넘으면 sel 을 격자 첫날로 리셋한다. */
 export function scheduleWindow(y: number, m: number, sel: string): Window {
   const weeks = monthWeeks(y, m);
   const from0 = weeks[0][0];

@@ -6,7 +6,7 @@ import { MEMBERSHIP_LABEL, type RoomStatus, type TaskStatus } from "@/lib/types"
 /** 참가 CTA 의 기본 상태. recruit 는 사용자의 join 값에 따라 join/apply/leave/pending 으로 갈린다. */
 export type BaseAction = "recruit" | "owner" | "full" | "joined" | "inactive" | "activeClosed" | "ended" | "archived";
 export type JoinState = "none" | "joined" | "pending";
-/** 공개 식별자 = slug (D1). 목업 8개 리터럴에서 string 으로 넓힘 */
+/** 공개 식별자 = slug. 목업 8개 리터럴에서 string 으로 넓힘 */
 export type RoomId = string;
 export type Action = "login" | "join" | "apply" | "leave" | "pending" | "inactive" | "joined" | "owner" | "full" | "activeClosed" | "ended" | "archived";
 
@@ -40,7 +40,7 @@ export type RoomRound = {
 export type Room = {
   /** = slug */
   id: RoomId;
-  /** 보관된 방 — 표기를 "보관된 스터디" 로 (최종 수정 4). 목업은 생략 */
+  /** 보관된 방 — 표기를 "보관된 스터디" 로. 목업은 생략 */
   archived?: boolean;
   title: string;
   intro: string;
@@ -49,7 +49,6 @@ export type Room = {
   draft?: boolean;
   base: BaseAction;
   approval: boolean;
-  /** 비공개면 false */
   pub?: boolean;
   period: string;
   when: string;
@@ -265,10 +264,8 @@ export const ROOM_GROUPS: { key: RoomStatus; label: string; ids: RoomId[] }[] = 
   { key: "ended", label: "종료", ids: ["algo"] },
 ];
 
-/** 초기 join 상태 */
 export const INITIAL_JOIN: Partial<Record<RoomId, JoinState>> = { sqld: "pending" };
 
-/** CTA 상태 결정 — 스펙 §3 */
 export const actionOf = (room: Room, join: JoinState | undefined): Action => {
   if (room.base !== "recruit") return room.base;
   if (join === "joined") return "leave";
@@ -281,8 +278,7 @@ export const MARK: Partial<Record<Action, { label: string; fg: string; bg: strin
   leave: { label: MEMBERSHIP_LABEL.joined, fg: "#0B6553", bg: "#DDF4EE" },
   pending: { label: MEMBERSHIP_LABEL.pending, fg: "#7A4F00", bg: "#FBEFD3" },
   joined: { label: MEMBERSHIP_LABEL.joined, fg: "#0B6553", bg: "#DDF4EE" },
-  owner: { label: "그룹장", fg: "#2F5BC2", bg: "#E3ECFD" },   // 참가한 스터디 목록에서도 그룹장 방이 섞인다(0029) — 홈 카드 배지와 같은 말
+  owner: { label: "그룹장", fg: "#2F5BC2", bg: "#E3ECFD" },   // 참가한 스터디 목록에서도 그룹장 방이 섞인다 — 홈 카드 배지와 같은 말
 };
 
-/** 상태 배지 색 */
 export const STATUS_BADGE: Record<RoomStatus, string> = { recruit: "#3B6FE0", active: "#0D7A64", ended: "#5B6675" };

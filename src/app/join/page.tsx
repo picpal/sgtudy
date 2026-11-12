@@ -6,7 +6,7 @@ import { routes } from "@/lib/routes";
 
 export const metadata: Metadata = { title: "초대 코드로 참가" };
 
-/** 초대 코드 입력 (0032, D10) — 로그인 필수. 맞으면 /invite/{token} 랜딩으로 넘긴다(미리보기·CTA 는 랜딩 한 곳) */
+/** 초대 코드 입력 — 로그인 필수. 맞으면 /invite/{token} 랜딩으로 넘긴다(미리보기·CTA 는 랜딩 한 곳) */
 export default async function JoinPage({ searchParams }: { searchParams: Promise<{ code?: string | string[] }> }) {
   const sp = await searchParams;
   const code = Array.isArray(sp.code) ? sp.code[0] : sp.code;

@@ -1,7 +1,7 @@
 import { rpc, type Db } from "./errors";
 import type { Curriculum, MeTasks } from "./types";
 
-/** 개인 목표 RPC 래퍼 (0014). 스펙 docs/superpowers/specs/2026-10-16-personal-goals-design.md */
+/** 개인 목표 RPC 래퍼. 스펙 docs/superpowers/specs/2026-10-16-personal-goals-design.md */
 export const personalCreate = (slug: string, roundId: string, title: string, opts?: { start?: string; end?: string; desc?: string }, client?: Db) =>
   rpc<Curriculum & { createdId: string }>("personal_create", { p_slug: slug, p_round_id: roundId, p_title: title, p_start_date: opts?.start ?? null, p_end_date: opts?.end ?? null, p_description_md: opts?.desc ?? "" }, client);
 

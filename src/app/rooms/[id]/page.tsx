@@ -27,7 +27,7 @@ export async function generateMetadata({ params, searchParams }: { params: Promi
 export default async function RoomPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const invite = firstParam(sp.invite);
-  // 둘러보기에서 이어받은 필터(?tab=·status=·q=·tag=) — 왼쪽 목록을 같은 조건으로 (시나리오 QA #19)
+  // 둘러보기에서 이어받은 필터(?tab=·status=·q=·tag=) — 왼쪽 목록을 같은 조건으로
   const filters = parseHomeFilters(sp);
   const client = await getServerClient();
   // 상세와 사이드바 목록은 서로 독립 → 병렬

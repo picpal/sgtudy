@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   description: "함께 목표를 세우고, 누가 어디까지 왔는지 한눈에 확인하세요.",
 };
 
-/** 로그인 안 했으면 null. me_get 은 온보딩 전에도 허용(03-api §1). 실패해도 사이트 전체를 죽이지 않는다 → 익명 취급 */
+/** 로그인 안 했으면 null. me_get 은 온보딩 전에도 허용. 실패해도 사이트 전체를 죽이지 않는다 → 익명 취급 */
 async function loadMe(): Promise<Me | null> {
   try {
     return await getMe();
@@ -48,13 +48,13 @@ async function loadMyStudyHref(): Promise<string> {
     return myStudyHrefOf(await getMyStudies());
   } catch (e) {
     unstable_rethrow(e);
-    // 닉네임 전(온보딩 중)에는 me_studies 가 ONBOARDING_REQUIRED 로 거절한다 — 정상 상태라 로그·개발 오버레이 이슈로 남기지 않는다(Q3-7)
+    // 닉네임 전(온보딩 중)에는 me_studies 가 ONBOARDING_REQUIRED 로 거절한다 — 정상 상태라 로그·개발 오버레이 이슈로 남기지 않는다
     if (!isOnboardingRequired(e)) console.error("[layout] me_studies failed — header links to /my-study", e);
     return routes.myStudy();
   }
 }
 
-/** meta_get 실패(DB 다운·네트워크) 시 전 페이지 500 대신 KST 오늘로 폴백(S13). 화면별 응답 today 가 다시 덮어쓴다 */
+/** meta_get 실패(DB 다운·네트워크) 시 전 페이지 500 대신 KST 오늘로 폴백. 화면별 응답 today 가 다시 덮어쓴다 */
 async function loadToday(): Promise<string> {
   try {
     return await getToday();

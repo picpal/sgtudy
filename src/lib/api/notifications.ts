@@ -17,8 +17,8 @@ const kstTime = (d: Date) => {
 };
 
 /**
- * cross-cutting §3 알림 상대시간. 24시간 안은 분·시간, 그 밖은 KST 달력일 기준 "어제 HH:mm" / "M월 D일 HH:mm".
- * 올해가 아니면 연도도 붙인다. 문구가 같은 알림(일정 변경 등)이 이어질 때 서로 구분되도록 시각을 함께 보인다(Q1-9·Q3-8).
+ * 알림 상대시간. 24시간 안은 분·시간, 그 밖은 KST 달력일 기준 "어제 HH:mm" / "M월 D일 HH:mm".
+ * 올해가 아니면 연도도 붙인다. 문구가 같은 알림(일정 변경 등)이 이어질 때 서로 구분되도록 시각을 함께 보인다.
  */
 export function relativeTime(iso: string, now: Date): string {
   const t = new Date(iso);
@@ -44,7 +44,7 @@ export function panelShift(anchorRight: number, viewport: number): number {
   return Math.max(0, GUTTER - (anchorRight - w));
 }
 
-/** 본문이 방 제목과 같으면 메타 줄(방 제목 · 시간)과 겹치므로 숨긴다 — 백엔드 문구는 그대로(Q1-14) */
+/** 본문이 방 제목과 같으면 메타 줄(방 제목 · 시간)과 겹치므로 숨긴다 — 백엔드 문구는 그대로 */
 export function visibleBody(n: { body: string | null; room: { title: string } | null }): string {
   const body = n.body?.trim() ?? "";
   return body && body !== n.room?.title.trim() ? body : "";

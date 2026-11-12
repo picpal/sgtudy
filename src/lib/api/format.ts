@@ -12,11 +12,11 @@ export const TASK_TYPE_KO: Record<TaskTypeDto, "공통" | "지정" | "개인"> =
 const sameYear = (a: string, b: string) => a.slice(0, 4) === b.slice(0, 4);
 
 /**
- * 날짜 하나 표기 규칙(Q2-13): 오늘과 같은 해면 MM.DD, 다른 해면 YYYY.MM.DD.
+ * 날짜 하나 표기 규칙: 오늘과 같은 해면 MM.DD, 다른 해면 YYYY.MM.DD.
  * 범위는 endPart 규칙(끝이 시작과 다른 해면 연도)을 쓴다 — 둘 다 "연도가 바뀌면 연도를 쓴다"는 같은 규칙이다
  */
 export const dateShort = (iso: string, today: string): string => (sameYear(iso, today) ? mmdd(iso) : ymd(iso));
-/** 기간 표기 규칙(Q2-13): 시작은 dateShort, 끝은 시작과 다른 해면 YYYY.MM.DD — "10.25 – 2027.01.10", "2027.01.04 – 01.10" */
+/** 기간 표기 규칙: 시작은 dateShort, 끝은 시작과 다른 해면 YYYY.MM.DD — "10.25 – 2027.01.10", "2027.01.04 – 01.10" */
 export const rangeShort = (start: string, end: string, today: string): string => `${dateShort(start, today)} – ${sameYear(start, end) ? mmdd(end) : ymd(end)}`;
 
 /** "10/26" — 방 만들기(인터뷰·초안 카드·회차 초안) 의 짧은 날짜. withYear 면 "2026.10.26" */
@@ -25,21 +25,19 @@ export const slashDate = (iso: string, withYear = false): string => (withYear ? 
 export const slashRange = (start: string, end: string): string =>
   sameYear(start, end) ? `${slashDate(start)}~${slashDate(end)}` : `${ymd(start)} ~ ${ymd(end)}`;
 
-/** D14: 기간 주 수 = round((일수+1)/7). 카드 "· N주" 와 종료 방 "N주 완주" 가 같은 값을 쓴다(회차 수와 무관) */
+/** 기간 주 수 = round((일수+1)/7). 카드 "· N주" 와 종료 방 "N주 완주" 가 같은 값을 쓴다(회차 수와 무관) */
 export const periodWeeks = (start: string, end: string): number => Math.round((diffDays(start, end) + 1) / 7);
 
-/** 기간의 끝 표기: 같은 해면 MM.DD, 해를 넘기면 YYYY.MM.DD (Review Focus 1 — periodShort·periodLong 공용) */
+/** 기간의 끝 표기: 같은 해면 MM.DD, 해를 넘기면 YYYY.MM.DD */
 export const endPart = (start: string, end: string): string => (sameYear(start, end) ? mmdd(end) : ymd(end));
 
-/** "{YYYY.MM.DD} – {같은 해면 MM.DD}" — 사이드바·카드 공용 (preflight E5a) */
+/** "{YYYY.MM.DD} – {같은 해면 MM.DD}" — 사이드바·카드 공용 */
 export const periodShort = (start: string, end: string): string => `${ymd(start)} – ${endPart(start, end)}`;
 
-/** main §3-5: "{YYYY.MM.DD} – {같은 해면 MM.DD} · {round(일수/7)}주" */
 export function periodCard(start: string, end: string): string {
   return `${periodShort(start, end)} · ${periodWeeks(start, end)}주`;
 }
 
-/** roomview §1.2: 요일 포함 */
 export function periodLong(start: string, end: string): string {
   return `${ymd(start)}(${weekdayKo(start)}) – ${endPart(start, end)}(${weekdayKo(end)})`;
 }
@@ -69,7 +67,7 @@ export function curIndexOf(rounds: RoundSummary[], today: string): { index: numb
   return null;
 }
 
-/** roomview §3.6: recruit 앞 3개 / active [cur-1, cur, cur+1] + 완료 접두 / ended 전부 */
+/** recruit 앞 3개 / active [cur-1, cur, cur+1] + 완료 접두 / ended 전부 */
 export function roundsWindow(rounds: RoundSummary[], status: RoomStatusDto, today: string): { rows: RoundSummary[]; more: string; lo: number } {
   const n = rounds.length;
   if (status === "ended") return { rows: rounds, more: "", lo: 0 };
@@ -106,7 +104,7 @@ const taskView = (t: LeafSummary, today: string): CurTaskView => ({
   people: t.people.map((p) => ({ userId: p.userId, name: p.nickname, tone: p.tone, status: p.status })),
 });
 
-/** roomview §1.3 현재 회차 카드 */
+/** 현재 회차 카드 */
 export function curOf(dto: CurInput, today: string): CurView {
   const { stats } = dto;
   if (dto.status === "recruit" || dto.status === "draft") {
@@ -121,12 +119,12 @@ export function curOf(dto: CurInput, today: string): CurView {
   if (dto.status === "ended") {
     return {
       pill: "종료",
-      title: `${periodWeeks(dto.startDate, dto.endDate)}주 완주 · 전체 달성률 ${stats.overallPct === null ? "—" : `${stats.overallPct}%`}`,   // N주 = 기간 주 수(D14), N회차 = roundCount
+      title: `${periodWeeks(dto.startDate, dto.endDate)}주 완주 · 전체 달성률 ${stats.overallPct === null ? "—" : `${stats.overallPct}%`}`,   // N주 = 기간 주 수(회차 수 아님)
       meta: `${rangeShort(dto.startDate, dto.endDate, today)} · 제출 ${stats.totalSubmissions} / ${stats.totalAssignments}건`,
       tasks: [],
     };
   }
-  // 서버는 공백 구간에서 직전 회차를 currentRound 로 준다(room_current_round_id) → 오늘을 포함할 때만 현재 회차 (preflight C2)
+  // 서버는 공백 구간에서 직전 회차를 currentRound 로 준다(room_current_round_id) → 오늘을 포함할 때만 현재 회차
   const cur = dto.currentRound && dto.currentRound.startDate <= today && today <= dto.currentRound.endDate ? dto.currentRound : null;
   if (cur) {
     return {
@@ -148,7 +146,6 @@ export function curOf(dto: CurInput, today: string): CurView {
   };
 }
 
-/** roomview §3.7 */
 export function glanceOf(stats: RoomDetail["stats"], status: RoomStatusDto): { rounds: string; tasks: string } {
   const wd = stats.startWeekdays;
   let rounds = `${stats.roundCount}회차`;
@@ -165,14 +162,14 @@ export function glanceOf(stats: RoomDetail["stats"], status: RoomStatusDto): { r
   return { rounds, tasks };
 }
 
-/** rules_md → 불릿 배열 (D14: 마크다운 1필드, 프론트가 줄 단위로 분해). 줄 앞 목록 표식(-, *, +, 1., - [ ])은 뗀다 */
+/** rules_md → 불릿 배열 (마크다운 1필드라 프론트가 줄 단위로 분해). 줄 앞 목록 표식(-, *, +, 1., - [ ])은 뗀다 */
 export const rulesOf = (md: string): string[] =>
   md
     .split(/\r?\n/)
     .map((l) => l.replace(/^\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/, "").trim())
     .filter(Boolean);
 
-/** 보관된 방 표기 — 내 스터디·방 화면 공통 (시나리오 QA #6). 회차·기간 계산은 종료와 같은 규칙으로 접는다 */
+/** 보관된 방 표기 — 내 스터디·방 화면 공통. 회차·기간 계산은 종료와 같은 규칙으로 접는다 */
 export const ARCHIVED_DDAY = { short: "보관됨", long: "보관된 스터디 · 기록만 볼 수 있어요" } as const;
 export const ARCHIVED_CUR: CurView = { pill: "보관됨", title: "보관된 스터디예요", meta: "기록만 볼 수 있어요 · 제출·편집은 할 수 없어요", tasks: [] };
 export const ARCHIVED_ROUND_STATE = "보관됨";

@@ -4,7 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 
 export type Db = SupabaseClient<Database>;
 
-/** 03-api.md §0 — PostgrestError { message: CODE, details: 한국어, hint: json } */
+/** PostgrestError { message: CODE, details: 한국어, hint: json } */
 export type ApiError = { code: string; message: string; details?: Record<string, string> };
 
 export class ApiException extends Error {

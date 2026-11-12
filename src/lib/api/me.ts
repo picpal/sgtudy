@@ -17,7 +17,7 @@ export async function signOut(): Promise<void> {
 const NICK_RE = /^[가-힣A-Za-z0-9._]+( [가-힣A-Za-z0-9._]+)*$/;
 
 /**
- * 0002 nickname_problem 의 거울: NFC 후 trim 없이 검사, 2~16자(코드포인트), 완성형 한글[가-힣]·영문·숫자·_·.,
+ * 서버 nickname_problem 의 거울: NFC 후 trim 없이 검사, 2~16자(코드포인트), 완성형 한글[가-힣]·영문·숫자·_·.,
  * 단어 사이 단일 공백. 서버는 전부 'invalid' 하나로 답하지만 안내 문구를 위해 갈래를 나눈다.
  * 호출부는 value.trim() 을 넘긴다. 금칙어·중복은 서버(nickname_check)가 판정한다.
  */

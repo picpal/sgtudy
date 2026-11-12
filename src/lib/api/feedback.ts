@@ -1,7 +1,7 @@
 import { rpc, type ApiError, type Db } from "./errors";
 import type { FeedbackContext, FeedbackKind, FeedbackSaved } from "./types";
 
-/* 의견 보내기 어댑터 (0044_feedback.sql). 컴포넌트는 이 파일만 부른다 */
+/* 의견 보내기 어댑터. 컴포넌트는 이 파일만 부른다 */
 
 /** 서버 feedback_limits 와 같은 상한 — 폼 사전 검사·카운터용 */
 export const FEEDBACK_LIMITS = { messageMin: 5, messageMax: 2000 } as const;
@@ -30,11 +30,11 @@ const safeDecode = (s: string) => {
   }
 };
 
-/** 주소에 남겨도 되는 쿼리 — ?invite= 같은 비밀은 뺀다(스펙 D5) */
+/** 주소에 남겨도 되는 쿼리 — ?invite= 같은 비밀은 뺀다 */
 const SAFE_QUERY = ["tab", "item", "task", "mode"];
 
 /**
- * 자동 첨부 정보(스펙 D5). path 는 pathname + 허용 쿼리만, /invite/{토큰} 은 가린다. room = /rooms/{slug}·/my-study/{slug} 의 slug.
+ * 자동 첨부 정보. path 는 pathname + 허용 쿼리만, /invite/{토큰} 은 가린다. room = /rooms/{slug}·/my-study/{slug} 의 slug.
  * appVersion = 빌드 커밋(NEXT_PUBLIC_APP_COMMIT, next.config 가 VERCEL_GIT_COMMIT_SHA 앞 7자로 채운다) — 없으면 dev
  */
 export function feedbackContext(loc: { pathname: string; search: string }, ua: string, vw: number, vh: number, commit?: string): FeedbackContext {
@@ -57,7 +57,7 @@ export function feedbackContext(loc: { pathname: string; search: string }, ua: s
   };
 }
 
-/** 0044 오류 → 화면 문구(서버 문구가 정본 — 문구가 비었을 때만 기본 문구) */
+/** 오류 → 화면 문구(서버 문구가 정본 — 문구가 비었을 때만 기본 문구) */
 export const FEEDBACK_ERROR_KO: Record<string, string> = {
   AUTH_REQUIRED: "로그인이 필요해요",
   VALIDATION_FAILED: "입력 내용을 확인해 주세요",

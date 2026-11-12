@@ -3,8 +3,8 @@ import { rpc, toApiError, type Db } from "./errors";
 import { openRecruit } from "./leader";
 
 /*
- * 방 만들기 직후 회차 초안 적용·모집 시작(2단계 D21·D22·D35). 방은 이미 만들어졌으니 여기 실패는 던지지 않고 note 로 돌려준다 —
- * 생성 화면은 어떤 경우에도 편집 화면으로 이동하고, 편집 화면이 note 를 토스트로 알린다. 서버 검증은 계획서 RPC 가 다시 한다(0034)
+ * 방 만들기 직후 회차 초안 적용·모집 시작. 방은 이미 만들어졌으니 여기 실패는 던지지 않고 note 로 돌려준다 —
+ * 생성 화면은 어떤 경우에도 편집 화면으로 이동하고, 편집 화면이 note 를 토스트로 알린다. 서버 검증은 계획서 RPC 가 다시 한다
  */
 
 export type PlanPreview = { ok: boolean; previewId?: string; errors?: { code: string }[] };
@@ -44,5 +44,5 @@ export async function tryOpenRecruit(slug: string, client?: Db): Promise<"applie
   }
 }
 
-/** 제외한 회차만 뺀 계획서(D30·D31) — 그 밖은 바꾸지 않는다 */
+/** 제외한 회차만 뺀 계획서 — 그 밖은 바꾸지 않는다 */
 export const withOnly = (plan: PlanDoc, excluded: ReadonlySet<number>): PlanDoc => ({ ...plan, ops: plan.ops.filter((_, i) => !excluded.has(i)) });

@@ -4,20 +4,20 @@ import { recruitErrorText } from "@/lib/api/recruit";
 import { diffDays } from "@/lib/date";
 import type { InviteBypass, MembershipResult, Person, RoomDetail, RoomStatusDto } from "@/lib/api/types";
 
-/* 그룹장 패널(plan 06 P0) — 상태 액션 · 초대 링크 · 승인 대기. 모든 RPC 는 그룹장 전용(NOT_LEADER) */
+/* 그룹장 패널 — 상태 액션 · 초대 링크 · 승인 대기. 모든 RPC 는 그룹장 전용(NOT_LEADER) */
 
-/** message: 참가 신청 한마디(0024 D4 — 없으면 null) */
+/** message: 참가 신청 한마디(없으면 null) */
 export type Applicant = Person & { appliedAt: string; message?: string | null };
 export type Applications = { today: string; items: Applicant[] };
 export type InviteLink = { today: string; token: string; url: string; code: string | null; bypass: InviteBypass | null };
 /** room_start 경고 — 담당자 없는 지정 과제 · (일정을 당겼을 때) 방 기간 밖 노드 */
 export type StartWarning = { code: "UNASSIGNED_TASK" | "PERIOD_OUTSIDE_ROOM" | (string & {}); nodeId: string };
-/** 0024 D1 — 실제로 당긴 날수(0 = 안 당김)·옮긴 노드 수(보관 포함) */
+/** 실제로 당긴 날수(0 = 안 당김)·옮긴 노드 수(보관 포함) */
 export type StartShift = { days: number; nodes: number };
 export type StartResult = RoomDetail & { warnings: StartWarning[]; shift?: StartShift };
 
 export const openRecruit = (slug: string, client?: Db) => rpc<RoomDetail>("room_open_recruit", { p_slug: slug }, client);
-/** shift: 예정보다 일찍 시작할 때 일정(회차·과제·개인 목표·종료일)을 오늘로 당긴다 (0024·0025). 안 주면 지금과 같다(일정 그대로) */
+/** shift: 예정보다 일찍 시작할 때 일정(회차·과제·개인 목표·종료일)을 오늘로 당긴다. 안 주면 지금과 같다(일정 그대로) */
 export const startRoom = (slug: string, opts: { shift?: boolean } = {}, client?: Db) =>
   rpc<StartResult>("room_start", opts.shift ? { p_slug: slug, p_shift: true } : { p_slug: slug }, client);
 export const fetchInvite = (slug: string, client?: Db) => rpc<InviteLink>("invite_get", { p_slug: slug }, client);
@@ -27,14 +27,13 @@ export const approveApplicant = (slug: string, userId: string, client?: Db) => r
 /** 종료일만 바꾼다(room_update, 그룹장 전용). 모집 전·중엔 1년 상한, 진행중엔 오늘·마지막 과제 마감 이후만 — 서버가 검사 */
 export const updateRoomEndDate = (slug: string, endDate: string, client?: Db) =>
   rpc<RoomDetail & { warnings: { code: string; nodeId: string }[] }>("room_update", { p_slug: slug, p_patch: { endDate } }, client);
-/** 시작일만 바꾼다(room_update, 그룹장 전용). 진행중엔 오늘 이하 — 앞당겨 지난 주차를 등록, 늦추기는 가장 이른 일정까지(0048) — 서버가 검사 */
+/** 시작일만 바꾼다(room_update, 그룹장 전용). 진행중엔 오늘 이하 — 앞당겨 지난 주차를 등록, 늦추기는 가장 이른 일정까지 — 서버가 검사 */
 export const updateRoomStartDate = (slug: string, startDate: string, client?: Db) =>
   rpc<RoomDetail & { warnings: { code: string; nodeId: string }[] }>("room_update", { p_slug: slug, p_patch: { startDate } }, client);
 export const rejectApplicant = (slug: string, userId: string, client?: Db) => rpc<MembershipResult>("room_reject", { p_slug: slug, p_user: userId }, client);
 
 export type StatusAction = "openRecruit" | "start";
 
-/** 준비중 → 모집 시작, 모집중 → 지금 시작, 진행중·종료(·보관) → 없음 */
 export function statusActionOf(d: Pick<RoomDetail, "status" | "archived">): StatusAction | null {
   if (d.archived) return null;
   if (d.status === "draft") return "openRecruit";
@@ -53,7 +52,6 @@ export const showApplications = (d: Pick<RoomDetail, "status" | "joinMode" | "pe
   !d.archived && (d.status === "recruit" || d.status === "active") &&
   (((d.recruit?.open ?? d.status === "recruit") && d.joinMode === "approval") || d.pendingCount > 0);
 
-/** /invite/{token} → 이 사이트의 절대 주소 */
 export const absoluteUrl = (path: string, origin: string) => new URL(path, origin).href;
 
 const STATUS_STEP: Record<RoomStatusDto, string> = { draft: "준비중", recruit: "모집중", active: "진행중", ended: "종료" };
@@ -81,7 +79,7 @@ export function leaderErrorText(code: string, message: string): string {
 }
 
 /**
- * "지금 시작"이 기간 1년 상한에 막혔나 (0016: 예정보다 일찍 시작하면 시작일이 오늘로 당겨져 기간이 늘어난다 → PERIOD_TOO_LONG).
+ * "지금 시작"이 기간 1년 상한에 막혔나 (예정보다 일찍 시작하면 시작일이 오늘로 당겨져 기간이 늘어난다 → PERIOD_TOO_LONG).
  * 막혔으면 전용 문구와 줄여야 할 종료일 상한(서버 detail.maxEndDate) — 그룹장 패널이 종료일 바꾸기로 잇는다. 그 밖의 오류는 null
  */
 export function startBlockOf(err: ApiError): { text: string; maxEndDate: string | null } | null {
@@ -94,7 +92,7 @@ export function startBlockOf(err: ApiError): { text: string; maxEndDate: string 
 export const earlyStartDays = (d: Pick<RoomDetail, "status" | "today" | "startDate">): number =>
   d.status === "recruit" ? Math.max(0, diffDays(d.today, d.startDate)) : 0;
 
-/** "지금 시작" 확인 창의 두 선택지 (시나리오 QA D1 — 기본값은 당기기) */
+/** "지금 시작" 확인 창의 두 선택지 */
 export function shiftChoiceText(days: number, startDate: string): Record<"shift" | "keep", { label: string; note: string }> {
   return {
     shift: { label: "일정을 오늘부터 당기기", note: `모든 회차·과제·개인 목표와 종료일도 ${days}일 당겨져요 · 전체 기간은 그대로예요` },
@@ -109,7 +107,7 @@ export function startDoneText(r: Pick<StartResult, "warnings" | "shift">): strin
   return ["스터디를 시작했어요", days > 0 ? `일정을 ${days}일 당겼어요` : "", unassigned > 0 ? `담당자 없는 과제 ${unassigned}개` : ""].filter(Boolean).join(" · ");
 }
 
-/* ---------- 방 알림 설정 (settings_get/put — 그룹장 전용, 방 참가자 모두에게 적용. 0025 submissionDigest) ---------- */
+/* ---------- 방 알림 설정 (settings_get/put — 그룹장 전용, 방 참가자 모두에게 적용) ---------- */
 export type NotifySettings = {
   reminderD1: boolean;
   reminderD3: boolean;

@@ -1,7 +1,7 @@
 import type { Tone } from "@/lib/palette";
 import type { RoomStatus } from "@/lib/types";
 
-/** 카드 배지 상태 — RoomStatus 에 '정원 마감'·'준비중'(D2) 이 추가됨. 상태 필터는 서버(rooms_list p_status) 가 적용한다. */
+/** 카드 배지 상태 — RoomStatus 에 '정원 마감'·'준비중' 이 추가됨. 상태 필터는 서버(rooms_list p_status) 가 적용한다. */
 export type CardStatus = RoomStatus | "full" | "draft";
 
 export type Slot = {
@@ -14,7 +14,7 @@ export type Slot = {
 };
 
 export type Room = {
-  /** 0032 진행중 추가 모집 — open·full */
+  /** 진행중 추가 모집 — open·full */
   extra?: "open" | "full";
   id: string;
   title: string;
@@ -37,7 +37,7 @@ export type Room = {
   slot: Slot;
 };
 
-/** docs/specs/main.md §5 — 배열 순서 = 렌더 순서 */
+/** 배열 순서 = 렌더 순서 */
 export const ROOMS: Room[] = [
   {
     id: "aws",

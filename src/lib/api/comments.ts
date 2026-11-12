@@ -2,13 +2,13 @@ import { displayLength, mentionIds } from "@/lib/mention";
 import { rpc, type ApiError, type Db } from "./errors";
 import type { CommentPage, CommentSaved } from "./types";
 
-/* 회차·과제 댓글 어댑터 (0041_node_comments.sql). 컴포넌트는 이 파일만 부른다 */
+/* 회차·과제 댓글 어댑터. 컴포넌트는 이 파일만 부른다 */
 const num = (id: string) => Number(id);
 
 /** 서버 comment_limits 와 같은 상한 — 입력 사전 검사·카운터용 */
 export const COMMENT_LIMITS = { bodyMax: 2000, mentionsMax: 10 } as const;
 
-/** 기본 = 최신 50 · before = 그 id 보다 오래된 50 · from = 그 댓글부터 최신까지(딥링크, D17) */
+/** 기본 = 최신 50 · before = 그 id 보다 오래된 50 · from = 그 댓글부터 최신까지(딥링크) */
 export const fetchComments = (slug: string, node: string, opts: { before?: string; from?: string } = {}, client?: Db) =>
   rpc<CommentPage>("comment_list", {
     p_slug: slug, p_node: num(node),
@@ -31,7 +31,7 @@ export function validateComment(body: string): { field: "body" | "mentions"; tex
   return null;
 }
 
-/** 0041 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */
+/** 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */
 export const COMMENT_ERROR_KO: Record<string, string> = {
   COMMENT_NOT_FOUND: "댓글을 찾을 수 없어요 · 이미 삭제됐을 수 있어요",
   NOT_AUTHOR: "내가 쓴 댓글만 고칠 수 있어요",

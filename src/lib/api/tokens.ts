@@ -2,7 +2,7 @@ import { rpc, type Db } from "@/lib/api/errors";
 import { dateShort } from "@/lib/api/format";
 import { kstToday } from "@/lib/kst";
 
-/* AI 연동 Task 9 — /me 「AI 연결」 개인 액세스 토큰(PAT). 0033 pat_list / pat_create / pat_revoke.
+/* /me 「AI 연결」 개인 액세스 토큰(PAT). pat_list / pat_create / pat_revoke.
  * 원문(token)은 pat_create 응답에만 한 번 온다 — 화면 상태에만 두고 저장·로그하지 않는다 */
 
 export type ApiScope = "read" | "curriculum:write" | "personal:write";
@@ -22,12 +22,12 @@ export const revokeToken = (id: string, client?: Db) => rpc<TokenList>("pat_revo
 
 export const mcpUrl = (origin: string) => `${origin.replace(/\/+$/, "")}/api/mcp`;
 
-/** 〔D21〕 모든 폴더에서 쓰도록 --scope user */
+/** 모든 폴더에서 쓰도록 --scope user */
 export function mcpAddCommand(origin: string, token: string): string {
   return `claude mcp add --scope user --transport http sgtudy ${mcpUrl(origin)} --header "Authorization: Bearer ${token}"`;
 }
 
-/** 〔D21〕 ~/.claude/settings.json 조각 — 읽기 4개 + 미리보기만 자동 허용(적용·개인 목표 추가·삭제·시험 초안 저장은 계속 묻는다) */
+/** ~/.claude/settings.json 조각 — 읽기 4개 + 미리보기만 자동 허용(적용·개인 목표 추가·삭제·시험 초안 저장은 계속 묻는다) */
 export const MCP_ALLOW_SNIPPET = JSON.stringify(
   { permissions: { allow: ["mcp__sgtudy__list_my_studies", "mcp__sgtudy__get_curriculum", "mcp__sgtudy__list_my_tasks", "mcp__sgtudy__get_exam_brief", "mcp__sgtudy__preview_curriculum_plan"] } },
   null,

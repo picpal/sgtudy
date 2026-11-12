@@ -3,7 +3,7 @@ import { dateShort } from "@/lib/api/format";
 import type { MembershipResult, Person, RoomMemberDto } from "@/lib/api/types";
 import { kstToday } from "@/lib/kst";
 
-/* 시나리오 QA D3 — 진행 중 나가기 (0024 계약 §3).
+/* 진행 중 나가기.
  * 멤버: 탈퇴 요청·취소 → 그룹장: 요청 목록에서 내보내기(기존 member_deactivate_preview → 재배정 결정 → member_deactivate) 또는 반려.
  * 제출 기록은 남는다(서버). 모집 중 참가 취소는 기존 room_leave 그대로 */
 
@@ -11,7 +11,7 @@ export type LeaveRequestItem = Person & { requestedAt: string; reason: string | 
 export type LeaveRequests = { today: string; items: LeaveRequestItem[] };
 export type DeactivateTask = { nodeId: string; title: string; roundLabel: string | null; currentAssignees: Person[] };
 export type DeactivatePreview = { today: string; tasks: DeactivateTask[] };
-/** 0027: unassign = 이 사람만 빼고 재지정하지 않는다(담당 0명 = 담당 미정 허용) */
+/** unassign = 이 사람만 빼고 재지정하지 않는다(담당 0명 = 담당 미정 허용) */
 export type LeaveDecision = { nodeId: string; action: "exclude" | "unassign" } | { nodeId: string; action: "reassign"; assigneeIds: string[] };
 
 const reasonOf = (r?: string | null) => r?.trim() || null;
@@ -42,7 +42,7 @@ export type LeaveChoices = Record<string, string>;
 
 /**
  * 다른 담당자가 있으면 빼기만 해도 된다 → 기본 "exclude". 혼자 맡은 과제는 맡길 사람을 고르게 비워 두고,
- * 맡길 사람이 아예 없으면 "unassign"(담당 미정, 0027)을 기본으로 — 내보내기가 막히지 않게
+ * 맡길 사람이 아예 없으면 "unassign"(담당 미정)을 기본으로 — 내보내기가 막히지 않게
  */
 export const initialChoices = (p: DeactivatePreview, candidatesOf: (t: DeactivateTask) => Person[] = () => [{} as Person]): LeaveChoices =>
   Object.fromEntries(p.tasks.map((t) => [t.nodeId, t.currentAssignees.length > 0 ? "exclude" : candidatesOf(t).length === 0 ? "unassign" : ""]));

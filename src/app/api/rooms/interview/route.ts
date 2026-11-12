@@ -13,12 +13,12 @@ import { createClient } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-/** 서버 로그 1줄(D18) — 사용자 id·대화·초안 없음 */
+/** 서버 로그 1줄 — 사용자 id·대화·초안 없음 */
 const log = (o: { turn?: number; ms: number; in?: number; out?: number; cached?: number; model?: string; status: number | string }) =>
   console.info(JSON.stringify({ evt: "ai_interview", ...o }));
 
-// 순서(Review Focus 5): 같은 출처 → 크기 선검사 → 세션 → 본문(상한) → 모양 → 턴 상한 → 키 → ai_turn_check(사용량·상한, 모델 호출 전) → 모델 → 정규화 → ai_turn_done.
-// 방은 만들지 않는다 — 생성은 사용자가 미리보기(수동 폼)에서 [방 만들기] 를 눌러야만(D11·Review Focus 1)
+// 순서: 같은 출처 → 크기 선검사 → 세션 → content-type → 본문(상한) → 모양 → 턴 상한 → 키 → ai_turn_check(사용량·상한, 모델 호출 전) → 모델 → 정규화 → ai_turn_done.
+// 방은 만들지 않는다 — 생성은 사용자가 미리보기(수동 폼)에서 [방 만들기] 를 눌러야만
 export async function POST(req: Request) {
   if (!sameOrigin(req)) return failJson(403, "ORIGIN_NOT_ALLOWED", MSG.ORIGIN_NOT_ALLOWED);
   if (Number(req.headers.get("content-length") ?? 0) > MAX_INTERVIEW_BODY) return failJson(413, "PAYLOAD_TOO_LARGE", MSG.PAYLOAD_TOO_LARGE);

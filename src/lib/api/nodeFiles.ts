@@ -2,14 +2,14 @@ import { ApiException, browserDb, rpc, type Db } from "./errors";
 import { BUCKET } from "./submission";
 import type { FileMeta } from "./types";
 
-/* 진행목표 항목 첨부 어댑터 (0030_node_attachments.sql). 서명 URL 은 submission.fileUrl 을 그대로 쓴다 (files RLS · Storage 정책이 NODE_DOC 를 연다) */
+/* 진행목표 항목 첨부 어댑터. 서명 URL 은 submission.fileUrl 을 그대로 쓴다 (files RLS · Storage 정책이 NODE_DOC 를 연다) */
 const num = (id: string) => Number(id);
 
 export const registerNodeFile = (nodeId: string, f: { path: string; name: string; mime: string; size: number }, client?: Db) =>
   rpc<FileMeta>("node_file_register", { p_node: num(nodeId), p_path: f.path, p_name: f.name, p_mime: f.mime, p_size: f.size }, client);
 export const setNodeFiles = (nodeId: string, fileIds: string[], client?: Db) =>
   rpc<FileMeta[]>("node_files_set", { p_node: num(nodeId), p_file_ids: fileIds }, client);
-/** 편집 저장(0045 3인자, md-images D30) — baseIds = 편집을 시작할 때 붙어 있던 id. 지우는 것은 base − fileIds 뿐이라
+/** 편집 저장(3인자) — baseIds = 편집을 시작할 때 붙어 있던 id. 지우는 것은 base − fileIds 뿐이라
     편집하는 사이 다른 곳(MCP 등)이 붙인 파일은 남는다. 빼기만 하는 보기 상세는 최신 목록으로 2인자 setNodeFiles */
 export const setNodeFilesFrom = (nodeId: string, fileIds: string[], baseIds: string[], client?: Db) =>
   rpc<FileMeta[]>("node_files_set", { p_node: num(nodeId), p_file_ids: fileIds, p_base: baseIds }, client);
@@ -21,7 +21,7 @@ export async function discardNodeUnattached(fileId: string, client?: Db): Promis
     await discardNodeFile(fileId, client);
     return true;
   } catch {
-    return false; // 미저장 파일은 서버가 24시간 뒤 정리(0030 job_cleanup)
+    return false; // 미저장 파일은 서버가 24시간 뒤 정리(job_cleanup)
   }
 }
 
@@ -36,7 +36,7 @@ export async function fetchNodeFilesOrEmpty(nodeId: string, client?: Db): Promis
 }
 
 /**
- * 설명 속 그림·미리보기용 inline 서명 URL(1시간, download 없음) — files 표에서 경로를 한 번에 받고 createSignedUrls 한 번 (md-images 스펙 D14).
+ * 설명 속 그림·미리보기용 inline 서명 URL(1시간, download 없음) — files 표에서 경로를 한 번에 받고 createSignedUrls 한 번.
  * 받기 버튼은 지금처럼 fileUrl(download 300초). 서명에 실패한 id 는 결과에서 빠진다
  */
 export async function nodeImageUrls(files: Pick<FileMeta, "id">[], client?: Db): Promise<Map<string, string>> {

@@ -6,7 +6,7 @@ import type { Tone } from "@/lib/palette";
 import type { RoomStatus, TaskStatus } from "@/lib/types";
 import { addDays } from "@/lib/date";
 
-export type RoomId = string; // slug (D1)
+export type RoomId = string; // slug
 export const ROOM_IDS: RoomId[] = ["aws", "spring", "sqld", "algo"];
 export const isRoomId = (s: string): s is RoomId => (ROOM_IDS as string[]).includes(s);
 
@@ -21,7 +21,6 @@ export type MemberInfo = {
   me?: boolean;
   /** 이탈 */
   left?: boolean;
-  /** 승인 대기 */
   pending?: boolean;
   /** 막대·점수 없이 "–" */
   noBar?: boolean;

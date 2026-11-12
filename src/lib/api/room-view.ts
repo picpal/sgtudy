@@ -9,7 +9,7 @@ export const fetchRoomDetail = (slug: string, client?: Db, inviteToken?: string)
   rpc<RoomDetail>("room_get", { p_slug: slug, p_invite_token: inviteToken ?? null }, client);
 /** 비공개 방은 room_join_precheck 가 초대 토큰을 검사한다 → ?invite= 로 연 방이면 토큰을 그대로 넘긴다 */
 export const joinRoom = (slug: string, inviteToken?: string) => rpc<MembershipResult>("room_join", { p_slug: slug, p_invite_token: inviteToken ?? null });
-/** message: 참가 신청 한마디(선택, 200자 — 0024 D4). 다듬고 빈 값은 null */
+/** message: 참가 신청 한마디(선택, 200자). 다듬고 빈 값은 null */
 export const applyRoom = (slug: string, inviteToken?: string, message?: string, client?: Db) =>
   rpc<MembershipResult>("room_apply", { p_slug: slug, p_invite_token: inviteToken ?? null, p_message: message?.trim() || null }, client);
 
@@ -24,7 +24,7 @@ export const cancelApplication = (slug: string) => rpc<MembershipResult>("room_c
 
 type ActionInput = Pick<RoomDetail, "status" | "joinMode" | "memberCount" | "maxMembers" | "me"> & { archived?: boolean; recruit?: RoomDetail["recruit"] };
 
-/** 지금 참가할 수 없는 방 상태 — 비로그인도 로그인 전에 알 수 있게 먼저 보여 준다 (Q2-11). 진행중이라도 추가 모집 창이 열려 있으면 닫힘이 아니다(0032) */
+/** 지금 참가할 수 없는 방 상태 — 비로그인도 로그인 전에 알 수 있게 먼저 보여 준다. 진행중이라도 추가 모집 창이 열려 있으면 닫힘이 아니다 */
 export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "maxMembers"> & { recruit?: RoomDetail["recruit"] }): "ended" | "activeClosed" | "full" | null {
   if (d.status === "ended") return "ended";
   if (d.status === "active" && !d.recruit?.open) return "activeClosed";
@@ -32,10 +32,9 @@ export function closedAction(d: Pick<RoomDetail, "status" | "memberCount" | "max
   return null;
 }
 
-/** 03-api §3: 비로그인→(종료·진행중·정원 마감이면 그 상태, 아니면 login) · leader→owner · active&recruit→leave · active&(active|ended)→joined · pending→pending · inactive→inactive · ended→ended · active→activeClosed · full→full · approval→apply · direct→join */
 export function actionOf(d: ActionInput): Action {
   const st = d.me?.state;
-  // 보관된 방: 그룹장은 관리, 참가자는 내 스터디(기록 보기), 승인 대기 본인은 신청 취소(백로그 F① — 서버도 허용), 그 밖에는 참가할 수 없다는 안내 (최종 수정 4)
+  // 보관된 방: 그룹장은 관리, 참가자는 내 스터디(기록 보기), 승인 대기 본인은 신청 취소(서버도 허용), 그 밖에는 참가할 수 없다는 안내
   if (d.archived) return st === "leader" ? "owner" : st === "active" ? "joined" : st === "pending" ? "pending" : "archived";
   if (!d.me) return closedAction(d) ?? "login";
   if (st === "leader") return "owner";
@@ -54,7 +53,7 @@ export function toRoom(dto: RoomDetail, today: string, meId: string | null): Roo
   const dd = dto.archived ? ARCHIVED_DDAY : ddayOf(d.status, today, d.startDate, d.endDate);
   const win = roundsWindow(d.rounds, d.status, today);
   const ci = curIndexOf(d.rounds, today);
-  // 서버 currentRound 는 공백 구간에서 직전 회차를 준다(room_current_round_id) → 오늘을 포함하는 회차만 현재 (preflight C2)
+  // 서버 currentRound 는 공백 구간에서 직전 회차를 준다(room_current_round_id) → 오늘을 포함하는 회차만 현재
   const curId = ci?.inside ? d.rounds[ci.index].id : null;
   const members: RoomMember[] = d.members
     .filter((m) => m.status === "active")
@@ -95,7 +94,7 @@ export function toRoom(dto: RoomDetail, today: string, meId: string | null): Roo
   };
 }
 
-/** 쓰기 RPC 응답(MembershipResult)으로 교체 — 프론트가 +1 하지 않는다(roomview §3.5) */
+/** 쓰기 RPC 응답(MembershipResult)으로 교체 — 프론트가 +1 하지 않는다 */
 export const applyMembership = (d: RoomDetail, r: MembershipResult): RoomDetail => ({ ...d, me: r.me, memberCount: r.memberCount, members: r.members, pendingCount: r.pendingCount });
 
 export type SidebarRoom = { id: string; title: string; status: RoomStatus; draft: boolean; when: string; period: string; tags: RoomTagDto[]; capCur: number; capMax: number; mark?: "leave" | "pending" | "joined" | "owner" };

@@ -7,7 +7,7 @@ import { NOT_FOUND_TITLE } from "@/lib/routes";
 
 export const metadata: Metadata = { title: NOT_FOUND_TITLE };
 
-/** 없는 주소·없는 방·초대 없이 연 비공개 방(notFound()) 공통 404 — 앱 헤더와 돌아갈 길을 둔다(Q3-10, Q2-24) */
+/** 없는 주소·없는 방·초대 없이 연 비공개 방(notFound()) 공통 404 — 앱 헤더와 돌아갈 길을 둔다 */
 export default function NotFound() {
   return (
     <div className="flex min-h-screen flex-col text-ink">

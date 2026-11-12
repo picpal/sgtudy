@@ -4,7 +4,7 @@ import { mmdd } from "@/lib/api/format";
 import type { InviteLink } from "@/lib/api/leader";
 import type { JoinMode, RoomDetail } from "@/lib/api/types";
 
-/* 추가 모집 · 초대 코드(0032). 쓰기 RPC 는 모두 그룹장 전용 — 서버가 다시 검사한다 */
+/* 추가 모집 · 초대 코드. 쓰기 RPC 는 모두 그룹장 전용 — 서버가 다시 검사한다 */
 
 export const openExtraRecruit = (slug: string, v: { until: string; maxMembers: number; joinMode: JoinMode }, client?: Db) =>
   rpc<RoomDetail>("room_extra_recruit_open", { p_slug: slug, p_until: v.until, p_max_members: v.maxMembers, p_join_mode: v.joinMode }, client);

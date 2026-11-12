@@ -18,7 +18,6 @@ export const fetchRooms = (p: RoomsParams, client?: Db) =>
 
 const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
 
-/** main §3-2 모집 현황 꼬리 우선순위: 승인 대기중 > 정원 마감 > 첫 참가자 > N자리 남음 */
 function recruitTail(d: RoomCardDto): string {
   if (d.status === "draft") return "모집 전";
   if (d.membership?.status === "pending") return MEMBERSHIP_LABEL.pending;
@@ -36,7 +35,7 @@ function slotOf(d: RoomCardDto, today: string): Slot {
     }
     case "mine": {
       const v = pct(p.submitted, p.assigned);
-      // nextTask 는 지금 OPEN 인 과제만 — 없어도 미제출 과제가 남았으면 "다 끝냄" 처럼 읽히지 않게 (Q3-23)
+      // nextTask 는 지금 OPEN 인 과제만 — 없어도 미제출 과제가 남았으면 "다 끝냄" 처럼 읽히지 않게
       const none = p.submitted < p.assigned ? "지금 진행 중인 과제가 없어요" : "남은 과제가 없어요";
       return { label: "내 진척률", value: `${v}%`, pct: v, note: p.nextTask?.title ?? none, em: p.nextTask ? dday(today, p.nextTask.dueDate) : "" };
     }
@@ -52,7 +51,7 @@ function slotOf(d: RoomCardDto, today: string): Slot {
     }
     case "final": {
       const v = pct(p.submitted, p.assigned);
-      // "N주 완주" 의 N 은 기간 주 수(D14) — totalRounds(회차 수)가 아니다
+      // "N주 완주" 의 N 은 기간 주 수 — totalRounds(회차 수)가 아니다
       return { label: "최종 달성률", value: `${v}%`, pct: v, note: `${periodWeeks(d.startDate, d.endDate)}주 완주 · 제출 ${p.submitted}/${p.assigned}건`, em: "" };
     }
   }

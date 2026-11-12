@@ -1,7 +1,7 @@
-/** 로그인 필요 라우트(D6). `/rooms/[slug]` 는 공개라 `/rooms/new` 만 정확히 잡는다. */
+/** 로그인 필요 라우트. `/rooms/[slug]` 는 공개라 `/rooms/new` 만 정확히 잡는다. */
 export const PROTECTED_PREFIXES = ["/my-study", "/schedule", "/tasks", "/me", "/rooms/new", "/join"] as const;
 
-/** returnTo 로 허용하는 접두사(03-api §1). 그 외는 전부 "/". */
+/** returnTo 로 허용하는 접두사. 그 외는 전부 "/". */
 const RETURN_TO_PREFIXES = ["/rooms/", "/my-study", "/schedule", "/tasks", "/invite/"] as const;
 
 export function isProtectedPath(pathname: string): boolean {
@@ -22,7 +22,7 @@ export function safeReturnTo(raw: string | null | undefined): string {
 
 /** 로그인 화면 안내 사유 — 고아 세션(계정이 지워졌는데 쿠키만 남음)을 정리하고 보낼 때 붙인다 */
 export const SESSION_EXPIRED = "session_expired";
-/** 로그인 화면 안내 사유 — 오래 안 써서 서버가 세션을 지웠고(0050 pg_cron) proxy 의 refresh 가 거절됐을 때 붙인다 */
+/** 로그인 화면 안내 사유 — 오래 안 써서 서버가 세션을 지웠고(pg_cron) proxy 의 refresh 가 거절됐을 때 붙인다 */
 export const SESSION_INACTIVE = "session_inactive";
 
 export type LoginReason = typeof SESSION_EXPIRED | typeof SESSION_INACTIVE;

@@ -1,6 +1,6 @@
 import type { TaskStatus } from "@/lib/types";
 
-/** MySchedule.dc.html 목 데이터 — docs/specs/myschedule.md §3·§4 */
+/** MySchedule.dc.html 목 데이터 */
 
 export type StudyId = string; // slug
 

@@ -33,11 +33,11 @@ export default async function MyStudyPage({ params, searchParams }: { params: Pr
     throw e;
   }
   const [detail, curriculum, studies] = data;
-  // 내 스터디는 그룹장·참가자(이탈 포함)·승인 대기만 — 비참가자는 공개 방 화면으로 (T12 ruling, 승인 대기는 대기 카드가 있다)
+  // 내 스터디는 그룹장·참가자(이탈 포함)·승인 대기만 — 비참가자는 공개 방 화면으로 (승인 대기는 대기 카드가 있다)
   const st = detail.me?.state;
   if (st !== "leader" && st !== "active" && st !== "inactive" && st !== "pending") redirect(routes.room(id));
-  // 탭·?task= 정규화는 leaveGuard.screenKeyOf 하나로 — 이탈 가드의 "같은 화면" 판정과 같은 규칙 (E 리뷰 minor 1)
-  // ?task= 는 알림(D8) 진입 — 리프 포커스. 숫자 id 가 아니면 무시
+  // 탭·?task= 정규화는 leaveGuard.screenKeyOf 하나로 — 이탈 가드의 "같은 화면" 판정과 같은 규칙
+  // ?task= 는 알림 진입 — 리프 포커스. 숫자 id 가 아니면 무시
   const key = screenKeyOf(sp);
   const tab = key.tab as TabId;
   const task = key.task || undefined;

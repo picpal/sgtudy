@@ -13,12 +13,12 @@ import { readJsonCapped } from "@/lib/mcp/http";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
-// 모델 호출 한 번(timeout 25s, 재시도 없음, D10) + 앞뒤 RPC
+// 모델 호출 한 번(timeout 25s, 재시도 없음) + 앞뒤 RPC
 export const maxDuration = 30;
 
 type Begin = { hit: true; body: unknown } | { hit: false; id: number; room: RoomMeta };
 
-/** 서버 로그 1줄(D19) — 사용자 id·선택 텍스트·문맥 없음 */
+/** 서버 로그 1줄 — 사용자 id·선택 텍스트·문맥 없음 */
 const log = (o: { hit: boolean; ms: number; in?: number; out?: number; cached?: number; model?: string; status: number | string }) =>
   console.info(JSON.stringify({ evt: "ai_explain", ...o }));
 
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   const t0 = Date.now();
   let begin: Begin;
   try {
-    // 응시 화면(exam_take)만 그 시험 node 를 넘긴다 — begin 이 옵션·잠금을 다시 보고, 그때는 캐시를 읽지 않는다(0055)
+    // 응시 화면(exam_take)만 그 시험 node 를 넘긴다 — begin 이 옵션·잠금을 다시 보고, 그때는 캐시를 읽지 않는다
     const take = nodeId === undefined ? {} : { p_take_node: Number(nodeId) };
     begin = await rpc<Begin>("ai_explain_begin", { p_slug: slug, p_term_key: termKey, ...take }, db as unknown as Db);
   } catch (e) {
