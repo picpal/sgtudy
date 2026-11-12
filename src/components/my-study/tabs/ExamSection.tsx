@@ -31,19 +31,18 @@ type Mode = "take" | "result" | "note";
 export function examMode(v: ExamView, started = false): Mode {
   const keys = !!v.questions?.some((q) => "answer" in q);
   if (v.viewer.canTake && v.questions) {
-    // 정답을 직접 연 미제출자(0054): 응시를 시작하기 전엔 정답·해설을 보여 주고 [응시하기]로 넘어간다
+    // 정답을 직접 연 미제출자: 응시를 시작하기 전엔 정답·해설을 보여 주고 [응시하기]로 넘어간다
     if (v.viewer.answersSeen && keys && !started && v.attempt?.status !== "in_progress") return "result";
     return "take";
   }
   if (v.attempt?.status === "submitted") return "result";
-  // after_deadline 마감 뒤 미제출: 정답 키가 왔을 때만(편집자 · 옵션으로 직접 연 사람) 정답·해설(0054 — 기본은 안내만)
+  // after_deadline 마감 뒤 미제출: 정답 키가 왔을 때만(편집자 · 옵션으로 직접 연 사람) 정답·해설(기본은 안내만)
   if (v.viewer.reason === "closed" && keys) return "result";
   return "note";
 }
 
 const SAVE_TEXT: Record<ExamSaveState, string> = { idle: "", saving: "저장 중…", saved: "저장됨", failed: "저장 실패" };
 
-/** 시험 리프 상세의 본문 — 상태 안내 · 응시(문항 + 하단 고정 막대 · 제출 확인) · 결과 · 제출 현황 (스펙 §4.3·4.4) */
 export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, viewerPending, isLeader = false, quietNotAssigned = false, onUnsavedChange }: ExamSectionProps) {
   const meId = useMe()?.id ?? null;
   const t = useExamTake(slug, n.id, toast);
@@ -131,11 +130,11 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
   const showList = mode === "result" && !!v && (!!v.attempt?.results || qs.some((q) => "answer" in q));
   // 담당이 아니면 시험 응시 카드 없이 안내 한 줄만 — 제출 현황 위에
   const outside = v?.viewer.reason === "not_assignee";
-  // 정답을 본 미제출자가 아직 풀 수 있다 — 응시 전·응시 중 모두 한 줄(0054)
+  // 정답을 본 미제출자가 아직 풀 수 있다 — 응시 전·응시 중 모두 한 줄
   const seenNote = !!v?.viewer.canTake && v.viewer.answersSeen;
   const review = mode === "result" && !!v?.viewer.canTake;
   const panel = t.loading || (!v && !!t.error) || (!!v && (mode === "take" || mode === "result" || (!!info && !outside)));
-  // 그룹장·편집자만 — 점수는 본인과 편집자만 본다(D7). 발행 전에는 응시가 없다
+  // 그룹장·편집자만 — 점수는 본인과 편집자만 본다. 발행 전에는 응시가 없다
   const results = !!v?.viewer.canEdit && v.exam.status === "published";
 
   // 시험 응시 → 시험 결과(편집자) 카드는 한 포털에 묶어 본문 카드 아래 자리로 — 순서가 마운트 순서에 기대지 않는다. 여기 남는 건 제출 현황
@@ -302,7 +301,6 @@ export function ExamSection({ n, slug, focus, onFocused, onSubmitted, toast, vie
   );
 }
 
-/** 「정답 본 뒤 응시」 — 본인 결과·그룹장 결과 멤버 행 공용(0054) */
 export function SeenBadge() {
   return <span className="inline-flex h-6 items-center rounded-[12px] bg-warn-soft px-2 text-[12px] font-semibold text-warn">{ANSWERS_SEEN_BADGE}</span>;
 }

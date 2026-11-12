@@ -4,8 +4,7 @@ import { useEffect, useEffectEvent, useId, useRef, useState, type ReactNode, typ
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "@/components/ui/useFocusTrap";
 
-/** 번호 칸 하나 — text = 칸 글자(문항 번호), label = aria-label·title(색만으로 구분하지 않게 상태를 글로), tone = 칸 색 클래스,
- * mark = 오른쪽 위 귀퉁이 표시(마지막 정오), star = 왼쪽 위 귀퉁이 ★(오답노트 다시 볼 문제 — label 에도 글로 넣는다) */
+/** label 은 aria-label·title — 색·★ 만으로 구분하지 않게 상태를 글로. mark 는 마지막 정오 */
 export type NavCell = { key: string; text: string; label: string; tone: string; mark?: "ok" | "bad" | null; star?: boolean };
 /** 칸 묶음 — 시험이 여럿이면 시험별(title = 시험 이름). 번호 칸 index 는 묶음을 이어 센다 */
 export type NavGroup = { key: string; title?: string; cells: NavCell[] };
@@ -18,7 +17,6 @@ type NavProps = {
   onJump: (i: number) => void;
   /** side = 넓은 화면 오른쪽 붙는 칸(36px 칸) · sheet = 좁은 화면 바텀 시트 안(44px 칸, 머리는 시트가 그린다) */
   variant: "side" | "sheet";
-  /** 번호 칸 아래 각주(범례) */
   legend?: ReactNode;
   id?: string;
   className?: string;
@@ -31,7 +29,6 @@ export const NAV_TONE = {
 
 const MARK = { ok: "bg-done", bad: "bg-warn" } as const;
 
-/** 문항 이동 — 번호 칸(색·귀퉁이 표시 · 지금 문항) + 머리 요약 + 각주. 누르면 그 문항으로. 시험 응시(ExamNav)와 오답노트 상세가 같이 쓴다 */
 export function QuestionNav({ groups, summary, current, onJump, variant, legend, id, className = "" }: NavProps) {
   const side = variant === "side";
   let at = 0;
@@ -85,11 +82,7 @@ export function QuestionNav({ groups, summary, current, onJump, variant, legend,
 
 type SheetProps = Omit<NavProps, "variant" | "id" | "className"> & { id: string; onClose: () => void };
 
-/**
- * 좁은 화면 문항 이동 바텀 시트 — 열 때만 그린다(body 포털). 의견 보내기 시트와 같은 결: 어두운 바탕(누르면 닫힘) ·
- * 핸들·제목·요약·닫기 머리 / 번호 칸만 스크롤(60dvh) / safe-area 아래 여백. Esc 닫기 · 포커스 트랩 · 바탕 스크롤 잠금.
- * 열면 지금 문항 칸에 포커스, 그냥 닫으면 연 버튼으로 돌린다(번호를 고르면 onJump 가 문항으로 포커스를 옮긴다)
- */
+/** 그냥 닫으면 연 버튼으로 포커스를 돌린다 — 번호를 고르면 onJump 가 문항으로 옮긴다 */
 export function QuestionNavSheet({ id, onClose, summary, ...nav }: SheetProps) {
   const box = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLElement | null>(null);
@@ -158,7 +151,6 @@ type Props = {
   className?: string;
 };
 
-/** 시험 응시 칸 묶음 + "n/총 답함" — 옆 칸·시트가 같이 쓴다 */
 function examNavData(answered: boolean[]): Pick<NavProps, "groups" | "summary"> {
   const done = answered.filter(Boolean).length;
   const cells = answered.map((a, i) => ({ key: String(i), text: String(i + 1), label: `${i + 1}번 문항 · ${a ? "답함" : "안 답함"}`, tone: a ? NAV_TONE.answered : NAV_TONE.idle }));
@@ -175,12 +167,10 @@ function examNavData(answered: boolean[]): Pick<NavProps, "groups" | "summary"> 
   };
 }
 
-/** 시험 응시 문항 이동 — 번호 칸(답함/안 답함 · 지금 문항) + "n/총 답함" */
 export function ExamNav({ answered, ...rest }: Props) {
   return <QuestionNav {...rest} {...examNavData(answered)} />;
 }
 
-/** 시험 응시 좁은 화면 바텀 시트 */
 export function ExamNavSheet({ answered, ...rest }: Omit<SheetProps, "groups" | "summary"> & { answered: boolean[] }) {
   return <QuestionNavSheet {...rest} {...examNavData(answered)} />;
 }

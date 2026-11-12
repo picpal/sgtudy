@@ -35,7 +35,7 @@ type Props = {
   onChanged?: () => void;
   /** 발행 상태가 바뀔 때 — EditView 위쪽 [발행]/[발행됨] (트리 요약보다 서버 응답이 새롭다) */
   onPublishState?: (s: ExamPublishState) => void;
-  /** 「AI 로 생성」 탭 내용 (Task 8). 없으면 탭 줄 없이 직접 작성만 */
+  /** 「AI 로 생성」 탭 내용. 없으면 탭 줄 없이 직접 작성만 */
   ai?: (ed: ExamEditorApi, goManual: () => void, bindBrief: (h: BriefHandle | null) => void) => ReactNode;
   ref?: Ref<ExamEditorHandle>;
 };
@@ -44,9 +44,8 @@ const QTYPES = Object.keys(QTYPE_KO) as ExamQType[];
 const EMPTY_NOTE = "문항을 하나 이상 넣어야 발행할 수 있어요";
 
 /**
- * 리프 편집 화면의 「문제」 섹션 (스펙 §4.2) — 머리 줄(상태·문항 수·점수·발행) · 탭 · 문항 카드 · 문항 추가 · 공개 시점 · [문제 저장].
  * 문항 편집은 즉시 저장이 아니라 [문제 저장](exam_put) 한 번 — 제목·설명 저장(node_update)과 따로다.
- * 응시가 시작되면(응시 행 1건~) 구조 입력은 aria-disabled · 추가/삭제/순서 버튼은 숨긴다 — 문제 글·해설·공개 시점만
+ * 응시가 시작되면 구조는 잠기고 문제 글·해설·공개 시점만 고친다
  */
 export function ExamEditor({ slug, nodeId, summary, toast, onDirty, onChanged, onPublishState, ai, ref }: Props) {
   const ed = useExamEditor(slug, nodeId, toast, onChanged);
@@ -120,7 +119,6 @@ export function ExamEditor({ slug, nodeId, summary, toast, onDirty, onChanged, o
 
   return (
     <section ref={sec} aria-labelledby={`exam-head-${nodeId}`} className="flex flex-col gap-3 border-t border-line-2 pt-4" data-exam-editor="">
-      {/* 머리 줄 — 문제 · 초안/발행됨 · n문항 · m점 · [초안으로](발행은 위쪽 막대) */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <h3 ref={headRef} tabIndex={-1} id={`exam-head-${nodeId}`} className="m-0 outline-none text-[15px] font-bold text-ink">
           문제
@@ -141,7 +139,7 @@ export function ExamEditor({ slug, nodeId, summary, toast, onDirty, onChanged, o
           {EMPTY_NOTE}
         </p>
       )}
-      {/* 발행된 시험이 잠기면 [초안으로] 가 비활성 — 이유를 버튼 아래에(E2E I-7). AI 탭에선 잠금 안내문이 숨어서 따로 둔다 */}
+      {/* 발행된 시험이 잠기면 [초안으로] 가 비활성 — 이유를 버튼 아래에. AI 탭에선 잠금 안내문이 숨어서 따로 둔다 */}
       {!draftState && unpublishLocked && (
         <p id={`exam-unpub-${nodeId}`} className="m-0 -mt-1 text-[12px] font-medium text-muted">
           {unpublishLockText(view?.exam.submittedCount ?? 0)}
@@ -250,7 +248,7 @@ export function ExamEditor({ slug, nodeId, summary, toast, onDirty, onChanged, o
 
 type OptionToggleProps = { label: string; hint: string; ask: string; on: boolean; save: (next: boolean) => Promise<ExamView>; toast: (m: ToastMsg) => void; onView: (v: ExamView) => void };
 
-/** 편집자 시험 옵션 — 「미응시자에게도 정답 공개」(0054) · 「응시 중 AI 질문 허용」(0055). [문제 저장]과 따로 바로 저장한다. 켤 때만 확인 */
+/** 시험 옵션은 [문제 저장]과 따로 바로 저장한다. 켤 때만 확인 */
 function OptionToggle({ label, hint, ask: askText, on, save, toast, onView }: OptionToggleProps) {
   const [ask, setAsk] = useState(false);
   const [busy, setBusy] = useState(false);

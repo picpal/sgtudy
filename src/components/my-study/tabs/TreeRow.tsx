@@ -22,20 +22,16 @@ type Props = {
   /** 편집 모드 삭제 — 없으면 버튼을 비활성으로 두고 removeOff 를 안내한다 */
   onRemove?: () => void;
   removeOff?: string;
-  /** 이 행의 삭제 확인이 열려 있다 */
   asking?: boolean;
   /** 편집 목록 드래그 핸들 포인터 이벤트 (과제·묶음 행만 — 회차는 끌 수 없다) */
   dragHandle?: React.HTMLAttributes<HTMLElement>;
-  /** 이 행 위/아래에 놓을 자리 표시선 */
   dropHint?: "top" | "bottom" | null;
-  /** 이 행을 끌고 있다 */
   dragging?: boolean;
   /** 행 아래에 붙는 내용(삭제 확인 상자) — 같은 treeitem 안에 둬서 role="tree" 가 treeitem 만 소유하게 한다 */
   below?: React.ReactNode;
-  /** 편집 목록 "⋯ 옮기기" 메뉴 (Q2-4, rowMoves) — 과제·묶음 행만. 비면 비활성 */
+  /** "⋯ 옮기기" 메뉴 — 과제·묶음 행만. 비면 비활성 */
   moves?: RowMove[];
   onMoveRow?: (m: RowMove) => void;
-  /** 옮기는 중 — 메뉴 비활성 */
   moveBusy?: boolean;
 };
 
@@ -60,7 +56,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
   // 개인 목표는 편집 모드에 그리지 않는다 — 혹시 그려져도 끌기·삭제 대상이 아니다
   const isEdit = isEditMode && !personal;
   const owner = personal ? ownerOf(n) : null;
-  // 남의 개인 목표에만 소유자 표시 (결정 5 — 내 것에는 "나" 칩·아바타 없음)
+  // 남의 개인 목표에만 소유자 표시 — 내 것에는 "나" 칩·아바타 없음
   const other = personal && owner && owner.userId !== meId ? owner : null;
   const done = !!owner && isDone(owner.c);
   // "+" 는 회차에만 — 과제 아래 과제(묶음)는 만들지 않는다 (2단계: 회차 → 과제)
@@ -88,7 +84,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
         className={`flex min-h-[52px] cursor-pointer items-center gap-2 py-1 pl-2 pr-3 ${dragging ? "opacity-50" : ""}`}
         style={{ opacity: n.archived ? 0.55 : undefined }}
       >
-        {/* 390 폭에서도 제목·기간이 보이게: 들여쓰기 축소, 드래그 핸들·진척 막대·아바타는 숨기고 제목은 줄바꿈 (Q3-03) */}
+        {/* 390 폭에서도 제목·기간이 보이게: 들여쓰기 축소, 드래그 핸들·진척 막대·아바타는 숨기고 제목은 줄바꿈 */}
         <span className="w-[calc(var(--d)*22px)] shrink-0 max-sm:w-[calc(var(--d)*10px)]" style={{ "--d": n.d } as React.CSSProperties} />
         {isEdit && (
           // 회차 행은 끌 수 없다 — 자리만 남겨 제목 세로줄을 맞춘다
@@ -119,7 +115,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
           {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[7px] bg-navy px-2 py-[3px] text-[12px] font-bold text-white">{n.label}</span>}
           {n.leaf && <TypeBadge type={n.type} />}
           {n.leaf && n.exam && <ExamBadge draft={isExamDraft(n.exam)} />}
-          {/* 390: 소유자 이름 칸은 숨기고 남의 목표엔 제목 앞에 이니셜 아바타 (스펙 §4.4) */}
+          {/* 390: 소유자 이름 칸은 숨기고 남의 목표엔 제목 앞에 이니셜 아바타 */}
           {other && (
             <span className="shrink-0 sm:hidden" title={other.name}>
               <Avatar name={other.name} size={20} tone={other.tone} id={other.userId} />
@@ -157,7 +153,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
             <span className="max-sm:hidden">
               <AvatarStack people={n.people} size={28} ring="#FFFFFF" iconSize={14} overflowSize={30} />
             </span>
-            {/* 보관된 과제는 배정할 일이 없어 빼고, 390 은 제목 칸을 지키려 행 본문 안(제목 아래 줄)으로 (Q2-10) */}
+            {/* 보관된 과제는 배정할 일이 없어 빼고, 390 은 제목 칸을 지키려 행 본문 안(제목 아래 줄)으로 */}
             {unassigned && <span className="shrink-0 rounded-[7px] bg-[#FDF4E1] px-2 py-[3px] text-[12px] font-semibold text-amber-text max-sm:hidden">담당자 미정</span>}
             <span className="w-9 shrink-0 text-right text-[12px] font-semibold text-ink-2">{n.asg ? `${n.sub}/${n.asg}` : ""}</span>
           </>
@@ -176,7 +172,7 @@ export function TreeRow({ n, isEdit: isEditMode, meId = null, open, onToggle, on
             </span>
           </button>
         )}
-        {/* "+" 가 없는 행: 과제·묶음은 그 자리에 "⋯ 옮기기"(Q2-4), 보관된 회차는 비워 두어 삭제 버튼이 회차 행과 같은 세로줄에 선다 */}
+        {/* "+" 가 없는 행: 과제·묶음은 그 자리에 "⋯ 옮기기", 보관된 회차는 비워 두어 삭제 버튼이 회차 행과 같은 세로줄에 선다 */}
         {isEdit && !canAdd && (n.d > 0 && moves && onMoveRow ? <RowMenu title={n.title} moves={moves} onMove={onMoveRow} disabled={moveBusy || n.temp} /> : <span aria-hidden="true" className="w-8 shrink-0" />)}
         {isEdit && (
           // 누르는 자리는 44px(행 높이 52 안), 보이는 상자는 32px — "+" 와 같은 모양

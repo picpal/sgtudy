@@ -37,11 +37,11 @@ type Props = {
   S: ScreenState;
   update: Update;
   api: CurriculumApi;
-  /** 보류했던 목적지로 이동 (Q2-05) */
+  /** 보류했던 목적지로 이동 */
   go: (to: Leave) => void;
   /** 미저장 수정이 있으면 먼저 묻고 이동 */
   request: (to: Leave) => void;
-  /** 방 상태 — 시작 전 지정 과제 안내 (시나리오 QA #12) */
+  /** 방 상태 — 시작 전 지정 과제 안내 */
   roomStatus?: RoomStatus;
   /** 첨부 업로드 안내·오류 */
   toast: (m: ToastMsg) => void;
@@ -55,11 +55,7 @@ const FILES_ERR = "첨부 파일 목록을 불러오지 못했어요 · 새로 �
 const field = "h-11 rounded-[10px] border border-line-3 text-ink";
 const label = "flex flex-col gap-[6px] text-[12px] font-semibold text-ink-3";
 
-/**
- * 그룹장 편집 — 커리큘럼 목록 자리를 통째로 쓰는 전용 편집 화면 (?item=).
- * 글(설명)이 주인공: 제목 한 줄 → 기간·유형 한 줄 → 남은 높이를 채우는 마크다운 편집기. 저장·삭제는 위쪽 고정 막대에 늘 보인다.
- * 내용 변경은 오버라이드에 모았다가 "저장" 1회(node_update), 삭제·보관은 즉시 RPC.
- */
+/** 내용 변경은 오버라이드에 모았다가 "저장" 1회(node_update), 삭제·보관은 즉시 RPC */
 export function EditView({ n, parent, nodes, roots, period, members, S, update, api, go, request, roomStatus = "active", toast, slug }: Props) {
   const id = n.id;
   const view = useRef<HTMLElement>(null);
@@ -77,7 +73,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     if (S.justAdded === id && titleInput.current) {
       titleInput.current.focus({ preventScroll: true });
       titleInput.current.select();
-      // 저장 전까지 "방금 만든 항목" — 저장 없이 떠나면 빈 회차를 지운다 (Q2-8, MyStudyScreen)
+      // 저장 전까지 "방금 만든 항목" — 저장 없이 떠나면 MyStudyScreen 이 빈 회차를 지운다
       update({ justAdded: null, fresh: id });
     } else heading.current?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 항목이 바뀔 때(key) 한 번만
@@ -103,7 +99,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   };
   // 첨부 — 붙은 목록은 서버(node_files), 고친 선택은 ov.files 에 모았다가 "저장" 때 node_files_set. 임시 행은 저장한 뒤에 붙인다
   const [savedFiles, setSavedFiles] = useState<FileMeta[] | null>(null);
-  // 못 불러오면 빈 목록으로 보지 않는다 — node_files_set 은 통째 교체라 일부 목록으로 저장하면 붙은 파일이 지워진다 (리뷰 I-1)
+  // 못 불러오면 빈 목록으로 보지 않는다 — node_files_set 은 통째 교체라 일부 목록으로 저장하면 붙은 파일이 지워진다
   const [filesErr, setFilesErr] = useState(false);
   useEffect(() => {
     if (n.temp) return;
@@ -137,7 +133,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   }, [up.uploading, id, update]);
 
   // 시험 리프의 「문제」 섹션 — 문항 수정은 [문제 저장](exam_put) 따로. 저장 안 한 문항이 있으면 S.examDirty 로 올려
-  // 올리는 중(S.uploading)과 같은 "저장하지 않은 수정이 있어요" 경로로 탭·뒤로 가기·다른 항목 이동을 막는다 (Review Focus 10)
+  // 올리는 중(S.uploading)과 같은 "저장하지 않은 수정이 있어요" 경로로 탭·뒤로 가기·다른 항목 이동을 막는다
   const exam = n.leaf && !n.temp && n.exam ? n.exam : null;
   const examRef = useRef<ExamEditorHandle>(null);
   const [examDirty, setExamDirty] = useState(false);
@@ -164,8 +160,8 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     return () => window.removeEventListener("beforeunload", warn);
   }, [unsaved]);
 
-  // 앱 안 링크(헤더 메뉴·로고·옆 목록)로 다른 화면에 가려 하면 — 미저장 수정은 아래 확인으로 보류(Q2-1),
-  // 저장한 적 없는 새 회차(빈 채)는 지우고 그대로 보낸다(Q2-8 — 화면이 사라져 MyStudyScreen 의 정리가 돌지 않는다)
+  // 앱 안 링크(헤더 메뉴·로고·옆 목록)로 다른 화면에 가려 하면 — 미저장 수정은 아래 확인으로 보류,
+  // 저장한 적 없는 새 회차(빈 채)는 지우고 그대로 보낸다(화면이 사라져 MyStudyScreen 의 정리가 돌지 않는다)
   const fresh = S.fresh === id && !n.leaf && n.kids.every(isPersonal);
   useEffect(() => {
     if (!unsaved && !fresh) return;
@@ -175,9 +171,9 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
         return true;
       }
       // 같은 방 주소(헤더 "내 스터디" 등 task·tab 없는 주소)는 화면이 다시 그려지지 않는다 — 이동 대신 목록으로 닫고,
-      // (?task=·?tab= 이 있는 같은 방 알림 링크는 화면이 다시 마운트되니 아래로 가서 지우고 이동한다, N-1)
-      // 빈 새 회차는 MyStudyScreen 정리가 상태째 지운다(서버만 지우면 지워진 회차의 편집 화면이 남는다, 최종 리뷰 Minor 1)
-      // 해시 알림 링크(#applications 등)는 편집만 닫고 이동은 막지 않는다 — 벨이 이동·앵커·읽음까지 이어 간다 (최종 리뷰 I2)
+      // (?task=·?tab= 이 있는 같은 방 알림 링크는 화면이 다시 마운트되니 아래로 가서 지우고 이동한다)
+      // 빈 새 회차는 MyStudyScreen 정리가 상태째 지운다(서버만 지우면 지워진 회차의 편집 화면이 남는다)
+      // 해시 알림 링크(#applications 등)는 편집만 닫고 이동은 막지 않는다 — 벨이 이동·앵커·읽음까지 이어 간다
       if (samePage(href)) {
         go({ sel: null });
         return holdSamePage(href);
@@ -193,13 +189,12 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   // 보관된 하위의 제출도 센다 — 서버는 하위 어디에든 제출이 있으면 삭제를 막는다
   const hasSub = n.subAll > 0;
   const isGong = n.leaf && n.type === "공통";
-  // 제출이 있으면 유형 변경·제출한 담당자 빼기를 미리 막는다 (시나리오 QA #11 — 저장 때 서버 거절 토스트 대신)
+  // 제출이 있으면 유형 변경·제출한 담당자 빼기를 미리 막는다 — 저장 때 서버 거절 토스트 대신
   const locks = n.leaf ? leafLocks(n) : null;
   const removeLabel = n.archived ? "보관 해제" : hasSub ? "보관" : "삭제";
   const plan = removePlan(n);
-  // 리프의 회차 고르기 — 지금 회차와 선택지
   const round = n.leaf ? { cur: roundOf(nodes, n), opts: roundOptions(roots) } : null;
-  // 내부 depth("2단계")는 보여 주지 않는다 (Q1-17) — "1주차 · 회차", "1주차 IAM·VPC › 과제"(시험 리프는 "› 시험" — 상세와 같게). 조상은 누르면 그 편집 화면으로
+  // 내부 depth("2단계")는 보여 주지 않는다 — "1주차 · 회차", "1주차 IAM·VPC › 과제"(시험 리프는 "› 시험" — 상세와 같게). 조상은 누르면 그 편집 화면으로
   const kind = n.leaf ? (n.exam ? "시험" : "과제") : n.d === 0 ? "회차" : "묶음";
   const ancestors: TreeNode[] = [];
   for (let p = nodes.find((x) => x.id === n.parentId); p; p = nodes.find((x) => x.id === p!.parentId)) ancestors.unshift(p);
@@ -257,7 +252,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
     if (wasLeave.current && !S.leave) heading.current?.focus({ preventScroll: true });
     wasLeave.current = S.leave;
   }, [S.leave]);
-  // 회차·묶음 시작일을 옮겼으면 저장 전에 "하위도 같은 날수만큼 옮길까요?" (시나리오 QA D2). then = 저장 뒤 이동할 곳(떠나기 전 저장)
+  // 회차·묶음 시작일을 옮겼으면 저장 전에 "하위도 같은 날수만큼 옮길까요?". then = 저장 뒤 이동할 곳(떠나기 전 저장)
   const [shiftAsk, setShiftAsk] = useState<{ ask: ShiftAsk; then: typeof S.leave } | null>(null);
   const doSave = async (shift: boolean, then: typeof S.leave): Promise<boolean> => {
     if (savingRef.current) return false;
@@ -299,13 +294,13 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   // 이동은 go — request 가 아니라 "저장하지 않은 수정" 확인을 거치지 않는다(성공하면 수정은 이미 지워졌다). [임시저장] = 저장하고 머문다(시험 리프엔 없다)
   const saveAndReturn = () => {
     if (dirty || examDirty) return trySave(editReturn(S));
-    // 시험은 [저장] 을 눌러 반영됐는지 확인하려 한다 — 말없이 돌아가면 저장이 안 되는 줄 안다(시험 313)
+    // 시험은 [저장] 을 눌러 반영됐는지 확인하려 한다 — 말없이 돌아가면 저장이 안 되는 줄 안다
     if (exam) toast({ text: "바뀐 내용이 없어요", tone: "ok" });
-    // 저장한 적 없는 새 회차도 [저장] 을 눌렀으면 남긴다 (예전 "저장" 이 fresh 를 지운 것과 같게 — 빈 회차 정리 대상에서 뺀다)
+    // 저장한 적 없는 새 회차도 [저장] 을 눌렀으면 남긴다 — 빈 회차 정리 대상에서 뺀다
     if (S.fresh === id) update({ fresh: null });
     go(editReturn(S));
   };
-  // 확인을 띄운 뒤 날짜를 또 바꿨거나 다른 이동 확인(S.leave)이 떴으면 그 질문은 낡았다 — 숨기고 다시 "저장" 으로 묻는다 (최종 리뷰 Minor 4)
+  // 확인을 띄운 뒤 날짜를 또 바꿨거나 다른 이동 확인(S.leave)이 떴으면 그 질문은 낡았다 — 숨기고 다시 "저장" 으로 묻는다
   const askShown = shiftAsk && !S.leave && sameShiftAsk(shiftAsk.ask, shiftAskOf(n, nodes)) ? shiftAsk : null;
   // 시험 리프 [발행] = 고친 것(문항·제목·설명·첨부)을 먼저 저장하고 발행, 편집 화면에 머문다. 저장이 거절되면 발행하지 않는다.
   // 리프는 시작일 옮기기 질문(shiftAsk)이 없어 바로 doSave
@@ -353,13 +348,13 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           {n.temp && <span className="shrink-0 text-[12px] text-muted max-sm:hidden">서버에 만드는 중…</span>}
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {/* 상위 보관으로 함께 숨겨진 항목은 자기 보관이 아니라 해제할 대상이 없다 → 버튼을 숨긴다 */}
-            {/* 확인 상자가 떠 있는 동안은 숨긴다 — 빨간 "삭제" 가 두 개 보이지 않게 (Q2-22) */}
+            {/* 확인 상자가 떠 있는 동안은 숨긴다 — 빨간 "삭제" 가 두 개 보이지 않게 */}
             {!n.archivedByParent && !S.confirm && (
               <button ref={removeBtn} type="button" disabled={n.temp} onClick={askRemove} className="h-11 shrink-0 rounded-[22px] border border-[#EBC3BD] bg-surface px-4 text-[14px] font-semibold text-warn disabled:opacity-50 max-sm:px-3">
                 {removeLabel}
               </button>
             )}
-            {/* [임시저장] = 저장하고 머문다(보조), [저장] = 저장하고 들어오기 전 화면으로(주). 올리는 중엔 둘 다 막는다 (리뷰 M-1).
+            {/* 올리는 중엔 두 저장 버튼 다 막는다.
                 시험 리프는 발행해야 팀원에게 보이니 [임시저장] 대신 [저장] 오른쪽에 [발행](발행했으면 비활성 [발행됨]) */}
             {!exam && (
               <button type="button" disabled={n.temp || !!askShown || up.uploading || saving || (!dirty && !examDirty)} onClick={() => trySave(null)} className="h-11 shrink-0 rounded-[22px] border border-line-3 bg-surface px-4 text-[14px] font-semibold text-ink disabled:opacity-50 max-sm:px-3">
@@ -397,7 +392,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             cancelLabel="계속 편집"
             onCancel={() => setShiftAsk(null)}
             actions={[
-              // 올리는 중엔 저장하지 않는다 — 올리던 파일이 빠진 채 저장된다 (리뷰 M-1)
+              // 올리는 중엔 저장하지 않는다 — 올리던 파일이 빠진 채 저장된다
               { label: "함께 옮기기", tone: "primary", onClick: () => void doSave(true, askShown.then), disabled: up.uploading || saving },
               { label: kind === "회차" ? "회차만 바꾸기" : "이 묶음만 바꾸기", onClick: () => void doSave(false, askShown.then), disabled: up.uploading || saving },
             ]}
@@ -411,7 +406,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           />
         )}
         {S.leave && (
-          // 올리는 중이면 "저장하고 이동" 은 없다 — 기다리지 않고 막는다 (리뷰 I-2: 저장하면 올리던 파일이 빠진다)
+          // 올리는 중이면 "저장하고 이동" 은 없다 — 기다리지 않고 막는다(저장하면 올리던 파일이 빠진다)
           <InlineConfirm
             text={up.uploading ? (dirty || examDirty ? "파일을 올리는 중이에요. 지금 나가면 올리던 파일과 저장하지 않은 수정은 버려져요" : "파일을 올리는 중이에요. 지금 나가면 올리던 파일은 버려져요") : "저장하지 않은 수정이 있어요. 저장할까요?"}
             cancelLabel="계속 편집"
@@ -458,7 +453,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           {n.leaf && !n.personal && (
             <div className={`${label} col-span-2 min-w-0 @min-[640px]:col-span-1`}>
               <span>과제 유형</span>
-              {/* 바깥(p-3)까지 44 — 날짜·회차 칸과 같은 높이 */}
+              {/* 날짜·회차 칸과 같은 높이(44) */}
               <div className="[&_[role=group]]:h-11 [&_button]:h-full">
                 <Seg<TaskType> label="과제 유형" value={n.type} onChange={setType} grow disabled={!!locks?.typeReason} describedBy={locks?.typeReason ? `type-lock-${id}` : undefined} options={[["공통", "공통 · 참가자 전원"], ["지정", "지정 · 일부 인원"]]} />
               </div>
@@ -509,14 +504,14 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
           </p>
         )}
 
-        {/* 제출이 있는 과제 — 유형 잠금 이유 (시나리오 QA #11). 기간·유형 줄의 세로 정렬을 흔들지 않게 줄 밖에 */}
+        {/* 제출이 있는 과제 — 유형 잠금 이유. 기간·유형 줄의 세로 정렬을 흔들지 않게 줄 밖에 */}
         {locks?.typeReason && (
           <p id={`type-lock-${id}`} className="m-0 -mt-1 text-[12px] font-medium text-muted">
             과제 유형: {locks.typeReason} · 바꾸려면 보관하고 새 과제를 만들어 주세요
           </p>
         )}
 
-        {/* E4: 기간 경고 — 저장은 막지 않는다 (Q1-10/Q2-21) */}
+        {/* 기간 경고 — 저장은 막지 않는다 */}
         {warns.length > 0 && (
           <div role="status" className="flex flex-col gap-[2px] rounded-[9px] bg-[#FDF4E1] px-[10px] py-2 text-[12px] font-semibold text-amber-text">
             {warns.map((w) => (
@@ -615,7 +610,7 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
             설명
           </span>
           {/* 남은 화면 높이를 채우고(최소 420) 내용만큼 자란다 — 편집 면 안쪽 스크롤 없음(maxHeight none). 툴바는 고정 막대 아래에 붙는다.
-              "크게 쓰기" 도 둔다 — 방 만들기 상세 설명·운영 규칙 편집기와 같게(Q2-6), 390 에선 큰 창이 더 넓다 */}
+              "크게 쓰기" 도 둔다 — 방 만들기 상세 설명·운영 규칙 편집기와 같게, 390 에선 큰 창이 더 넓다 */}
           <MarkdownEditor
             labelledBy={`desc-label-${id}`}
             value={n.desc}

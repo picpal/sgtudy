@@ -12,7 +12,7 @@ import type { PeriodGap } from "../rounds";
 type Props = {
   gap: PeriodGap;
   slug: string;
-  /** 진행중이면 시작일은 오늘까지(앞당기기 — 0048)·종료일은 마지막 마감 이후로만 — 문구가 달라진다 */
+  /** 진행중이면 시작일은 오늘까지 앞당기기·종료일은 마지막 마감 이후로만 — 문구가 달라진다 */
   roomStatus: "draft" | "recruit" | "active";
   /** 진행목표 편집 권한(그룹장 + 권한 받은 팀원) — 기간 맞추기 안내 */
   canEdit: boolean;
@@ -24,7 +24,7 @@ type Props = {
 };
 
 // 「그대로 두기」 — 이 브라우저에서만 숨긴다. 기억하는 값은 gap.key(벗어난 회차 id 앞·뒤 목록) — 개수 문구·방 기간은 과제를 더하거나
-// 종료일을 늘릴 때마다 바뀌어 숨긴 경고가 다시 떴다(2026-10-23 사용자 보고). 저장소가 막혀도 경고는 그대로 뜬다
+// 종료일을 늘릴 때마다 바뀌어 숨긴 경고가 다시 떴다. 저장소가 막혀도 경고는 그대로 뜬다
 const KEPT_EVENT = "sgtudy:period-kept";
 /** 서버 렌더·하이드레이션 중에는 저장소를 못 읽는다 — 이때 편집자에게는 그리지 않는다(숨긴 경고가 들어올 때마다 번쩍이지 않게) */
 const UNKNOWN = "\u0000unknown";
@@ -47,11 +47,7 @@ const readKept = (slug: string) => {
 
 const BTN = "h-11 rounded-[22px] border border-[#E2C77F] bg-surface px-4 text-[13px] font-semibold text-[#6B4700]";
 
-/**
- * "회차 n개가 스터디 기간(…)을 벗어나요" 경고 줄 — 진행목표(보기·편집)·개요 공용.
- * 편집자에게 기간 맞추기: 회차 기간 고치기(편집 모드로) · 그대로 두기(이 브라우저에서 숨김) · 그룹장이면 시작일 앞당기기(가장 이른
- * 시작으로 채운 폼 — 이미 진행해 온 팀이 지난 주차를 등록할 때, 0048)·종료일 늘리기(마지막 마감으로 채운 EndDateForm)
- */
+/** 시작일 앞당기기는 이미 진행해 온 팀이 지난 주차를 등록할 때 쓴다 */
 export function PeriodWarning({ gap, slug, roomStatus, canEdit, isLeader, onEditRounds, toast }: Props) {
   const active = roomStatus === "active";
   const today = useToday();

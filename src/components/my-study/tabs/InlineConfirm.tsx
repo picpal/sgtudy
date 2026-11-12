@@ -5,9 +5,6 @@ import { useEffect, useId, useRef, type KeyboardEvent } from "react";
 type Action = { label: string; onClick: () => void; tone?: "danger" | "primary"; disabled?: boolean };
 type Props = { text: string; actions: Action[]; onCancel: () => void; cancelLabel?: string };
 
-/**
- * 편집 패널 안의 확인 상자 (Q3-13): 열리면 첫 버튼(취소)으로 포커스 · 화면 안으로 스크롤 · Esc 취소 · Tab 은 상자 안에서만 돈다.
- */
 export function InlineConfirm({ text, actions, onCancel, cancelLabel = "취소" }: Props) {
   const textId = useId();
   const box = useRef<HTMLDivElement>(null);

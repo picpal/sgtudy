@@ -9,11 +9,10 @@ import { toneOfName } from "../bits";
 import { memberStats, overallPct, type Tree } from "../model";
 import { StatusBadge } from "../StudyHeaderInfo";
 
-/** onCancel: 확인 대화상자 열기 — 참가 취소(모집 기간)·신청 취소·탈퇴 요청/요청 취소(진행 중, 시나리오 QA D3) */
+/** 참가 취소는 모집 기간, 탈퇴 요청·요청 취소는 진행 중 */
 export type JoinCardAction = "leave" | "cancel" | "leaveRequest" | "leaveRequestCancel";
 type Props = { room: StudyRoom; tree: Tree; onMyTasks: () => void; goLeaf: (id: string) => void; onCancel: (kind: JoinCardAction) => void; busy: boolean; admin?: ReactNode };
 
-/** 우측 aside "참가 정보" + "내 다음 마감" */
 export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, admin }: Props) {
   const overall = overallPct(tree.roots);
   const full = room.capCur >= room.capMax;
@@ -36,7 +35,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
             </span>
           </div>
           <ProgressBar pct={Math.round((room.capCur / room.capMax) * 100)} height={8} fill={full ? "#B4462B" : "#12A386"} />
-          {/* 최소 인원이 없는 방은 문구가 비어 있다 — 아이콘만 남기지 않는다 (V2-05) */}
+          {/* 최소 인원이 없는 방은 문구가 비어 있다 — 아이콘만 남기지 않는다 */}
           {room.minText && (
             <span className="inline-flex items-center gap-[5px] text-[12px] font-medium" style={{ color: room.minOk ? "#0D7A64" : "#8A5A00" }}>
               {room.minOk ? (
@@ -102,10 +101,10 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
           </ul>
         </div>
 
-        {/* 상태별 문구·버튼 (Q1-12/Q2-13): 모집 기간 참가자는 /rooms 처럼 참가 취소 가능, 진행 중은 불가, 그룹장은 취소 없음 */}
+        {/* 모집 기간 참가자는 /rooms 처럼 참가 취소 가능, 진행 중은 불가, 그룹장은 취소 없음 */}
         {(room.action === "joined" || room.action === "leave" || room.action === "owner") && (
           <div className="flex flex-col gap-[6px]">
-            {/* 헤더 "내 과제"(/tasks, 모든 방)와 헷갈리지 않게 — 이 방 보드의 내 담당만 (Q1-12) */}
+            {/* 헤더 "내 과제"(/tasks, 모든 방)와 헷갈리지 않게 — 이 방 보드의 내 담당만 */}
             <button type="button" onClick={onMyTasks} className="flex h-12 items-center justify-center rounded-[24px] bg-navy text-[15px] font-semibold text-white">
               보드에서 이 방 내 과제 보기
             </button>
@@ -114,7 +113,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
                 참가 취소
               </button>
             )}
-            {/* 진행 중 참가자는 그룹장에게 탈퇴를 요청한다 — 그룹장이 담당 과제를 넘기고 처리한다 (시나리오 QA D3) */}
+            {/* 진행 중 참가자는 그룹장에게 탈퇴를 요청한다 — 그룹장이 담당 과제를 넘기고 처리한다 */}
             {room.action === "joined" && room.leaveRequest && (
               <div data-leave-request role="status" className="flex flex-col gap-1 rounded-[12px] bg-amber-soft px-[14px] py-[10px] text-[13px] leading-[1.5] text-amber-text">
                 <span className="font-semibold">{room.leaveRequest.on}에 탈퇴를 요청했어요 · 그룹장이 처리하면 알려 드려요</span>
@@ -149,7 +148,7 @@ export function JoinInfoCard({ room, tree, onMyTasks, goLeaf, onCancel, busy, ad
         {room.action === "pending" && (
           <div className="flex flex-col gap-2">
             {room.archived ? (
-              // 백로그 F①: 보관된 방에 남은 승인 대기 — 보관 안내와 함께 신청만 취소할 수 있다
+              // 보관된 방에 남은 승인 대기 — 보관 안내와 함께 신청만 취소할 수 있다
               <button type="button" disabled className="h-12 rounded-[24px] bg-slate-soft text-[15px] font-semibold text-muted">
                 보관된 스터디
               </button>

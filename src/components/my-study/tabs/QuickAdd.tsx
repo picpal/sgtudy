@@ -15,13 +15,11 @@ const treeItem = (inTree: boolean, indent: number, label: string) => (inTree ? {
 /** team = 편집 목록 팀 과제(민트), personal = 보기 목록 "내 목표 추가"(슬레이트) */
 export type AddTone = "team" | "personal";
 
-/** "{회차 라벨} {회차 제목}" — 개인 목표 문구(스펙 §6)용 */
 const roundName = (r: ParentNode) => (r.label ? `${r.label} ${r.title}` : r.title);
 
-/** 팀 빠른 추가의 종류 — 시험은 리프를 만든 뒤 빈 초안을 넣고 출제 화면으로 (스펙 2026-10-21-round-exam §4.1) */
+/** 시험은 리프를 만든 뒤 빈 초안을 넣고 출제 화면으로 간다 */
 export type AddKind = "task" | "exam";
 
-/** 펼친 회차 끝의 "+ 과제 추가" / "＋ 내 목표 추가" 줄 */
 export function AddRow({ round, indent, onOpen, inTree = false, tone = "team" }: { round: ParentNode; indent: number; onOpen: () => void; inTree?: boolean; tone?: AddTone }) {
   const personal = tone === "personal";
   const label = personal ? `${roundName(round)}에 내 목표 추가` : `${round.title}에 과제 추가`;
@@ -44,13 +42,13 @@ export function AddRow({ round, indent, onOpen, inTree = false, tone = "team" }:
   );
 }
 
-/** 빠른 추가 — Enter 로 만들고 입력은 다음 과제를 위해 비운 채 열어 둔다. Esc·빈 입력에서 포커스가 나가면 닫힘 */
+/** Enter 로 만든 뒤에도 입력을 비운 채 열어 둔다 — 이어서 추가하게 */
 export function QuickAdd({
   round, indent, onAdd, onClose, inTree = false, tone = "team", designatedNote = null,
 }: {
   round: ParentNode;
   indent: number;
-  /** type: 팀 빠른 추가에서 고른 과제 유형(공통/지정, 시나리오 QA D4), kind: 과제/시험. 개인 목표는 둘 다 늘 undefined */
+  /** type: 팀 빠른 추가에서 고른 과제 유형(공통/지정), kind: 과제/시험. 개인 목표는 둘 다 늘 undefined */
   onAdd: (title: string, type?: TaskType, kind?: AddKind) => Promise<boolean>;
   onClose: () => void;
   inTree?: boolean;
@@ -67,7 +65,7 @@ export function QuickAdd({
   const [kind, setKind] = useState<AddKind>("task");
   const exam = !personal && kind === "exam";
   const [last, setLast] = useState("");
-  // 개인 목표는 낙관적 임시 행 없이 응답을 기다린다 — 그동안 입력에 aria-busy (스펙 §7). 연달아 보내면 마지막 응답까지
+  // 개인 목표는 낙관적 임시 행 없이 응답을 기다린다 — 그동안 입력에 aria-busy. 연달아 보내면 마지막 응답까지
   const [pending, setPending] = useState(0);
   const busy = pending > 0;
   useEffect(() => input.current?.focus(), []);

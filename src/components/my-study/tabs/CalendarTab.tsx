@@ -233,10 +233,8 @@ const liveBar = (a: Anchor) => (a.el.isConnected ? a.el : document.querySelector
 const MOBILE_MQ = "(width < 40rem)";
 
 /**
- * 막대 상세 팝오버 — body 로 포털, 화면 고정 좌표로 누른 막대 바로 아래(모자라면 위)에 뜬다.
- * 창 크기·내용이 바뀌면 다시 잡고, 바탕 스크롤은 따라가지 않는다 — 처음 뜬 자리에 머물다 막대가 SCROLL_CLOSE_PX 넘게 움직이거나 화면 밖으로 나가면 닫힌다. 모바일(<640)은 아래 시트(공지 팝업과 같은 꼴) — 어디서 눌러도 스크롤 없이 보인다.
- * 열리면 상자로 포커스, Esc·X 는 닫고 누른 막대로 포커스를 돌려준다. PC 는 바깥을 누르면 닫힌다.
- * 모바일 시트는 공지 시트처럼 흐린 배경 + 바탕 스크롤 잠금 — 바탕을 쓸어 스크롤하려다 닫히지 않게, 배경을 톡 누르면(click) 닫힌다.
+ * 바탕 스크롤은 따라가지 않는다 — 처음 뜬 자리에 머물다 막대가 SCROLL_CLOSE_PX 넘게 움직이거나 화면 밖으로 나가면 닫힌다.
+ * 모바일(<640) 시트는 바탕 스크롤을 잠그고 배경 click 으로만 닫는다 — 바탕을 쓸어 스크롤하려다 닫히지 않게.
  * 비모달이라 Tab 트랩은 없다.
  */
 export function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onClose: (refocus: boolean) => void; children: ReactNode }) {

@@ -27,7 +27,7 @@ type ViewProps = {
   sub?: string | null;
 };
 
-/** 과제 제출 카드 표시 (훅 없음) — 스펙 §2.2 */
+/** 훅 없는 표시 전용 */
 export function MySubmissionCardView({ state, badge, mine, composer, notice, onEdit, onOpenFile, headingRef, personal = false, sub }: ViewProps) {
   const saved = mine && (
     <div className="flex flex-col gap-3">
@@ -81,7 +81,7 @@ type Props = {
   onOpenFile: (f: FileMeta) => void;
   toast: (m: ToastMsg) => void;
   headingRef?: Ref<HTMLHeadingElement>;
-  /** 파일을 올리는 중인지 — 상세 나가기 확인용 (스펙 §2.8) */
+  /** 상세 나가기 확인용 */
   onUploadingChange?: (uploading: boolean) => void;
   /** 작성 중 바뀐 내용이 있으면 그 손잡이, 없으면 null */
   onDraftChange?: (d: SubmitDraft | null) => void;
@@ -143,7 +143,6 @@ function EditableCard({ detail, nodeId, userId, state, badge, onSaved, onRefetch
       }}
     />
   ) : null;
-  // 제출물 보기 위 이어 쓰기 안내 — 고르면 작성 화면으로
   const notice =
     !composing && c.pending ? (
       <DraftNotice

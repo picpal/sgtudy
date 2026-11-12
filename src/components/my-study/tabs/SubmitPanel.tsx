@@ -28,8 +28,7 @@ type Props = {
   children?: ReactNode;
 };
 
-/** 과제 상세의 "내가 하는 곳" — 본문 카드(과제 · 제출 현황 · 댓글) 아래 형제 카드. 방 화면이 연 자리(submitSlot)로 포털해 그린다.
- *  React 트리는 그대로라 작성 상태·나가기 확인·포커스 ref 가 상세 화면과 함께 산다 */
+/** 방 화면이 연 자리(submitSlot)로 포털 — React 트리는 그대로라 작성 상태·나가기 확인·포커스 ref 가 상세 화면과 함께 산다 */
 export function SubmitPanel(props: Props) {
   return (
     <SubmitSlotPortal>
@@ -46,7 +45,6 @@ export function SubmitSlotPortal({ children }: { children?: ReactNode }) {
   return slot ? createPortal(children, slot) : null;
 }
 
-/** 자리 카드 한 장(포털 없이) — 「과제 제출」·「시험 응시」·「시험 결과」가 같은 머리(아이콘 · h2 · 한 줄 · 배지) */
 export function SlotCard({ id, title, sub, subPlacement = "below", icon, badge, headingRef, children }: Props) {
   // 표식: 결과 카드는 따로 — 「내가 하는 곳」(data-submit-panel)을 찾는 쪽이 결과 카드를 집지 않게
   const inline = subPlacement === "inline";

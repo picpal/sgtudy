@@ -22,7 +22,6 @@ type ViewProps = { files: FileMeta[]; onOpen: (f: FileMeta) => void; onRemove?: 
 
 const BADGE = "shrink-0 rounded-[6px] bg-surface-2 px-[6px] py-[2px] text-[11px] font-bold text-ink-3";
 
-/** 그림 줄의 56×56 썸네일 버튼 — 누르면 라이트박스(D13). URL 이 아직 없거나 못 불러오면 IMG 배지 */
 function Thumb({ f, preview }: { f: FileMeta; preview: AttachmentPreview }) {
   const url = preview.thumbs.get(f.id);
   const [bad, setBad] = useState<ReadonlySet<string>>(new Set());
@@ -31,7 +30,7 @@ function Thumb({ f, preview }: { f: FileMeta; preview: AttachmentPreview }) {
   const svg = isSvgMime(f.contentType);
   return (
     <button type="button" aria-label={`${f.name} 크게 보기`} onClick={() => preview.onPreview(f)} className={`relative h-14 w-14 shrink-0 cursor-zoom-in overflow-hidden rounded-[10px] border border-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint ${svg ? "bg-white" : "bg-surface-2"}`}>
-      {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다(스펙 D17) */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다 */}
       <img
         src={url}
         alt=""
@@ -54,7 +53,6 @@ function Thumb({ f, preview }: { f: FileMeta; preview: AttachmentPreview }) {
   );
 }
 
-/** 보기 상세의 "첨부 파일 n" 목록 — 0개면 아무것도 그리지 않는다 */
 export function NodeAttachmentsView({ files, onOpen, onRemove, busy = null, removing = false, headingRef, preview }: ViewProps) {
   const id = useId();
   if (files.length === 0) return null;
@@ -89,7 +87,7 @@ export function NodeAttachmentsView({ files, onOpen, onRemove, busy = null, remo
   );
 }
 
-/** 컨테이너 — 목록은 useNodeFiles 가 마운트 뒤 한 번 받아 설명 그림과 같이 쓴다. 서버가 볼 권한을 판단하므로 받은 것만 그린다 */
+/** 목록은 useNodeFiles 가 받아 설명 그림과 같이 쓴다. 볼 권한은 서버가 판단하므로 받은 것만 그린다 */
 export function NodeAttachments({ nodeId, files, setFiles, canRemove, toast, preview }: { nodeId: string; files: FileMeta[]; setFiles: (l: FileMeta[]) => void; canRemove: boolean; toast: (m: ToastMsg) => void; preview?: AttachmentPreview }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [asking, setAsking] = useState<FileMeta | null>(null);

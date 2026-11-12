@@ -52,7 +52,7 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
   const hasToday = tIdx >= 0 && tIdx < nDays;
   const todayX = tIdx * dw + dw / 2;
   const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !listClosed(tree.roots, p.closed, today)[id] } }));
-  // 처음(및 확대 단위 변경 시) 오늘이 차트 영역 가운데쯤 오도록 가로 스크롤 (Q1-21/Q3-08)
+  // 처음(및 확대 단위 변경 시) 오늘이 차트 영역 가운데쯤 오도록 가로 스크롤
   const scroller = useRef<HTMLDivElement>(null);
   const labelCol = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -129,7 +129,7 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
               const personal = n.leaf && n.personal;
               const done = personal && personalDone(n);
               const owner = personal ? ownerOf(n) : null;
-              // 남의 개인 목표에만 소유자 표시 (결정 5 — 내 것에는 "나" 칩·아바타 없음)
+              // 남의 개인 목표에만 소유자 표시 — 내 것에는 "나" 칩·아바타 없음
               const other = personal && owner && owner.userId !== meId ? owner : null;
               const what = personal ? `개인 목표${other ? ` · ${other.name}` : ""} · ${codeLabel(n, owner?.c ?? "P")}` : n.leaf ? (n.asg ? `${n.sub}/${n.asg} 제출` : "담당자 미정") : `${n.pct}%`;
               const tip = `${n.title} · ${md(n.s)}–${md(n.e)} · ${what}`;

@@ -24,7 +24,7 @@ type Props = {
 
 const NOT_ACTIVE = "스터디가 진행 중일 때 완료할 수 있어요";
 
-/** 완료 체크 — 44px 버튼, 보이는 원은 22px. 완료면 초록 채움 + 체크. 비활성 이유(title)는 툴팁이 안 뜨는 환경을 위해 aria-describedby 로도 */
+/** 비활성 이유(title)는 툴팁이 안 뜨는 환경을 위해 aria-describedby 로도 */
 function CheckButton({ n, done, disabled, busy, title, onClick }: { n: LeafNode; done: boolean; disabled: boolean; busy: boolean; title?: string; onClick: () => void }) {
   const whyId = `why-${n.id}`;
   return (
@@ -58,7 +58,6 @@ function CheckButton({ n, done, disabled, busy, title, onClick }: { n: LeafNode;
   );
 }
 
-/** 목표 한 줄의 본문 버튼(누르면 그 상세) — [개인] 제목 · 기간 · 상태 */
 function GoalBody({ n, onOpen, padLeft }: { n: LeafNode; onOpen: (id: string) => void; padLeft: string }) {
   const c = ownerCode(n);
   return (
@@ -82,14 +81,10 @@ const Disclosure = ({ open }: { open: boolean }) => (
   </svg>
 );
 
-/**
- * 회차 상세의 개인 목표 섹션 (스펙 §4.5) — 팀 과제 목록(ChildList) 아래.
- * "내 개인 목표" = 체크로 바로 완료 + 끝에 "＋ 내 목표 추가". "팀원 개인 목표" = 기본 접힘 → 멤버별 → 그 사람 목표(읽기 전용).
- */
 export function PersonalSection({ round, meId, isLeader, roomStatus, personal, api, onOpen }: Props) {
   const mine = round.kids.filter((k): k is LeafNode => isPersonal(k) && meId !== null && k.ownerId === meId);
   const others = groupOthers(round, meId, isLeader);
-  // 머리 개수는 보관 제외(personalStats 와 같은 기준) — 보관된 줄은 흐리게 보여도 세지 않는다
+  // 보관된 줄은 흐리게 보여도 머리 개수에는 세지 않는다
   const counts = sectionCounts(round, meId, isLeader);
   const othersRows = others.reduce((a, g) => a + g.items.length, 0);
   const eligible = !!personal?.canAdd;
@@ -109,7 +104,7 @@ export function PersonalSection({ round, meId, isLeader, roomStatus, personal, a
       setBusy(null);
     }
   };
-  // 닫으면 "＋ 내 목표 추가" 로 — 버튼이 다시 그려진 뒤(effect, /tasks 와 같은 훅)
+  // 닫으면 "＋ 내 목표 추가" 로 — 버튼이 다시 그려진 뒤라 effect 에서
   const refocus = useRefocusOnClose(adding);
   const closeAdd = () => {
     refocus(() => document.querySelector<HTMLButtonElement>(`[data-add-personal="${CSS.escape(round.id)}"]`));

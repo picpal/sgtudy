@@ -5,11 +5,7 @@ import type { RowMove } from "../rounds";
 
 type Props = { title: string; moves: RowMove[]; onMove: (m: RowMove) => void; disabled?: boolean };
 
-/**
- * 편집 목록 과제·묶음 행의 "⋯ 옮기기" 메뉴 (Q2-4) — 드래그 핸들이 없는 390·키보드에서도 순서·회차를 바꾼다.
- * 누르는 자리 44px · 보이는 상자 32px(행의 "+"·삭제 버튼과 같은 모양). WAI-ARIA menu: 열면 첫 항목, ↑↓·Home·End, Esc 는 닫고 버튼으로, Tab 은 닫는다.
- * "다른 회차로" 항목 앞에는 소제목(메뉴 항목 아님)을 둔다.
- */
+/** 드래그 핸들이 없는 좁은 화면·키보드에서도 순서·회차를 바꿀 수 있게 하는 메뉴 */
 export function RowMenu({ title, moves, onMove, disabled = false }: Props) {
   const [open, setOpen] = useState(false);
   // 목록 상자가 overflow:hidden(둥근 모서리)이라 메뉴는 화면 기준(fixed)으로 띄운다 — 아래 자리가 모자라면 버튼 위로

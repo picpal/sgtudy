@@ -42,11 +42,7 @@ type Dialog =
 
 const BTN = "h-11 rounded-[22px] px-4 text-[13px] font-semibold disabled:opacity-60";
 
-/**
- * 진행 중 나가기 — 그룹장 쪽 (시나리오 QA D3). 멤버 관리 카드 안에 붙는다(진행중·미보관 방만).
- * 탈퇴 요청 목록(#leave-requests 알림 앵커): [내보내기] · [반려]. 요청이 없어도 [팀원 내보내기] 로 고른 팀원을 내보낸다.
- * 내보내기 = member_deactivate_preview → 미제출 지정 과제마다 "담당에서 빼기 / 다른 팀원에게 맡기기" → member_deactivate. 제출 기록은 남는다.
- */
+/** 진행 중 나가기의 그룹장 쪽 — 요청이 없어도 [팀원 내보내기] 로 고른 팀원을 내보낼 수 있다. #leave-requests 는 알림 앵커 */
 export function LeaveAdmin({ slug, today, members, leaderDoesTasks, leaveRequestCount, toast }: Props) {
   const router = useRouter();
   const [items, setItems] = useState<LeaveRequestItem[] | null>(leaveRequestCount > 0 ? null : []);
@@ -54,7 +50,7 @@ export function LeaveAdmin({ slug, today, members, leaderDoesTasks, leaveRequest
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [busy, setBusy] = useState(false);
   const hit = useHashTarget("leave-requests", items !== null || !!error);
-  // 한 번 딥링크로 찾아온 목록은 남긴다 — 처리된 요청 알림(0건)으로 와도 목록이 사라져 포커스가 body 로 가지 않게 (재리뷰 Minor B)
+  // 한 번 딥링크로 찾아온 목록은 남긴다 — 처리된 요청 알림(0건)으로 와도 목록이 사라져 포커스가 body 로 가지 않게
   const [stuck, setStuck] = useState(false);
   if (hit && !stuck) setStuck(true);
 
@@ -238,7 +234,7 @@ function PlanList({ dialog, members, leaderDoesTasks, onChoose }: { dialog: Extr
                 className="h-11 rounded-[10px] border border-line bg-surface px-3 text-[14px] text-ink"
               >
                 {others.length > 0 ? <option value="exclude">담당에서 빼기</option> : cands.length > 0 && <option value="">맡길 사람 고르기</option>}
-                {/* 0027: 혼자 맡은 과제는 담당 미정으로 둘 수 있다 */}
+                {/* 혼자 맡은 과제는 담당 미정으로 둘 수 있다 */}
                 {others.length === 0 && <option value="unassign">담당 미정으로 두기</option>}
                 {cands.map((c) => (
                   <option key={c.userId} value={c.userId}>

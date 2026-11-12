@@ -13,11 +13,10 @@ type Props = {
   /** 승인 대기 — 받지 않고 안내만(공지와 같다) */
   viewerPending: boolean;
   toast: (m: ToastMsg) => void;
-  /** 회차 기간(커리큘럼 루트 노드) — 카드·상세 머리의 기간 줄 */
+  /** 회차 기간(커리큘럼 루트 노드) */
   periods?: RoundPeriods;
 };
 
-/** 오답노트 탭 (스펙 §6.1 · D22~) — 회차 카드 → ?round= 상세. 본문은 내 과제와 같은 WrongNoteList */
 export function WrongNoteTab({ slug, viewerPending, toast, periods }: Props) {
   // 서버도 승인 대기면 viewer: "pending" 으로 빈 응답을 준다 — 화면 정보보다 늦게 바뀐 경우
   const [serverPending, setServerPending] = useState(false);

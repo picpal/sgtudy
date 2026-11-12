@@ -6,7 +6,7 @@ import { sizeText } from "../submission";
 
 type Props = { s: Pick<Submission, "bodyMd" | "links" | "files">; onOpenFile: (f: FileMeta) => void };
 
-/** 제출물 한 건 읽기 — 본문 · 링크 · 파일 (내 제출 카드 · 제출 현황 펼침 공용). 안쪽 스크롤 없이 내용만큼 자란다 */
+/** 안쪽 스크롤 없이 내용만큼 자란다 */
 export function SubmissionView({ s, onOpenFile }: Props) {
   const empty = s.bodyMd.trim() === "" && s.links.length === 0 && s.files.length === 0;
   return (

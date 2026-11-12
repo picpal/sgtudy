@@ -12,11 +12,7 @@ import { CODE_COLOR, CODE_LABEL, CODE_STATUS, boardColumn, codeLabel, ddayLabel,
 import { boardSource } from "../sources";
 import type { BoardMode, ScreenState, Update } from "../state";
 
-/**
- * 보드 회차 필터 선택지 — 회차가 20개쯤 되면 칩이 여러 줄로 쌓여 칸반을 밀어내서 드롭다운 하나로 고른다.
- * 제목은 "1주차 · 제목"(라벨 없으면 제목만), 아래 줄은 기간과 그 회차 과제 수(counts — 지금 칸반 범위 기준).
- * 꼬리표: 보관된 회차 "보관됨", 오늘이 든 회차 "이번 회차", 끝난 회차 "종료". 앞으로의 회차는 꼬리표 없음.
- */
+/** 회차가 20개쯤 되면 칩이 여러 줄로 쌓여 칸반을 밀어내서 드롭다운 하나로 고른다. counts 는 지금 칸반 범위 기준 */
 export function boardRoundOptions(roots: Tree["roots"], today: string, counts: Record<string, number> = {}): ListboxOption[] {
   const n = (k: number) => `과제 ${k}개`;
   const total = Object.values(counts).reduce((a, b) => a + b, 0);

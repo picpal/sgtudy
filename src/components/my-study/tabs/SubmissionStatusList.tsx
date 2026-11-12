@@ -18,11 +18,11 @@ type Props = {
   personal?: boolean;
   headingRef?: Ref<HTMLHeadingElement>;
   onOpenFile: (f: FileMeta) => void;
-  /** false = 펼침 없음(시험 — 제출 행에 볼 내용이 없고 점수는 본인·편집자만, 스펙 D7) */
+  /** false = 펼침 없음(시험 — 제출 행에 볼 내용이 없고 점수는 본인·편집자만) */
   expandable?: boolean;
 };
 
-/** 담당자별 제출 현황 (스펙 §2.4). 펼침은 task_get.submissions 에 있는 줄만 — 트리 people 로 제출물을 추측하지 않는다 */
+/** 펼침은 task_get.submissions 에 있는 줄만 — 트리 people 로 제출물을 추측하지 않는다 */
 export function SubmissionStatusList({ rows, sub, asg, note, archived = false, personal = false, headingRef, onOpenFile, expandable = true }: Props) {
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) =>
@@ -33,7 +33,7 @@ export function SubmissionStatusList({ rows, sub, asg, note, archived = false, p
       return n;
     });
   return (
-    // id="submissions": 알림 딥링크 앵커(TASK_ALL_SUBMITTED·SUBMISSION_DIGEST → ?task=…#submissions, 0024 계약 §7)
+    // id="submissions": 알림 딥링크 앵커(TASK_ALL_SUBMITTED·SUBMISSION_DIGEST → ?task=…#submissions)
     <section id="submissions" tabIndex={-1} aria-labelledby="sub-status-title" className="flex scroll-mt-20 flex-col gap-2 outline-none">
       <h3 id="sub-status-title" ref={headingRef} tabIndex={-1} className="m-0 scroll-mt-20 text-[15px] font-bold text-ink outline-none">
         {statusHeadOf(personal, sub, asg)}

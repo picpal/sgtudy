@@ -18,8 +18,7 @@ type Props = {
   refreshKey?: string;
 };
 
-/** 그룹장·편집자 결과 보기 — 「시험 결과」 카드(머리 한 줄에 요약) · 문항별 정답률 · 멤버별 점수와 [답안 ▸](스펙 §4.5). 점수는 본인과 편집자만(D7).
- *  카드만 그린다 — 자리(submitSlot)로 보내는 건 ExamSection 이 「시험 응시」 카드와 한 포털에 묶어서 */
+/** 카드만 그린다 — 자리(submitSlot)로 보내는 건 ExamSection 이 「시험 응시」 카드와 한 포털에 묶어서 */
 export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
   const [data, setData] = useState<ExamResultsDto | null>(null);
   const [error, setError] = useState(false);
@@ -146,7 +145,6 @@ export function ExamResults({ slug, nodeId, toast, refreshKey = "" }: Props) {
   );
 }
 
-/** 그 멤버의 문항별 답·정오 — 응시 결과 화면과 같은 뷰, 읽기 전용 */
 function AttemptView({ v, name, scope }: { v: ExamView; name: string; scope: string }) {
   const qs = v.questions ? [...v.questions].sort((a, b) => a.ord - b.ord) : [];
   const sum = resultSummary(v);

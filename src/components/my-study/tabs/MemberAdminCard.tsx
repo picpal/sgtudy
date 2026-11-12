@@ -19,16 +19,14 @@ type Props = {
   members: RoomMemberDto[];
   meId: string;
   toast: (m: ToastMsg) => void;
-  /** 개인 목표 열 — 저장된 트리(Tree.personal = 보관 제외)와 이번 회차(thisRoundId — /tasks 와 같은 규칙, 모집·진행 중이 아니면 null) */
+  /** roundId 는 /tasks 와 같은 thisRoundId — 모집·진행 중이 아니면 null */
   tree: Tree;
   roundId: string | null;
-  /** "팀원 개인 목표 보기 →" — 진행목표 보기 + 팀원 목표 칩 켜기 */
   onShowOthers: () => void;
-  /** 진행중·미보관 방만 — 탈퇴 요청 처리·내보내기 (시나리오 QA D3) */
+  /** 진행중·미보관 방만 — 탈퇴 요청 처리·내보내기 */
   leave?: { today: string; leaderDoesTasks: boolean; leaveRequestCount: number };
 };
 
-/** 그룹장 전용 "멤버 관리" — 참가 중인 팀원에게 커리큘럼 편집 권한을 주고 거둔다 (기본은 그룹장만 편집) */
 export function MemberAdminCard({ slug, members, meId, toast, tree, roundId, onShowOthers, leave }: Props) {
   const router = useRouter();
   // 낙관적 값 — 응답이 실패하면 지운다(원래 값으로). 성공하면 서버 값과 같으므로 그대로 둔다
@@ -38,7 +36,6 @@ export function MemberAdminCard({ slug, members, meId, toast, tree, roundId, onS
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const rows = editorRows(members, ov);
   const others = rows.filter((r) => !r.leader);
-  // 개인 목표 · 이번 회차 완료/전체 (팀 수치와 따로)
   const statOf = (userId: string) => {
     if (roundId === null) return { text: "–", label: "지금 진행 중인 회차가 없어요" };
     const { done, total } = personalStats(tree.personal, userId, roundId);

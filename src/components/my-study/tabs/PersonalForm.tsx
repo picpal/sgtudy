@@ -40,10 +40,7 @@ type Props = {
 const field = "h-11 w-full min-w-0 rounded-[10px] border border-line-3 bg-surface px-3 text-[14px] text-ink";
 const label = "flex min-w-0 flex-col gap-[6px] text-[12px] font-semibold text-ink-3";
 
-/**
- * 개인 목표 편집 폼 (스펙 §4.6, 시안 B-2) — 상세 자리에서 펼쳐진다. 제목 · 회차(+ 기간 미리보기) · 시작/마감 · 설명.
- * 유형·담당자 없음. 저장 = personal_update 한 번(회차 이동 + 기간 + 내용 원자적).
- */
+/** 저장 = personal_update 한 번 — 회차 이동·기간·내용을 원자적으로 */
 export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onUploadingChange, toast }: Props) {
   const [d, setD] = useState<PersonalDraft>(() => draftOf(n));
   const [note, setNote] = useState("");
@@ -104,7 +101,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
 
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
-    // 좁은 화면에서는 폼이 방 머리·탭 아래 멀리 있다 — 상세 섹션(sticky 머리 포함)을 맨 위로 맞춰 폼이 바로 보이게 (QA Q1-8)
+    // 좁은 화면에서는 폼이 방 머리·탭 아래 멀리 있다 — 상세 섹션(sticky 머리 포함)을 맨 위로 맞춰 폼이 바로 보이게
     const el = formRef.current?.closest("section") ?? formRef.current;
     if (el && formScrollNeeded(el.getBoundingClientRect().top, window.innerHeight)) el.scrollIntoView({ block: "start" });
   }, []);
@@ -163,7 +160,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
     try {
       if (steps[0] === "files") {
         try {
-          const attached = await setNodeFilesFrom(n.id, sent!, savedIds); // base = 지금 붙어 있다고 보는 목록(D30)
+          const attached = await setNodeFilesFrom(n.id, sent!, savedIds); // base = 지금 붙어 있다고 보는 목록
           setSavedFiles(attached);
           // 저장하는 사이 또 고쳤다면 그 선택은 남긴다 — 보낸 것과 같을 때만 저장본으로 맞춘다
           setFileIds((cur) => (cur && sameIds(cur, sent!) ? attached.map((f) => f.id) : cur));
@@ -273,7 +270,7 @@ export function PersonalForm({ n, roots, period, api, onDone, onDirtyChange, onU
       <p className="m-0 text-[12px] text-muted">
         유형·담당자는 없어요 · 기간은 방 기간({rangeShort(period.start, period.end, today)}) 안에서 정해 주세요
       </p>
-      {/* 취소 · 임시저장(저장하고 머문다) · 저장(저장하고 상세로) — 390 에서 한 줄, 넘치면(올리는 중 문구) 줄바꿈 */}
+      {/* 390 에서 한 줄, 넘치면(올리는 중 문구) 줄바꿈 */}
       <div className="flex flex-wrap justify-end gap-2">
         <button type="button" onClick={cancel} className="h-11 rounded-[22px] border border-line-3 bg-surface px-5 text-[14px] font-semibold text-ink">
           취소

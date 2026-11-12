@@ -47,7 +47,7 @@ type Props = {
 /** 트리 안 비활성 안내 줄(한도·빈 회차·소제목) — tree 안에는 treeitem 만 둔다. 선택 대상이 아니라 aria-selected 는 두지 않는다(다른 보기 행과 같게) */
 function InfoRow({ children, tone = "plain", ...rest }: { children: React.ReactNode; tone?: "plain" | "personal" | "heading" } & React.HTMLAttributes<HTMLDivElement> & { "data-limit"?: string }) {
   const item = { role: "treeitem", "aria-level": 3, "aria-disabled": true };
-  // 소제목(시안 C-2): 글자는 행 제목 세로줄(68px = 여백 8 + 들여쓰기 22 + 간격 8 + 점 30)에 맞춘다. 390 은 들여쓰기 10 → 56px
+  // 소제목: 글자는 행 제목 세로줄(68px = 여백 8 + 들여쓰기 22 + 간격 8 + 점 30)에 맞춘다. 390 은 들여쓰기 10 → 56px
   if (tone === "heading")
     return (
       <div {...item} {...rest} className="flex items-center border-b border-line-2 bg-personal-bg pb-[6px] pl-[68px] pr-[18px] pt-2 text-[12px] font-bold text-personal-ink focus-visible:-outline-offset-2 max-sm:pl-[56px]">
@@ -78,24 +78,23 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
   const closed = listClosed(tree.roots, S.closed, today);
   const rows = visibleNodes(tree.roots, closed, scope);
   const canAddPersonal = !isEdit && !!personal?.canAdd;
-  // 준비중 방은 개인 목표를 아직 못 만든다(서버 canAdd: 모집·진행만) — "＋ 내 목표 추가" 자리에 이유 안내 (Q3-3)
+  // 준비중 방은 개인 목표를 아직 못 만든다(서버 canAdd: 모집·진행만) — "＋ 내 목표 추가" 자리에 이유 안내
   const draftNote = !isEdit && roomStatus === "draft";
   const limit = personal?.perRound ?? 20;
   // 회차마다 내 목표(보관 제외)가 한도에 닿았나
   const atLimit = (roundId: string) => !!meId && personalStats(tree.personal, meId, roundId).total >= limit;
   const overall = overallPct(tree.roots) ?? 0;
-  // 담당자 배정 안내는 편집할 수 있는 사람에게만 (Q1-11/Q2-12 — 그룹장 + 편집 권한을 받은 팀원)
+  // 담당자 배정 안내는 편집할 수 있는 사람에게만 (그룹장 + 편집 권한을 받은 팀원)
   const warn = canEdit ? unassignedCount(tree.leaves) : 0;
   const selNode = isEdit ? findNode(tree.nodes, S.editSel) : null;
   const viewNode = !isEdit ? findNode(tree.nodes, S.viewSel) : null;
-  // 댓글 멘션 후보(D11) — 그룹장 + ACTIVE. Tree.members 가 이미 그 집합이다
+  // 댓글 멘션 후보 — 그룹장 + ACTIVE. Tree.members 가 이미 그 집합이다
   const mentionMembers = useMemo(() => tree.members.map((m) => ({ userId: m.userId, nickname: m.name, tone: m.tone })), [tree.members]);
   const parentNode = selNode ? findNode(tree.nodes, selNode.parentId) : null;
   const lastRoot = tree.roots[tree.roots.length - 1];
-  // 다음 회차는 마지막 회차 다음 날부터 7일 — 방 종료일을 넘기면 미리 알려 준다 (E4, Q2-21)
+  // 다음 회차는 마지막 회차 다음 날부터 7일 — 방 종료일을 넘기면 미리 알려 준다
   const nextRoundOut = !!lastRoot && addDays(lastRoot.e, 7) > period.end;
 
-  // 목록 행의 삭제 확인이 열린 항목 (아래 목록 삭제)
   const [ask, setAsk] = useState<string | null>(null);
   const toggle = (id: string) => update((p) => ({ closed: { ...p.closed, [id]: !listClosed(tree.roots, p.closed, today)[id] } }));
   // 상세·편집으로 연 항목(딥링크·보드·알림 포함)이 접힌 회차 안이면 그 회차·묶음을 펼쳐 둔다 — 목록으로 돌아오면 그 자리가 보이게
@@ -120,7 +119,7 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
       void api.create(to.add);
     } else if ("tab" in to) update({ tab: to.tab, calPick: null, confirm: false, leave: null, saved: "" });
     else if ("href" in to) {
-      // 헤더 메뉴·옆 목록 링크 (leaveGuard 가 보류했던 주소). 같은 방 주소면 화면이 다시 그려지지 않으니 목록으로 닫는다 (최종 리뷰 Minor 1)
+      // 헤더 메뉴·옆 목록 링크 (leaveGuard 가 보류했던 주소). 같은 방 주소면 화면이 다시 그려지지 않으니 목록으로 닫는다
       if (samePage(to.href)) update({ editSel: null, quickAdd: null, confirm: false, leave: null, saved: "" });
       else {
         update({ leave: null });
@@ -132,12 +131,11 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
     // 목록에서 연 편집 화면은 [저장] 하면 목록으로 — 편집 화면 안에서 다른 항목으로 옮길 때는 처음 들어온 곳을 그대로 둔다
     else update((p) => ({ editSel: to.sel, editFrom: to.sel === null ? null : p.editSel === null ? "list" : p.editFrom, quickAdd: null, confirm: false, leave: null, saved: "" }));
   };
-  // 편집 모드는 권한을 다시 확인한 뒤에 연다 — 화면을 연 뒤 권한을 거뒀을 수 있다 (시나리오 QA #10)
+  // 편집 모드는 권한을 다시 확인한 뒤에 연다 — 화면을 연 뒤 권한을 거뒀을 수 있다
   async function enterEdit() {
     update({ leave: null });
     if (await api.recheckEdit()) update((p) => modeSwitchPatch(p, "edit"));
   }
-  // 저장하지 않은 수정이 있으면 먼저 묻는다 (Q2-05)
   const request = (to: Leave) => {
     if (editUnsaved(S, S.editSel) && !("sel" in to && to.sel === S.editSel)) update({ leave: to, confirm: false });
     else go(to);
@@ -147,14 +145,14 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
   // 회차 "+"·"과제 추가" 줄 → 목록에 머문 채 그 회차를 펼치고 끝에 빠른 추가 입력 (한 번에 하나)
   const openAdd = (id: string) => update((p) => ({ quickAdd: id, closed: { ...p.closed, [id]: false } }));
   // Esc 로 닫았을 때만(포커스가 갈 곳이 없을 때) "과제 추가" 줄로 — 다른 회차 "+" 를 눌러 닫힌 거면 그쪽 입력을 뺏지 않는다.
-  // 버튼이 다시 그려진 뒤(effect) — 개인 목표 빠른 추가·/tasks 와 같은 훅. 이미 다른 회차로 넘어간 입력의 닫기는 대상을 걸지 않는다
+  // 버튼이 다시 그려진 뒤(effect)에 옮긴다. 이미 다른 회차로 넘어간 입력의 닫기는 대상을 걸지 않는다
   const refocusAdd = useRefocusOnClose(!!S.quickAdd && !S.quickAdd.startsWith("p:"));
   const closeAdd = (id: string) => {
     if (S.quickAdd === id) refocusAdd(() => document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(id)}"]`));
     update((p) => (p.quickAdd === id ? { quickAdd: null } : {}));
   };
   // 목록 드래그 놓기 → 즉시 node_move (다른 회차로 가면 기간 규칙 movedPlan — 묶음은 하위까지 — 적용 + 토스트)
-  // 드래그 놓기와 행 메뉴(⋯ 옮기기, Q2-4)가 같은 길로 node_move 한다
+  // 드래그 놓기와 행 메뉴(⋯ 옮기기)가 같은 길로 node_move 한다
   const moveTo = useCallback(
     (dragId: string, parentId: string, index: number | undefined) => {
       const n = findNode(tree.nodes, dragId);
@@ -163,7 +161,7 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
       const from = roundOf(tree.nodes, n);
       const to = roundOf(tree.nodes, target);
       const cross = !!from && !!to && from.id !== to.id;
-      // 묶음이면 하위 과제까지 같은 규칙으로 (finding 6) — 토스트 기간은 끌어 온 행 자신의 것
+      // 묶음이면 하위 과제까지 같은 규칙으로 — 토스트 기간은 끌어 온 행 자신의 것
       const dates = cross ? movedPlan(n, from, to) : [];
       const period = dates.find((d) => d.id === dragId) ?? null;
       const label = to?.label ?? to?.title;
@@ -200,7 +198,7 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
   const entries = scope.mineOnly ? withEmptyRounds(listed, closed) : listed;
   // "＋ 내 목표 추가" → 그 자리가 빠른 추가 입력 (한 번에 하나 — S.quickAdd 를 편집 목록과 함께 쓴다)
   const openPAdd = (id: string) => update({ quickAdd: pKey(id) });
-  // 닫으면 그 자리 "＋ 내 목표 추가" 로 — 버튼이 다시 그려진 뒤(effect, /tasks 와 같은 훅)
+  // 닫으면 그 자리 "＋ 내 목표 추가" 로 — 버튼이 다시 그려진 뒤라 effect 에서
   const refocusPAdd = useRefocusOnClose(!!S.quickAdd?.startsWith("p:"));
   const closePAdd = (id: string) => {
     refocusPAdd(() => document.querySelector<HTMLButtonElement>(`[data-add-personal="${CSS.escape(id)}"]`));
@@ -408,7 +406,6 @@ export function CurriculumTab({ tree, S, update, onViewBack, api, canEdit, isLea
               );
             }
             if (entry.kind === "empty") return <InfoRow key={`empty-${entry.round.id}`}>이 회차에 내 항목이 없어요</InfoRow>;
-            // 시안 C-2 — 남의 개인 목표 앞 소제목
             if (entry.kind === "others")
               return (
                 <InfoRow key={`others-${entry.round.id}`} tone="heading">

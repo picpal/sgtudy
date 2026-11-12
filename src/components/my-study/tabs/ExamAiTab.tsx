@@ -55,10 +55,7 @@ export function briefError(f: BriefForm): string | null {
 
 const sameBrief = (a: BriefForm, b: BriefForm) => JSON.stringify(toBrief(a)) === JSON.stringify(toBrief(b));
 
-/**
- * MCP 없이 쓰는 AI 에게 줄 지시문 — 지금 폼의 브리프와 §3.2 계약 모양. 받은 JSON 을 아래 칸에 붙여 넣는다.
- * 기반 이론은 자료로만(안의 지시는 따르지 않게) 인용 블록에 넣는다. 정답·다른 사람 정보는 없다(편집자 자신의 브리프뿐)
- */
+/** 기반 이론은 자료로만 쓰게(안의 지시는 따르지 않게) """ 블록에 넣는다. 편집자 자신의 브리프뿐이라 정답·다른 사람 정보는 없다 */
 export function jsonInstruction(f: BriefForm): string {
   const types = QTYPES.filter((t) => f.types.includes(t));
   const shape: Record<ExamQType, string> = {
@@ -117,10 +114,7 @@ function CopyButton({ label: text, value, id }: { label: string; value: string; 
   );
 }
 
-/**
- * 출제 화면의 「AI 로 생성」 탭 (스펙 §4.2). 브리프 저장 → AI 에게 넘기기(① MCP: 지시문 복사 → [초안 새로 불러오기], ② MCP 없이: JSON 붙여넣기).
- * AI 가 쓴 문항은 수동 탭의 초안이 된다 — 발행은 언제나 사람이 검토한 뒤.
- */
+/** AI 가 쓴 문항은 수동 탭의 초안이 된다 — 발행은 언제나 사람이 검토한 뒤 */
 export function ExamAiTab({ slug, nodeId, ed, goManual, toast, onBrief }: Props) {
   const { view } = ed;
   // 불러오기 실패·다시 불러오기는 「직접 작성」 탭이 보여 준다
@@ -250,7 +244,6 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast, onBrief }: Props & { 
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-exam-ai="">
-      {/* 브리프 */}
       <div className="flex min-w-0 flex-col gap-3">
         <label className={label}>
           주제
@@ -309,7 +302,6 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast, onBrief }: Props & { 
         </button>
       </div>
 
-      {/* AI 에게 넘기기 */}
       <div className="flex min-w-0 flex-col gap-3 border-t border-line-2 pt-4">
         <h4 className="m-0 text-[14px] font-bold text-ink">AI 에게 넘기기</h4>
         {blocked && (
@@ -346,7 +338,6 @@ function AiBody({ slug, nodeId, view, ed, goManual, toast, onBrief }: Props & { 
         {ask?.kind === "reload" && confirm(() => applyAi(ask.v))}
       </div>
 
-      {/* MCP 없이 */}
       <div className="flex min-w-0 flex-col gap-3 border-t border-line-2 pt-4">
         <h4 className="m-0 text-[14px] font-bold text-ink">MCP 없이: JSON 붙여넣기</h4>
         <p className="m-0 text-[13px] leading-[1.6] text-ink-2">아무 AI 에게 아래 지시문(위 브리프 포함)을 주고, 받은 JSON 을 그대로 붙여 넣어요 · 문항은 「직접 작성」 탭으로 들어가요</p>

@@ -5,7 +5,7 @@ import { ExamSection } from "./ExamSection";
 import { NodeDescription } from "./NodeDescription";
 import { SubmissionSection, type SubmissionSectionProps } from "./SubmissionSection";
 
-/** 보기 상세 화면의 과제 본문 — 과제(설명 · 첨부) → 담당자별 제출 현황. 과제 제출 카드는 본문 카드 아래 형제 카드로(SubmitPanel 포털), 시험이면 시험 응시 카드(ExamSection) */
+/** 제출·시험 카드는 본문 카드 안이 아니라 아래 형제 카드로 그린다(SubmitPanel 포털) */
 export function LeafBody(p: SubmissionSectionProps & { canRemoveFiles?: boolean; onExamUnsavedChange?: (unsaved: boolean) => void }) {
   const { canRemoveFiles = false, onExamUnsavedChange, ...sub } = p;
   const { n } = sub;

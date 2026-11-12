@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from "react";
 type Half = "top" | "bottom";
 type Over = { id: string; half: Half } | null;
 
-/** 행 핸들 포인터 드래그 (마우스·펜 전용, ≥640 에서만 핸들이 보인다). 키보드·터치 대체: 회차 화면 위/아래 · 과제 화면 회차 선택 */
+/** 마우스·펜 전용 — 키보드·터치는 회차 화면 위/아래 버튼 · 과제 화면 회차 선택으로 대신한다 */
 export function useRowDrag(onDrop: (dragId: string, overId: string, half: Half) => void) {
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOverState] = useState<Over>(null);

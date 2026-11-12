@@ -10,7 +10,7 @@ import { CODE_COLOR, CODE_LABEL, myCode, removePlan, type ParentNode } from "../
 import { InlineConfirm } from "./InlineConfirm";
 import { AddRow, QuickAdd, type AddKind } from "./QuickAdd";
 
-/** 편집 화면에서만 — 순서(위/아래)·삭제는 즉시 RPC, 끝에 빠른 과제 추가 */
+/** 편집 화면에서만 — 순서·삭제는 즉시 RPC */
 export type ChildListEdit = { onMove: (id: string, dir: -1 | 1) => void; onRemove: (id: string) => void; onAdd: (title: string, type?: TaskType, kind?: AddKind) => Promise<boolean>; busy: string | null; canAdd: boolean; designatedNote?: string | null };
 
 type Props = { parent: ParentNode; onOpen: (id: string) => void; edit?: ChildListEdit };
@@ -30,14 +30,14 @@ const IconBtn = ({ label, d, onClick, disabled, tone }: { label: string; d: stri
   </button>
 );
 
-/** 회차(·묶음) 상세/편집 화면의 "이 회차의 과제" 목록. 내용만큼 자란다(안쪽 스크롤 없음) */
+/** 내용만큼 자란다(안쪽 스크롤 없음) */
 export function ChildList({ parent, onOpen, edit }: Props) {
   const meId = useMe()?.id ?? null;
-  // 팀 과제만 — 개인 목표는 회차 상세의 개인 섹션(Task 9)에서, 편집 화면에는 그리지 않는다
+  // 팀 과제만 — 개인 목표는 회차 상세의 개인 섹션이 그린다
   const kids = parent.kids.filter((k) => !(k.leaf && k.personal));
   const [ask, setAsk] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  // Esc 로 닫으면(포커스 갈 곳이 없으면) "과제 추가" 버튼으로 — 다른 곳을 눌러 닫힌 거면 그 포커스를 뺏지 않는다 (공용 훅: 다시 그려진 뒤 effect)
+  // 다른 곳을 눌러 닫힌 거면 그 포커스를 뺏지 않는다 — 갈 곳이 없을 때만 "과제 추가" 버튼으로
   const refocus = useRefocusOnClose(adding);
   const closeAdd = () => {
     refocus(() => document.querySelector<HTMLButtonElement>(`[data-add-task="${CSS.escape(parent.id)}"]`));

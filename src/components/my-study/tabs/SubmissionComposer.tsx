@@ -10,7 +10,6 @@ import { LinkListEditor } from "./LinkListEditor";
 
 type Props = { c: Composer; editing: boolean; late: boolean; personal?: boolean; onCancel?: () => void };
 
-/** 이 기기 임시본 안내 — [이어 쓰기] [버리기] (스펙 §2.7) */
 export function DraftNotice({ at, onResume, onDrop }: { at: string; onResume: () => void; onDrop: () => void }) {
   return (
     <div role="status" className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[#F0D79A] bg-[#FDF4E1] px-[14px] py-2 text-[13px] text-[#6B4700]">
@@ -27,24 +26,22 @@ export function DraftNotice({ at, onResume, onDrop }: { at: string; onResume: ()
 
 const n = (x: number) => x.toLocaleString("en-US");
 
-/** 작성 화면 — 본문 · 링크 · 파일 · 버튼 줄 (스펙 §2.3). 서버 저장은 주 버튼만 */
+/** 서버 저장은 주 버튼만 */
 export function SubmissionComposer({ c, editing, late, personal = false, onCancel }: Props) {
   const id = useId();
   const hintId = `${id}-hint`;
   const over = c.body.length > SUB_LIMITS.body;
   // 한 번이라도 무언가 넣었나 — 빈 상태 안내는 넣었다 비웠을 때만 경고색 (처음 열린 빈 화면은 중립색)
   const [touched, setTouched] = useState(false);
-  // 수정 취소 — 바꾼 게 있으면 조용히 버리지 않고 묻는다 (Q1-11)
+  // 수정 취소 — 바꾼 게 있으면 조용히 버리지 않고 묻는다
   const [asking, setAsking] = useState(false);
   const cancel = () => (c.dirty ? setAsking(true) : onCancel?.());
   if (!touched && (c.body.trim() !== "" || c.links.length > 0 || c.rows.length > 0)) setTouched(true);
-  // 왼쪽 안내: 비활성 이유가 먼저, 없으면 수정·지각 안내
   const empty = c.body.trim() === "" && c.links.length === 0 && c.rows.length === 0;
   const hint = composerHint({ blocker: c.blocker, editing, late, personal, touched, empty });
   return (
     <div className="flex flex-col gap-4">
       {c.pending && <DraftNotice at={c.pending.at} onResume={c.resume} onDrop={c.dropDraft} />}
-      {/* 제출하는 동안 입력 잠금 */}
       <div inert={c.busy} className="flex flex-col gap-4">
         <div className="flex flex-col gap-[6px]">
           <span id={`${id}-body`} className="text-[12px] font-semibold text-ink-3">

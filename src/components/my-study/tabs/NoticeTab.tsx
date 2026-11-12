@@ -16,7 +16,7 @@ import { useRoomArchived } from "../roomArchived";
 import { tabPatch, type Leave, type ScreenState, type Update } from "../state";
 import { InlineConfirm } from "./InlineConfirm";
 
-/** leader: 그룹장 · member: 참가 중(ACTIVE) · left: 이탈(INACTIVE, 읽기만) · pending: 승인 대기(볼 수 없음, D10) */
+/** leader: 그룹장 · member: 참가 중(ACTIVE) · left: 이탈(INACTIVE, 읽기만) · pending: 승인 대기(볼 수 없음) */
 export type NoticeViewer = "leader" | "member" | "left" | "pending";
 
 type Draft = { title: string; bodyMd: string; popup: boolean; pinned: boolean; renotify: boolean };
@@ -40,14 +40,13 @@ type Props = {
   viewer: NoticeViewer;
   /** 종료된 방 — 서버 canWrite 가 거짓인 이유 문구용 (보관은 useRoomArchived) */
   ended: boolean;
-  /** 안 읽은 공지가 남았나 — 탭 점(D9) */
+  /** 안 읽은 공지가 남았나 — 탭 점 */
   onUnread: (unread: boolean) => void;
   toast: (m: ToastMsg) => void;
   /** 바뀌면 목록을 다시 받는다 — 같은 화면에서 공지 알림을 다시 눌렀을 때 */
   reload?: number;
 };
 
-/** 공지 탭 (스펙 §6.3) — 고정 → 최신순 목록, 펼쳐 읽기(읽음 처리), 그룹장은 탭 위 인라인 폼으로 쓰기·고치기 */
 export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, reload = 0 }: Props) {
   const archived = useRoomArchived();
   const router = useRouter();
@@ -73,7 +72,7 @@ export function NoticeTab({ slug, S, update, viewer, ended, onUnread, toast, rel
   }, [slug, pending, tick, reload, onUnread]);
   const refetch = useCallback(() => setTick((t) => t + 1), []);
 
-  // 펼침 = 읽음 (D7) — 안 읽은 공지만 한 번 부른다. 실패해도 읽기는 그대로(다음에 다시 시도)
+  // 펼침 = 읽음 — 안 읽은 공지만 한 번 부른다. 실패해도 읽기는 그대로(다음에 다시 시도)
   const reading = useRef(new Set<string>());
   const toggle = (n: Notice) => {
     const open = S.noticeOpen === n.id ? null : n.id;

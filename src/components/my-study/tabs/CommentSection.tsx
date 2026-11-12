@@ -19,10 +19,10 @@ import { InlineConfirm } from "./InlineConfirm";
 type Props = {
   slug: string;
   nodeId: string;
-  /** 자동완성 후보 — 그룹장 + ACTIVE(D11) */
+  /** 자동완성 후보 — 그룹장 + ACTIVE */
   members: MentionMember[];
   meId: string | null;
-  /** 승인 대기 — 댓글을 볼 수 없다(D2). 부르지 않고 안내만 */
+  /** 승인 대기 — 댓글을 볼 수 없다. 부르지 않고 안내만 */
   viewerPending: boolean;
   toast: (m: ToastMsg) => void;
 };
@@ -33,7 +33,7 @@ const BLOCK_TEXT: Record<Exclude<CommentWriteBlock, "exam_locked">, string> = {
   archived_node: "보관된 항목에는 댓글을 쓸 수 없어요",
 };
 const LOCKED_TEXT = "시험을 제출하면 댓글을 볼 수 있어요";
-/** 창으로 돌아올 때 다시 받는 간격(D19) */
+/** 창으로 돌아올 때 다시 받는 간격 */
 const STALE_MS = 30_000;
 const FLASH_MS = 2000;
 // 쓰기 실패 중 화면 상태(쓰기 가능·잠금·댓글 유무)가 그새 바뀌었을 수 있는 것 — 목록을 다시 받는다
@@ -61,9 +61,8 @@ const linksTo = (nodeId: string) => (search: string) => {
 const absTime = (iso: string) => new Date(iso).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
 
 /**
- * 회차·과제 보기 상세 하단 「댓글」 (스펙 §6.3) — 오래된 → 최신, 처음엔 최신 50 + [이전 댓글 더 보기], 아래 입력창.
- * 갱신은 실시간 없이 등록·수정·삭제 뒤 · 창으로 돌아올 때(30초 지났으면) · 딥링크 도착(D19).
- * 딥링크 #comment-{id}: from={id} 로 불러 그 댓글을 꼭 넣고, 다 그려지면 useHashPrefixTarget 이 가운데로 스크롤 + 포커스, 2초 강조(D16)
+ * 갱신은 실시간 없이 등록·수정·삭제 뒤 · 창으로 돌아올 때(STALE_MS 지났으면) · 딥링크 도착.
+ * 딥링크 #comment-{id} 는 from={id} 로 불러 그 댓글을 꼭 넣은 뒤 useHashPrefixTarget 이 찾아간다
  */
 export function CommentSection({ slug, nodeId, members, meId, viewerPending, toast }: Props) {
   const ids = useId();
@@ -115,7 +114,7 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
   // 딥링크 — 그 댓글부터(from). 없거나 지워졌으면 서버가 최신 쪽을 주고 target 으로 알린다
   useEffect(() => {
     if (!want || viewerPending) return;
-    // 딥링크는 자기 번호로만 버린다(더 새 딥링크가 왔을 때) — 창 복귀 조회가 끼어도 반드시 끝을 맺어(done) 훅이 찾아가고 해시를 지운다 (리뷰 M7)
+    // 딥링크는 자기 번호로만 버린다(더 새 딥링크가 왔을 때) — 창 복귀 조회가 끼어도 반드시 끝을 맺어(done) 훅이 찾아가고 해시를 지운다
     const myDeep = ++deep.current;
     deepBusy.current = true;
     const from = commentIdOfHash(want);
@@ -233,7 +232,7 @@ export function CommentSection({ slug, nodeId, members, meId, viewerPending, toa
 
   const heading = (
     <h3 id={`${ids}-h`} className="m-0 text-[16px] font-bold text-ink">
-      {/* 시험 잠금이면 개수도 숨긴다(D4 — 0043 서버는 total 을 null 로 준다) */}
+      {/* 시험 잠금이면 개수도 숨긴다(서버도 total 을 null 로 준다) */}
       댓글{page && !page.locked && page.total != null && <span className="ml-[6px] font-semibold text-ink-3">{page.total}</span>}
     </h3>
   );

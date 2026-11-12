@@ -12,7 +12,7 @@ import { personalStats, type Tree } from "../model";
 import { personalLineText } from "../personal";
 import { Inline, MarkdownView } from "../MarkdownView";
 
-/** 빈 섹션 안내 (Q2-11) — 그룹장에게는 채우는 곳으로 가는 링크 */
+/** 그룹장에게는 채우는 곳으로 가는 링크를 붙인다 */
 function Empty({ text, href, cta }: { text: string; href?: string; cta?: string }) {
   return (
     <p className="m-0 flex flex-wrap items-center gap-x-2 rounded-[12px] bg-surface-2 px-[14px] py-3 text-[13px] text-muted">
@@ -44,11 +44,10 @@ const LEGEND: [TaskStatus, string][] = [
   ["planned", "예정"],
 ];
 
-/** 참가자 내 카드 줄 — "개인 목표 이번 회차 d/t 완료 · 내 과제에서 보기 →" (팀 수치와 따로) */
 export function MyPersonalLine({ tree, userId, roundId, slug, today }: { tree: Tree; userId: string; roundId: string; slug: string; today?: string }) {
   const { done, total } = personalStats(tree.personal, userId, roundId);
   const round = tree.roots.find((r) => r.id === roundId) ?? null;
-  // 시작 전 회차(모집 중 첫 회차)는 "이번 회차" 라 부르지 않는다 (시나리오 QA #14)
+  // 시작 전 회차(모집 중 첫 회차)는 "이번 회차" 라 부르지 않는다
   const line = personalLineText({ done, total }, today && round ? { label: round.label, s: round.s } : null, today ?? "");
   return (
     <div data-my-personal className="flex flex-wrap items-center gap-x-2 rounded-[12px] bg-personal-bg px-[14px] text-[13px] text-ink-2">
@@ -69,8 +68,7 @@ export function MyPersonalLine({ tree, userId, roundId, slug, today }: { tree: T
   );
 }
 
-/** roundId = 개인 목표 "이번 회차"(thisRoundId — /tasks 와 같은 규칙). 모집·진행 중이 아닌 방이면 null → 내 개인 목표 줄 없음 */
-/** onOpenTask = 이번 회차 과제 카드 누름 → 그 과제의 진행목표 보기 상세 (보드 카드와 같은 goLeaf). 시험 과제도 같은 상세(시험 영역)로 */
+/** roundId 는 /tasks 와 같은 thisRoundId — 모집·진행 중이 아닌 방이면 null 이라 내 개인 목표 줄이 없다 */
 export function OverviewTab({ room, tree, roundId, onGoCurriculum, onOpenTask, periodWarning, today }: { room: StudyRoom; tree: Tree; roundId: string | null; onGoCurriculum: () => void; onOpenTask?: (id: string) => void; periodWarning?: React.ReactNode; today?: string }) {
   const cur = room.cur;
   const hasTasks = cur.tasks.length > 0;
@@ -80,9 +78,7 @@ export function OverviewTab({ room, tree, roundId, onGoCurriculum, onOpenTask, p
   const settings = owner ? routes.roomSettings(room.id, routes.myStudy(room.id)) : undefined;
   return (
     <>
-      {/* 방 기간을 벗어난 회차 경고 (PeriodWarning — 진행목표와 같은 줄) */}
       {periodWarning && <div className="mt-[22px]">{periodWarning}</div>}
-      {/* 이번 회차 */}
       <div className="mt-[22px] flex flex-col gap-[14px] rounded-[18px] border border-line px-5 py-[18px]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="inline-flex h-7 items-center gap-[6px] rounded-[14px] bg-lav-soft px-[11px] text-[12px] font-semibold text-lav-text">

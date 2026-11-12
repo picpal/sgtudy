@@ -7,11 +7,8 @@ const GAP = 6;
 const MARGIN = 8;
 
 /**
- * @param a  누른 막대의 getBoundingClientRect
- * @param x  누른 가로 위치(마우스). 키보드로 열었으면 null — 막대 가운데
- * @param h  팝오버 실제 높이
- * @param vw @param vh 화면 너비·높이
- * @param box 가로로 머물 칸(캘린더 표의 left·right) — 옆 메뉴를 덮지 않게. 팝오버보다 좁으면 화면 전체
+ * @param x  키보드로 열었으면 null — 막대 가운데
+ * @param box 가로로 머물 칸(캘린더 표) — 옆 메뉴를 덮지 않게. 팝오버보다 좁으면 화면 전체
  */
 export function placeCalPopover(a: Rect, x: number | null, h: number, vw: number, vh: number, box?: { left: number; right: number }): Placement {
   const width = Math.min(POP_W, vw - MARGIN * 2);
@@ -38,7 +35,5 @@ export const samePlacement = (a: Placement | null, b: Placement) =>
 
 /** PC: 바탕을 이만큼(막대가 움직인 거리 누적) 스크롤하면 닫는다 — 휠 한 칸(≈100px) 정도. 살짝 건드린 건 그대로 */
 export const SCROLL_CLOSE_PX = 100;
-/** 막대가 지난번 자리에서 움직인 거리 */
 export const barMoved = (a: Rect, b: Rect) => Math.abs(b.top - a.top) + Math.abs(b.left - a.left);
-/** 막대가 화면 밖으로 완전히 나갔는가 */
 export const offScreen = (r: Rect, vw: number, vh: number) => r.bottom <= 0 || r.top >= vh || r.right <= 0 || r.left >= vw;

@@ -8,9 +8,9 @@ import { activeQuery, displayLength, insertMention, isImeComposing, matchMembers
 import { clearCommentDraft, draftStore, readCommentDraft, writeCommentDraft } from "../commentDraft";
 import { CommentBody } from "./CommentBody";
 
-/** 자동완성 후보 — 방 그룹장 + ACTIVE 멤버(D11) */
+/** 자동완성 후보 — 방 그룹장 + ACTIVE 멤버 */
 export type MentionMember = { userId: string; nickname: string; tone: Tone };
-/** [답글] — 입력창 끝에 `@작성자 ` 를 넣고 포커스(D5) */
+/** [답글] — 입력창 끝에 `@작성자 ` 를 넣고 포커스 */
 export type ComposerHandle = { reply: (p: MentionPick) => void; focus: () => void };
 
 type Props = {
@@ -18,7 +18,7 @@ type Props = {
   meId: string | null;
   /** 수정 모드 — 저장 본문을 toEditable 로 바꾼 글·picks */
   initial?: { text: string; picks: MentionPick[] };
-  /** 새 댓글 임시 저장 키(D24) — 수정 모드는 없음 */
+  /** 새 댓글 임시 저장 키 — 수정 모드는 없음 */
   draftKey?: string | null;
   submitLabel: string;
   /** body = 저장 본문(토큰, 앞뒤 공백 정리). true 면 비운다(새 댓글)·닫힌다(수정) */
@@ -34,9 +34,7 @@ const MAX_LINES = 8;
 const LINE_PX = 22;
 
 /**
- * 댓글 입력창 (§6.3·§6.4) — 평범한 textarea(모바일·IME 단순) + `@` 멤버 자동완성(MentionPicker).
- * 고른 멤버는 입력창에 `@닉네임` 으로 보이고 picks 에 기록 → 등록 때 toTokens 가 `<@uuid>` 로 바꾼다(공백 있는 닉네임도 안전).
- * 키: Enter 줄바꿈 · Cmd/Ctrl+Enter 등록 · 후보가 열려 있으면 ↑↓ 이동, Enter·Tab 선택, Esc 닫기.
+ * 평범한 textarea — 모바일·IME 가 단순하다. 고른 멤버는 입력창에 `@닉네임` 으로 보이고 picks 에 기록 → 등록 때 toTokens 가 `<@uuid>` 로 바꾼다(공백 있는 닉네임도 안전).
  * 한글 조합 중(isComposing·229)에는 이 키들을 처리하지 않는다 — 조합 확정 Enter 가 선택·등록으로 새지 않게.
  * (Android Gboard 는 모든 키를 229 로 보내 ↑↓/Enter 선택이 안 된다 — 모바일은 탭이 주 경로라 그대로 둔다)
  * 조합 중에 후보를 마우스·탭으로 고르면 조합을 먼저 끝내고(blur → compositionend) 그 확정 글로 넣는다 — 조합 도중 value 를 바꾸면 Safari·iOS 에서 음절이 겹친다
@@ -258,7 +256,7 @@ export function CommentComposer({ members, meId, initial, draftKey = null, submi
     <div className="flex flex-col gap-2">
       <div className="relative">
         {open && (
-          // 캐럿 좌표 대신 입력창 바로 위에 고정(§6.4) — 모바일은 가상 키보드 위, 폭은 입력창과 같아 화면 밖으로 나가지 않는다
+          // 캐럿 좌표 대신 입력창 바로 위에 고정 — 모바일은 가상 키보드 위, 폭은 입력창과 같아 화면 밖으로 나가지 않는다
           <ul
             id={listId}
             role="listbox"

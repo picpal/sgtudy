@@ -16,7 +16,7 @@ type Props = {
   mineLabel?: string;
   /** 결과 모드의 해설을 펼친 채로 — 오답노트 다시 풀기 채점 뒤(기본 접힘) */
   explanationOpen?: boolean;
-  /** 응시 중 「AI에게 물어보기」를 허용한 시험의 node id(시험 옵션, 0055) — take 모드에서만 쓴다. 없으면 응시 중엔 제외(D16) */
+  /** 응시 중 「AI에게 물어보기」를 허용한 시험의 node id(시험 옵션) — take 모드에서만 쓴다. 없으면 응시 중엔 제외 */
   askAiNode?: string;
 } & (
   | { mode: "take"; onChange: (answer: unknown) => void; disabled?: boolean }
@@ -29,7 +29,7 @@ const nums = (v: unknown): number[] => (Array.isArray(v) ? v.filter((x): x is nu
 // 하단 고정 막대(약 64px)에 가리지 않게 — 키보드로 옮겨 가도 막대 위로 스크롤된다
 const row = "flex min-h-11 scroll-mb-20 items-center gap-3 rounded-[10px] border px-3 py-2 text-[14px]";
 
-/** 시험 문항 1개 — 응시(라디오·체크·O/X 두 버튼·단답 칸) 또는 결과(내 답·정답·정오·해설). 서버가 보낸 키만 그린다 */
+/** 서버가 보낸 키만 그린다 */
 export function ExamQuestionView(p: Props) {
   const { q, no, mine, idScope, mineLabel = "내 답", explanationOpen = false, askAiNode } = p;
   const askAi = p.mode === "take" ? (askAiNode ? "exam_take" : "off") : "exam";

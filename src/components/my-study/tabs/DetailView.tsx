@@ -46,7 +46,7 @@ type Props = {
   viewerPending: boolean;
   isLeader: boolean;
   quietNotAssigned: boolean;
-  /* 개인 목표 (Task 9) — 편집 폼의 회차 선택·방 기간, 추가 자격, RPC */
+  /* 개인 목표 — 편집 폼의 회차 선택·방 기간, 추가 자격, RPC */
   roots: ParentNode[];
   period: { start: string; end: string };
   personal?: { canAdd: boolean; perRound: number };
@@ -61,7 +61,6 @@ type Props = {
 
 const NOT_ACTIVE = "스터디가 진행 중일 때 완료할 수 있어요";
 
-/** 개인 목표 ⋯ 메뉴 — 보관(해제) · 삭제. Esc·바깥 클릭으로 닫히고 버튼으로 포커스가 돌아온다. 위/아래 화살표로 항목 이동 */
 function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActions; onArchive: () => void; onRemove: () => void }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
@@ -139,7 +138,6 @@ function MoreMenu({ n, a, onArchive, onRemove }: { n: LeafNode; a: PersonalActio
   );
 }
 
-/** 보기 모드 상세 — 목록 자리를 쓰는 읽기 전용 화면 (?tab=curriculum&item=). 회차는 기간·진척·설명·과제 목록, 과제는 설명·담당자별 상태 */
 /**
  * 뒤로 가기 보류 — active 인 동안 같은 주소 기록을 하나 쌓아 둔다. 뒤로 가기로 그 기록이 빠지면 다시 쌓고 onHeld(묻기).
  * 돌려준 unwind(then): 쌓아 둔 기록을 먼저 걷고 then — 화면 안 이동(← 연 곳·탭·링크)이 그 기록에 걸리지 않게, 제출 뒤 갱신이 그 back 과 겹치지 않게.
@@ -187,7 +185,7 @@ function useBackHold(active: boolean, onHeld: () => void): (then: () => void) =>
 export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진행목표", onEdit, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, isLeader, quietNotAssigned, roots, period, personal, api, onUnsavedChange, pendingLeave, members = [] }: Props) {
   const today = useToday();
   const meId = useMe()?.id ?? null;
-  // 위 고정 막대 높이 → 제출·개인 목표 편집기 툴바가 그 밑에 붙는다 (Q1-10)
+  // 위 고정 막대 높이 → 제출·개인 목표 편집기 툴바가 그 밑에 붙는다
   const stickyBar = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLElement>(null);
   useStickyOffset(stickyBar, sectionRef);
@@ -217,7 +215,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
     return () => onUnsavedChange(null);
   }, [onUnsavedChange, blockId]);
   const [unsaved, setUnsaved] = useState<(() => void) | null>(null);
-  // 개인 목표 편집 폼에 저장 안 한 수정 → 헤더 메뉴·⋯ 메뉴 등 앱 안 링크도 아래 "저장하지 않은 수정이 있어요" 로 보류 (최종 리뷰 Minor 8)
+  // 개인 목표 편집 폼에 저장 안 한 수정 → 헤더 메뉴·⋯ 메뉴 등 앱 안 링크도 아래 "저장하지 않은 수정이 있어요" 로 보류
   const router = useRouter();
   useEffect(() => {
     if (!(editing && formUnsaved)) return;
@@ -263,7 +261,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
   for (let p = nodes.find((x) => x.id === n.parentId); p; p = nodes.find((x) => x.id === p!.parentId)) ancestors.unshift(p);
   const exam = n.leaf ? (n.exam ?? null) : null;
   const kind = pn ? "개인 목표" : exam ? "시험" : n.leaf ? "과제" : n.d === 0 ? "회차" : "묶음";
-  // 파일을 올리는 중이면 나가기 전에 묻는다 (스펙 §2.8) — 탭 전환·브라우저 뒤로 가기는 막지 않는다
+  // 파일을 올리는 중이면 나가기 전에 묻는다 — 탭 전환·브라우저 뒤로 가기는 막지 않는다
   const [uploading, setUploading] = useState(false);
   // 시험 답 저장이 실패한 채로 나가면 그 답은 사라진다 — 올리는 중 파일과 같은 확인으로 묻는다
   const [examUnsaved, setExamUnsaved] = useState(false);
@@ -297,7 +295,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
     await api.completePersonal(pn.id, !done);
     setBusy(false);
   };
-  // 그룹장이 남의 목표를 보관하면 한 번 묻는다(소유자에게 알림이 간다 — 시나리오 QA #7). 내 목표·보관 해제는 바로
+  // 그룹장이 남의 목표를 보관하면 한 번 묻는다(소유자에게 알림이 간다). 내 목표·보관 해제는 바로
   const [askArchive, setAskArchive] = useState(false);
   const archive = () => {
     if (!pn) return;
@@ -314,7 +312,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
   // 첨부 빼기(그룹장 모더레이션) — 남의 개인 목표 ∧ 보관 아님 ∧ 방 모집·진행 중 (보관은 acts 가 이미 방 상태를 본다)
   const canRemoveFiles = !!pn && !isOwner && isLeader && !pn.archived && !!acts?.archive;
   const owner = pn && !isOwner ? ownerOf(pn) : null;
-  // 댓글(0041 D1) — 회차 · 팀 과제 리프(시험 포함). 개인 목표·묶음·아직 저장 안 된 노드는 없음
+  // 댓글 — 회차 · 팀 과제 리프(시험 포함). 개인 목표·묶음·아직 저장 안 된 노드는 없음
   const comments = !pn && (n.leaf || n.d === 0) && /^\d+$/.test(n.id) && (
     <CommentSection key={n.id} slug={slug} nodeId={n.id} members={members} meId={meId} viewerPending={viewerPending} toast={toast} />
   );
@@ -514,7 +512,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
             {n.archived && <ArchivedBadge left={n.leaf && n.ownerLeft} />}
           </div>
           <p className="m-0 flex flex-wrap items-center gap-x-[6px] text-[13px] text-ink-2">
-            {/* 남의 개인 목표만 소유자(아바타 20px + 이름) — 내 것에는 표시 없음 (결정 5) */}
+            {/* 남의 개인 목표만 소유자(아바타 20px + 이름) — 내 것에는 표시 없음 */}
             {owner && (
               <>
                 <Avatar name={owner.name} size={20} tone={owner.tone} />

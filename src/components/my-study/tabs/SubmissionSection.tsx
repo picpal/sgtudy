@@ -34,7 +34,6 @@ export type SubmissionSectionProps = {
   quietNotAssigned?: boolean;
 };
 
-/** 과제 상세의 제출 영역 — 과제 제출 카드(아래 형제 카드로 포털) · 전원 제출 배너 · 제출 현황 (스펙 §2.1) */
 export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSubmitted, toast, viewerPending, onUploadingChange, onDraftChange, isLeader = false, quietNotAssigned = false }: SubmissionSectionProps) {
   const meId = useMe()?.id ?? null;
   const { detail, error, loading, refetch, setMine } = useTaskDetail(slug, n.id);
@@ -43,9 +42,9 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
 
   const roomArchived = useRoomArchived();
   const card = detail ? myCardStateOf(detail, roomStatus, roomArchived) : null;
-  // 응답이 오면(또는 실패하면) 한 번만 제출 영역으로 — 그 뒤 viewFocus 를 지운다 (Review Focus 6)
+  // 응답이 오면(또는 실패하면) 한 번만 제출 영역으로 — 그 뒤 viewFocus 를 지운다
   const settled = !!detail || !!error;
-  // 알림 딥링크 #submissions(전원 제출·제출 요약): 내 카드가 아니라 제출 현황으로 (시나리오 QA D4)
+  // 알림 딥링크 #submissions(전원 제출·제출 요약): 내 카드가 아니라 제출 현황으로
   const toStatus = useHashTarget("submissions", settled);
   useEffect(() => {
     if (focus !== "submission" || !settled) return;
@@ -57,7 +56,7 @@ export function SubmissionSection({ n, slug, roomStatus, focus, onFocused, onSub
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus, settled]);
 
-  // 내 줄이 아닌 현황 — 응답 전에는 트리 people(상태만, 펼침 없음)
+  // 응답 전에는 트리 people 로 — 상태만, 펼침 없음
   const rows: StatusRow[] = detail
     ? statusRows(detail, meId)
     : n.people.map((p) => ({ userId: p.userId, name: p.name, tone: p.tone, status: CODE_STATUS[p.c], me: p.userId === meId, released: false, submission: null }));

@@ -13,7 +13,6 @@ type Props = {
   disabled?: boolean;
 };
 
-/** 제출 링크 목록 편집 — 입력 + [추가](Enter 도, IME 조합 중 Enter 는 무시) · 줄마다 [빼기] (스펙 §2.3-2) */
 export function LinkListEditor({ links, input, onInput, onAdd, onRemove, error, disabled }: Props) {
   const id = useId();
   const errId = `${id}-err`;

@@ -37,7 +37,6 @@ function Icon({ d }: { d: string }) {
 }
 const X = "M6 6l12 12M18 6 6 18";
 
-/** 출제 화면 문항 카드 1개 (스펙 §4.2) — 유형·배점 고르기 · 문제 · 보기(라디오/체크 = 정답) · OX · 단답 허용 답 · 해설 · 위/아래/삭제 */
 export function ExamQuestionForm({ q, i, count, locked, lockId, err, dispatch }: Props) {
   const no = i + 1;
   const bad = (f: string) => (err?.field === f ? true : undefined);
@@ -48,7 +47,7 @@ export function ExamQuestionForm({ q, i, count, locked, lockId, err, dispatch }:
 
   return (
     <li className="flex flex-col gap-3 rounded-[14px] border border-line-2 bg-surface p-3" aria-label={`${no}번 문항`}>
-      {/* 머리 — 번호 · 유형 · 배점 · 순서/삭제(390 에서 넘치면 다음 줄로) */}
+      {/* 390 에서 넘치면 다음 줄로 */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[14px] font-bold text-ink">{no}.</span>
         <Listbox label={`${no}번 문항 유형`} value={q.type} options={TYPE_OPTIONS} onChange={(v) => dispatch({ type: "patch", i, patch: { type: v as ExamQType } })} disabled={locked} describedBy={locked ? lockId : undefined} className="w-[132px]" align="left" />
