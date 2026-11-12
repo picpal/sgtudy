@@ -5,7 +5,7 @@ import { HomeLink } from "./HomeLink";
 export function Logo() {
   return (
     <HomeLink
-      // 누르는 자리 44px (Q1-4 — 보이는 로고는 30px). 이탈 확인은 HomeLink(GuardedLink)가 한다 (Q2-1)
+      // 누르는 자리 44px(보이는 로고는 30px). 이탈 확인은 HomeLink(GuardedLink)가 한다
       className="flex min-h-11 items-center gap-[10px] pr-2 text-ink hover:text-ink"
       aria-label="슥터디 홈"
     >

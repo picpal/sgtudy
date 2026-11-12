@@ -25,7 +25,6 @@ export function FeedbackScreen({ from }: { from?: string }) {
   const id = useId();
   const [ctx, setCtx] = useState<FeedbackContext | null>(null);
 
-  // 브라우저 정보는 마운트 뒤에만 읽을 수 있다
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- window·navigator 는 마운트 뒤에만 있다
     setCtx(feedbackContext(fromLocation(from), navigator.userAgent, window.innerWidth, window.innerHeight, APP_COMMIT));

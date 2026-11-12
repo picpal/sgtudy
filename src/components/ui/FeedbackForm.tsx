@@ -5,7 +5,7 @@ import { toApiError } from "@/lib/api/errors";
 import { FEEDBACK_KINDS, FEEDBACK_LIMITS, feedbackErrorText, submitFeedback, validateFeedback } from "@/lib/api/feedback";
 import type { FeedbackContext, FeedbackKind } from "@/lib/api/types";
 
-/** 함께 보내는 정보의 화면 이름 — 사용자에게 무엇이 붙는지 그대로 보여 준다(스펙 D5) */
+/** 함께 보내는 정보의 화면 이름 — 사용자에게 무엇이 붙는지 그대로 보여 준다 */
 const CTX_LABEL: Record<keyof FeedbackContext, string> = { path: "보던 화면", room: "스터디", userAgent: "브라우저", viewport: "화면 크기", appVersion: "앱 버전" };
 
 /** 보낸 뒤 원래 화면 토스트 문구 — 모달·모바일 페이지 공통 */

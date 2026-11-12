@@ -64,7 +64,7 @@ export function DayPanel({ sel, today, studies, tasks, markers, ref }: Props) {
                 href={it.href}
                 className="box-border flex min-h-11 flex-col gap-[6px] rounded-[12px] border border-line-2 px-3 py-[10px] text-ink hover:text-ink"
               >
-                {/* 배지는 윗줄로 — 제목이 배지 폭에 밀려 0px 이 되지 않게 한 줄을 통째로 준다 (V2-01) */}
+                {/* 배지는 윗줄로 — 제목이 배지 폭에 밀려 0px 이 되지 않게 한 줄을 통째로 준다 */}
                 <span className="flex items-center justify-between gap-2">
                   <span className="min-w-0 truncate rounded-[7px] px-2 py-[3px] text-[11px] font-bold" style={{ background: S.bg, color: S.fg }}>
                     {shortName(S)}

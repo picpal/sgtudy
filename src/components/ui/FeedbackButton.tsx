@@ -18,8 +18,7 @@ export const APP_COMMIT: string | undefined = process.env.NEXT_PUBLIC_APP_COMMIT
 const MOBILE_MQ = "(width < 40rem)";
 
 /**
- * 헤더 벨 왼쪽 「의견 보내기」(0044, 스펙 2026-10-22-feedback-design). 로그인 분기에서만 그린다(D1).
- * 데스크톱: ConfirmDialog 모양 대화상자 — 포커스 트랩 · Esc/바깥 클릭 닫기(보내는 중엔 안 닫힘) · 닫히면 버튼으로 포커스.
+ * 헤더 벨 왼쪽 「의견 보내기」. 로그인 분기에서만 그린다. 데스크톱은 ConfirmDialog 모양 대화상자.
  * < sm: /feedback 페이지로 간다 — iOS Safari 는 키보드가 뜨면 fixed 시트 아래로 뒤 페이지가 비쳐(visualViewport·WebKit 297779)
  * 일반 문서 흐름에 맡긴다. 보내고 돌아오면 여기서 토스트
  */

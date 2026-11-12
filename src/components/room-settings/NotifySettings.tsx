@@ -9,7 +9,7 @@ import { NOTIFY_ROWS, fetchNotifySettings, putNotifySettings, type NotifySetting
 
 /**
  * 방 알림 설정 (settings_get/put, 그룹장 전용) — 바꾸면 바로 저장한다(방 정보 폼의 저장 막대와 따로).
- * 이 방 참가자 모두에게 적용된다. 0025: 팀원 제출 하루 요약(그룹장에게)을 끌 수 있다.
+ * 이 방 참가자 모두에게 적용된다. 팀원 제출 하루 요약(그룹장에게)을 끌 수 있다.
  */
 export function NotifySettingsSection({ slug, toast, disabled = false }: { slug: string; toast: (m: ToastMsg) => void; disabled?: boolean }) {
   const [s, setS] = useState<NotifySettings | null>(null);

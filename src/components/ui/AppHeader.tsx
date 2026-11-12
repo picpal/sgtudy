@@ -80,13 +80,13 @@ const NAV: { key: NavKey; label: string; href: string; authOnly: boolean; icon: 
 type Props = {
   /** 생략하면 어느 메뉴도 강조하지 않는다 (/me, /rooms/new 처럼 nav 키가 없는 화면) */
   active?: NavKey;
-  /** nav 와 알림 사이에 끼울 요소 (Main 의 검색창 등). ≤640 에서는 그리지 않는다 */
+  /** nav 와 알림 사이에 끼울 요소 (Main 의 검색창 등). 폭 <1056 에서는 그리지 않는다 */
   children?: ReactNode;
-  /** 알림 벨 (Task 4 의 <NotificationBell/>). 없으면 벨을 그리지 않는다 */
+  /** 알림 벨(<NotificationBell/>). 없으면 벨을 그리지 않는다 */
   bell?: ReactNode;
 };
 
-/** 모든 화면 공통 헤더 — 전폭 흰 바(아래 경계선). 안쪽 폭·좌우 여백은 본문 틀(PageBody·Main)과 같은 1376px·32px(≤640 16px) */
+/** 모든 화면 공통 헤더 — 전폭 흰 바(아래 경계선). 안쪽 폭·좌우 여백은 본문 틀(PageBody·Main)과 같은 1376px·32px(<640 16px) */
 export function AppHeader({ active, children, bell }: Props) {
   const me = useMe();
   const myStudyHref = useMyStudyHref();
@@ -116,7 +116,7 @@ export function AppHeader({ active, children, bell }: Props) {
     const onDown = (e: MouseEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) setOpen(false);
     };
-    // Esc 로 닫으면 아바타 버튼으로 포커스를 돌려준다(Q3-19)
+    // Esc 로 닫으면 아바타 버튼으로 포커스를 돌려준다
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       setOpen(false);
@@ -142,7 +142,6 @@ export function AppHeader({ active, children, bell }: Props) {
     prefetchMe();
     setOpen(true);
   };
-  // role=menu 안에서 ↑/↓/Home/End 로 항목 사이를 돈다
   const onMenuKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     const els = items();
     if (els.length === 0) return;
@@ -171,8 +170,7 @@ export function AppHeader({ active, children, bell }: Props) {
       <nav aria-label="주 메뉴" className="flex gap-1 max-sm:order-last max-sm:w-full max-sm:gap-[2px] max-sm:overflow-x-auto">
         {NAV.filter((n) => me || !n.authOnly).map((n) => {
           const on = n.key === active;
-          // ≤640: 메뉴 4개가 한 줄(358px)에 들어가게 아이콘을 빼고 좌우 여백을 줄인다 — 높이는 44px 터치 영역
-          // 누르는 자리는 모든 폭에서 44px (Q1-4 — 전에는 640 초과에서 39px)
+          // <640: 메뉴 4개가 한 줄(358px)에 들어가게 아이콘을 빼고 좌우 여백을 줄인다. 누르는 자리는 모든 폭에서 44px
           const cls = `flex min-h-11 shrink-0 items-center gap-[7px] whitespace-nowrap rounded-[12px] px-[14px] py-0 text-[14px] max-sm:px-[10px] max-sm:[&>svg]:hidden ${
             on ? "bg-bg font-semibold text-ink" : "font-medium text-ink-3 hover:text-ink"
           }`;
@@ -185,7 +183,7 @@ export function AppHeader({ active, children, bell }: Props) {
               </HomeLink>
             );
           const href = n.key === "myStudy" ? myStudyHref : n.href;
-          // 진행목표 편집 화면에 저장하지 않은 수정이 있으면 이동 전에 묻는다 (Q2-1 — GuardedLink)
+          // 저장하지 않은 수정이 있는 화면(진행목표 편집·방 설정)이면 이동 전에 묻는다 (GuardedLink)
           return (
             <Link key={n.key} href={href} aria-current={on ? "page" : undefined} className={cls}>
               {n.icon}
@@ -199,7 +197,7 @@ export function AppHeader({ active, children, bell }: Props) {
       {children && <div className="flex min-w-0 max-[1056px]:hidden">{children}</div>}
       {me ? (
         <>
-          {/* 의견 보내기(0044) — 벨 왼쪽. 로그인했을 때만(스펙 D1). 390 폭에서도 로고와 한 줄(스펙 D2) */}
+          {/* 의견 보내기 — 벨 왼쪽, 로그인했을 때만. 390 폭에서도 로고와 한 줄 */}
           <FeedbackButton />
           {bell}
           <div ref={menuRef} className="relative">
@@ -239,7 +237,7 @@ export function AppHeader({ active, children, bell }: Props) {
         </>
       ) : (
         // returnTo 는 허용 접두사(/rooms/·/my-study·/schedule·/tasks·/invite/)만 남긴다 — /zzz 같은 없는 최상위 주소의 404 는 일부러 / 로,
-        // /rooms/nope 처럼 접두사 안의 404 는 그 주소 그대로 간다(로그인 뒤 비공개 방이 열릴 수 있다). pathname 문제가 아니다 (V1-03)
+        // /rooms/nope 처럼 접두사 안의 404 는 그 주소 그대로 간다(로그인 뒤 비공개 방이 열릴 수 있다)
         <span className="flex shrink-0 items-center gap-2">
           {anonAuthLinks(pathname + search).map((l) => (
             <Link

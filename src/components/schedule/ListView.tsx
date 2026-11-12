@@ -35,7 +35,7 @@ export function ListView({ y, m, today, studies, tasks }: Props) {
                     const urgent = isUrgent(t);
                     return (
                       <li key={t.id}>
-                        {/* 월 막대·일 패널·다가오는 마감처럼 과제로 바로 간다 (V2-04) */}
+                        {/* 월 막대·일 패널·다가오는 마감처럼 과제로 바로 간다 */}
                         <Link
                           href={taskHref(t, S)}
                           className="flex flex-wrap items-center gap-4 rounded-[14px] border border-line bg-surface px-[18px] py-4 text-ink transition-[border-color,box-shadow] duration-150 hover:border-line-dash hover:text-ink hover:shadow-[0_4px_12px_rgba(27,34,48,.06)]"

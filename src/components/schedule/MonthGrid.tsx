@@ -29,7 +29,7 @@ export function MonthGrid({ y, m, sel, today, studies, tasks, markers, onPick }:
           </div>
         ))}
       </div>
-      {/* 주 행은 최소 높이를 갖되 레인이 많으면 막대 높이만큼 늘어난다 — 다음 주 행 밑으로 숨지 않게 (schedule §1-5). 달력은 내용만큼 자라고 페이지가 스크롤된다 */}
+      {/* 주 행은 최소 높이를 갖되 레인이 많으면 막대 높이만큼 늘어난다 — 다음 주 행 밑으로 숨지 않게. 달력은 내용만큼 자라고 페이지가 스크롤된다 */}
       <div className="flex flex-col">
         {weeks.map((days) => (
           <WeekRow key={days[0]} days={days} m={m} sel={sel} today={today} studies={studies} tasks={tasks} markers={markers} onPick={onPick} />
@@ -59,7 +59,7 @@ function WeekRow({ days, m, sel, today, studies, tasks, markers, onPick }: WeekP
           const color = isToday ? "#FFFFFF" : !inMonth ? "#A7B0BA" : c === 0 ? "#C0453A" : c === 6 ? "#2F5BC2" : past ? "#7A8594" : "#1B2230";
           return (
             // 칸 = 래퍼(배경·선택 테두리·막대 아래 빈 곳 클릭) + 머리 줄 버튼(36px). 버튼이 칸 전체를 덮으면 그 위의 과제 막대가 가운데를 가로채
-            // 날짜 버튼을 직접 누를 수 없다(Q1-7) — 버튼은 막대가 시작하는 pt-9(36px) 위에만 둔다. 빈 곳 클릭은 래퍼가 받고, 키보드·스크린리더는 버튼이 맡는다
+            // 날짜 버튼을 직접 누를 수 없다 — 버튼은 막대가 시작하는 pt-9(36px) 위에만 둔다. 빈 곳 클릭은 래퍼가 받고, 키보드·스크린리더는 버튼이 맡는다
             <div
               key={k}
               data-day-cell={k}
@@ -137,12 +137,12 @@ function TaskBar({ seg: { task: t, col, span, isStart, isEnd, lane }, studies }:
         opacity: finished ? 0.72 : 1,
       }}
     >
-      {/* [개인] 미니 배지 — 시작 조각에만, 390 에선 막대가 좁아 점선·색으로만 구분 */}
       {!isStart && (
         <span data-cont="prev" aria-hidden="true" className="-ml-1 shrink-0 text-[12px] font-bold leading-none opacity-60">
           ‹
         </span>
       )}
+      {/* [개인] 미니 배지 — 2칸 이상 막대의 주별 첫 조각에만, <640 에선 막대가 좁아 점선·색으로만 구분 */}
       {look.badge && span > 1 && (isStart || col === 0) && (
         <span className="shrink-0 rounded-[5px] bg-slate-soft px-[5px] text-[10px] font-bold leading-4 text-personal-ink max-sm:hidden">
           개인

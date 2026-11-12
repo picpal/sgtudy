@@ -11,7 +11,7 @@ type Props = {
   index: number;
   onIndex: (i: number) => void;
   onClose: () => void;
-  /** 받기 — download 서명 URL 로 저장(D15: 「원본 열기」는 두지 않는다) */
+  /** 받기 — download 서명 URL 로 저장(「원본 열기」는 두지 않는다) */
   onDownload: (id: string) => void;
   /** <img> 가 못 불러오면(서명 만료) 한 번 다시 서명 */
   onRefresh?: (id: string) => void;
@@ -45,8 +45,8 @@ function zoomAt(g: Geo, s: number, base: Zoom, px?: number, py?: number): Zoom {
 const ROUND = "flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white hover:bg-black/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white aria-disabled:opacity-35";
 
 /**
- * 첨부 그림 크게 보기 (md-images 스펙 §4.3) — 한 노드의 그림들을 ←/→·스와이프로 넘긴다(끝에서 멈춤).
- * Esc·닫기·그림 밖 클릭으로 닫히고 연 요소로 포커스가 돌아간다. 그림은 <img> 로만(D15)
+ * 첨부 그림 크게 보기 — 한 노드의 그림들을 ←/→·스와이프로 넘긴다(끝에서 멈춤).
+ * Esc·닫기·그림 밖 클릭으로 닫히고 연 요소로 포커스가 돌아간다. 그림은 <img> 로만
  */
 export function ImageLightbox({ items, index, onIndex, onClose, onDownload, onRefresh }: Props) {
   const n = items.length;
@@ -298,7 +298,7 @@ export function ImageLightbox({ items, index, onIndex, onClose, onDownload, onRe
           ) : (
             <>
               {!(cur.url && loaded.has(cur.url)) && <span aria-hidden="true" className="absolute h-8 w-8 rounded-full border-[3px] border-white/30 border-t-white motion-safe:animate-spin" />}
-              {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다(스펙 D17) */}
+              {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다 */}
               {cur.url && <img
                 key={cur.url}
                 ref={imgEl}

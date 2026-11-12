@@ -10,7 +10,6 @@ export type Edit = { changes: Change[]; anchor: number; head?: number };
 
 type Line = { from: number; to: number; text: string };
 
-/** pos 가 속한 줄 */
 export function lineAt(doc: string, pos: number): Line {
   const from = doc.lastIndexOf("\n", pos - 1) + 1;
   const nl = doc.indexOf("\n", pos);
@@ -221,7 +220,7 @@ export function mergeListMarker(auto: string, typed: string): string | null {
 }
 
 /**
- * Enter 직전 정리 — 캐럿 뒤가 줄 끝까지 닫는 인라인 표식뿐이면(굵게 버튼으로 **|** 안에 쓰던 중) 표식을 다음 줄로 흩지 않게 (Q3-12).
+ * Enter 직전 정리 — 캐럿 뒤가 줄 끝까지 닫는 인라인 표식뿐이면(굵게 버튼으로 **|** 안에 쓰던 중) 표식을 다음 줄로 흩지 않게.
  * - 앞에 그 표식을 여는 짝이 있으면 캐럿을 줄 끝(표식 뒤)으로 옮긴다 → 이어서 기본 Enter(목록 이어 쓰기 포함)
  * - 여는 짝이 캐럿 바로 앞이면(아무것도 안 쓴 빈 쌍 ****) 쌍을 지운다
  * 해당 없으면 null. 반환 Edit 을 적용한 뒤 Enter 는 기본 동작이 한다.

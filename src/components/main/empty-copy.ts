@@ -9,9 +9,8 @@ export type EmptyAction = "create" | "browse" | "reset" | "clear";
 export type EmptyCopy = { title: string; body: string; action: EmptyAction; secondary?: "join-code" };
 
 /**
- * 빈 상태 문구 — spec main §4 우선순위에, 걸려 있는 상태·태그 필터를 알려 주는 갈래를 더했다(Q3-15).
  * 필터가 원인일 수 있으면 무엇이 걸려 있는지 말하고 초기화를 바로 옆에 둔다.
- * "내가 참가한 방" 이 비면 참가할 방을 찾는 게 다음 행동이다(Q3-16).
+ * "내가 참가한 방" 이 비면 참가할 방을 찾는 게 다음 행동이다.
  */
 export function emptyCopy(q: string, tab: Tab, status: StatusFilter, tagLabels: string[]): EmptyCopy {
   const filters = [...(status === "all" ? [] : [STATUS_LABEL[status]]), ...tagLabels.map((t) => `#${t}`)].join(" · ");

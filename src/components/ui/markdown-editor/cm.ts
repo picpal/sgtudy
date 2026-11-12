@@ -237,7 +237,7 @@ function exitEmptyQuote(view: EditorView): boolean {
   return true;
 }
 
-/** 닫는 인라인 표식 바로 앞 Enter — 캐럿을 표식 뒤로(빈 쌍은 지우고) 옮긴 뒤 기본 Enter 에 넘긴다 (Q3-12, commands.enterPastInline) */
+/** 닫는 인라인 표식 바로 앞 Enter — 캐럿을 표식 뒤로(빈 쌍은 지우고) 옮긴 뒤 기본 Enter 에 넘긴다 (commands.enterPastInline) */
 function enterPastInline(view: EditorView): boolean {
   const sel = view.state.selection.main;
   if (!sel.empty || inCodeBlock(view.state, sel.head)) return false;

@@ -4,7 +4,7 @@ import { useId } from "react";
 
 export type Choice<K extends string> = { key: K; label: string; note?: string };
 
-/** 확인 창 안의 단일 선택(라디오) — 한 줄 전체가 누르는 영역(44px 이상). legend 는 화면에 보이지 않는 그룹 이름 */
+/** 단일 선택(라디오) — 한 줄 전체가 누르는 영역(44px 이상). legend 는 화면에 보이지 않는 그룹 이름 */
 export function ChoiceList<K extends string>({ legend, choices, value, onChange }: { legend: string; choices: Choice<K>[]; value: K; onChange: (k: K) => void }) {
   const name = useId();
   return (

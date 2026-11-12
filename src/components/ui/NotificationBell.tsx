@@ -21,9 +21,9 @@ export function NotificationBell() {
   const [items, setItems] = useState<NotificationDto[] | null>(null);
   const [error, setError] = useState("");
   const boxRef = useRef<HTMLDivElement>(null);
-  // 패널은 벨 오른쪽 끝에 붙는데, 390 폭에선 벨 오른쪽에 아바타가 있어 왼쪽이 화면 밖으로 나간다 — 열 때 오른쪽으로 민다(Q1-02)
+  // 패널은 벨 오른쪽 끝에 붙는데, 390 폭에선 벨 오른쪽에 아바타가 있어 왼쪽이 화면 밖으로 나간다 — 열 때 오른쪽으로 민다
   const [shift, setShift] = useState(0);
-  // 읽음 처리 직전·직후로 올려, 그 전에 시작한 카운트 조회가 낙관적 감소를 덮어쓰지 않게 한다(Q1-13)
+  // 읽음 처리 직전·직후로 올려, 그 전에 시작한 카운트 조회가 낙관적 감소를 덮어쓰지 않게 한다
   const [guard] = useState(pollGuard);
   const fetchCount = useCallback(
     () => guard.run(fetchUnreadCount()).then((r) => (r.fresh ? r.value : null)),
@@ -99,15 +99,15 @@ export function NotificationBell() {
     setOpen(false);
     let held = false;
     guardNavigate(n.link, { preventDefault: () => (held = true) }); // 저장 안 한 편집이 있으면 가드가 확인 뒤 이동한다
-    // 확인에서 "계속 편집"을 고르면 알림은 읽지 않은 채로 남는다 — 실제로 이동할 때만 읽음 (최종 리뷰 Minor 2).
+    // 확인에서 "계속 편집"을 고르면 알림은 읽지 않은 채로 남는다 — 실제로 이동할 때만 읽음.
     // 확인 뒤 "버리기/저장하고 이동"으로 가면 그 이동은 편집 화면이 하므로 이 알림은 안 읽음으로 남는다(작은 대가)
     if (held) return;
     markItemRead(n);
-    // 링크 해시(#applications 등)의 영역이 찾아가게 알린다 — 같은 화면이면 Next 가 화면을 그대로 두고, 새 화면이면 마운트 때 받는다 (시나리오 QA #8)
+    // 링크 해시(#applications 등)의 영역이 찾아가게 알린다 — 같은 화면이면 Next 가 화면을 그대로 두고, 새 화면이면 마운트 때 받는다
     announceHash(n.link);
-    announceItem(n.link); // 같은 화면 ?item= — 같은 item 을 다시 눌러도 화면이 연다 (백로그 F 재리뷰 m1)
-    announceTab(n.link); // 같은 화면 ?tab=notice — 다른 탭을 보고 있어도 공지 탭으로 (0040)
-    announceTask(n.link); // 같은 과제 화면 ?task= — 다른 탭·항목을 보고 있어도 그 과제 상세로 (댓글 멘션 #comment-, 0041)
+    announceItem(n.link); // 같은 화면 ?item= — 같은 item 을 다시 눌러도 화면이 연다
+    announceTab(n.link); // 같은 화면 ?tab=notice — 다른 탭을 보고 있어도 공지 탭으로
+    announceTask(n.link); // 같은 과제 화면 ?task= — 다른 탭·항목을 보고 있어도 그 과제 상세로 (댓글 멘션 #comment-)
     router.push(n.link);
   };
   const onReadAll = async () => {
@@ -146,7 +146,7 @@ export function NotificationBell() {
         <div role="dialog" aria-label="알림" style={{ right: -shift }} className="absolute right-0 top-[52px] z-20 flex w-[360px] max-w-[calc(100vw-32px)] flex-col rounded-[16px] border border-line bg-surface shadow-[0_16px_40px_rgba(27,34,48,.16)]">
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-[15px] font-bold">알림</span>
-            {/* 알림이 하나도 없으면 누를 일이 없다 — 숨긴다(Q3-8). 누르는 영역은 위아래로 늘려 44px */}
+            {/* 알림이 하나도 없으면 누를 일이 없다 — 숨긴다. 누르는 영역은 위아래로 늘려 44px */}
             {items?.length !== 0 && (
               <button
                 type="button"

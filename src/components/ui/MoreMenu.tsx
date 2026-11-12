@@ -19,7 +19,6 @@ export function MoreMenu({ items, label = "더보기" }: { items: MoreMenuItem[]
     const els = Array.from(box.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
     if (els.length) els[(i + els.length) % els.length].focus();
   };
-  // 열리면 첫 항목에 포커스
   useEffect(() => {
     if (open) focusAt(0);
   }, [open]);

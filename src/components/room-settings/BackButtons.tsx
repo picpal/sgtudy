@@ -19,7 +19,6 @@ function Arrow() {
   );
 }
 
-/** 카드 위쪽 "내 스터디로" */
 export function TopBackLink({ href }: { href: string }) {
   return (
     <Link href={href} className={BACK_CLASS}>
@@ -30,13 +29,6 @@ export function TopBackLink({ href }: { href: string }) {
 }
 
 /**
- * 카드 왼쪽 바깥 여백의 "이전 페이지" — 카드(relative) 높이만큼의 레일 끝에 sticky bottom 으로 붙어, 스크롤해도 화면 아래에 보인다.
- * 위치는 카드 기준(right-full) 이라 카드 폭이 바뀌어도 따라간다. bottom-3 은 저장 막대(카드 안 sticky bottom-0, py-3)의 버튼 높이와 맞춘 값 —
- * 막대는 카드 안, 이 버튼은 카드 밖이라 겹치지 않는다.
- * 좁은 화면(왼쪽 여백 < 간격 16 + 버튼 ≈ 150px)에서는 숨긴다 — 위쪽 "내 스터디로" 가 같은 곳으로 가고, 떠 있는 버튼이 저장 막대·폼을 가리지 않게.
- * 여백 = (화면폭 − 카드폭)/2 이라 기준은 카드 880px 에 맞춘 1200px(여백 160px). 카드 폭을 바꾸면 카드폭 + 2×(16+버튼 ≈ 130) 이상으로 함께 바꾼다.
- */
-/**
  * 스크린리더용 목적지 이름 — 보이는 글자는 "이전 페이지" 그대로. href 는 settingsBackOf 가 검증한 값(이 방의 방 보기 또는 내 스터디)이라
  * 방 보기(/rooms/{slug}, 쿼리·하위 경로 없음)만 "방 보기로", 그 외는 전부 "내 스터디로".
  */
@@ -44,6 +36,13 @@ export function backLabelOf(href: string): string {
   return /^\/rooms\/[^/?#;]+$/.test(href) && href !== "/rooms/new" ? "이전 페이지 — 방 보기로" : "이전 페이지 — 내 스터디로";
 }
 
+/**
+ * 카드 왼쪽 바깥 여백의 "이전 페이지" — 카드(relative) 높이만큼의 레일 끝에 sticky bottom 으로 붙어, 스크롤해도 화면 아래에 보인다.
+ * 위치는 카드 기준(right-full) 이라 카드 폭이 바뀌어도 따라간다. bottom-3 은 저장 막대(카드 안 sticky bottom-0, py-3)의 버튼 높이와 맞춘 값 —
+ * 막대는 카드 안, 이 버튼은 카드 밖이라 겹치지 않는다.
+ * 좁은 화면(왼쪽 여백 < 간격 16 + 버튼 ≈ 150px)에서는 숨긴다 — 떠 있는 버튼이 저장 막대·폼을 가리지 않게(위쪽 "내 스터디로" 는 남는다).
+ * 여백 = (화면폭 − 카드폭)/2 이라 기준은 카드 880px 에 맞춘 1200px(여백 160px). 카드 폭을 바꾸면 카드폭 + 2×(16+버튼 ≈ 130) 이상으로 함께 바꾼다.
+ */
 export function SideBackRail({ href }: { href: string }) {
   return (
     <div data-testid="side-back-rail" className="pointer-events-none absolute inset-y-0 right-full hidden w-max flex-col items-end justify-end pr-4 min-[1200px]:flex">

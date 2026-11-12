@@ -64,7 +64,7 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
       }
     }
   };
-  /** 달을 옮기면 선택일은 그 달의 오늘, 아니면 1일 — 이전 선택일을 끌고 가지 않는다 (Q1-19/Q3-20) */
+  /** 달을 옮기면 선택일은 그 달의 오늘, 아니면 1일 — 이전 선택일을 끌고 가지 않는다 */
   const shift = (dm: number) => {
     const from = target.current ?? { y, m };
     const d = new Date(Date.UTC(from.y, from.m + dm, 1));
@@ -81,7 +81,7 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   const toggle = (id: string) => setOff(on(id) ? [...off, id] : off.filter((x) => x !== id));
 
   // 날짜를 누르면 일 패널을 화면으로 끌어온다(페이지 스크롤). ≤900 (CSS 는 Tailwind max-[901px] = width < 901, JS 는 max-width: 900px — 같은 구간)
-  // 에서는 패널이 달력 아래라 항상 (Q3-05), 넓은 화면은 요약 열이 붙지 못해(화면보다 길다) 패널 머리가 화면 밖일 때만
+  // 에서는 패널이 달력 아래라 항상, 넓은 화면은 요약 열이 붙지 못해(화면보다 길다) 패널 머리가 화면 밖일 때만
   const dayRef = useRef<HTMLElement>(null);
   const [asideRef, asideFits] = useStickyFit<HTMLElement>();
   const pick = (k: string) => {
@@ -98,8 +98,8 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   if (data.studies.length === 0) return <ScheduleEmpty />;
 
   return (
-    // 한 페이지 스크롤 — 화면 높이에 가두지 않는다. 예전에는 넓은 화면을 h-screen 에 가두고 달력·패널에 안쪽 스크롤(overflow-auto +
-    // overscroll-behavior: contain)을 두었는데, 넘칠 게 없는 안쪽 스크롤러도 휠·터치를 붙잡고 문서로 넘기지 않아 화면 밖 내용을 볼 수 없었다
+    // 한 페이지 스크롤 — 화면 높이에 가두지 않는다. 안쪽 스크롤러(overflow-auto + overscroll-behavior: contain)는 넘칠 게 없어도
+    // 휠·터치를 붙잡고 문서로 넘기지 않아 화면 밖 내용을 볼 수 없었다
     // 과제 링크를 누르면 출발지를 기억한다 — 상세의 [← 내 일정] 이 이 화면으로 돌아온다
     <div className="flex min-h-screen flex-col" onClickCapture={(e) => markTaskOrigin("schedule", e)}>
       <AppHeader active="schedule" bell={<NotificationBell />} />
@@ -114,7 +114,7 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
             )}
             {view === "month" && <Legend />}
           </main>
-          {/* >900 에서는 폭을 고정해(340, 넓으면 380) 일 패널 제목이 줄어들지 않게 한다 (V2-01). ≤900 은 달력 아래로 내려가고, 태블릿(601~900)은 두 패널을 나란히 */}
+          {/* >900 에서는 폭을 고정해(340, 넓으면 380) 일 패널 제목이 줄어들지 않게 한다. ≤900 은 달력 아래로 내려가고, 태블릿(601~900)은 두 패널을 나란히 */}
           <aside ref={asideRef} aria-label="일정 요약" className={`${stickyAside(asideFits)} flex min-w-0 flex-col gap-4 max-[901px]:basis-full min-[601px]:max-[901px]:grid min-[601px]:max-[901px]:grid-cols-2 min-[601px]:max-[901px]:items-start min-[901px]:flex-[0_0_340px] min-[1201px]:basis-[380px]`}>
             <DayPanel ref={dayRef} sel={sel} today={today} studies={data.studyMap} tasks={tasks} markers={markers} />
             <UpcomingPanel today={today} studies={data.studyMap} upcoming={upcoming} />

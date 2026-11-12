@@ -19,7 +19,7 @@ export function renderCell(cell: HTMLElement, raw: string): void {
     if (i > 0) cell.appendChild(document.createElement("br"));
     for (const s of parseInline(line)) {
       if (s.t === "text") { cell.appendChild(document.createTextNode(s.v)); continue; }
-      // 그림은 셀에서 불러오지 않는다 — 자리표시 글자(md-images 스펙 §5)
+      // 그림은 셀에서 불러오지 않는다 — 자리표시 글자
       if (s.t === "img") { cell.appendChild(document.createTextNode(`[그림: ${imgLabel(s)}]`)); continue; }
       const el = document.createElement(s.t === "b" ? "strong" : s.t === "i" ? "em" : s.t === "s" ? "del" : s.t === "code" ? "code" : "a");
       el.textContent = s.v;
@@ -48,7 +48,7 @@ export function focusNextTable(r: number, col: number): void {
 // 구조 변경으로 위젯이 재생성될 때, 새 toDOM이 소비해 포커스를 복원할 좌표. r=0은 헤더행, r>=1은 본문행(r-1).
 let pendingFocus: { r: number; col: number } | null = null;
 
-/** 칸으로 옮기며 글자를 통째로 선택 — Tab 으로 옮긴 뒤 바로 치면 자리 글자("제목 2")를 바꿔 쓴다(스프레드시트처럼, Q2-7).
+/** 칸으로 옮기며 글자를 통째로 선택 — Tab 으로 옮긴 뒤 바로 치면 자리 글자("제목 2")를 바꿔 쓴다(스프레드시트처럼).
  *  focus 리스너가 원문을 다시 넣은 뒤에 선택한다 */
 function selectCell(cell: HTMLElement): void {
   cell.focus();
@@ -171,7 +171,6 @@ export class TableWidget extends WidgetType {
     return wrap;
   }
 
-  /** 셀 엘리먼트 생성. Task 6: 편집 리스너 포함. */
   protected makeCell(tag: "th" | "td", text: string, align: Align): HTMLElement {
     const cell = document.createElement(tag);
     cell.className = "cm-cell";
@@ -225,7 +224,7 @@ export class TableWidget extends WidgetType {
     const range = this.currentRange();
     if (!range) return;
     const next = serializeFromDom(this.dom);
-    if (this.view.state.sliceDoc(range.from, range.to) === next) return; // no-op
+    if (this.view.state.sliceDoc(range.from, range.to) === next) return;
     try {
       this.view.dispatch({ changes: { from: range.from, to: range.to, insert: next } });
       this.source = next; // DOM이 표현하는 현재 소스로 갱신 — eq 스테일 방지(undo로 원본 복귀 시 재렌더 보장)
@@ -234,7 +233,7 @@ export class TableWidget extends WidgetType {
     }
   }
 
-  // ---- Task 7: 키보드 내비게이션 + 좌표/포커스 헬퍼 ----
+  // ---- 키보드 내비게이션 + 좌표/포커스 헬퍼 ----
 
   protected colCount(): number {
     return this.dom ? this.dom.querySelectorAll(".cm-header-row .cm-cell").length : 0;
@@ -436,7 +435,7 @@ export class TableWidget extends WidgetType {
     return this.dom?.querySelectorAll<HTMLElement>(kind === "col" ? ".cm-col-handle" : ".cm-row-handle")[i];
   }
 
-  // ---- Task 8: 행/열 핸들 + 메뉴 ----
+  // ---- 행/열 핸들 + 메뉴 ----
 
   private menuEl?: HTMLElement;
   private menuAnchor?: HTMLElement;
@@ -628,7 +627,7 @@ export class TableWidget extends WidgetType {
 
   /** 셀 mousedown — 드래그가 다른 셀로 넘어가면 범위 모드. 한 셀에 머물면 네이티브 텍스트 선택 유지. */
   protected onCellMouseDown(e: MouseEvent, cell: HTMLElement): void {
-    if (e.button !== 0) return; // 좌클릭만
+    if (e.button !== 0) return;
     this.clearRange();
     const anchor = this.coordOf(this.allCells().indexOf(cell));
     this.rangeAnchor = anchor;

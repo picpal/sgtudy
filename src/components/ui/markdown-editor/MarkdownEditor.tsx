@@ -17,7 +17,7 @@ export type MarkdownEditorProps = {
   /** 편집 면 최대 높이 — 내용이 이보다 길면 편집 면 안에서 스크롤한다. "none" 이면 내용만큼 자란다 */
   maxHeight?: number | string;
   /** 툴바를 스크롤 부모 위쪽(이 오프셋)에 붙여 둔다 — 편집 면이 내용만큼 자라는 전용 편집 화면용.
-   *  생략해도 maxHeight="none"(내용만큼 자람)이면 붙는다: 오프셋은 CSS 변수 --md-sticky-top(없으면 0) — 화면 위 고정 막대가 있으면 그 높이를 조상에 실어 준다 (Q1-10) */
+   *  생략해도 maxHeight="none"(내용만큼 자람)이면 붙는다: 오프셋은 CSS 변수 --md-sticky-top(없으면 0) — 화면 위 고정 막대가 있으면 그 높이를 조상에 실어 준다 */
   stickyToolbar?: string;
   /** 본문 줄 폭 상한(px) — 넓은 편집 면에서 글 줄이 너무 길어지지 않게 가운데 정렬한다 */
   contentMaxWidth?: number;
@@ -105,7 +105,7 @@ export function revealLeft(view: { left: number; width: number }, item: { left: 
  * 줄바꿈하면 3줄(133px)로 편집 면을 먹는다. 데스크톱 마우스: 줄바꿈으로 전부 보인다(숨긴 스크롤바는 휠로 닿기 어렵다).
  * "크게 쓰기"는 늘 스크롤·줄바꿈 영역 밖 오른쪽 고정
  */
-export function Toolbar({ groups, view, onExpand, expandRef, stickyTop, wrap = false }: { groups: Tool[][]; view: RefObject<EditorView | null>; onExpand?: () => void; expandRef?: RefObject<HTMLButtonElement | null>; stickyTop?: string; /** 늘 줄바꿈(가로 스크롤 없음) — 높이 여유가 있는 "크게 쓰기" 창 (Q3-12) */ wrap?: boolean }) {
+export function Toolbar({ groups, view, onExpand, expandRef, stickyTop, wrap = false }: { groups: Tool[][]; view: RefObject<EditorView | null>; onExpand?: () => void; expandRef?: RefObject<HTMLButtonElement | null>; stickyTop?: string; /** 늘 줄바꿈(가로 스크롤 없음) — 높이 여유가 있는 "크게 쓰기" 창 */ wrap?: boolean }) {
   const bar = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
@@ -139,7 +139,7 @@ export function Toolbar({ groups, view, onExpand, expandRef, stickyTop, wrap = f
       el.scrollLeft = revealLeft({ left: el.scrollLeft, width: el.clientWidth }, { left: b.offsetLeft, width: b.offsetWidth }, FADE);
     } else b.focus();
   };
-  // 가려진 도구가 있다는 표시 겸 버튼 — 누르면 한 화면만큼 오른쪽으로 (포인터 전용: 키보드는 ←→ 로 닿는다, Q3-12)
+  // 가려진 도구가 있다는 표시 겸 버튼 — 누르면 한 화면만큼 오른쪽으로 (포인터 전용: 키보드는 ←→ 로 닿는다)
   const scrollMore = () => {
     const el = scroller.current;
     if (el) el.scrollBy({ left: Math.max(88, el.clientWidth - 88), behavior: "smooth" });
@@ -236,6 +236,8 @@ export function Toolbar({ groups, view, onExpand, expandRef, stickyTop, wrap = f
 
 const FRAME = "rounded-[10px] border border-line-3 bg-surface font-normal text-ink focus-within:border-mint focus-within:shadow-[0_0_0_3px_#DDF4EE]";
 
+const len = (v: number | string) => (typeof v === "number" ? `${v}px` : v);
+
 /**
  * 라이브 프리뷰 마크다운 에디터 — 쓰는 즉시 서식이 보이고 원문은 마크다운 그대로(work-note 에디터 이식).
  * 값 계약은 textarea 와 같다: value(문자열) 를 받고 onChange(문자열) 로 돌려준다.
@@ -245,8 +247,6 @@ const FRAME = "rounded-[10px] border border-line-3 bg-surface font-normal text-i
  * 그래서 값·되돌리기 기록·캐럿이 그대로 이어지고, 부모의 저장 흐름(onChange)도 바뀌지 않는다.
  * showModal 은 top layer 라 @container(레이아웃 격리) 안에서도 화면 전체 기준으로 뜬다.
  */
-const len = (v: number | string) => (typeof v === "number" ? `${v}px` : v);
-
 export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy, minHeight = 240, maxHeight = 480, expandable = true, tools, stickyToolbar, contentMaxWidth, className = "" }: MarkdownEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const bigHost = useRef<HTMLDivElement>(null);
@@ -303,7 +303,7 @@ export function MarkdownEditor({ value, onChange, placeholder, label, labelledBy
     expandBtn.current?.focus();
   };
 
-  // 긴 글에서 툴바가 위로 사라지지 않게 (Q1-10) — 안쪽 스크롤 편집 면(maxHeight 숫자)은 툴바가 이미 늘 보인다
+  // 긴 글에서 툴바가 위로 사라지지 않게 — 안쪽 스크롤 편집 면(maxHeight 숫자)은 툴바가 이미 늘 보인다
   const sticky = stickyToolbar ?? (maxHeight === "none" ? "var(--md-sticky-top, 0px)" : undefined);
   const groups = tools ? GROUPS.map((g) => g.filter((t) => tools.includes(t.cmd))).filter((g) => g.length > 0) : GROUPS;
   return (

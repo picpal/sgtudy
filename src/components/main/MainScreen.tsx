@@ -61,7 +61,7 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
     res: initial,
     error: "",
   }));
-  // 진행 중 여부·에러는 key 로 파생 — effect 본문에서 동기 setState 하지 않는다(C10, react-hooks 7).
+  // 진행 중 여부·에러는 key 로 파생 — effect 본문에서 동기 setState 하지 않는다(react-hooks 7 규칙).
   const loading = done.key !== key;
   const error = loading ? "" : done.error;
   const res = done.res;
@@ -91,7 +91,6 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
     if (step === "push" && !first) window.history.pushState(null, "", href);
     else window.history.replaceState(null, "", href);
   }, [tab, status, dq, tags]);
-  // 뒤로·앞으로 가기 → 그 기록의 필터로
   useEffect(() => {
     const onPop = () => {
       const f = urlFilters(!me);
@@ -151,7 +150,7 @@ export function MainScreen({ initial, filters }: { initial: RoomListResponse; fi
             tab={tab}
             status={status}
             tagLabels={selectedLabels}
-            // 필터 초기화는 검색어도 지운다 — 남겨 두면 결과가 계속 비어 있다(Q3-5)
+            // 필터 초기화는 검색어도 지운다 — 남겨 두면 결과가 계속 비어 있다
             onReset={() => {
               setStatus("all");
               setTags([]);

@@ -43,7 +43,7 @@ export function Toolbar({ y, m, view, off, studies, onPrev, onNext, onToday, onT
         </button>
       </div>
       <div className="flex-[1_1_20px]" />
-      {/* ≤640: 스터디 칩이 한 줄씩 쌓여 달력이 한참 밀린다 — 카드 끝까지 한 줄 가로 스크롤. py-[5px]: 34px 칩의 44px 누름 영역이 스크롤 상자에 잘리지 않게 */}
+      {/* <640: 스터디 칩이 한 줄씩 쌓여 달력이 한참 밀린다 — 카드 끝까지 한 줄 가로 스크롤. py-[5px]: 34px 칩의 44px 누름 영역이 스크롤 상자에 잘리지 않게 */}
       <div role="group" aria-label="스터디 필터" className="thin-scroll flex flex-wrap gap-x-[6px] gap-y-[10px] max-sm:-mx-4 max-sm:-my-[5px] max-sm:w-[calc(100%+2rem)] max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 max-sm:py-[5px] max-sm:[&>*]:shrink-0 max-sm:[&>*]:whitespace-nowrap">
         {studies.map((s) => {
           const active = !off.includes(s.id);

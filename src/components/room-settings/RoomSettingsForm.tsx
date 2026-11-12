@@ -39,7 +39,7 @@ function Section({ title, desc, children }: { title: string; desc?: string; chil
 }
 
 /**
- * 방 설정 (그룹장, QA Q3-1·Q2-2) — 방 만들기 폼과 같은 칸 + 태그 + 삭제/보관.
+ * 방 설정 (그룹장) — 방 만들기 폼과 같은 칸 + 태그 + 삭제/보관.
  * 저장: 바뀐 칸만 room_update, 태그가 바뀌었으면 room_tags_put. 잠긴 칸·삭제/보관 가능 여부는 서버 규칙(settings.ts)을 따른다
  */
 export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail: RoomDetail; back?: string }) {
@@ -77,7 +77,7 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
     window.addEventListener("beforeunload", onBefore);
     return () => window.removeEventListener("beforeunload", onBefore);
   }, [dirtyCount]);
-  // 앱 안 링크(헤더 메뉴·로고·"내 스터디로")로 떠날 때도 묻는다 (Q2-1, leaveGuard)
+  // 앱 안 링크(헤더 메뉴·로고·"내 스터디로")로 떠날 때도 묻는다 (leaveGuard)
   const leaveAsk = useLeaveConfirm(dirtyCount > 0, (href) => router.push(href));
 
   const set = <K extends keyof NewRoomValues>(k: K, val: NewRoomValues[K]) => {
@@ -87,7 +87,7 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
   };
   const recheck = (k: keyof NewRoomValues) => setErrors((e) => revalidateOnChange(e, k, v, today, recheckWith));
   const dis = (k: keyof NewRoomValues) => locked.has(k) || busy;
-  // 입력 중 오류 갱신도 상태별 규칙으로(진행중 시작일은 과거 허용 — 0048)
+  // 입력 중 오류 갱신도 상태별 규칙으로(진행중 시작일은 과거 허용)
   const recheckWith = (next: NewRoomValues, t: string) => validateSettings(base, next, t, d);
 
   const save = async (e: FormEvent) => {
@@ -100,7 +100,7 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
     setBusy(true);
     setServerError("");
     try {
-      // 방 정보가 저장되면 태그 결과를 기다리지 않고 기준값을 먼저 갱신 — 태그만 실패해도 "바뀐 항목"엔 태그만 남는다 (최종 리뷰 Minor 6)
+      // 방 정보가 저장되면 태그 결과를 기다리지 않고 기준값을 먼저 갱신 — 태그만 실패해도 "바뀐 항목"엔 태그만 남는다
       const next = await saveSteps(
         { hasPatch: Object.keys(patch).length > 0, tagsDirty },
         {
@@ -133,7 +133,7 @@ export function RoomSettingsForm({ detail: initialDetail, back: prev }: { detail
       setBusy(false);
     }
   };
-  // 추가 모집 섹션의 바로 저장 — 서버가 바꾼 칸만 기준값·현재값의 "최신" 상태에 덮는다(Codex #8·2-4). 요청 전 base/v 를 캡처하지 않는다
+  // 추가 모집 섹션의 바로 저장 — 서버가 바꾼 칸만 기준값·현재값의 "최신" 상태에 덮는다. 요청 전 base/v 를 캡처하지 않는다
   const onRecruitDetail = (next: RoomDetail, changed: readonly (keyof NewRoomValues)[]) => {
     setD(next);
     setBase((b) => mergeServerFields(b, next, changed));

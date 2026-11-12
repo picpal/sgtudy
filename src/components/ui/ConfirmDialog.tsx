@@ -10,7 +10,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, danger, busy, c
   const cancelRef = useRef<HTMLButtonElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   // 열릴 때만 포커스 — 부모 재렌더(busy 등)로 포커스가 "돌아가기" 로 튀지 않게 open 에만 묶는다.
-  // 닫히면 연 버튼으로 포커스를 돌려준다(그 버튼이 사라졌으면 그대로 둔다) — Q1-16
+  // 닫히면 연 버튼으로 포커스를 돌려준다(그 버튼이 사라졌으면 그대로 둔다)
   useEffect(() => {
     if (!open) return;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -19,9 +19,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, danger, busy, c
       if (trigger?.isConnected) trigger.focus();
     };
   }, [open]);
-  // 포커스 트랩: Tab/Shift+Tab 이 대화상자 안의 버튼·입력칸 사이만 돈다
   const onTrapKey = useFocusTrap(boxRef);
-  // 처리 중(busy)에는 Esc·바깥 클릭으로 닫히지 않는다
   useEffect(() => {
     if (!open || busy) return;
     const onKey = (e: globalThis.KeyboardEvent) => e.key === "Escape" && onCancel();

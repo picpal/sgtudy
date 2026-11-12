@@ -15,7 +15,6 @@ const STATUS_BADGE: Record<CardStatus, { label: string; bg: string; fg: string }
   draft: { label: "준비중", bg: "#E9EEF0", fg: "#4A5563" },
 };
 
-/** 상태 슬롯 톤 [배경, 라벨색, 막대색, 트랙색] */
 const SLOT_TONE: Record<CardStatus, { bg: string; label: string; bar: string; track: string }> = {
   recruit: { bg: "#EFF4FE", label: "#2F5BC2", bar: "#3B6FE0", track: "#D6E2FA" },
   full: { bg: "#FDF1EC", label: "#B4462B", bar: "#C9583A", track: "#F4D9CF" },
@@ -25,7 +24,7 @@ const SLOT_TONE: Record<CardStatus, { bg: string; label: string; bar: string; tr
 };
 
 /** anonymous: 비로그인이면 카드를 누를 때 로그인부터 — 로그인 뒤 그 방으로 돌아온다 */
-/** filters: 지금 둘러보기 필터 — 상세 화면 왼쪽 목록이 이어받는다 (시나리오 QA #19) */
+/** filters: 지금 둘러보기 필터 — 상세 화면 왼쪽 목록이 이어받는다 */
 /** room.mine(그룹장·참가중): 공개 방 대신 그 방의 내 스터디로 — 공개 방 화면은 주소로 바로 열면 그대로 열린다 */
 type Props = { room: Room; selectedTags: string[]; anonymous?: boolean; filters?: HomeFilters };
 

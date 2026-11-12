@@ -84,17 +84,14 @@ export function Listbox({
     if (o && o.value !== value) onChange(o.value);
   };
 
-  // 열리면 목록에 포커스
   useEffect(() => {
     if (open) list.current?.focus();
   }, [open]);
-  // 활성 항목이 보이도록
   useEffect(() => {
     if (!open) return;
     document.getElementById(optId(active))?.scrollIntoView?.({ block: "nearest" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, active]);
-  // 바깥 누르면 닫기
   useEffect(() => {
     if (!open) return;
     const onDown = (e: PointerEvent) => {
@@ -210,7 +207,7 @@ export function Listbox({
                       <span className={`truncate text-[14px] ${on ? "font-bold" : "font-semibold"}`}>{o.label}</span>
                       {o.sub && <span className="text-[12px] font-medium text-muted">{o.sub}</span>}
                     </span>
-                    {/* 목록의 꼬리표는 같은 폭(가운데 글자) — 「종료」처럼 짧은 꼬리표가 「이번 회차」와 어긋나 보이지 않게 (E2E I-8) */}
+                    {/* 목록의 꼬리표는 같은 폭(가운데 글자) — 「종료」처럼 짧은 꼬리표가 「이번 회차」와 어긋나 보이지 않게 */}
                     {o.tag && <Tag tag={o.tag} className="min-w-[60px] text-center" />}
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`shrink-0 text-mint ${on ? "" : "invisible"}`}>
                       <path d="m5 12.5 4.5 4.5L19 7.5" />

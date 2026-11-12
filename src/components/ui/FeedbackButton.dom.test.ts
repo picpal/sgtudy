@@ -5,12 +5,13 @@ import { createRoot, type Root } from "react-dom/client";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const api = vi.hoisted(() => ({ calls: [] as unknown[][], fail: null as unknown, pushed: [] as string[] }));
+const api = vi.hoisted(() => ({ calls: [] as unknown[][], fail: null as unknown, hang: false, pushed: [] as string[] }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: (h: string) => api.pushed.push(h) }) }));
 vi.mock("@/lib/api/feedback", async (orig) => ({
   ...(await orig<typeof import("@/lib/api/feedback")>()),
   submitFeedback: (...a: unknown[]) => {
     api.calls.push(a);
+    if (api.hang) return new Promise(() => {});
     return api.fail ? Promise.reject(api.fail) : Promise.resolve({ id: "1", createdAt: "2026-10-22T01:00:00Z" });
   },
 }));
@@ -44,6 +45,7 @@ afterEach(() => {
   document.body.innerHTML = "";
   api.calls = [];
   api.fail = null;
+  api.hang = false;
   api.pushed = [];
   delete (window as { matchMedia?: unknown }).matchMedia;
   window.history.replaceState(null, "", "/");
@@ -95,6 +97,17 @@ describe("FeedbackButton", () => {
     await act(async () => byText("보내기").click());
     expect(dialog()!.querySelector('[role="alert"]')!.textContent).toBe("의견을 너무 자주 보내고 있어요 · 잠시 후 다시 보내 주세요");
     expect(document.querySelector("textarea")!.value).toBe("버튼이 안 눌려요");
+  });
+
+  it("보내는 중에는 Esc·바깥 클릭으로 닫히지 않는다", async () => {
+    api.hang = true;
+    await mount();
+    await act(async () => trigger().click());
+    await type("버튼이 안 눌려요");
+    await act(async () => byText("보내기").click());
+    await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    await act(async () => dialog()!.parentElement!.click());
+    expect(dialog()).not.toBeNull();
   });
 
   it("Esc 로 닫는다", async () => {

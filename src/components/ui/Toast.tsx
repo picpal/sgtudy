@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 export type ToastMsg = { text: string; tone: "ok" | "bad"; action?: { label: string; onClick: () => void } } | null;
 
 export function Toast({ msg, onClose }: { msg: ToastMsg; onClose: () => void }) {
-  // 버튼이 있는 토스트는 마우스를 올리거나 포커스가 안에 있는 동안 닫히지 않는다(WCAG 2.2.1). 글자만 있는 토스트는 그대로
+  // 버튼이 있는 토스트는 hover·포커스 동안 멈춘다(WCAG 2.2.1)
   // 붙잡은 토스트를 객체로 기억 — 새 토스트가 오면 자동으로 풀린다
   const [heldMsg, setHeldMsg] = useState<ToastMsg>(null);
   const paused = !!msg?.action && heldMsg === msg;
@@ -18,7 +18,7 @@ export function Toast({ msg, onClose }: { msg: ToastMsg; onClose: () => void }) 
   }, [msg, onClose, paused]);
   if (!msg) return null;
   const action = msg.action;
-  // 글자만 있는 알림이라 클릭을 받을 일이 없다 — 아래 버튼(회차 추가 등)을 가리지 않게 통과시킨다 (V2-07). 버튼이 있으면 토스트만 클릭을 받는다
+  // 글자만 있는 알림이라 클릭을 받을 일이 없다 — 아래 버튼(회차 추가 등)을 가리지 않게 통과시킨다. 버튼이 있으면 토스트만 클릭을 받는다
   return (
     <div
       role={msg.tone === "bad" ? "alert" : "status"}
