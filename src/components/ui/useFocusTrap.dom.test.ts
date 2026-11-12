@@ -23,7 +23,7 @@ const tab = (shiftKey = false) =>
   act(() => void document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true })));
 const label = () => document.activeElement?.textContent?.trim() || (document.activeElement as HTMLInputElement | null)?.name;
 
-// 대화상자 포커스 트랩 공용화 (공지 팝업 스펙 §6.4) — ConfirmDialog 동작은 그대로
+// 대화상자 포커스 트랩 공용화 — ConfirmDialog 동작은 그대로
 describe("useFocusTrap", () => {
   it("ConfirmDialog — 마지막에서 Tab 은 처음으로, 처음에서 Shift+Tab 은 마지막으로 (입력칸 포함)", () => {
     mount(createElement(ConfirmDialog, { open: true, title: "t", body: "b", confirmLabel: "확인", onConfirm: () => {}, onCancel: () => {} }, createElement("input", { name: "reason" })));

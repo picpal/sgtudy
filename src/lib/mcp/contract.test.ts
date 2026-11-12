@@ -1,4 +1,4 @@
-/* 〔C#9·#5〕 SQL 응답 계약 — supabase/tests/api-invoke-sql.test.ts 가 실제 api_invoke 응답을 정규화해 쓴 fixture 를
+/* SQL 응답 계약 — supabase/tests/api-invoke-sql.test.ts 가 실제 api_invoke 응답을 정규화해 쓴 fixture 를
    포맷터에 그대로 넣는다. 손으로 만든 format.test.ts fixture 가 실제 모양과 어긋나는 것을 막는다.
    계약을 바꾸는 SQL 변경 → `UPDATE_CONTRACT=1 npm run test:db` 로 fixture 갱신 후 이 테스트를 다시 돌린다(같은 커밋) */
 import { describe, expect, it } from "vitest";
@@ -50,7 +50,7 @@ describe("api-contract → formatters", () => {
     expect(lines[0]).toMatch(new RegExp(`^미리보기 · ${slug} \\(아직 적용 전\\)`));
     for (const mark of ["+ ", "~ ", "↪ "]) expect(lines.some((l) => l.trimStart().startsWith(mark))).toBe(true);
     expect(t).toContain("[지정: 지은]");
-    expect(t).toMatch(/^\+ \[시험\] 계약 시험 /m);                       // 0038 create kind:"exam"
+    expect(t).toMatch(/^\+ \[시험\] 계약 시험 /m);                       // create kind:"exam"
     const warn = lines.filter((l) => l.startsWith("경고"));
     expect(warn.length).toBe(preview.warnings.length);
     for (const w of warn) expect(w).toMatch(/: .*[가-힣]/);

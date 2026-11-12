@@ -219,7 +219,7 @@ describe("PersonalForm 첨부 파일", () => {
     });
     act(() => button("저장").click());
     await flush();
-    expect(m.set).toHaveBeenCalledWith("32", ["s1", "new1"], ["s1"]);   // 3인자(base = 붙어 있던 목록, D30)
+    expect(m.set).toHaveBeenCalledWith("32", ["s1", "new1"], ["s1"]);   // 3인자(base = 붙어 있던 목록)
     expect(order).toEqual(["files", "node"]);
     expect(m.discard).not.toHaveBeenCalled();
     expect(host.querySelector("form")).toBeNull();

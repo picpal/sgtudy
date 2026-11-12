@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Q1-5·Q2-5: 누르는 영역 44px — 보이는 크기는 그대로 두고 가상 요소(before:h-11)나 높이(h-11)로 영역만 키운다.
+// 누르는 영역 44px — 보이는 크기는 그대로 두고 가상 요소(before:h-11)나 높이(h-11)로 영역만 키운다.
 // jsdom 은 레이아웃을 계산하지 않으므로 "44px 영역을 만드는 클래스가 있는가"를 본다.
 import { describe, expect, it } from "vitest";
 import { createElement, type ComponentProps } from "react";

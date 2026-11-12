@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { addDays } from "../normalize";
 import { labelFor, splitRounds } from "./schedule";
 
-/* 회차 표(D23) — 7/14일 전환 · 꼬리 합침 · 마지막 = 종료일 · 연속 */
+/* 회차 표 — 7/14일 전환 · 꼬리 합침 · 마지막 = 종료일 · 연속 */
 const S = "2026-10-26";
 const days = (n: number) => splitRounds(S, addDays(S, n - 1));
 

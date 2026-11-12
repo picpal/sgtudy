@@ -56,8 +56,8 @@ describe("showApplications", () => {
   it("not outside recruit or when archived", () => {
     expect(showApplications({ ...d, status: "draft" })).toBe(false);
     expect(showApplications({ ...d, status: "ended", pendingCount: 1 })).toBe(false);
-    expect(showApplications({ ...d, status: "active" })).toBe(false); // 0032: 진행중은 창이 열렸을 때만(대기자 없으면)
-    expect(showApplications({ ...d, status: "active", pendingCount: 1 })).toBe(true); // 0032 스펙 §승인 대기 목록: 대기자가 남아 있으면 진행중도
+    expect(showApplications({ ...d, status: "active" })).toBe(false); // 진행중은 창이 열렸을 때만(대기자 없으면)
+    expect(showApplications({ ...d, status: "active", pendingCount: 1 })).toBe(true); // 승인 대기 목록: 대기자가 남아 있으면 진행중도
     expect(showApplications({ ...d, archived: true })).toBe(false);
   });
 });
@@ -99,7 +99,7 @@ describe("helpers", () => {
   });
 });
 
-// 0016: 예정보다 일찍 "지금 시작"하면 시작일이 오늘로 당겨져 1년 상한을 넘을 수 있다 → PERIOD_TOO_LONG(detail.maxEndDate)
+// 예정보다 일찍 "지금 시작"하면 시작일이 오늘로 당겨져 1년 상한을 넘을 수 있다 → PERIOD_TOO_LONG(detail.maxEndDate)
 describe("startBlockOf (지금 시작 — 기간 1년 초과)", () => {
   it("PERIOD_TOO_LONG 은 전용 문구 + 줄여야 할 종료일 상한", () => {
     expect(startBlockOf({ code: "PERIOD_TOO_LONG", message: "기간은 최대 1년이에요", details: { field: "endDate", maxEndDate: "2027-10-16" } })).toEqual({
@@ -113,7 +113,7 @@ describe("startBlockOf (지금 시작 — 기간 1년 초과)", () => {
   it("다른 오류는 null (일반 토스트)", () => expect(startBlockOf({ code: "ROOM_STATUS_INVALID", message: "x" })).toBeNull());
 });
 
-// 시나리오 QA D1 — 예정보다 일찍 "지금 시작" 하면 일정을 당길지 고른다 (0024 room_start p_shift, 0025 종료일도 함께)
+// 예정보다 일찍 "지금 시작" 하면 일정을 당길지 고른다 (room_start p_shift, 종료일도 함께)
 describe("지금 시작 — 일정 당기기", () => {
   it("earlyStartDays: 모집중이고 오늘이 예정 시작일 전이면 남은 날수, 아니면 0", () => {
     expect(earlyStartDays({ status: "recruit", today: "2026-10-12", startDate: "2026-10-19" })).toBe(7);
@@ -136,7 +136,7 @@ describe("지금 시작 — 일정 당기기", () => {
   });
 });
 
-// 0025 — 방 알림 설정(settings_get/put). 제출 하루 요약(submissionDigest)을 끌 수 있다 (오케스트레이터 결정)
+// 방 알림 설정(settings_get/put). 제출 하루 요약(submissionDigest)을 끌 수 있다
 describe("방 알림 설정", () => {
   it("settings_get / settings_put — 전체 값을 넘긴다", async () => {
     const { calls, client } = fake();

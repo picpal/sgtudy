@@ -16,7 +16,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// 0025·오케스트레이터 결정: 그룹장이 "제출 하루 요약" 알림을 끌 수 있다 — 방 설정의 알림 설정
+// 그룹장이 "제출 하루 요약" 알림을 끌 수 있다 — 방 설정의 알림 설정
 describe("NotifySettingsSection", () => {
   it("불러온 값으로 스위치를 그리고, 제출 하루 요약을 끄면 전체 값을 저장한다", async () => {
     api.fetchNotifySettings.mockResolvedValue(S);

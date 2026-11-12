@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/* POST /api/rooms/rounds — 경계 순서·상한 먼저·계획서 서버 조립·로그(스펙 2026-10-23-room-create-ai-rounds-design §5.1·§6) */
+/* POST /api/rooms/rounds — 경계 순서·상한 먼저·계획서 서버 조립·로그 */
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/kst", () => ({ kstToday: () => "2026-10-23" }));
 const claims = vi.fn();

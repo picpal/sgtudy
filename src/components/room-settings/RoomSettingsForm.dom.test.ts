@@ -130,7 +130,7 @@ describe("방 설정 — 돌아가기 목적지", () => {
   });
 });
 
-/* 추가 모집 · 초대 섹션의 바로 저장이 폼 기준값·현재값에 서버가 바꾼 칸만 반영한다 (Codex #8·2-4) */
+/* 추가 모집 · 초대 섹션의 바로 저장이 폼 기준값·현재값에 서버가 바꾼 칸만 반영한다 */
 describe("방 설정 — 추가 모집 결과가 폼과 맞물린다", () => {
   const typeIn = (el: HTMLInputElement, value: string) => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;

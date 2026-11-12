@@ -2,8 +2,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-/* MCP 경로(src/lib/mcp/**, src/app/api/mcp/**)에 관리자 키가 들어오지 않는다 (md-images 스펙 D21 · 계획 Global Constraints).
-   그림 올리기의 서명·읽기도 anon 키 + 0045 티켓 정책만으로 한다 */
+/* MCP 경로(src/lib/mcp/**, src/app/api/mcp/**)에 관리자 키가 들어오지 않는다.
+   그림 올리기의 서명·읽기도 anon 키 + 티켓 정책만으로 한다 */
 const ROOTS = ["src/lib/mcp", "src/app/api/mcp"];
 const files = (dir: string): string[] =>
   readdirSync(dir).flatMap((n) => {

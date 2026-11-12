@@ -23,7 +23,7 @@ describe("roundOptions", () => {
     expect(o[0].text).toBe("1주차 · IAM·VPC (10.01 – 10.07)");
   });
   it("excludes archived rounds", () => expect(roundOptions(archivedTree.roots).map((x) => x.id)).toEqual(["1", "3", "4", "5"]));
-  // F 리뷰 n1: 라벨 없는 회차는 앞에 " · " 를 남기지 않는다
+  // 라벨 없는 회차는 앞에 " · " 를 남기지 않는다
   it("no label → title (period) without a leading separator", () => {
     const [r] = tree.roots;
     expect(roundOptions([{ ...r, label: null }])[0].text).toBe("IAM·VPC (10.01 – 10.07)");
@@ -265,7 +265,7 @@ describe("roundsOutsidePeriod", () => {
     expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2027-10-14" })?.fitStart).toBe("2026-10-15");
     expect(roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2027-10-15" })?.fitStart).toBeNull();
   });
-  // 「그대로 두기」 기억 키 — 렌더·날짜·개수에 흔들리지 않고, 벗어난 회차 집합이 바뀔 때만 달라진다 (사용자 보고 2026-10-23)
+  // 「그대로 두기」 기억 키 — 렌더·날짜·개수에 흔들리지 않고, 벗어난 회차 집합이 바뀔 때만 달라진다
   it("key: 같은 회차에 과제를 더하거나 종료일만 늘려도 그대로", () => {
     const base = roundsOutsidePeriod(nodes, { start: "2026-10-16", end: "2026-11-25" })!;
     const moreTasks = roundsOutsidePeriod([...nodes, n("t1b", "r1", "10-15", "10-18"), n("g1", "r1", "10-15", "10-21"), n("t1c", "g1", "10-15", "10-16")], { start: "2026-10-16", end: "2026-11-25" })!;
@@ -323,7 +323,7 @@ describe("designatedHint — 모집 전 지정 과제 안내 (시나리오 QA #1
   });
 });
 
-// 시나리오 QA D2: 회차 시작일을 바꾸면 하위 과제·개인 목표도 같은 날수만큼 옮길지 묻는다 (0024 node_update shiftDescendants)
+// 회차 시작일을 바꾸면 하위 과제·개인 목표도 같은 날수만큼 옮길지 묻는다 (node_update shiftDescendants)
 describe("shiftAskOf · shiftAskText · shiftedText", () => {
   const withStart = (id: string, s: string) => buildTree(AWS, { ...EMPTY_OVERRIDES, dates: { [id]: { s } } }, REF_DAY);
   it("시작일이 바뀐 회차 → 날수와 하위(보관 제외) 과제·개인 목표·묶음 수", () => {
@@ -350,7 +350,7 @@ describe("shiftAskOf · shiftAskText · shiftedText", () => {
   });
 });
 
-// 최종 리뷰 Minor 4: 확인이 떠 있는 동안 날짜를 또 바꾸면 그 확인(n일)은 낡았다 — 같은 질문일 때만 그대로 둔다
+// 확인이 떠 있는 동안 날짜를 또 바꾸면 그 확인(n일)은 낡았다 — 같은 질문일 때만 그대로 둔다
 describe("sameShiftAsk", () => {
   it("날수·개수가 같을 때만 같다", () => {
     const a = { days: 7, tasks: 1, personal: 2, groups: 1 };

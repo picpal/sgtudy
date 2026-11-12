@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-// "≤900" 규칙 (QA V2-01/V2-02): Tailwind 는 max-[901px] / min-[901px] (width < 901 / ≥ 901),
+// "≤900" 규칙: Tailwind 는 max-[901px] / min-[901px] (width < 901 / ≥ 901),
 // JS 는 matchMedia("(max-width: 900px)"). 900 에서 CSS 와 JS 가 서로 다른 쪽을 보면 하이브리드 레이아웃이 된다.
 const SRC = path.resolve(__dirname, "..");
 const files = (dir: string): string[] =>

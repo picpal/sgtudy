@@ -71,7 +71,7 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-// 백로그 F 리뷰 I1: 같은 방 진행목표 탭(같은 key)에서 묶음 알림 ?tab=curriculum&item= 을 누르면 그 항목 상세가 열린다
+// 같은 방 진행목표 탭(같은 key)에서 묶음 알림 ?tab=curriculum&item= 을 누르면 그 항목 상세가 열린다
 describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
   it("목록 → 같은 화면에서 ?item= 로 바뀌면 보기 상세가 열린다", () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
@@ -90,7 +90,7 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     expect(detailTitle(host)).toContain(title("3"));
   });
 
-  // 재리뷰 m2: 알림으로 연 상세를 닫으면 알림 이동이 쌓은 기록을 back — 원래 목록 주소·탭으로 돌아온다
+  // 알림으로 연 상세를 닫으면 알림 이동이 쌓은 기록을 back — 원래 목록 주소·탭으로 돌아온다
   it("알림으로 연 상세를 닫으면 history.back 으로 원래 목록 주소로 돌아온다", async () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
     const { host, render } = mount({});
@@ -108,7 +108,7 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     back.mockRestore();
   });
 
-  // F 리뷰 n1 → 출발지 복귀: 보드 탭에서 연 상세는 화면 안 [← 보드]로 닫으면 보드 — 돌아온 목록 기록의 ?tab= 도 화면을 따른다
+  // 출발지 복귀: 보드 탭에서 연 상세는 화면 안 [← 보드]로 닫으면 보드 — 돌아온 목록 기록의 ?tab= 도 화면을 따른다
   const selectedTab = (host: HTMLElement) => host.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? "";
   const openFromBoard = () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=board");
@@ -128,7 +128,7 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     expect(selectedTab(host)).toContain("보드");
     expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=board");
   });
-  // F 리뷰 n2: 브라우저 뒤로 가기는 상세를 연 목록 기록의 탭(보드)으로 — backTab 회귀를 잡는다
+  // 브라우저 뒤로 가기는 상세를 연 목록 기록의 탭(보드)으로 — backTab 회귀를 잡는다
   it("보드에서 연 상세에서 브라우저 뒤로 가기 → 보드 탭", async () => {
     const { host } = openFromBoard();
     const popped = new Promise((r) => window.addEventListener("popstate", r, { once: true }));
@@ -139,7 +139,7 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     expect(window.location.pathname + window.location.search).toBe("/my-study/aws?tab=board");
   });
 
-  // F 리뷰 m1: 개요 목록 → (알림 등으로) 진행목표 목록 주소로 이동 → 브라우저 뒤로. 이 화면이 닫은 back 이 아니므로 돌아온 ?tab=overview 를 curriculum 으로 고치지 않는다
+  // 개요 목록 → (알림 등으로) 진행목표 목록 주소로 이동 → 브라우저 뒤로. 이 화면이 닫은 back 이 아니므로 돌아온 ?tab=overview 를 curriculum 으로 고치지 않는다
   it("다른 목록 주소에서 뒤로 가기로 돌아오면 ?tab= 을 이 화면 탭으로 고치지 않는다", async () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=overview");
     window.history.pushState(null, "", "/my-study/aws?tab=curriculum");
@@ -154,7 +154,7 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
     replace.mockRestore();
   });
 
-  // 재리뷰 m1: 벨로 item=31 → 상세 안에서 상위(3회차)로 이동 → 같은 알림을 다시 누름. initialItem 은 그대로 31 이지만 벨이 알린 item 을 연다
+  // 벨로 item=31 → 상세 안에서 상위(3회차)로 이동 → 같은 알림을 다시 누름. initialItem 은 그대로 31 이지만 벨이 알린 item 을 연다
   it("상세 안에서 다른 항목으로 옮긴 뒤 같은 알림을 다시 누르면 그 항목이 다시 열린다", () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
     const { host, render } = mount({});
@@ -174,7 +174,7 @@ describe("MyStudyScreen — 같은 화면에서 ?item= 알림", () => {
   });
 });
 
-// 백로그 F 리뷰 I2: 보관된 방의 신청 취소 확인 — 다시 신청할 수 없다고 알린다 (보관 아닌 방은 그대로)
+// 보관된 방의 신청 취소 확인 — 다시 신청할 수 없다고 알린다 (보관 아닌 방은 그대로)
 describe("MyStudyScreen — 신청 취소 확인 문구", () => {
   const confirmBody = (archived: boolean) => {
     const pendingDetail = { ...detail, archived, status: "recruit", me: { state: "pending" } } as RoomDetail;
@@ -367,7 +367,7 @@ describe("MyStudyScreen — 상세 [← 연 곳]", () => {
   });
 });
 
-// 백로그 F 리뷰(1319cc2) #6: 내 스터디에서 방 설정으로 가는 링크는 지금 탭을 ?from= 으로 싣는다 → 설정 "이전 페이지" 가 그 탭으로
+// 내 스터디에서 방 설정으로 가는 링크는 지금 탭을 ?from= 으로 싣는다 → 설정 "이전 페이지" 가 그 탭으로
 const { routes, MY_STUDY_TABS } = await import("@/lib/routes");
 const { TABS } = await import("./StudyHeaderInfo");
 describe("MyStudyScreen — 방 설정 링크의 from", () => {
@@ -390,7 +390,7 @@ describe("MyStudyScreen — 방 설정 링크의 from", () => {
   });
 });
 
-// 개인 목표 편집(보기 모드) — 미저장 수정이 있으면 탭 전환·브라우저 뒤로 가기도 묻는다 (Task 7 M-1)
+// 개인 목표 편집(보기 모드) — 미저장 수정이 있으면 탭 전환·브라우저 뒤로 가기도 묻는다
 describe("MyStudyScreen — 개인 목표 편집 폼 미저장", () => {
   const flush = () =>
     act(async () => {
@@ -468,7 +468,7 @@ describe("MyStudyScreen — 개인 목표 편집 폼 미저장", () => {
   });
 });
 
-// 재리뷰 R-3: 다른 화면 주소로 돌아간 popstate(클라이언트 이동으로 들어온 경우)는 이 화면이 막거나 ?item= 을 쌓지 않는다
+// 다른 화면 주소로 돌아간 popstate(클라이언트 이동으로 들어온 경우)는 이 화면이 막거나 ?item= 을 쌓지 않는다
 describe("MyStudyScreen — popstate 가 다른 화면 주소면 손대지 않는다", () => {
   const flush = () =>
     act(async () => {
@@ -541,7 +541,7 @@ describe("MyStudyScreen — popstate 가 다른 화면 주소면 손대지 않�
     expect(host.textContent).toContain("저장하지 않은 수정이 있어요");
   });
 
-  // 재리뷰 nit: [목록, 31, 32] 에서 32 를 고치다 뒤로 → 확인 → 버리기 = 31 기록으로 돌아간다 (31 기록을 하나 더 만들지 않는다)
+  // [목록, 31, 32] 에서 32 를 고치다 뒤로 → 확인 → 버리기 = 31 기록으로 돌아간다 (31 기록을 하나 더 만들지 않는다)
   it("개인 목표 폼 미저장 — 뒤로 가기 확인에서 버리기 하면 아래 기록으로 돌아가 그다음 뒤로 가기가 목록", async () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=curriculum");
     const cur = { ...AWS, personal: { canAdd: true, perRound: 20 } };
@@ -579,7 +579,7 @@ describe("MyStudyScreen — popstate 가 다른 화면 주소면 손대지 않�
   });
 });
 
-// 공지(0040) — 진입 팝업·탭 점·알림 링크
+// 공지 — 진입 팝업·탭 점·알림 링크
 describe("MyStudyScreen — 공지", () => {
   const notice = { id: "5", title: "모임 규칙", bodyMd: "늦지 말아요", popup: true, pinned: false, author: P("u2", "민수", "mint"), createdAt: "2026-10-20T01:00:00.000Z", updatedAt: "2026-10-20T01:00:00.000Z", edited: false, read: false, rev: 2 };
   const tabBtn = (host: HTMLElement, name: string) => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((b) => b.textContent === name)!;
@@ -630,7 +630,7 @@ describe("MyStudyScreen — 공지", () => {
   });
 });
 
-// 댓글 스펙 D15·D16: 멘션 알림 링크 ?task={id}#comment-{cid} · ?tab=curriculum&item={id}#comment-{cid}
+// 댓글 멘션 알림 링크 ?task={id}#comment-{cid} · ?tab=curriculum&item={id}#comment-{cid}
 describe("MyStudyScreen — 댓글 딥링크", () => {
   const tabBtn = (host: HTMLElement, name: string) => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((b) => b.textContent?.includes(name))!;
   it("?task=#comment- 로 열면 그 과제 상세 + 댓글을 from 으로 불러온다", async () => {

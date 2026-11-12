@@ -18,7 +18,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-// 백로그 F①: 보관된 방에서 승인 대기 중이면 "보관된 스터디" 안내와 함께 [신청 취소]
+// 보관된 방에서 승인 대기 중이면 "보관된 스터디" 안내와 함께 [신청 취소]
 describe("JoinCard — 보관된 방의 승인 대기", () => {
   it("보관 안내 + 신청 취소 버튼", () => {
     const onCancel = vi.fn();
@@ -51,7 +51,7 @@ describe("JoinCard — 보관된 방의 승인 대기", () => {
   });
 });
 
-// 0032: 진행중 방 참가 안내 (D12)
+// 진행중 방 참가 안내
 describe("JoinCard — 진행중 방 참가", () => {
   it("과제 안내 + 마감일 + 탈퇴 요청 안내", () => {
     const host = document.body.appendChild(document.createElement("div"));

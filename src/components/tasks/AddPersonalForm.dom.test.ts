@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { MeTasks } from "@/lib/api/types";
 import { AddPersonalForm } from "./AddPersonalForm";
 
-// QA Q3-2: 머리 "＋ 목표" 폼이 고른 스터디 칩을 따르고, 스터디 이름을 늘 보이며, 못 더하는 방은 이유를 알린다
+// 머리 "＋ 목표" 폼이 고른 스터디 칩을 따르고, 스터디 이름을 늘 보이며, 못 더하는 방은 이유를 알린다
 const data = (): MeTasks => ({
   today: "2026-10-16",
   personalPerRound: 20,

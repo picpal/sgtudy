@@ -65,7 +65,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// 방 만들기 AI 2단계 D22·D35 — 회차 적용·모집 시작이 실패하면 생성 화면이 ?note= 로 넘긴다
+// 방 만들기 AI 2단계 — 회차 적용·모집 시작이 실패하면 생성 화면이 ?note= 로 넘긴다
 describe("MyStudyScreen — 방 만들기 직후 안내(?note=)", () => {
   it("rounds-skipped · recruit-skipped → 각 토스트 · 준비중 막대는 그대로", () => {
     let host = mount({}, { initialNote: "rounds-skipped" });

@@ -27,7 +27,7 @@ describe("OverviewTab 내 카드 개인 목표 줄", () => {
   });
 });
 
-// Q2-11: 소개·규칙·회차가 없는 방 — 제목만 덩그러니 두지 않고 빈 상태 안내(그룹장은 어디서 채우는지까지)
+// 소개·규칙·회차가 없는 방 — 제목만 덩그러니 두지 않고 빈 상태 안내(그룹장은 어디서 채우는지까지)
 const emptyRoom = {
   id: "new-room", title: "새 방", intro: "소개", status: "recruit", draft: true, period: "", dday: "", ddayLong: "", joinMode: "바로 참가", visibility: "공개",
   leader: "민수", tags: [], capCur: 1, capMax: 5, minText: "", minOk: true, members: [],

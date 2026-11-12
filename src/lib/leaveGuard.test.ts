@@ -67,7 +67,7 @@ describe("samePage — 내 스터디 화면 key(page.tsx: id·task·tab) 와 같
   });
 });
 
-// 최종 리뷰 I2: 깨끗한 편집 화면이 같은 화면 알림 링크(#applications 등)를 삼키지 않는다 — 해시 링크는 막지 않고 이동시킨다
+// 깨끗한 편집 화면이 같은 화면 알림 링크(#applications 등)를 삼키지 않는다 — 해시 링크는 막지 않고 이동시킨다
 describe("holdSamePage — 같은 화면 이동을 편집 화면이 대신 처리하나", () => {
   const here = "http://x/my-study/aws?tab=curriculum&item=3&mode=edit";
   it("해시 없는 같은 화면 주소는 보류(편집 화면만 닫는다)", () => {

@@ -71,7 +71,7 @@ describe("buildTree with overrides (optimistic edits)", () => {
   it("added round appends a temp root after the last round", () => {
     const t = buildTree(AWS, { ...EMPTY_OVERRIDES, added: { root: ["새 회차"] } }, REF_DAY);
     expect(t.rootCount).toBe(6);
-    expect(t.roots[5]).toMatchObject({ id: "root.new0", label: "6주차", s: "2026-11-05", e: "2026-11-11", kids: [] });   // 서버 기본 라벨 "{n}주차"(D14)와 같게 — 응답 후 깜빡임 없음
+    expect(t.roots[5]).toMatchObject({ id: "root.new0", label: "6주차", s: "2026-11-05", e: "2026-11-11", kids: [] });   // 서버 기본 라벨 "{n}주차"와 같게 — 응답 후 깜빡임 없음
   });
 });
 

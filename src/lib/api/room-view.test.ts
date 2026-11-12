@@ -64,7 +64,7 @@ describe("actionOf (03-api §3 결정 순서, roomview §3.5 목업 대응)", ()
     expect(actionOf(detail({ joinMode: "approval", memberCount: 4, maxMembers: 4 }))).toBe("full"); // jcg
     expect(actionOf(detail({ status: "active", joinMode: "approval", me: { state: "active" } }))).toBe("joined"); // aws
     expect(actionOf(detail({ status: "active" }))).toBe("activeClosed");                          // react
-    expect(actionOf(detail({ status: "ended", me: { state: "active" } }))).toBe("joined");         // algo — D14: ended+member → joined
+    expect(actionOf(detail({ status: "ended", me: { state: "active" } }))).toBe("joined");         // algo — ended+member → joined
     expect(actionOf(detail({ status: "ended" }))).toBe("ended");
     expect(actionOf(detail({ me: { state: "active" } }))).toBe("leave");                          // recruit + joined
     expect(actionOf(detail({ joinMode: "approval" }))).toBe("apply");
@@ -157,7 +157,7 @@ describe("sidebar", () => {
   });
 });
 
-// 시나리오 QA D4: 참가 신청 한마디 (0024 room_apply·invite_join p_message — 다듬고 빈 값은 null)
+// 참가 신청 한마디 (room_apply·invite_join p_message — 다듬고 빈 값은 null)
 describe("참가 신청 한마디", () => {
   it("applyRoom·joinByInvite 가 p_message 를 넘긴다", async () => {
     const calls: [string, Record<string, unknown>][] = [];
@@ -175,7 +175,7 @@ describe("참가 신청 한마디", () => {
   });
 });
 
-// 최종 수정 4: 방 화면(/rooms/[slug])도 보관 방은 "보관된 스터디" 로 — 종료·진행중·D-n 이 섞이지 않게 (내 스터디와 같은 규칙)
+// 방 화면(/rooms/[slug])도 보관 방은 "보관된 스터디" 로 — 종료·진행중·D-n 이 섞이지 않게 (내 스터디와 같은 규칙)
 describe("toRoom · actionOf — 보관된 방", () => {
   const active = detail({ status: "active", archived: true, stats: stats({ roundCount: 4 }), startDate: "2026-10-01", endDate: "2026-12-31", rounds: weekly(4, "2026-10-01"), currentRound: weekly(4, "2026-10-01")[1] });
   it("표기를 보관으로 통일", () => {
@@ -193,7 +193,7 @@ describe("toRoom · actionOf — 보관된 방", () => {
     expect(actionOf({ ...detail({ archived: true }), me: { state: "active" } })).toBe("joined"); // 모집 중 보관도 참가 취소 없음
     expect(actionOf({ ...active, me: null })).toBe("archived");
   });
-  // 백로그 F①: 보관된 방에서도 승인 대기 본인은 신청을 취소할 수 있다(서버 room_cancel_application 은 보관 여부를 보지 않는다)
+  // 보관된 방에서도 승인 대기 본인은 신청을 취소할 수 있다(서버 room_cancel_application 은 보관 여부를 보지 않는다)
   it("승인 대기 본인은 pending(신청 취소) — base 는 보관", () => {
     const pend = { ...detail({ archived: true }), me: { state: "pending" as const } };
     expect(actionOf(pend)).toBe("pending");

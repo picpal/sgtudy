@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { RecruitNowField, RECRUIT_DISABLED_HINT } from "./RecruitNowField";
 import { RoundsDraftSection } from "./RoundsDraftSection";
 
-/* 바로 모집 체크(D36·D38) · 회차 초안 섹션 모양(D30·D33) */
+/* 바로 모집 체크 · 회차 초안 섹션 모양 */
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const render = (el: ReturnType<typeof createElement>) => {

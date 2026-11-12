@@ -117,7 +117,7 @@ describe("PeriodWarning (방 기간을 벗어난 회차)", () => {
     const changed = mount({ canEdit: true, gap: { ...gap, key: "b:|a:r6,r7,r8" } });
     expect(changed.host.querySelector("[data-period-warning]")).not.toBeNull();
   });
-  // 회귀(2026-10-23 사용자 보고): 「그대로 두기」 뒤 과제를 더하거나 종료일을 늘리면 문구(개수·기간)가 바뀌어 들어올 때마다 다시 떴다
+  // 회귀: 「그대로 두기」 뒤 과제를 더하거나 종료일을 늘리면 문구(개수·기간)가 바뀌어 들어올 때마다 다시 떴다
   it("그대로 두기: 같은 회차에서 개수·기간 문구만 바뀌면 숨김 유지 (다시 들어와도)", () => {
     const first = mount({ canEdit: true });
     act(() => first.host.querySelector<HTMLButtonElement>("[data-keep-period]")!.click());

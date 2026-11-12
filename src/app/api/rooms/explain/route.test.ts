@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/* POST /api/rooms/explain — 경계 순서·캐시 적중·응시 중 거부·상한·로그(스펙 2026-10-27-ask-ai-term-explain-design §4.3) */
+/* POST /api/rooms/explain — 경계 순서·캐시 적중·응시 중 거부·상한·로그 */
 vi.mock("server-only", () => ({}));
 const claims = vi.fn();
 const dbRpc = vi.fn();

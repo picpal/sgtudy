@@ -34,7 +34,7 @@ async function mount(count = 1) {
   return { host, root, toast };
 }
 
-// 시나리오 QA D3: 그룹장 — 탈퇴 요청 목록(#leave-requests)에서 내보내기 또는 반려, 그 밖의 팀원도 내보내기
+// 그룹장 — 탈퇴 요청 목록(#leave-requests)에서 내보내기 또는 반려, 그 밖의 팀원도 내보내기
 describe("LeaveAdmin — 탈퇴 요청", () => {
   it("요청 목록: 이름·요청 날짜·미제출 지정 과제 수·사유", async () => {
     api.fetchLeaveRequests.mockResolvedValue({ today: "2026-10-12", items: [req] });
@@ -42,7 +42,7 @@ describe("LeaveAdmin — 탈퇴 요청", () => {
     expect(api.fetchLeaveRequests).toHaveBeenCalledWith("r1");
     const box = host.querySelector("#leave-requests")!;
     expect(box.textContent).toContain("탈퇴 요청");
-    // 딥링크로 포커스가 오면 무엇인지 읽힌다 (최종 리뷰 Minor 5)
+    // 딥링크로 포커스가 오면 무엇인지 읽힌다
     expect(host.querySelector(`#${CSS.escape(box.getAttribute("aria-labelledby") ?? "x")}`)?.textContent).toBe("탈퇴 요청");
     const row = box.querySelector('[data-leave-row="u3"]')!;
     expect(row.textContent).toContain("윤호");
@@ -94,7 +94,7 @@ describe("LeaveAdmin — 탈퇴 요청", () => {
     act(() => root.unmount());
   });
 
-  // 0027: 맡길 팀원이 없으면 "담당 미정으로 두기" 가 기본 — 바로 내보낼 수 있고, 토스트에 담당 미정 수
+  // 맡길 팀원이 없으면 "담당 미정으로 두기" 가 기본 — 바로 내보낼 수 있고, 토스트에 담당 미정 수
   it("맡길 사람이 없으면 담당 미정으로 두기가 기본이고 실행된다", async () => {
     api.fetchLeaveRequests.mockResolvedValue({ today: "2026-10-12", items: [req] });
     api.previewDeactivate.mockResolvedValue({ today: "2026-10-12", tasks: [{ nodeId: "9", title: "배열 문제", roundLabel: "1주차", currentAssignees: [] }] });
@@ -119,7 +119,7 @@ describe("LeaveAdmin — 탈퇴 요청", () => {
     act(() => root.unmount());
   });
 
-  // 재리뷰 Minor B: 이미 처리된 요청 알림(#leave-requests, 0건)으로 들어와도 빈 목록이 남아 포커스가 body 로 가지 않는다
+  // 이미 처리된 요청 알림(#leave-requests, 0건)으로 들어와도 빈 목록이 남아 포커스가 body 로 가지 않는다
   it("해시로 들어오면 0건이어도 빈 목록이 남고 포커스를 지킨다", async () => {
     Element.prototype.scrollIntoView = () => {};
     window.history.replaceState(null, "", "/my-study/r1#leave-requests");

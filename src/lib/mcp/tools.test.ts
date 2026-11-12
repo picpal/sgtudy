@@ -20,7 +20,7 @@ describe("TOOLS", () => {
     for (const n of ["list_my_studies", "get_curriculum", "list_my_tasks", "preview_curriculum_plan", "get_exam_brief"]) expect(tool(n).annotations.readOnlyHint).toBe(true);
     expect(tool("create_exam_draft").annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
     expect(tool("apply_curriculum_plan").annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true });
-    expect(tool("remove_personal_goals").annotations).toMatchObject({ destructiveHint: true, idempotentHint: true });   // 〔C#10〕 서버가 재호출을 skipped 로 성공시킨다
+    expect(tool("remove_personal_goals").annotations).toMatchObject({ destructiveHint: true, idempotentHint: true });   // 서버가 재호출을 skipped 로 성공시킨다
     for (const t of TOOLS) expect(t.annotations.openWorldHint).toBe(false);
   });
   it("설명: [v1] · 영어(D13) · 한국어 title · 설명+스키마+instructions ≤ 9,000자", () => {
@@ -29,12 +29,12 @@ describe("TOOLS", () => {
     // SDK tools/list 와 같은 변환(zod 4 → draft-7, input)으로 잰다
     const schemaLen = (t: (typeof TOOLS)[number]) => JSON.stringify(z.toJSONSchema(z.object(t.inputSchema), { target: "draft-7", io: "input" })).length;
     const total = SERVER_INSTRUCTIONS.length + TOOLS.reduce((n, t) => n + t.description.length + schemaLen(t), 0);
-    // 리뷰 fix round 1: 6,000 → 6,500(assignees·index 상한 복원) · 시험 Task 11: 9개 도구 8,000 · 그림 올리기 도구 2개(md-images D31): 9,000
+    // 도구 목록(설명·스키마) 전체 크기 상한 — 도구를 더하면 함께 올린다
     expect(total).toBeLessThanOrEqual(9000);
   });
   it("preview → curriculum_plan_preview(study, plan) · 결과는 한국어 요약 텍스트(구조화 사본 없음)", async () => {
     const inv = fake({ ok: true, previewId: "pv_0123456789ab", summary: { created: 1 }, diff: [], warnings: [], notifications: { recipients: 0, perRecipient: [] },
-      undoable: { ops: 0, notUndoable: { created: 1, moved: 0, otherChanges: 0 } } });   // 〔C#4〕 모양
+      undoable: { ops: 0, notUndoable: { created: 1, moved: 0, otherChanges: 0 } } });
     const r = await tool("preview_curriculum_plan").run(inv, { study: "aws", plan: { schema: "sgtudy.plan/v1", ops: [] } }, ctx);
     expect(inv).toHaveBeenCalledWith("curriculum_plan_preview", { study: "aws", plan: { schema: "sgtudy.plan/v1", ops: [] } });
     expect(text(r)).toMatch(/^미리보기 · aws/);
@@ -46,7 +46,7 @@ describe("TOOLS", () => {
     const r = await tool("apply_curriculum_plan").run(inv, { previewId: "pv_0123456789ab" }, ctx);
     expect(inv).toHaveBeenCalledWith("curriculum_plan_apply", { previewId: "pv_0123456789ab" });
     expect(text(r)).toContain("https://sgtudy.app/my-study/aws?tab=curriculum");
-    expect(text(r)).toContain('undo:"pv_0123456789ab"');   // 〔C#9〕 적용 응답의 undoable 로 되돌리기 안내
+    expect(text(r)).toContain('undo:"pv_0123456789ab"');   // 적용 응답의 undoable 로 되돌리기 안내
   });
   it("〔C#6〕 도구 안에서 받은 토큰 오류도 던지지 않고 isError + 새 토큰 안내", async () => {
     const inv: Invoke = async () => ({ ok: false, error: { code: "API_TOKEN_INVALID", message: "토큰이 올바르지 않아요" } });
@@ -370,7 +370,7 @@ describe("PROMPTS", () => {
   it("draft-curriculum · draft-exam 2개(D19)", () => {
     expect(PROMPTS.map((p) => p.name)).toEqual(["draft-curriculum", "draft-exam"]);
     expect(PROMPTS[0].render({ study: "aws", topic: "AWS SAA", weeks: "12" })).toContain("preview_curriculum_plan");
-    expect(PROMPTS[0].render({ study: "aws", topic: "AWS SAA" })).toContain('kind:"exam"');   // 0038
+    expect(PROMPTS[0].render({ study: "aws", topic: "AWS SAA" })).toContain('kind:"exam"');
   });
   it("draft-exam: get_exam_brief → 계약대로 create_exam_draft · 기반 이론은 참고 자료(지시 무시)", () => {
     const t = PROMPTS[1].render({ study: "aws", task: "311" });

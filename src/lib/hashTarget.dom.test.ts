@@ -31,7 +31,7 @@ const mount = (id: string) => {
   return { host, root };
 };
 
-// 시나리오 QA #8·D4: 알림 딥링크(#applications · #submissions · #leave-requests) — 내용이 준비되면 그 영역으로 스크롤·포커스
+// 알림 딥링크(#applications · #submissions · #leave-requests) — 내용이 준비되면 그 영역으로 스크롤·포커스
 describe("useHashTarget", () => {
   it("주소 해시가 맞으면 준비된 뒤에 한 번 스크롤하고 포커스한다", () => {
     window.history.replaceState(null, "", "/my-study/aws#applications");
@@ -81,7 +81,7 @@ describe("useHashTarget — 알림으로 다른 화면을 열 때", () => {
   });
 });
 
-// 최종 리뷰 I1: 해시는 한 번 쓰면 주소에서 지운다 — 탭을 갔다 와서 다시 마운트돼도 또 스크롤·포커스하지 않는다
+// 해시는 한 번 쓰면 주소에서 지운다 — 탭을 갔다 와서 다시 마운트돼도 또 스크롤·포커스하지 않는다
 describe("useHashTarget — 한 번만", () => {
   it("찾아간 뒤 주소 해시를 지우고, 다시 마운트되면 아무것도 안 한다", () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=overview#applications");
@@ -107,7 +107,7 @@ describe("useHashTarget — 한 번만", () => {
   });
 });
 
-// 최종 리뷰 Minor 1: 다른 방 화면이 알린 해시를 가로채지 않는다
+// 다른 방 화면이 알린 해시를 가로채지 않는다
 describe("useHashTarget — 다른 방의 알림", () => {
   it("지금 화면 경로와 다른 링크의 알림은 무시하고, 그 방 화면이 마운트될 때 쓴다", () => {
     window.history.replaceState(null, "", "/my-study/a");
@@ -124,7 +124,7 @@ describe("useHashTarget — 다른 방의 알림", () => {
   });
 });
 
-// 재리뷰 Minor A: 벨로 다른 화면에 들어와 주소 해시로 hit 되면 남은 pending 도 비운다 — 늦은 재확인·재마운트가 다시 찾아가지 않게
+// 벨로 다른 화면에 들어와 주소 해시로 hit 되면 남은 pending 도 비운다 — 늦은 재확인·재마운트가 다시 찾아가지 않게
 describe("useHashTarget — 해시로 hit 되면 pending 도 비운다", () => {
   it("주소 해시 + pending 이 함께 있을 때 한 번만 찾아가고, 다시 마운트돼도 안 간다", () => {
     vi.useFakeTimers();
@@ -145,7 +145,7 @@ describe("useHashTarget — 해시로 hit 되면 pending 도 비운다", () => {
   });
 });
 
-// 댓글 스펙 D15·D16: #comment-{id} — 고정 id 가 아니라 접두사로 받아 찾은 id 를 돌려준다(화면이 from=id 로 불러온 뒤 ready)
+// 댓글 #comment-{id} — 고정 id 가 아니라 접두사로 받아 찾은 id 를 돌려준다(화면이 from=id 로 불러온 뒤 ready)
 let scrolledBlock: (string | undefined)[] = [];
 function PrefixProbe({ ready, ids }: { ready: boolean; ids: string[] }) {
   const hit = useHashPrefixTarget("comment-", ready, { fallbackId: "comments" });

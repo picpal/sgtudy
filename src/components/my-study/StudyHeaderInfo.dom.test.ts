@@ -91,7 +91,7 @@ describe("StudyHeaderInfo 방 정보 접기", () => {
   });
 });
 
-// 공지 탭(0040) — 개요 바로 다음. 안 읽은 공지가 있으면 탭 라벨 옆 점(D9) — 숫자 대신 점, 이름으로 읽힌다
+// 공지 탭 — 개요 바로 다음. 안 읽은 공지가 있으면 탭 라벨 옆 점 — 숫자 대신 점, 이름으로 읽힌다
 describe("StudyHeaderInfo 공지 탭", () => {
   const tabs = (host: HTMLElement) => [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
   it("탭 순서: 개요 · 공지 · 진행목표 …", () => {

@@ -5,7 +5,7 @@ import { splitRounds } from "./schedule";
 import type { RoundsModel } from "./schema";
 import { examEachRound, goalWithHead, placeRounds, tasksPerRound, toPlan } from "./toPlan";
 
-/* 계획서 서버 조립(D24·D31·Review Focus 2) — planDoc 통과 · 날짜는 회차 표 · 보정 */
+/* 계획서 서버 조립 — planDoc 통과 · 날짜는 회차 표 · 보정 */
 const S = "2026-10-26";
 const sched = (weeks: number) => splitRounds(S, addDays(S, weeks * 7 - 1));
 const model = (n: number, tasks = 3): RoundsModel => ({

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sanitizeLine, sanitizeMd } from "./sanitize";
 
-/* 회차 글 정규화(D31·§6) — 평문 + "- " 불릿만 */
+/* 회차 글 정규화 — 평문 + "- " 불릿만 */
 describe("sanitizeMd", () => {
   it("링크는 글만 · 이미지·HTML 태그·맨 URL 제거", () => {
     expect(sanitizeMd("[공식 문서](https://evil.example) 읽기 ![x](https://t.example/p.png)<script>alert(1)</script> https://a.example/b", 300)).toBe(

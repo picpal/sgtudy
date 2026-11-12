@@ -21,8 +21,8 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// 0016: 예정보다 일찍 "지금 시작" → 시작일이 오늘로 당겨져 1년 상한(PERIOD_TOO_LONG)에 막히면 전용 안내 + 종료일 바꾸기
-// 시나리오 QA D1: 예정보다 일찍 시작하면 확인 창에서 일정을 당길지 고른다(기본 당기기)
+// 예정보다 일찍 "지금 시작" → 시작일이 오늘로 당겨져 1년 상한(PERIOD_TOO_LONG)에 막히면 전용 안내 + 종료일 바꾸기
+// 예정보다 일찍 시작하면 확인 창에서 일정을 당길지 고른다(기본 당기기)
 describe("LeaderPanel 지금 시작 — 일정 당기기 선택", () => {
   const early = { ...detail, startDate: "2026-10-19", endDate: "2026-12-13" };
   const open = (d = early) => {
@@ -121,7 +121,7 @@ describe("LeaderPanel 지금 시작 — 기간 1년 초과", () => {
   });
 });
 
-// Q3-3: "모집 시작"은 공개된다는 안내와 함께 확인을 받는다
+// "모집 시작"은 공개된다는 안내와 함께 확인을 받는다
 describe("LeaderPanel 모집 시작 — 확인 단계", () => {
   it("버튼은 확인 대화상자를 열고, 확인해야 room_open_recruit", async () => {
     api.openRecruit.mockResolvedValue({ ...detail, status: "recruit" });
@@ -150,7 +150,7 @@ describe("LeaderPanel 모집 시작 — 확인 단계", () => {
   });
 });
 
-// 시나리오 QA D4·#8: 신청 한마디를 승인 대기 줄에 보이고, 패널은 알림 딥링크 #applications 의 앵커
+// 신청 한마디를 승인 대기 줄에 보이고, 패널은 알림 딥링크 #applications 의 앵커
 describe("LeaderPanel 승인 대기 — 한마디·앵커", () => {
   it("한마디가 있으면 그 줄 아래에, 영역 id=applications", async () => {
     api.fetchApplications.mockResolvedValue({ today: "2026-10-12", items: [
@@ -170,7 +170,7 @@ describe("LeaderPanel 승인 대기 — 한마디·앵커", () => {
   });
 });
 
-// 0027: 내보내기 등으로 담당 미정이 된 과제 — 그룹장 패널에서 "담당 미정 과제 n개" + 진행목표 편집으로
+// 내보내기 등으로 담당 미정이 된 과제 — 그룹장 패널에서 "담당 미정 과제 n개" + 진행목표 편집으로
 describe("LeaderPanel 담당 미정 안내", () => {
   const mount = (d: object) => {
     const host = document.body.appendChild(document.createElement("div"));
@@ -199,7 +199,7 @@ describe("LeaderPanel 담당 미정 안내", () => {
   });
 });
 
-// 0032: 진행중 + 추가 모집 창 닫힘 → 이 링크로 참가 불가 안내 + 방 설정 링크, 열림이면 칩. 초대 코드 복사는 방 설정에만 둔다
+// 진행중 + 추가 모집 창 닫힘 → 이 링크로 참가 불가 안내 + 방 설정 링크, 열림이면 칩. 초대 코드 복사는 방 설정에만 둔다
 describe("LeaderPanel 초대 행 — 추가 모집·초대 코드", () => {
   const active = { ...detail, status: "active" as const, startDate: "2026-10-01", recruit: { open: false, extraUntil: null } };
   const render = (d: object) => {

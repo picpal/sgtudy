@@ -58,7 +58,7 @@ describe("openaiCallRounds", () => {
     const [body, opts] = parse.mock.calls[0];
     expect(body).toMatchObject({ model: "gpt-6-luna", instructions: "RSYS", input: rin.messages, reasoning: { effort: "low" }, max_output_tokens: 12_000, store: false, prompt_cache_key: "sgtudy-room-rounds" });
     expect(body.text.format).toMatchObject({ type: "json_schema", strict: true, name: "room_rounds_draft" });
-    // 배열 길이 = 쓸 회차 수(D39) · 항목마다 회차 번호
+    // 배열 길이 = 쓸 회차 수 · 항목마다 회차 번호
     expect(body.text.format.schema.properties.rounds).toMatchObject({ minItems: 3, maxItems: 3, items: { required: ["index", "title", "goalMd", "tasks"] } });
     expect(opts).toEqual({ timeout: 50_000, maxRetries: 0 });
     expect(r).toEqual({ ok: true, output: { rounds: [] }, usage: { in: 3000, out: 2500, cached: 1200 }, model: "gpt-6-luna" });

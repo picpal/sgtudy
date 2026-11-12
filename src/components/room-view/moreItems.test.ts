@@ -32,7 +32,7 @@ describe("studyMoreItems — 내 스터디 더보기", () => {
   });
 });
 
-// 시나리오 QA D3 (#4 — 은지가 더보기에서 나가기를 찾았다): 진행 중 참가자는 더보기에서도 탈퇴 요청·요청 취소
+// 진행 중 참가자는 더보기에서도 탈퇴 요청·요청 취소 (사용자가 더보기에서 나가기를 찾았다)
 describe("studyMoreItems — 진행 중 탈퇴 요청", () => {
   it("참가 중이면 탈퇴 요청, 요청 중이면 요청 취소", () => {
     expect(studyMoreItems("joined", { canRequestLeave: true })).toEqual(["roomInfo", "leaveRequest"]);
@@ -71,7 +71,7 @@ describe("menuItemsOf — 방 설정 링크에 지금 화면(from)을 싣는다"
   });
 });
 
-// 백로그 F 리뷰 I2: 방 화면·내 스터디 공용 신청 취소 확인 본문
+// 방 화면·내 스터디 공용 신청 취소 확인 본문
 describe("cancelConfirmBody", () => {
   it("보관된 방은 다시 신청할 수 없다고, 아니면 기존 문구", () => {
     expect(cancelConfirmBody(true)).toBe("보관된 스터디라 취소하면 다시 신청할 수 없어요.");

@@ -111,7 +111,7 @@ describe("minor 보강", () => {
   it("summary.left 는 종료된 방의 미완료를 세지 않는다", () => {
     const m = fx();
     const all = applyFilter(m, { ...DEFAULT_FILTER, scope: "all" });
-    expect(summary(m, all).left).toBe(2); // 팀 과제만 (개인 목표는 따로 — 시나리오 QA #16)
+    expect(summary(m, all).left).toBe(2); // 팀 과제만 (개인 목표는 따로)
   });
   it("round 를 못 찾은 항목은 round:null 그룹", () => {
     const m = fx();
@@ -323,6 +323,6 @@ describe("addBlockReason / studyNote — 추가 못 하는 방은 이유 안내 
     const m = draft();
     expect(studyNote(m.studies.find((s) => s.slug === "mine")!)).toBe("모집을 시작하면 개인 목표를 추가할 수 있어요");
     expect(studyNote(m.studies[0])).toBeNull();
-    expect(studyNote(m.studies[1])).toBeNull(); // 종료 방은 읽기 전용 — 안내 없음(시안 E-4)
+    expect(studyNote(m.studies[1])).toBeNull(); // 종료 방은 읽기 전용 — 안내 없음
   });
 });

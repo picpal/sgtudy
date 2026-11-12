@@ -5,7 +5,7 @@ describe("goLeafPatch", () => {
   it("opens the task detail view instead of an inline row", () =>
     expect(goLeafPatch("21")).toEqual({ tab: "curriculum", curMode: "view", viewSel: "21", viewFocus: "submission", viewFrom: null, editSel: null, closed: {}, calPick: null }));
   it("연 곳(지금 탭)을 적는다", () => expect(goLeafPatch("21", "board").viewFrom).toBe("board"));
-  // 댓글 스펙 D16①: 댓글 알림(#comment-{id})으로 온 과제 상세는 제출 영역으로 끌어가지 않는다
+  // 댓글 알림(#comment-{id})으로 온 과제 상세는 제출 영역으로 끌어가지 않는다
   it("댓글 해시면 viewFocus 없음 · 다른 해시·없음은 제출 영역", () => {
     expect(goLeafPatch("21", null, "comment-31").viewFocus).toBeNull();
     expect(goLeafPatch("21", null, "submissions").viewFocus).toBe("submission");
@@ -132,7 +132,7 @@ describe("개인 목표 편집 폼 미저장 (personalUnsaved) — 보기 모드
   it("tabPatch — 목적지를 보류", () => expect(tabPatch(S, "board", false)).toEqual({ leave: { tab: "board" }, confirm: false }));
 });
 
-// 공지 탭(0040) — 인라인 작성 폼에 저장하지 않은 글이 있으면 다른 탭·헤더 메뉴로 떠나기 전에 묻는다 (스펙 §6.2 D18)
+// 공지 탭 — 인라인 작성 폼에 저장하지 않은 글이 있으면 다른 탭·헤더 메뉴로 떠나기 전에 묻는다
 describe("공지 작성 폼 미저장 (noticeUnsaved)", () => {
   const S = { ...INITIAL_STATE, tab: "notice" as const, noticeEdit: { id: "new" }, noticeUnsaved: true };
   it("blocksLeave — 공지 탭에서만, 권한과 무관", () => {

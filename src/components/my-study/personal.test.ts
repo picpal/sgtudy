@@ -156,7 +156,7 @@ describe("sectionCounts — 보관 제외 (personalStats 와 같은 기준)", ()
   });
   it("archived goals drop out of the counts (leader still sees the rows)", () => {
     expect(sectionCounts(withArchived(["32"]), CHULSU, false)).toEqual({ mine: { total: 0, done: 0 }, others: 1, othersArchived: 0 });
-    // 그룹장에게 보관된 팀원 것만 있으면 "0 · 보관 1" (시안 C-4)
+    // 그룹장에게 보관된 팀원 것만 있으면 "0 · 보관 1"
     expect(sectionCounts(withArchived(["33"]), CHULSU, true)).toEqual({ mine: { total: 1, done: 0 }, others: 0, othersArchived: 1 });
     expect(sectionCounts(withArchived(["33"]), CHULSU, false).othersArchived).toBe(0);
     expect(sectionCounts(withArchived(["33"]), JIEUN, false).mine).toEqual({ total: 0, done: 0 });
@@ -230,7 +230,7 @@ describe("personalLineText — 개요 내 개인 목표 줄 (시나리오 QA #14
   });
 });
 
-// 시나리오 QA #7: 그룹장이 팀원의 개인 목표를 보관할 때는 한 번 묻고, 당사자에게 알림이 간다고 알린다
+// 그룹장이 팀원의 개인 목표를 보관할 때는 한 번 묻고, 당사자에게 알림이 간다고 알린다
 describe("archiveOthersText", () => {
   it("이름을 넣어 확인 문구", () => {
     expect(archiveOthersText("윤호")).toBe("윤호 님의 개인 목표를 보관할까요? 윤호 님에게 알림이 가요 · 보관을 풀면 다시 보여요.");

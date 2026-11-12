@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 
-/* 방 만들기 화면 — 세그먼트·값 유지·인터뷰 흐름·대체 경로 (스펙 D12·D13·§9·§10). fetch 는 목 */
+/* 방 만들기 화면 — 세그먼트·값 유지·인터뷰 흐름·대체 경로. fetch 는 목 */
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const push = vi.fn();

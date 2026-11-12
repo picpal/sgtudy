@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-/* 키·관리자 권한 경계(스펙 §6·Review Focus 4) — 정적 검사 */
+/* 키·관리자 권한 경계 — 정적 검사 */
 const root = path.resolve(__dirname, "../../..");
 function files(dir: string): string[] {
   if (!existsSync(dir)) return [];

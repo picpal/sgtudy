@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ReasonField } from "./ReasonField";
 
-// 최종 리뷰 Minor 3: 글자 수는 키를 누를 때마다 읽히지 않게 — 한도는 입력칸 설명으로 한 번
+// 글자 수는 키를 누를 때마다 읽히지 않게 — 한도는 입력칸 설명으로 한 번
 describe("ReasonField", () => {
   it("카운터는 live 영역이 아니고, 입력칸 설명에 한도", () => {
     const root = document.createElement("div");

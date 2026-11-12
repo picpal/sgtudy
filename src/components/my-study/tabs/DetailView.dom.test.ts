@@ -38,7 +38,7 @@ describe("DetailView 개인 목표 머리 버튼 (스펙 §4.6)", () => {
     const btn = root.querySelector<HTMLButtonElement>("button[aria-pressed]")!;
     expect(btn.disabled).toBe(true);
     expect(root.querySelector(`#${btn.getAttribute("aria-describedby")}`)?.textContent).toBe("스터디가 진행 중일 때 완료할 수 있어요");
-    // 이유는 버튼 밖 — 접근 가능한 이름에 섞여 두 번 읽히지 않게 (최종 리뷰 Minor 6)
+    // 이유는 버튼 밖 — 접근 가능한 이름에 섞여 두 번 읽히지 않게
     expect(btn.textContent?.trim()).toBe("완료로 표시");
   });
   it("그룹장·남의 것: ⋯ 만 (완료·편집 없음)", () => {
@@ -56,7 +56,7 @@ describe("DetailView 개인 목표 머리 버튼 (스펙 §4.6)", () => {
   });
 });
 
-// 시나리오 QA #13: 팀원이 추가한 과제 — 누가 추가했는지 보인다 (0024 createdBy). 알림은 담당자에게만(서버)
+// 팀원이 추가한 과제 — 누가 추가했는지 보인다 (createdBy). 알림은 담당자에게만(서버)
 describe("DetailView 작성자 표시", () => {
   it("createdBy 가 있으면 'OO 님이 추가', 없으면 표시 없음", () => {
     const t = buildTree({ ...AWS, nodes: AWS.nodes.map((n) => (n.id === "21" ? { ...n, createdBy: { userId: "u3", nickname: "지은", tone: "peach" as const } } : n)) }, EMPTY_OVERRIDES, REF_DAY);
@@ -96,7 +96,7 @@ describe("개인 목표 편집 폼 — 저장 안 한 수정이면 앱 안 링�
   });
 });
 
-// 회차 시험 Task 9: 시험 리프 머리 — 경로 끝 "시험" · 시험 배지 · 메타 줄 "· n문항 m점" · 본문은 응시 영역(제출 카드 대신)
+// 시험 리프 머리 — 경로 끝 "시험" · 시험 배지 · 메타 줄 "· n문항 m점" · 본문은 응시 영역(제출 카드 대신)
 describe("DetailView 시험 리프 머리", () => {
   const exam = (e: LeafNode["exam"]) => ({ ...leaf("311"), exam: e }) as LeafNode;
   it("발행된 시험: 시험 · 4문항 5점", () => {

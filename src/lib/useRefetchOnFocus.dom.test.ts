@@ -11,7 +11,7 @@ function Probe({ on, fn }: { on: boolean; fn: () => void }) {
   return null;
 }
 
-// 시나리오 QA #9: 승인 대기 화면을 열어 둔 채 다른 탭에서 승인 알림을 보고 돌아오면 새로 불러 "참가중" 으로
+// 승인 대기 화면을 열어 둔 채 다른 탭에서 승인 알림을 보고 돌아오면 새로 불러 "참가중" 으로
 describe("useRefetchOnFocus", () => {
   it("켜져 있을 때만, 창으로 돌아오면(포커스·보이기) 다시 부른다", () => {
     const fn = vi.fn();
@@ -21,7 +21,7 @@ describe("useRefetchOnFocus", () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(10_000);
     act(() => window.dispatchEvent(new Event("focus")));
     expect(fn).toHaveBeenCalledTimes(1);
-    // 탭으로 돌아오면 focus 와 visibilitychange 가 같이 온다 — 한 번만 (최종 리뷰 Minor 2)
+    // 탭으로 돌아오면 focus 와 visibilitychange 가 같이 온다 — 한 번만
     act(() => document.dispatchEvent(new Event("visibilitychange")));
     expect(fn).toHaveBeenCalledTimes(1);
     now.mockReturnValue(12_000);

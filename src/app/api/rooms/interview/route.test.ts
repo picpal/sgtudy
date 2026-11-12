@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/* POST /api/rooms/interview — 경계 순서·상한 먼저·정규화·로그(스펙 §5.1·§11) */
+/* POST /api/rooms/interview — 경계 순서·상한 먼저·정규화·로그 */
 vi.mock("server-only", () => ({}));
 const claims = vi.fn();
 const dbRpc = vi.fn();

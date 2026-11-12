@@ -46,7 +46,7 @@ describe("toCurriculumTree", () => {
     const mine = r1.children[1];
     expect(mine).toMatchObject({ kind: "personal", ownerId: "u1", ownerNickname: "민수" });
     expect("progress" in mine).toBe(false);
-    expect("isMine" in mine).toBe(false);                    // 게이트웨이 값이 없으면 만들지 않는다(〔C#5〕)
+    expect("isMine" in mine).toBe(false);                    // 게이트웨이 값이 없으면 만들지 않는다
   });
   it("보관된 부모의 하위는 함께 빠진다 · currentRoundId·fileCounts·isMine 반영", () => {
     const c = {

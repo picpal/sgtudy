@@ -23,7 +23,7 @@ const fake = () => {
   return { calls, client };
 };
 
-// 시나리오 QA D3 — 멤버 탈퇴 요청 / 그룹장 내보내기 (0024 계약 §3)
+// 멤버 탈퇴 요청 / 그룹장 내보내기
 describe("탈퇴 요청·내보내기 RPC", () => {
   it("인자를 계약대로 넘긴다 — 사유는 다듬고 빈 값은 null", async () => {
     const { calls, client } = fake();
@@ -78,7 +78,7 @@ describe("내보내기 — 담당 과제 재배정 결정", () => {
     expect(missingChoices(preview, initialChoices(preview))).toEqual(["6"]);
     expect(missingChoices(preview, { "5": "exclude", "6": "u3" })).toEqual([]);
   });
-  // 0027: 넘길 사람이 없으면 "담당 미정으로 두기"(unassign)를 기본으로 — 내보내기가 막히지 않는다
+  // 넘길 사람이 없으면 "담당 미정으로 두기"(unassign)를 기본으로 — 내보내기가 막히지 않는다
   it("initialChoices(candidates): 혼자 맡았는데 맡길 사람이 없으면 unassign", () => {
     expect(initialChoices(preview, () => [])).toEqual({ "5": "exclude", "6": "unassign" });
     expect(initialChoices(preview, () => [{ userId: "u4", nickname: "u4", tone: "mint" }])).toEqual({ "5": "exclude", "6": "" });

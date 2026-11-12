@@ -90,7 +90,7 @@ describe("TreeRow personal goal row", () => {
   });
 });
 
-// 시험 리프(0037) — 유형 배지 옆 "시험", 초안이면 "초안" (exam.status 로 판정)
+// 시험 리프 — 유형 배지 옆 "시험", 초안이면 "초안" (exam.status 로 판정)
 describe("TreeRow exam badge", () => {
   const leaf = buildTree(AWS, EMPTY_OVERRIDES, REF_DAY).nodes.find((x): x is LeafNode => x.leaf && x.type === "공통")!;
   const badge = (n: TreeNode) => {

@@ -28,7 +28,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-// 시나리오 QA D3 (#4): 진행 중에는 참가 취소 대신 그룹장에게 탈퇴를 요청한다
+// 진행 중에는 참가 취소 대신 그룹장에게 탈퇴를 요청한다
 describe("JoinInfoCard — 진행 중 탈퇴 요청", () => {
   it("참가 중이면 [탈퇴 요청] 과 안내", () => {
     const { host, root, onCancel } = render(base);
@@ -50,7 +50,7 @@ describe("JoinInfoCard — 진행 중 탈퇴 요청", () => {
   });
 });
 
-// 시나리오 QA #6: 보관된 방은 "모집 종료" 가 아니라 보관된 스터디
+// 보관된 방은 "모집 종료" 가 아니라 보관된 스터디
 describe("JoinInfoCard — 보관된 방", () => {
   it("배지·버튼·안내가 모두 보관", () => {
     const { host, root } = render({ ...base, archived: true, action: "closed", dday: "보관됨", ddayLong: "보관된 스터디 · 기록만 볼 수 있어요" });
@@ -62,7 +62,7 @@ describe("JoinInfoCard — 보관된 방", () => {
   });
 });
 
-// 백로그 F①: 보관된 방에서 승인 대기 중이면 보관 안내와 함께 [신청 취소]
+// 보관된 방에서 승인 대기 중이면 보관 안내와 함께 [신청 취소]
 describe("JoinInfoCard — 보관된 방의 승인 대기", () => {
   it("보관 안내 + 신청 취소", () => {
     const { host, root, onCancel } = render({ ...base, archived: true, action: "pending", dday: "보관됨", ddayLong: "보관된 스터디 · 기록만 볼 수 있어요" });

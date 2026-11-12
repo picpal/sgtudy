@@ -179,7 +179,7 @@ describe("EditView 첨부 파일", () => {
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0][1].files["21"]).toEqual(["s1", "new1"]);
     expect(typeof save.mock.calls[0][2].onFiles).toBe("function");
-    expect(save.mock.calls[0][2].baseFiles).toEqual(["s1"]);                // 0045 D30: 편집을 시작할 때 붙어 있던 목록
+    expect(save.mock.calls[0][2].baseFiles).toEqual(["s1"]);                // 편집을 시작할 때 붙어 있던 목록
   });
 
   it("목록을 못 불러오면 빈 목록으로 보지 않는다 — 첨부 비활성 + 토스트, 저장은 첨부를 빼고 (I-1)", async () => {

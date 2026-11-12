@@ -68,7 +68,7 @@ describe("nicknameCandidates / pickAvailable — 닉네임 중복 시 대안 (�
   });
 });
 
-// 최종 리뷰 Minor 6: 후보를 한꺼번에 다 묻지 않는다 — max 개씩 나눠 묻고 다 찾으면 멈춘다
+// 후보를 한꺼번에 다 묻지 않는다 — max 개씩 나눠 묻고 다 찾으면 멈춘다
 describe("pickAvailable — 요청 수", () => {
   it("앞의 3개가 모두 쓸 수 있으면 3번만 묻는다", async () => {
     const asked: string[] = [];

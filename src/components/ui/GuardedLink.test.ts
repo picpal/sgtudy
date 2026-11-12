@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * 진행목표 편집 화면(MyStudyScreen)과 함께 보이는 화면 조각의 앱 안 링크는 모두 이탈 가드(leaveGuard)를 거친다 (Q2-1, 최종 리뷰 I-1).
+ * 진행목표 편집 화면(MyStudyScreen)과 함께 보이는 화면 조각의 앱 안 링크는 모두 이탈 가드(leaveGuard)를 거친다.
  * next/link 를 직접 쓰면 저장 안 한 수정이 확인 없이 사라진다 — GuardedLink(또는 HomeLink → GuardedLink)를 쓴다.
  * 예외: GuardedLink 자신, 클릭을 직접 다루며 guardNavigate 를 부르는 NotificationBell.
  */

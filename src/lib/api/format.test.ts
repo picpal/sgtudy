@@ -191,7 +191,7 @@ describe("glanceOf (roomview §3.7)", () => {
     expect(glanceOf(stats({ roundCount: 12, leafCount: 24, commonCount: 24, startWeekdays: [1, 4] }), "recruit").rounds).toBe("12회차 · 월·목 시작");
     expect(glanceOf(stats({ roundCount: 2, leafCount: 6, commonCount: 6 }), "recruit")).toEqual({ rounds: "2회차", tasks: "6개 · 모두 공통 과제" });
     expect(glanceOf(stats({ roundCount: 4, leafCount: 9, commonCount: 7, designatedCount: 2 }), "recruit").tasks).toBe("9개 · 공통 7 · 지정 2");
-    expect(glanceOf(stats({ roundCount: 3, leafCount: 13, totalAssignments: 78, totalSubmissions: 68, startWeekdays: [3] }), "ended")).toEqual({ rounds: "3회차 · 완료", tasks: "78건 중 68건 제출" });   // algo 시드 = depth-2 3개(D14)
+    expect(glanceOf(stats({ roundCount: 3, leafCount: 13, totalAssignments: 78, totalSubmissions: 68, startWeekdays: [3] }), "ended")).toEqual({ rounds: "3회차 · 완료", tasks: "78건 중 68건 제출" });   // algo 시드 = depth-2 3개
     expect(glanceOf(stats({ roundCount: 13, leafCount: 8, commonCount: 5, designatedCount: 3, startWeekdays: [4] }), "active")).toEqual({ rounds: "13회차 · 매주 목요일 시작", tasks: "8개 · 공통 5 · 지정 3" });
   });
 });

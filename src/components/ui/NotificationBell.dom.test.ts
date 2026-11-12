@@ -79,7 +79,7 @@ describe("NotificationBell 이탈 가드 (최종 리뷰 Minor 2)", () => {
   });
 });
 
-// 최종 리뷰 I2: 깨끗한 편집 화면(가드 = EditView 와 같은 규칙)이 같은 화면 해시 알림을 삼키지 않는다 — 이동·앵커 알림·읽음까지
+// 깨끗한 편집 화면(가드 = EditView 와 같은 규칙)이 같은 화면 해시 알림을 삼키지 않는다 — 이동·앵커 알림·읽음까지
 describe("NotificationBell 해시 알림 + 편집 화면 가드", () => {
   it("같은 화면 #applications 알림은 편집만 닫고 이동·읽음·앵커 알림을 이어 간다", async () => {
     const { holdSamePage, samePage, setScreenKey } = await import("@/lib/leaveGuard");

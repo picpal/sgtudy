@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // /signup·/reset-password 서버 페이지: returnTo 는 safeReturnTo 를 거쳐 흐름에 넘어가고,
-// 로그인 사용자는 비밀번호가 있으면 returnTo 로, 없으면 비밀번호 단계(resume)로 간다(리뷰 Minor 2·9)
+// 로그인 사용자는 비밀번호가 있으면 returnTo 로, 없으면 비밀번호 단계(resume)로 간다
 const auth = vi.hoisted(() => ({ user: null as null | Record<string, unknown> }));
 vi.mock("@/lib/api/me.server", () => ({ getAuthUser: async () => auth.user }));
 vi.mock("@/components/auth/OtpPasswordFlow", () => ({ OtpPasswordFlow: () => null }));

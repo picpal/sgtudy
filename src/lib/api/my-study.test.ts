@@ -81,8 +81,8 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
     };
     expect([label("draft"), label("recruit"), label("active"), label("ended")]).toEqual(["준비중", "모집중", "진행중", "종료"]);
   });
-  // 시나리오 QA #6: 보관된 방을 주소로 열면 "종료" 와 "진행중·마감 D-6" 이 섞이지 않고 모두 "보관된 스터디"
-  // 백로그 F①: 보관된 방의 승인 대기 본인은 신청 취소 카드(closed 가 아니다)
+  // 보관된 방을 주소로 열면 "종료" 와 "진행중·마감 D-6" 이 섞이지 않고 모두 "보관된 스터디"
+  // 보관된 방의 승인 대기 본인은 신청 취소 카드(closed 가 아니다)
   it("archived room + 승인 대기 본인 → pending", () => {
     expect(toStudyRoom({ ...aws, archived: true, me: { state: "pending" } }, tree, TODAY, "u1").action).toBe("pending");
   });
@@ -94,7 +94,7 @@ describe("toStudyRoom (mystudy §1.2–1.4)", () => {
     expect(toStudyRoom({ ...aws, archived: true, me: { state: "leader" } }, tree, TODAY, "u2").action).toBe("owner");
     expect(toStudyRoom(aws, tree, TODAY, "u1").archived).toBe(false);
   });
-  // 시나리오 QA D3: 탈퇴 요청 중이면 참가 카드가 요청 날짜·사유와 "요청 취소" 를 보인다
+  // 탈퇴 요청 중이면 참가 카드가 요청 날짜·사유와 "요청 취소" 를 보인다
   it("leaveRequest — 진행 중 참가자의 탈퇴 요청", () => {
     const r = toStudyRoom({ ...aws, me: { state: "active", leaveRequest: { requestedAt: "2026-10-12T01:00:00.000Z", reason: "이사" } } }, tree, TODAY, "u1");
     expect(r.leaveRequest).toEqual({ on: "10.12", reason: "이사" });
@@ -147,7 +147,7 @@ describe("toSidebarGroups (mystudy §1.1)", () => {
       { label: "모집중 · 승인 대기중", items: [{ id: "sqld", title: "SQLD", intro: "q", when: "10.26 시작" }] },
     ]);
   });
-  // 시나리오 QA #17: 승인된 방을 "신청한 방" 이라 부르면 아직 승인 전으로 오해한다 → 참가 중 / 승인 대기로 나눈다
+  // 승인된 방을 "신청한 방" 이라 부르면 아직 승인 전으로 오해한다 → 참가 중 / 승인 대기로 나눈다
   it("모집중 그룹은 참가 중과 승인 대기를 나눈다 (#17)", () => {
     const ms: MeStudies = { today: TODAY, groups: [
       { kind: "recruit", items: [
@@ -157,7 +157,7 @@ describe("toSidebarGroups (mystudy §1.1)", () => {
     ] };
     expect(toSidebarGroups(ms, TODAY).map((g) => g.label)).toEqual(["모집중 · 참가중", "모집중 · 승인 대기중"]);
   });
-  // 시나리오 QA #5: 보관된 방도 내 스터디 목록 끝 "보관됨" 그룹에 남는다
+  // 보관된 방도 내 스터디 목록 끝 "보관됨" 그룹에 남는다
   it("보관된 방은 보관됨 그룹 (#5)", () => {
     const ms: MeStudies = { today: TODAY, groups: [
       { kind: "active", items: [] },

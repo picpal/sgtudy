@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 
-/* 방 만들기 AI 2단계 — 회차 초안 질문 · 미리보기 섹션 · 바로 모집 · 생성 뒤 적용 (스펙 D21~D38). fetch·rpc 는 목 */
+/* 방 만들기 AI 2단계 — 회차 초안 질문 · 미리보기 섹션 · 바로 모집 · 생성 뒤 적용. fetch·rpc 는 목 */
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const push = vi.fn();

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildRoundsMessages, ROUNDS_SYSTEM } from "./prompt";
 import { splitRounds } from "./schedule";
 
-/* 회차 프롬프트(§5.3·Review Focus 4) — 데이터 블록 escape · 발화 12줄 · system 고정 */
+/* 회차 프롬프트 — 데이터 블록 escape · 발화 12줄 · system 고정 */
 const base = {
   today: "2026-10-23",
   draft: { title: "AWS SAA", intro: "소개", descriptionMd: "설명", rulesMd: "- 규칙" },
@@ -18,7 +18,7 @@ describe("buildRoundsMessages", () => {
     expect(m).toHaveLength(1);
     expect(m[0].role).toBe("user");
     const c = m[0].content;
-    // 마지막 회차 표시(위치 요청, D41) · 쓸 회차 번호(D39)
+    // 마지막 회차 표시(위치 요청) · 쓸 회차 번호
     expect(c).toContain('<schedule n="2" cadence="7">1주차 2026-10-26~2026-11-01; 2주차(마지막) 2026-11-02~2026-11-08</schedule><write n="2">1,2</write>');
     expect(c).not.toContain("<written>");
     expect(c).toContain("<tasks_per_round>2</tasks_per_round>");

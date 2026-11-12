@@ -3,8 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /*
- * 사용자 파일 임베드 금지 게이트 (md-images 스펙 D15·T2) — SVG 는 <img src> 로만 그린다.
- * 화면 코드에 HTML 주입·문서 임베드가 들어오면 여기서 막는다(A0 기록: 0건).
+ * 사용자 파일 임베드 금지 게이트 — SVG 는 <img src> 로만 그린다.
+ * 화면 코드에 HTML 주입·문서 임베드가 들어오면 여기서 막는다.
  */
 
 const SRC = path.resolve(__dirname, "../..");
