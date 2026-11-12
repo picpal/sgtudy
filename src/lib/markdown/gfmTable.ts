@@ -93,7 +93,6 @@ function emptyRow(n: number): string[] {
   return Array.from({ length: n }, () => "");
 }
 
-/** atBodyIndex 위치에 빈 본문 행 삽입(범위 초과는 끝에). */
 export function insertRow(m: TableModel, atBodyIndex: number): TableModel {
   const rows = m.rows.map((r) => r.slice());
   const i = Math.max(0, Math.min(atBodyIndex, rows.length));
@@ -101,7 +100,7 @@ export function insertRow(m: TableModel, atBodyIndex: number): TableModel {
   return { ...m, rows };
 }
 
-/** 본문 행 삭제(범위 밖이면 그대로). 헤더만 남는 것 허용. */
+/** 헤더만 남는 것 허용. */
 export function deleteRow(m: TableModel, bodyIndex: number): TableModel {
   if (bodyIndex < 0 || bodyIndex >= m.rows.length) return m;
   const rows = m.rows.map((r) => r.slice());
@@ -109,7 +108,6 @@ export function deleteRow(m: TableModel, bodyIndex: number): TableModel {
   return { ...m, rows };
 }
 
-/** atIndex 위치에 빈 열 삽입(align="none"). */
 export function insertColumn(m: TableModel, atIndex: number): TableModel {
   const i = Math.max(0, Math.min(atIndex, m.header.length));
   const header = m.header.slice(); header.splice(i, 0, "");
@@ -128,7 +126,6 @@ export function deleteColumn(m: TableModel, index: number): TableModel {
   return { align, header, rows };
 }
 
-/** 지정 열 정렬 변경(범위 밖이면 그대로). */
 export function setAlign(m: TableModel, index: number, align: Align): TableModel {
   if (index < 0 || index >= m.align.length) return m;
   const a = m.align.slice(); a[index] = align;
@@ -154,7 +151,6 @@ export function seqColumns(m: TableModel): number[] {
   return cols;
 }
 
-/** 지정: 해당 열을 1..N으로 채우고 가운데 정렬. 범위 밖이면 그대로. */
 export function setSeqColumn(m: TableModel, col: number): TableModel {
   if (col < 0 || col >= m.header.length) return m;
   const align = m.align.slice(); align[col] = "center";
@@ -162,7 +158,6 @@ export function setSeqColumn(m: TableModel, col: number): TableModel {
   return { ...m, align, rows };
 }
 
-/** 주어진 열들을 1..N으로 다시 채운다. 범위 밖 인덱스는 무시. */
 export function renumberSeq(m: TableModel, cols: number[]): TableModel {
   const valid = cols.filter((c) => c >= 0 && c < m.header.length);
   if (valid.length === 0) return m;

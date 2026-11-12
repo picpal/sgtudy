@@ -3,8 +3,8 @@ import type { CallRounds } from "./rounds";
 import type { RoundsModel } from "./schema";
 
 /*
- * AI_INTERVIEW_MOCK=1 회차 대본(D34) — 키 없이 로컬·E2E·DOM 확인용. 결정적: 쓸 회차(write)의 라벨로 제목·과제를 만든다.
- * 발화에 "장애 테스트" 가 있으면 503 흉내. "부족 테스트" 면 첫 요청에서 끝 2회차를 빼서 재요청 경로(D40)를,
+ * AI_INTERVIEW_MOCK=1 회차 대본 — 키 없이 로컬·E2E·DOM 확인용. 결정적: 쓸 회차(write)의 라벨로 제목·과제를 만든다.
+ * 발화에 "장애 테스트" 가 있으면 503 흉내. "부족 테스트" 면 첫 요청에서 끝 2회차를 빼서 재요청 경로를,
  * "계속 부족 테스트" 면 매번 끝 2회차를 빼서 재요청 뒤에도 빈 채움 회차(padded)가 남는 경로를 보여 준다
  */
 export const mockCallRounds: CallRounds = async ({ state, write }) => {

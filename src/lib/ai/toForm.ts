@@ -3,7 +3,7 @@ import type { NewRoomValues } from "@/components/room-new/validate";
 import type { Tone } from "@/lib/palette";
 import type { Draft } from "./schema";
 
-/* 인터뷰 초안 ↔ 수동 폼 값(D13). 두 모드가 같은 values·tags 를 공유하고, 인터뷰에는 "채운 칸" 만 초안으로 보낸다 */
+/* 인터뷰 초안 ↔ 수동 폼 값. 두 모드가 같은 values·tags 를 공유하고, 인터뷰에는 "채운 칸" 만 초안으로 보낸다 */
 
 const TONES: readonly string[] = ["mint", "blue", "peach", "lav", "amber", "slate"];
 
@@ -51,7 +51,6 @@ export function draftKeys(d: Draft): FilledKey[] {
   return (Object.keys(d) as (keyof Draft)[]).filter((k) => d[k] !== undefined) as FilledKey[];
 }
 
-/** 두 폼 값에서 바뀐 칸 */
 export function changedKeys(a: NewRoomValues, b: NewRoomValues): (keyof NewRoomValues)[] {
   return (Object.keys(b) as (keyof NewRoomValues)[]).filter((k) => a[k] !== b[k]);
 }

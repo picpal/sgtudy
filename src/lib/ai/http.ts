@@ -1,6 +1,6 @@
 import type { TurnErrorBody } from "./schema";
 
-/* /api/rooms/interview·rounds 의 HTTP 경계(D7) — 같은 출처만 · 본문 64KB · 오류 본문 {error, message, details?}(키·모델 원문 없음) */
+/* /api/rooms/interview·rounds 의 HTTP 경계 — 같은 출처만 · 본문 64KB · 오류 본문 {error, message, details?}(키·모델 원문 없음) */
 
 export const MAX_INTERVIEW_BODY = 64 * 1024;
 

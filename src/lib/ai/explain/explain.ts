@@ -4,7 +4,7 @@ import { buildExplainMessages, EXPLAIN_SYSTEM, type ExplainInput } from "./promp
 import { sanitizeExplain } from "./sanitize";
 import { ExplainOut } from "./schema";
 
-/* 용어 해설 한 번(D7·D10) — 메시지 조립 → 모델 → 스키마 검사 → 정제. 순수(모델은 주입) */
+/* 용어 해설 한 번 — 메시지 조립 → 모델 → 스키마 검사 → 정제. 순수(모델은 주입) */
 
 /** 모델 호출 — 실제는 client.ts(openaiCallExplain), 로컬·테스트는 explain-mock.ts. term 은 목 대본용(실제 호출은 쓰지 않는다) */
 export type CallExplain = (i: { system: string; messages: ChatInput[]; term: string }) => Promise<

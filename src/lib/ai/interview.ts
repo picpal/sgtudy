@@ -4,7 +4,7 @@ import { computeMissing, deriveAnswer, mergeDraft, normalizeDraft, normalizePatc
 import { buildMessages, systemPrompt, type ChatInput } from "./prompt";
 import { MAX_MESSAGES, ModelTurnIn, SAY_MAX, type Draft, type Dropped, type Field, type InterviewRequest, type RequiredField, type TurnResponse } from "./schema";
 
-/* 인터뷰 한 턴(§5.3) — 순수 로직. 모델 호출은 주입(callModel)이라 테스트·목 모드는 대본을 끼운다. I/O·키 없음 */
+/* 인터뷰 한 턴 — 순수 로직. 모델 호출은 주입(callModel)이라 테스트·목 모드는 대본을 끼운다. I/O·키 없음 */
 
 export type Usage = { in: number; out: number; cached: number };
 /** 모델 호출 — 실제는 client.ts(openaiCallModel), 로컬·테스트는 interview-mock.ts */
@@ -46,7 +46,7 @@ export async function runTurn(req: InterviewRequest, deps: { callModel: CallMode
   if (!parsed.success) return { ok: false, error: "AI_UNAVAILABLE" };
   const m = parsed.data;
 
-  // 3) 모델 patch 정규화(D10) → 4) 완료는 서버가 판정(D11)
+  // 3) 모델 patch 정규화 → 4) 완료는 서버가 판정
   // null = 이번에 안 바꿈(strict 스키마) — 정규화 전에 뺀다
   const modelPatch = Object.fromEntries(Object.entries(m.patch).filter(([, v]) => v !== null && v !== undefined));
   const fromModel = normalizePatch(modelPatch, draft1, today, tagDict);

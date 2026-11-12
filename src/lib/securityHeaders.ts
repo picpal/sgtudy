@@ -1,7 +1,7 @@
 /**
- * 앱 응답 헤더 (md-images 스펙 D17) — 모든 경로에 nosniff + 그림 출처 제한.
+ * 앱 응답 헤더 — 모든 경로에 nosniff + 그림 출처 제한.
  * img-src 만 둔다: 스크립트 CSP 는 nonce·동적 렌더가 필요해 범위 밖. 앱의 <img> 는 Supabase Storage 서명 URL 뿐이라
- * 렌더러에 버그가 있어도 외부 그림(추적 픽셀)은 브라우저가 한 번 더 막는다(T5)
+ * 렌더러에 버그가 있어도 외부 그림(추적 픽셀)은 브라우저가 한 번 더 막는다
  */
 export type Header = { key: string; value: string };
 

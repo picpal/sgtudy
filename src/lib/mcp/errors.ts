@@ -4,8 +4,8 @@ const CODE_RE = /^[A-Z][A-Z0-9_]*$/;
 
 /** PostgREST 오류 → 도구 오류. fail() 형식만 그대로, 그 밖은 INTERNAL(원문 비노출) */
 export function fromPostgrest(e: Pg): ToolError {
-  // 〔C#12〕 statement_timeout·취소는 DB 감사 행이 없다(롤백) — 호출자(invoke.ts)가 토큰 없이 운영 로그를 남긴다.
-  // PAT 경로의 실제 상한은 anon 역할의 3초(0034 의 15s 설정은 적용되지 않는다)
+  // statement_timeout·취소는 DB 감사 행이 없다(롤백) — 호출자(invoke.ts)가 토큰 없이 운영 로그를 남긴다.
+  // PAT 경로의 실제 상한은 anon 역할의 3초(curriculum_plan_preview·apply 의 15s 설정은 적용되지 않는다)
   if (e.code === "57014") return { code: "TIMEOUT", message: "처리 시간(3초)을 넘어 취소됐어요. 계획을 나눠 다시 미리 봐 주세요" };
   if (e.code !== "P0001" || !CODE_RE.test(e.message)) return { code: "INTERNAL", message: "처리 중 오류가 났어요" };
   let details: Record<string, unknown> | undefined;
@@ -23,7 +23,7 @@ const STATUS: Record<string, number> = {
 /** 전송 수준 상태. 그 밖의 코드는 MCP 도구 결과(isError)로 200 */
 export const httpStatusOf = (code: string) => STATUS[code] ?? 200;
 
-/* ---------- 다음 행동 〔UX 재검토 §4.3 · T2·D12·T4〕 ---------- */
+/* ---------- 다음 행동 ---------- */
 export type NextStep = { kind: "fix" | "reread" | "stop"; hint: string };
 
 const FIX_PLAN = "표시한 경로를 고쳐 preview_curriculum_plan 을 다시 부르세요";
@@ -35,7 +35,7 @@ const FIX: Record<string, string> = {
   ROUND_NOT_FOUND: FIX_ARG, ROUND_AMBIGUOUS: FIX_ARG, TASK_NOT_FOUND: FIX_ARG, TASK_AMBIGUOUS: FIX_ARG, NODE_AMBIGUOUS: FIX_ARG, ASSIGNEE_NOT_MEMBER: FIX_PLAN, ASSIGNEE_AMBIGUOUS: FIX_PLAN,
   STUDY_NOT_FOUND: "list_my_studies 로 slug 를 확인해 study 에 넣고 다시 부르세요",
   STUDY_AMBIGUOUS: "사용자에게 어느 스터디인지 물어본 뒤 study 에 그 slug 를 넣어 다시 부르세요",
-  // 0045 그림 올리기
+  // 그림 올리기
   FILE_NAME_TAKEN: "같은 이름을 바꾸려면 replace:true 로 prepare_image_upload 부터 다시 부르세요(다른 이름도 돼요)",
   FILE_NOT_READY: "prepare_image_upload 결과의 curl 을 먼저 실행한 뒤 finish_image_upload 를 다시 부르세요",
   FILE_TOO_LARGE: "파일을 줄여(SVG 2MB · 그 밖 10MB) prepare_image_upload 부터 다시 부르세요",

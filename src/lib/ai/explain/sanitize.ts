@@ -4,7 +4,7 @@ import { normTerm } from "./normalize";
 import { IN_CONTEXT_MAX, ONE_LINER_MAX, POINT_MAX, POINTS_MAX, RELATED_ITEM_MAX, RELATED_MAX, TERM_MAX, type ExplainOut } from "./schema";
 
 /*
- * 모델 출력 정제(D7·§5.2) — 링크·이미지·HTML·헤딩·URL 제거(rounds 의 sanitizeMd), 상한 적용.
+ * 모델 출력 정제 — 링크·이미지·HTML·헤딩·URL 제거(rounds 의 sanitizeMd), 상한 적용.
  * points·related 는 빈 값·중복·용어 자신을 뺀다. not_term 이면 본문 절을 비운다
  */
 /** dropLong: 상한을 넘는 항목은 자르지 않고 버린다(관련 용어 칩 — 잘린 용어로 다시 물으면 엉뚱한 해설이 된다) */
@@ -37,7 +37,7 @@ export function sanitizeExplain(raw: ExplainOut, term: string): ExplainOut {
   };
 }
 
-/** 보기·정답 지목(응시 화면 exam_take, 0055) — 「정답은」·「오답」·「답은 B」·원 숫자·「2번 보기」·「보기 1」·「맞는 선택지」. 「2번 이상」·「대답」·「답변」은 남긴다 */
+/** 보기·정답 지목(응시 화면 exam_take) — 「정답은」·「오답」·「답은 B」·원 숫자·「2번 보기」·「보기 1」·「맞는 선택지」. 「2번 이상」·「대답」·「답변」은 남긴다 */
 const ANSWER_HINT =
   /정답|오답|(?:^|[^가-힣])답(?:은|이|으로)(?![가-힣])|[①-⑳]|\d+\s*번\s*(?:보기|선택지)|\d+\s*번(?:이|은|을|가|이에요|예요)(?![가-힣])|(?:보기|선택지)\s*[0-9A-Ea-e]|(?:맞는|옳은|틀린|정확한)\s*(?:보기|선택지|것은|답)/;
 export const TAKE_FALLBACK = "이 용어의 일반적인 뜻만 설명할 수 있어요";

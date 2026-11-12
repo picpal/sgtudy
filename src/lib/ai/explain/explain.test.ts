@@ -27,6 +27,11 @@ describe("runExplain", () => {
     const r = await runExplain(p, { callExplain: async () => ({ ok: true, output: { kind: "term", answer: 1 }, usage: { in: 0, out: 0, cached: 0 }, model: "m" }) });
     expect(r).toEqual({ ok: false, status: 200 });
   });
+  it("정제 뒤 한 줄 해설이 빈 term → ok:false(캐시에 남기지 않게)", async () => {
+    const output = { kind: "term", term: "서브넷", oneLiner: "  ", inContext: "문맥", points: ["a"], related: [] };
+    const r = await runExplain(p, { callExplain: async () => ({ ok: true, output, usage: { in: 0, out: 0, cached: 0 }, model: "m" }) });
+    expect(r).toEqual({ ok: false, status: 200 });
+  });
   it("model failure → status passed through", async () => {
     expect(await runExplain(p, { callExplain: async () => ({ ok: false, status: 429 }) })).toEqual({ ok: false, status: 429 });
     expect(await runExplain({ ...p, term: "실패" }, { callExplain: mockCallExplain })).toEqual({ ok: false, status: 500 });

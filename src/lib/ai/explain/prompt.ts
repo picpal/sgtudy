@@ -3,8 +3,8 @@ import { clipContext } from "./normalize";
 import type { RoomMeta, Source } from "./schema";
 
 /*
- * 용어 해설 프롬프트(D9). system 은 상수 하나(요청 사이 바이트 동일 → 프롬프트 캐시, prompt_cache_key "sgtudy-term-explain").
- * 방 메타·영역·문맥·용어는 user 메시지 하나의 데이터 블록에만, 전부 escapeData. 시험 문항·정답·해설은 서버가 넣지 않는다(D16)
+ * 용어 해설 프롬프트. system 은 상수 하나(요청 사이 바이트 동일 → 프롬프트 캐시, prompt_cache_key "sgtudy-term-explain").
+ * 방 메타·영역·문맥·용어는 user 메시지 하나의 데이터 블록에만, 전부 escapeData. 시험 문항·정답·해설은 서버가 넣지 않는다
  */
 
 export const EXPLAIN_SYSTEM = `너는 스터디 모임 서비스 「슥터디」의 학습 도우미다. 스터디 방 멤버가 학습 자료에서 선택한 용어를 그 방의 주제 관점으로 짧게 설명한다.

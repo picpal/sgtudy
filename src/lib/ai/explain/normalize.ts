@@ -2,7 +2,7 @@ import { clampCp, cpLength } from "@/components/room-new/validate";
 import { stripControl } from "../normalize";
 import { CONTEXT_MAX, TERM_MAX } from "./schema";
 
-/* 용어 정규화(D2·D8·D13) — 서버 캐시 키와 클라이언트 선택 판정이 같은 규칙을 쓴다. 클라이언트도 import 하므로 server-only·crypto 금지 */
+/* 용어 정규화 — 서버 캐시 키와 클라이언트 선택 판정이 같은 규칙을 쓴다. 클라이언트도 import 하므로 server-only·crypto 금지 */
 
 const EDGE = new Set([..."\"'“”‘’«»()[]{}<>「」『』.,:;!?…·"]);
 const PAIRS: Record<string, string> = { "(": ")", "[": "]", "{": "}", "<": ">", "「": "」", "『": "』", "“": "”", "‘": "’", "«": "»", '"': '"', "'": "'" };
@@ -37,7 +37,7 @@ export function normTerm(s: string): string {
   return clampCp(normFull(s), TERM_MAX);
 }
 
-/** 용어로 받을 길이인가(D2): 정규화 뒤 1~40cp, 줄바꿈 ≤ 1 */
+/** 용어로 받을 길이인가: 정규화 뒤 1~40cp, 줄바꿈 ≤ 1 */
 export function isTermLength(s: string): boolean {
   const breaks = (stripControl(s).match(/\r\n|\r|\n/g) ?? []).length;
   if (breaks > 1) return false;
@@ -45,7 +45,7 @@ export function isTermLength(s: string): boolean {
   return n >= 1 && n <= TERM_MAX;
 }
 
-/** 선택 주변 문맥(D8): 공백 정리 뒤 용어 첫 위치 기준 앞뒤 150cp(전체 ≤ 300cp). 용어가 없으면 앞 300cp */
+/** 선택 주변 문맥: 공백 정리 뒤 용어 첫 위치 기준 앞뒤 150cp(전체 ≤ 300cp). 용어가 없으면 앞 300cp */
 export function clipContext(s: string, term: string): string {
   const text = squash(s);
   const cps = [...text];

@@ -3,12 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * 알림 딥링크 앵커 (0024 계약 §7) — 서버가 만든 링크의 해시로 화면 안 영역을 찾아간다.
+ * 알림 딥링크 앵커 — 서버가 만든 링크의 해시로 화면 안 영역을 찾아간다.
  *   #applications   개요 탭 승인 대기(그룹장 패널)
  *   #submissions    과제 상세(?task=)의 제출 현황
  *   #leave-requests 개요 탭 멤버 관리의 탈퇴 요청
  * 영역은 비동기로 채워지므로 "준비됨(ready)" 뒤에 스크롤·포커스한다. 한 번 찾아가면 주소에서 해시를 지운다 —
- * 탭을 갔다 와 다시 마운트되거나 다른 과제를 열 때 또 포커스를 가져가지 않게 (최종 리뷰 I1).
+ * 탭을 갔다 와 다시 마운트되거나 다른 과제를 열 때 또 포커스를 가져가지 않게.
  * 같은 화면에서 알림을 다시 누르면 Next 는 화면을 그대로 두므로 알림 벨이 announceHash 로 알린다(주소 해시가 바뀌는 시점에 기대지 않는다).
  */
 export const OVERVIEW_ANCHORS = ["applications", "leave-requests"] as const;
@@ -32,7 +32,7 @@ const pathOf = (href: string): string => new URL(href, "http://x").pathname;
 const searchOf = (href: string): string => new URL(href, "http://x").search;
 
 // 다른 화면으로 넘어갈 때는 새 화면이 마운트되는 시점에 주소 해시가 아직 없을 수 있다 → 링크 경로와 함께 잠깐 기억해 둔다.
-// 경로가 다른 화면(다른 방)은 가로채지 않는다 (최종 리뷰 Minor 1)
+// 경로가 다른 화면(다른 방)은 가로채지 않는다
 let pending: (Announce & { at: number }) | null = null;
 // accept: 링크 쿼리로 받는 쪽을 가린다(댓글 = 그 노드의 ?task=·?item= 링크만). 없으면 경로만 본다
 const livePending = (match: (hash: string) => boolean, accept?: (search: string) => boolean): string | null =>
@@ -69,7 +69,7 @@ export function useHashAnnounce(fn: (hash: string) => void): void {
 const ITEM_EVENT = "sgtudy:item";
 
 /** 알림 벨이 이동할 링크의 ?item= 을 알린다 — 같은 화면에서 같은 item 알림을 다시 누르면 서버 prop(initialItem)이 그대로라
- *  화면이 모른다(상세 안에서 다른 항목으로 옮긴 뒤 등). 화면은 주소가 그 item 이 된 뒤 연다 (백로그 F 재리뷰 m1) */
+ *  화면이 모른다(상세 안에서 다른 항목으로 옮긴 뒤 등). 화면은 주소가 그 item 이 된 뒤 연다 */
 export function announceItem(href: string): void {
   const u = new URL(href, "http://x");
   const item = u.searchParams.get("item");
@@ -91,7 +91,7 @@ export function useItemAnnounce(fn: (item: string) => void): void {
 const TAB_EVENT = "sgtudy:tab";
 
 /** 알림 벨이 이동할 링크의 ?tab= 을 알린다(항목·과제 없는 탭 링크만) — 같은 방 화면 key(page.tsx: tab)가 같으면 다시 마운트되지 않아
- *  다른 탭을 보던 화면이 그 탭으로 옮기지 못한다(공지 알림 ?tab=notice, 0040) */
+ *  다른 탭을 보던 화면이 그 탭으로 옮기지 못한다(공지 알림 ?tab=notice) */
 export function announceTab(href: string): void {
   const u = new URL(href, "http://x");
   const tab = u.searchParams.get("tab");
@@ -113,7 +113,7 @@ export function useTabAnnounce(fn: (tab: string) => void): void {
 const TASK_EVENT = "sgtudy:task";
 
 /** 알림 벨이 이동할 링크의 ?task= 를 알린다 — 같은 과제 key(page.tsx: task)의 화면은 다시 마운트되지 않아, 다른 탭·항목을 보던 화면이
- *  그 과제 상세로 돌아가지 못한다(댓글 멘션 #comment-, 0041). 화면은 주소가 그 task 가 된 뒤 연다 */
+ *  그 과제 상세로 돌아가지 못한다(댓글 멘션 #comment-). 화면은 주소가 그 task 가 된 뒤 연다 */
 export function announceTask(href: string): void {
   const u = new URL(href, "http://x");
   const task = u.searchParams.get("task");
@@ -144,7 +144,7 @@ export function useHashTarget(id: string, ready: boolean): boolean {
   const [hit, setHit] = useState<{ on: boolean; seq: number }>({ on: false, seq: 0 });
   useEffect(() => {
     // 다른 화면에서 넘어오면 주소 갱신이 이 화면 마운트보다 늦을 수 있어 잠깐 뒤에 한 번 더 본다
-    // 해시와 pending 을 둘 다 본다(단락 평가로 pending 이 남지 않게) — 남으면 늦은 재확인·재마운트가 다시 찾아간다 (재리뷰 Minor A)
+    // 해시와 pending 을 둘 다 본다(단락 평가로 pending 이 남지 않게) — 남으면 늦은 재확인·재마운트가 다시 찾아간다
     const first = () => {
       const byHash = hashOf(window.location.hash) === id;
       const byPending = takePending((h) => h === id) !== null;
@@ -181,7 +181,7 @@ export function useHashTarget(id: string, ready: boolean): boolean {
   return hit.on;
 }
 
-/* ---------- 접두사 앵커 (댓글 #comment-{id}, 0041 스펙 D15·D16) ---------- */
+/* ---------- 접두사 앵커 (댓글 #comment-{id}) ---------- */
 export const COMMENT_HASH_PREFIX = "comment-";
 /** "comment-12" → "12". 댓글 해시가 아니면 null */
 export const commentIdOfHash = (hash: string): string | null => {

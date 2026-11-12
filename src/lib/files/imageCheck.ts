@@ -1,8 +1,8 @@
 import { IMAGE_MIME, type ImageMime } from "./imageMime";
 
 /*
- * 그림 파일 검사 — 웹 업로드(브라우저)·MCP finish(Vercel 함수) 공용 순수 함수 (md-images 스펙 §3.2·D27).
- * Uint8Array·TextDecoder 만 쓴다. 방어 심층일 뿐 경계가 아니다 — 경계는 <img> 로만 그리기(D15)·CSP(D17)·버킷 MIME 목록
+ * 그림 파일 검사 — 웹 업로드(브라우저)·MCP finish(Vercel 함수) 공용 순수 함수.
+ * Uint8Array·TextDecoder 만 쓴다. 방어 심층일 뿐 경계가 아니다 — 경계는 <img> 로만 그리기·CSP·버킷 MIME 목록
  */
 
 export { IMAGE_MIME, type ImageMime };
@@ -36,8 +36,8 @@ const decodeEntities = (s: string) =>
   s.replace(/&#x([0-9a-f]+);?/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);?/g, (_, d: string) => String.fromCodePoint(Number(d)));
 
 /**
- * SVG 금지 규칙(스펙 §3.2, 대소문자 무시) — 걸린 규칙마다 한국어 문구 하나. [] = 통과.
- * 그림 편집기(draw.io·Excalidraw·mermaid) 출력이 통과하도록 좁힌 곳(스펙 D27 표):
+ * SVG 금지 규칙(대소문자 무시) — 걸린 규칙마다 한국어 문구 하나. [] = 통과.
+ * 그림 편집기(draw.io·Excalidraw·mermaid) 출력이 통과하도록 좁힌 곳:
  * foreignObject 허용(글자 상자 — <img> 안에서는 그리기만 한다), <a> 의 http(s) 링크·#참조 허용,
  * 래스터·글꼴 data: 허용, 외부 DTD 만 있는 <!DOCTYPE> 허용(내부 DTD [..] 는 거부)
  */
@@ -72,7 +72,7 @@ export function svgProblems(text: string): string[] {
 
 /**
  * 설명에 붙여 넣을 그림 조각 — `![alt](attachment:이름)`. 파서(inline.ts)가 끊는 글자만 퍼센트 인코딩한다:
- * 공백·괄호·`%`(디코딩되므로). 한글 등은 그대로 — 읽히는 조각이 낫다(D25). alt 의 대괄호는 뺀다
+ * 공백·괄호·`%`(디코딩되므로). 한글 등은 그대로 — 읽히는 조각이 낫다. alt 의 대괄호는 뺀다
  */
 export const imageSnippet = (name: string, alt = "") =>
   `![${alt.replace(/[[\]]/g, "")}](attachment:${name.replace(/[\s%]/g, encodeURIComponent).replace(/\(/g, "%28").replace(/\)/g, "%29")})`;

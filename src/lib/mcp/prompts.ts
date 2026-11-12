@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/* MCP prompt 〔UX 재검토 D19〕 — `/mcp__sgtudy__draft-curriculum`·`draft-exam` 으로 부를 때만 컨텍스트에 들어간다(상주 비용 0).
+/* MCP prompt — `/mcp__sgtudy__draft-curriculum`·`draft-exam` 으로 부를 때만 컨텍스트에 들어간다(상주 비용 0).
    본문은 영어 지침 + 한국어 용어 */
 export type PromptDef = {
   name: string;

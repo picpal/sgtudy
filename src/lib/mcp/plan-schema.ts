@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 /* 도구 입력 zod 스키마 — 문서화(도구 inputSchema) 목적. 최종 검증은 서버(plan_shape_check·plan_resolve·plan_validate).
-   〔UX 재검토 D13〕 설명은 영어 · op 별 객체는 loose(추가 키 허용 — JSON Schema 를 작게 두고 서버가 거른다).
-   tools/list 예산(설명+스키마+instructions ≤ 6,500자, tools.test.ts): 반복되는 하위 스키마(날짜·회차 선택자)엔 설명을 달지 않고
+   설명은 영어 · op 별 객체는 loose(추가 키 허용 — JSON Schema 를 작게 두고 서버가 거른다).
+   tools/list 예산(설명+스키마+instructions ≤ 9,000자, tools.test.ts): 반복되는 하위 스키마(날짜·회차 선택자)엔 설명을 달지 않고
    쓰는 자리에서 한 번만 단다(날짜 형식은 SERVER_INSTRUCTIONS). .int() 만 쓰면 maximum 9007199254740991 이 붙어 상한을 둔다.
    서버가 한국어 경로별 오류로 검사하는 상한(설명 길이·children 개수(총 노드 200)·ref 형식)은 스키마에 싣지 않는다 — loose 라 그대로 통과.
    assignees 개수·index 상한은 서버에 없어(dedup·멤버 검사뿐, index 는 ::int 넘침 → INTERNAL) 여기서 막는다 */

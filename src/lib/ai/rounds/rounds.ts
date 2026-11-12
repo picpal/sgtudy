@@ -8,7 +8,7 @@ import { sanitizeLine } from "./sanitize";
 import { ROUND_TITLE_MAX, RoundsModelIn, type RoundModelItem, type RoundsRequest, type RoundsResponse } from "./schema";
 import { examEachRound, placeRounds, tasksPerRound, toPlan } from "./toPlan";
 
-/* 회차 초안 한 번(§5.1·D28) — 순수 로직. 모델 호출은 주입(callRounds)이라 테스트·목 모드는 대본을 끼운다. I/O·키 없음 */
+/* 회차 초안 한 번 — 순수 로직. 모델 호출은 주입(callRounds)이라 테스트·목 모드는 대본을 끼운다. I/O·키 없음 */
 
 /** 검증을 통과한 요청 — 라우트가 사용량을 남기기 전에 만든다(날짜 없는 요청은 상한을 쓰지 않는다) */
 export type PreparedRounds = { today: string; draft: Draft & { title: string; startDate: string; endDate: string }; schedule: Schedule; style: string[]; userLines: string[] };
@@ -19,9 +19,9 @@ export type CallRounds = (input: {
   messages: ChatInput[];
   /** 목 대본용 — 실제 호출은 쓰지 않는다 */
   state: PreparedRounds;
-  /** 이번에 쓸 회차 — 출력 배열 길이를 이 수로 못박는다(D39) */
+  /** 이번에 쓸 회차 — 출력 배열 길이를 이 수로 못박는다 */
   write: ScheduleRound[];
-  /** 없으면 기본(50s). 재요청은 남은 시간으로 줄인다(D40) */
+  /** 없으면 기본(50s). 재요청은 남은 시간으로 줄인다 */
   timeoutMs?: number;
 }) => Promise<{ ok: true; output: unknown; usage: Usage; model: string } | { ok: false; status?: number }>;
 
@@ -41,7 +41,7 @@ export function prepareRounds(req: RoundsRequest, today: string): PreparedRounds
 }
 
 /**
- * 1) 전 회차를 한 번에 요청 → 2) 회차 번호로 자리를 맞추고 → 3) 빈 자리가 있으면 그 회차만 한 번 더(D40, 시간이 남을 때) →
+ * 1) 전 회차를 한 번에 요청 → 2) 회차 번호로 자리를 맞추고 → 3) 빈 자리가 있으면 그 회차만 한 번 더(시간이 남을 때) →
  * 4) 그래도 빈 자리는 toPlan 이 채움 회차로. 사용량은 두 호출을 합쳐 한 번(ai_turn_check 1회 · ai_turn_done 1회)으로 기록한다
  */
 export async function runRounds(p: PreparedRounds, deps: { callRounds: CallRounds; now?: () => number }): Promise<RoundsResult> {

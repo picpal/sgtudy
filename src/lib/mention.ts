@@ -1,5 +1,5 @@
 /**
- * 댓글 멘션 (0041 스펙 D10·§6.4) — 순수 함수만. 저장 본문은 `<@uuid>`(소문자) 토큰, 화면·입력창은 `@닉네임`.
+ * 댓글 멘션 — 순수 함수만. 저장 본문은 `<@uuid>`(소문자) 토큰, 화면·입력창은 `@닉네임`.
  * 서버 comment_parse 와 같은 규칙: 토큰 정규식이 같고, 표시 길이는 토큰을 1자로 센다(코드 포인트 기준 — char_length).
  * 닉네임에는 공백이 있을 수 있어 `@텍스트` 만으로는 경계를 모른다 → 자동완성으로 고른 사람(picks)만 토큰으로 바꾼다.
  */
@@ -81,7 +81,7 @@ export function toEditable(body: string, people: Record<string, { nickname: stri
   return { text, picks: [...picks.values()] };
 }
 
-/** 칩 문구 — 맵에 없는 uid 는 "@알 수 없음"(D10) */
+/** 칩 문구 — 맵에 없는 uid 는 "@알 수 없음" */
 export const mentionLabel = (userId: string, people: Record<string, { nickname: string }>): string =>
   `@${people[userId]?.nickname || "알 수 없음"}`;
 
@@ -89,7 +89,7 @@ export const mentionLabel = (userId: string, people: Record<string, { nickname: 
 const QUERY_MAX = 16;
 
 /**
- * 캐럿 앞의 `@질의` (§6.4 트리거). `@` 는 줄 시작 또는 공백 다음이어야 하고(이메일 a@b 무시), 질의에 공백이 없어야 한다.
+ * 캐럿 앞의 `@질의`. `@` 는 줄 시작 또는 공백 다음이어야 하고(이메일 a@b 무시), 질의에 공백이 없어야 한다.
  * 한글 조합 중 글자("@ㅎ", "@하")도 그대로 질의다 — input 이벤트 값으로 부르면 된다. start = `@` 위치
  */
 export function activeQuery(text: string, caret: number): { start: number; query: string } | null {
@@ -131,7 +131,7 @@ export function searchKey(s: string): string {
 }
 
 /**
- * 자동완성 후보(§6.4): 접두 일치 → 포함 일치 순, 같은 무리 안에서는 들어온 순서, 최대 limit.
+ * 자동완성 후보: 접두 일치 → 포함 일치 순, 같은 무리 안에서는 들어온 순서, 최대 limit.
  * 본인(selfId)은 후보에서 뺀다 — 이미 본문에 있는 자기 멘션(수정 모드)은 picks 로 그대로 남는다. 빈 질의("@" 만 침)는 본인 빼고 전원
  */
 export function matchMembers<T extends { userId: string; nickname: string }>(query: string, members: T[], selfId: string | null, limit = 6): T[] {
@@ -149,7 +149,7 @@ export function matchMembers<T extends { userId: string; nickname: string }>(que
 }
 
 /**
- * keydown 이 한글 조합 중인지(§6.4 IME). 조합 확정 Enter 가 후보 선택·등록으로 새지 않게 ↑↓/Enter/Tab/Esc 처리 전에 본다.
+ * keydown 이 한글 조합 중인지. 조합 확정 Enter 가 후보 선택·등록으로 새지 않게 ↑↓/Enter/Tab/Esc 처리 전에 본다.
  * Safari 는 compositionend 뒤에 keyCode 229 keydown 을 한 번 더 보내므로 isComposing 과 229 를 함께 본다
  */
 export const isImeComposing = (e: { isComposing?: boolean; keyCode?: number; nativeEvent?: { isComposing?: boolean; keyCode?: number } }): boolean =>

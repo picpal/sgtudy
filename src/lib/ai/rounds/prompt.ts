@@ -4,7 +4,7 @@ import { USER_TEXT_MAX, type Draft } from "../schema";
 import { MAX_USER_LINES } from "./schema";
 import type { Schedule, ScheduleRound } from "./schedule";
 
-/* 회차 초안 프롬프트(§5.3). system 은 요청 사이 바이트가 같다(프롬프트 캐시) — 방·발화·회차 표는 user 의 데이터 블록으로만 */
+/* 회차 초안 프롬프트. system 은 요청 사이 바이트가 같다(프롬프트 캐시) — 방·발화·회차 표는 user 의 데이터 블록으로만 */
 
 export const ROUNDS_SYSTEM = `너는 스터디 모임 서비스 「슥터디」의 진행목표 설계 도우미다. 방 정보와 방장이 인터뷰에서 한 말을 보고, 서버가 정한 회차마다 제목·목표·과제 초안을 쓴다.
 
@@ -36,7 +36,7 @@ export type RoundsPromptInput = {
   schedule: Schedule;
   tasksPerRound: number;
   userLines: readonly string[];
-  /** 이번에 쓸 회차(없으면 전부). 재요청이면 빠진 회차만(D40) */
+  /** 이번에 쓸 회차(없으면 전부). 재요청이면 빠진 회차만 */
   write?: readonly ScheduleRound[];
   /** 재요청 때 이미 받은 회차 — 라벨·제목만(이어지게) */
   written?: readonly { label: string; title: string }[];
@@ -44,7 +44,7 @@ export type RoundsPromptInput = {
 
 /**
  * user 데이터 블록 하나. 발화는 뒤에서 12줄·각 500자, 전부 escape — 블록을 닫거나 새로 열 수 없다.
- * 회차 표는 늘 전부(위치 요청 "마지막 회차" 를 맞추려고, D41), 쓸 회차는 <write> 로 번호를 준다(D39)
+ * 회차 표는 늘 전부(위치 요청 "마지막 회차" 를 맞추려고), 쓸 회차는 <write> 로 번호를 준다
  */
 export function buildRoundsMessages(p: RoundsPromptInput): ChatInput[] {
   const room = { title: p.draft.title ?? "", intro: p.draft.intro ?? "", descriptionMd: p.draft.descriptionMd ?? "", rulesMd: p.draft.rulesMd ?? "" };

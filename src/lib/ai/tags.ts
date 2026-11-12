@@ -4,7 +4,7 @@ import type { RoomTagDto } from "@/lib/api/types";
 import { createAnonClient } from "@/lib/supabase/anon";
 import type { TagDict } from "./normalize";
 
-/* 태그 사전(§5.3) — 세션 없는 anon 으로 tags_search(null) 을 읽어 모듈 캐시(5분).
+/* 태그 사전 — 세션 없는 anon 으로 tags_search(null) 을 읽어 모듈 캐시(5분).
    사용자 세션으로 읽으면 그 사람만 보이는 비공개 방의 자유 태그가 캐시를 타고 다른 사람 프롬프트로 샐 수 있다 */
 
 const TTL_MS = 5 * 60_000;

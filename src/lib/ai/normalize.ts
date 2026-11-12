@@ -2,7 +2,7 @@ import { clampCp, maxEndDate } from "@/components/room-new/validate";
 import { TAG_LIMIT } from "@/components/room-new/tags";
 import { ACCESS_VALUES, MD_MAX, REQUIRED_FIELDS, type Draft, type DraftTag, type Dropped, type Field, type RequiredField } from "./schema";
 
-/* 모델·클라이언트가 낸 값을 수동 폼 규칙(validate.ts)으로 정규화한다(D10). 길이는 자르고, 범위 밖 값은 버리고 dropped 로 알린다 */
+/* 모델·클라이언트가 낸 값을 수동 폼 규칙(validate.ts)으로 정규화한다. 길이는 자르고, 범위 밖 값은 버리고 dropped 로 알린다 */
 
 /** 태그 사전(tags_search) — slug 로 고정 */
 export type TagDict = { slug: string; label: string; tone?: string }[];
@@ -129,7 +129,7 @@ export function normalizeDraft(raw: Record<string, unknown>, today: string, dict
   return mergeDraft({}, patch);
 }
 
-/** 필수 6개 중 비었거나 유효하지 않은 것(D11) — 서버가 계산한다 */
+/** 필수 6개 중 비었거나 유효하지 않은 것 — 서버가 계산한다 */
 export function computeMissing(d: Draft, today: string): RequiredField[] {
   return REQUIRED_FIELDS.filter((f) => {
     switch (f) {
@@ -149,7 +149,7 @@ export function computeMissing(d: Draft, today: string): RequiredField[] {
 }
 
 /**
- * 칩·직접 입력 답(answer) → 실제 필드 patch(§5.2 파생 필드). 서버가 모델보다 먼저 반영해 모델은 결과만 본다.
+ * 칩·직접 입력 답(answer) → 실제 필드 patch(파생 필드). 서버가 모델보다 먼저 반영해 모델은 결과만 본다.
  * style·extra 는 글로 모델에 넘긴다(설명·규칙 초안은 모델이 쓴다) — 여기서는 빈 patch.
  */
 export function deriveAnswer(answer: { field: Field; value: string } | null | undefined, draft: Draft): Record<string, unknown> {

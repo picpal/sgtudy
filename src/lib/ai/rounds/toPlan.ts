@@ -3,12 +3,12 @@ import type { Cadence, Schedule, ScheduleRound } from "./schedule";
 import { GOAL_MAX, ROUND_TITLE_MAX, TASK_DESC_MAX, TASK_TITLE_MAX, type RoundModelItem, type RoundsResponse, type RoundView } from "./schema";
 
 /*
- * 계획서는 서버가 조립한다(D31) — 모델 출력은 글뿐이고 op·parent·날짜·라벨·kind·taskType 은 여기서 붙인다.
+ * 계획서는 서버가 조립한다 — 모델 출력은 글뿐이고 op·parent·날짜·라벨·kind·taskType 은 여기서 붙인다.
  * 회차 수는 회차 표가 정한다: 모자라면 "N주차 학습" 으로 채우고(padded), 넘치면 자른다. 과제는 전부 common(멤버가 아직 없다)
  */
 
 /**
- * 모델 출력 → 회차 자리(D39). 회차 번호(index, 1부터)가 맞는 항목을 먼저 그 자리에, 번호가 없거나 틀리거나 겹친 항목은
+ * 모델 출력 → 회차 자리. 회차 번호(index, 1부터)가 맞는 항목을 먼저 그 자리에, 번호가 없거나 틀리거나 겹친 항목은
  * 남은 빈 자리에 순서대로. placed 는 schedule index(0부터) → 항목 — 재요청 결과를 같은 맵에 더한다
  */
 export function placeRounds(slots: readonly ScheduleRound[], items: readonly RoundModelItem[], placed: Map<number, RoundModelItem>): void {
@@ -23,7 +23,7 @@ export function placeRounds(slots: readonly ScheduleRound[], items: readonly Rou
 
 const GOAL_HEAD = /^(?:이번\s*(?:주|회차)\s*)?목표\s*[:：]\s*/;
 /**
- * 목표 앞머리는 서버가 붙인다(D42) — 7일 회차 "이번 주 목표:", 14일 "이번 회차 목표:". 모델이 붙여 보냈으면 떼고 다시 붙인다.
+ * 목표 앞머리는 서버가 붙인다 — 7일 회차 "이번 주 목표:", 14일 "이번 회차 목표:". 모델이 붙여 보냈으면 떼고 다시 붙인다.
  * 첫 줄이 불릿이면(목표 문장이 없음) 그대로 둔다
  */
 export function goalWithHead(raw: string, cadence: Cadence): string {
@@ -36,9 +36,9 @@ export function goalWithHead(raw: string, cadence: Cadence): string {
   return sanitizeMd([head + sentence, ...rest].join("\n"), GOAL_MAX);
 }
 
-/** 과제 수(D25) — 매주 과제·인증 방식이면 2, 아니면 1 */
+/** 과제 수 — 매주 과제·인증 방식이면 2, 아니면 1 */
 export const tasksPerRound = (style: readonly string[]) => (style.includes("weekly-task") || style.includes("proof") ? 2 : 1);
-/** 시험 리프(D26) — "회차별 시험" 을 골랐을 때만 */
+/** 시험 리프 — "회차별 시험" 을 골랐을 때만 */
 export const examEachRound = (style: readonly string[]) => style.includes("exam");
 
 type Child = { title: string; descriptionMd?: string; taskType?: "common"; kind?: "exam" };

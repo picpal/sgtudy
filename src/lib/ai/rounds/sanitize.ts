@@ -2,7 +2,7 @@ import { clampCp } from "@/components/room-new/validate";
 import { stripControl } from "../normalize";
 
 /*
- * 모델이 쓴 회차 글 정규화(D31·§6). 진행목표 설명은 마크다운으로 렌더되므로 평문 + "- " 불릿만 남긴다:
+ * 모델이 쓴 회차 글 정규화. 진행목표 설명은 마크다운으로 렌더되므로 평문 + "- " 불릿만 남긴다:
  * 이미지·링크(글만 남김)·HTML 태그·헤딩 기호·맨 URL 을 지우고, 빈 줄은 하나로 접고, 코드 포인트로 자른다
  */
 export function sanitizeMd(s: string, max: number): string {

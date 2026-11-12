@@ -1,6 +1,6 @@
 import type { Curriculum, NodeDto, RoomStatusDto, TaskTypeDto } from "@/lib/api/types";
 
-/** api_invoke('curriculum_get') 응답 — curriculum_json + 게이트웨이 보강(0035 api_curriculum_view·api_node_file_counts) */
+/** api_invoke('curriculum_get') 응답 — curriculum_json + 게이트웨이 보강(api_curriculum_view·api_node_file_counts) */
 export type GatewayCurriculum = Omit<Curriculum, "nodes"> & {
   nodes: (NodeDto & { isMine?: boolean })[];
   version: string;
@@ -35,7 +35,7 @@ export type TreeNode = {
   /** 개인 목표만 */
   ownerId?: string | null;
   ownerNickname?: string;
-  /** 〔C#5〕 게이트웨이가 붙인 값 그대로(없으면 생략 — 포맷터는 내 것으로 보지 않는다) */
+  /** 게이트웨이가 붙인 값 그대로(없으면 생략 — 포맷터는 내 것으로 보지 않는다) */
   isMine?: boolean;
   /** 개인 목표만 — 제출함 */
   done?: true;
@@ -67,7 +67,7 @@ function kindOf(n: NodeDto): TreeKind {
   return n.task === null ? "bundle" : "task";
 }
 
-/** curriculum_get → 스펙 §7.1 내부 정규화 트리. 형제 순서 = 입력 순서(서버 전위 정렬). 보관은 includeArchived 아니면 하위째 제외 */
+/** curriculum_get → 내부 정규화 트리. 형제 순서 = 입력 순서(서버 전위 정렬). 보관은 includeArchived 아니면 하위째 제외 */
 export function toCurriculumTree(c: GatewayCurriculum, opts: { includeDescriptions: boolean; includeArchived?: boolean }): CurriculumTree {
   const nick = new Map(c.members.map((m) => [m.userId, m.nickname]));
   const byId = new Map<string, TreeNode>();
@@ -91,7 +91,6 @@ export function toCurriculumTree(c: GatewayCurriculum, opts: { includeDescriptio
     }
     if (kind === "personal") {
       t.ownerId = n.ownerId ?? null;
-      // 〔P8〕 ownerNickname = task.people[0].nickname, 없으면 멤버 목록
       const owner = n.task?.people[0]?.nickname ?? (n.ownerId ? nick.get(n.ownerId) : undefined);
       if (owner) t.ownerNickname = owner;
       if (typeof n.isMine === "boolean") t.isMine = n.isMine;

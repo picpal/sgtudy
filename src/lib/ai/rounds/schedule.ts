@@ -1,7 +1,7 @@
 import { addDays } from "../normalize";
 import { MAX_ROUNDS } from "./schema";
 
-/* 회차 표(D23·D24) — 날짜는 서버가 나눈다. 모델은 이 표에 제목·목표·과제 글만 채운다. 순수 함수 */
+/* 회차 표 — 날짜는 서버가 나눈다. 모델은 이 표에 제목·목표·과제 글만 채운다. 순수 함수 */
 
 export type Cadence = 7 | 14;
 export type ScheduleRound = { index: number; label: string; startDate: string; endDate: string };

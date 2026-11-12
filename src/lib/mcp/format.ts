@@ -1,4 +1,4 @@
-/* MCP 도구 응답 텍스트 〔UX 재검토 §4 · D12〕 — 텍스트 1벌, 한국어 요약 먼저, id 는 줄 맨 앞, uuid 없음, 8,000자 상한.
+/* MCP 도구 응답 텍스트 — 텍스트 1벌, 한국어 요약 먼저, id 는 줄 맨 앞, uuid 없음, 8,000자 상한.
    입력은 api_invoke 의 data(계약: src/lib/mcp/__fixtures__/api-contract.json · contract.test.ts) */
 import type { RoomStatusDto, ScheduleResponse } from "@/lib/api/types";
 import type { TaskStatus } from "@/lib/types";
@@ -38,7 +38,7 @@ export function weekWindow(today: string, range: Range): { from: string; to: str
 }
 
 /* ---------- 절단 ---------- */
-/** 마지막 완전한 줄까지 자르고 안내 1줄. footer(n) = 남은 줄 수를 받아 안내 문구 */
+/** 마지막 완전한 줄까지 자르고 안내 1줄. footer(남은 줄 수, 자른 위치) = 안내 문구 */
 function capLines(lines: string[], footer: (rest: number, firstCut: number) => string): string {
   const full = lines.join("\n");
   if (full.length <= MAX_TEXT) return full;
@@ -70,7 +70,7 @@ export type CurriculumOpts = {
 
 type Picked = { rounds: TreeNode[]; note?: string } | { error: string };
 const MAX_CANDIDATES = 20;
-/** 회차 선택자 해석 — 서버 plan_round_pick(0034)과 같은 규칙:
+/** 회차 선택자 해석 — 서버 plan_round_pick 과 같은 규칙:
     대상 = 보관 안 된 회차(입력 순서 = sort_order·id). 수 = 서수(1부터, 정수만) · 문자열은 trim 후
     "current"(대소문자 무시) = 현재 회차, 없으면 첫 회차 · 숫자 1~18자리 = id(앞 0 무시), 없으면 라벨로 · 그 밖 = 라벨(trim) 정확 일치.
     라벨이 겹치면 ROUND_AMBIGUOUS(후보 "n번째 · 라벨 · 제목" ≤ 20), 못 찾으면 ROUND_NOT_FOUND(후보 라벨|제목 ≤ 20).
@@ -183,7 +183,7 @@ function nodeLines(t: CurriculumTree, n: TreeNode, parent: TreeNode, depth: numb
   for (const c of n.children) if (c.kind !== "personal") nodeLines(t, c, n, depth + 1, out);
 }
 
-/** curriculum_get → 줄 형식(스펙 §7.1). 개요 = 회차 1줄씩, 상세 = 고른 회차의 하위 트리 */
+/** curriculum_get → 줄 형식. 개요 = 회차 1줄씩, 상세 = 고른 회차의 하위 트리 */
 export function formatCurriculum(c: GatewayCurriculum, opts: CurriculumOpts): { text: string; isError: boolean } {
   const text = curriculumText(c, opts);
   return typeof text === "string" ? { text, isError: false } : { text: text.error, isError: true };
@@ -250,7 +250,6 @@ export function formatStudies(s: StudiesData, me: WhoamiData): string {
   return capLines(lines, (rest) => `… 외 ${rest}줄`);
 }
 
-/** 토큰 만료 7일 이내면 안내 1줄, 아니면 null */
 export function expiryNotice(expiresAt: string | null, today: string): string | null {
   if (!expiresAt) return null;
   const days = daysBetween(today, kst(expiresAt).slice(0, 10));
@@ -314,7 +313,7 @@ export type DiffItem = {
   // create
   ref?: string | null; label?: string | null; taskType?: "common" | "designated" | null; startDate?: string; endDate?: string;
   parent?: string | null; parentPath?: string | null; assignees?: string[];
-  /** 0038 시험 리프(create·update·move) */
+  /** 시험 리프(create·update·move) */
   exam?: true;
   // update · restore
   changes?: { title?: Pair<string>; label?: Pair<string | null>; startDate?: Pair<string>; endDate?: Pair<string>; taskType?: Pair<string | null>;
@@ -335,7 +334,7 @@ export type ApplyData = {
   summary: PlanSummary; notifications: Notifications; undoable?: Undoable; replayed?: boolean; version?: string;
 };
 
-/** plan_warn_text(0034) 와 같은 3개 — 서버가 message 를 붙이지만 계약이 깨져도 undefined 를 찍지 않는다 〔C#9〕 */
+/** plan_warn_text 와 같은 3개 — 서버가 message 를 붙이지만 계약이 깨져도 undefined 를 찍지 않는다 */
 export const WARN_TEXT: Record<string, string> = {
   PERIOD_OUTSIDE_ROOM: "스터디 기간 밖이에요",
   PERIOD_OUTSIDE_PARENT: "상위 항목 기간 밖이에요",
@@ -491,12 +490,12 @@ export function formatPersonalResult(r: PersonalCreateData): string {
   return capLines([parts.join(" · ")], () => "…");
 }
 
-/** 〔C#10〕 `n개 삭제` + 이미 없는 id 가 있으면 ` · 이미 없음 k개` */
+/** `n개 삭제` + 이미 없는 id 가 있으면 ` · 이미 없음 k개` */
 export function formatRemoveResult(r: { deleted: number; skipped: string[] }): string {
   return `${r.deleted}개 삭제${r.skipped.length ? ` · 이미 없음 ${r.skipped.length}개` : ""}`;
 }
 
-/* ---------- 시험(0037 exam_get_brief · exam_draft_put) ---------- */
+/* ---------- 시험(exam_get_brief · exam_draft_put) ---------- */
 export type ExamBriefData = {
   study: { slug: string; title: string };
   task: { id: string; title: string; startDate: string; endDate: string };
@@ -537,7 +536,7 @@ export function formatExamDraft(d: ExamDraftData, link: string | null): string {
   return `초안 저장 — ${d.questionCount}문항 ${d.totalPoints}점${warn} · 웹에서 검토·발행: ${link ?? "그 과제의 출제 화면"}`;
 }
 
-/* ---------- 그림 올리기(0045, md-images 스펙 §3.4·§4.5) ---------- */
+/* ---------- 그림 올리기 ---------- */
 export type UploadNode = { id: string; title: string; round?: string | null };
 export type UploadPrepared = { uploadId: string; objectPath: string; fileName: string; contentType: string; size: number; replace: boolean; expiresAt: string; node: UploadNode };
 export type UploadFile = { id: string; name: string; contentType: string; size: number };
@@ -547,7 +546,7 @@ const IMAGE_KIND: Record<string, string> = { "image/png": "PNG", "image/jpeg": "
 const nodeName = (slug: string, n: UploadNode) => `${slug}${n.round && n.round !== n.title ? ` ${n.round}` : ""} 「${n.title}」`;
 const kb = (size: number) => (size < 1024 ? `${size} B` : `${Math.round(size / 1024)} KB`);
 
-/** 준비 결과 — 실행할 curl 한 줄 · 다음 도구 · 설명 조각. 이름은 D25 규칙(따옴표·공백 없음)이라 작은따옴표로 감싸면 셸에 안전하다 */
+/** 준비 결과 — 실행할 curl 한 줄 · 다음 도구 · 설명 조각. 파일 이름에 따옴표·공백이 없어서 작은따옴표로 감싸면 셸에 안전하다 */
 export function formatUploadPrepared(d: UploadPrepared, signedUrl: string, slug: string, snippet: string): string {
   return [
     `그림 올리기 준비 완료 · ${nodeName(slug, d.node)} · 2시간 안에 올려 주세요(~ ${kst(d.expiresAt).slice(11)} KST)${d.replace ? " · 같은 이름 그림을 바꿔요" : ""}`,

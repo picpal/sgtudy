@@ -12,8 +12,8 @@ import { planDoc, ROUND_SEL_HELP, roundSel } from "./plan-schema";
 import { anonStorage, type ImageStorage } from "./storage";
 import { toCurriculumTree, type GatewayCurriculum, type TreeNode } from "./tree";
 
-/* MCP 도구 v1 〔UX 재검토 D12·D13〕 — 설명·instructions 는 영어(한국어 용어 병기), title 은 한국어, 결과·오류는 한국어 줄 형식 텍스트 1벌.
-   도구는 던지지 않는다 〔C#6〕: 인증은 라우트가 transport 앞에서 끝냈고, 여기서 받은 오류는 isError 텍스트 + 다음 행동 */
+/* MCP 도구 v1 — 설명·instructions 는 영어(한국어 용어 병기), title 은 한국어, 결과·오류는 한국어 줄 형식 텍스트 1벌.
+   도구는 던지지 않는다: 인증은 라우트가 transport 앞에서 끝냈고, 여기서 받은 오류는 isError 텍스트 + 다음 행동 */
 export type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
 /** today 는 테스트용(없으면 KST 오늘). who 는 라우트가 인증 때 받은 whoami — 있으면 list_my_studies 가 whoami 를 다시 부르지 않는다.
     storage 는 테스트용(없으면 anon Storage — 그림 올리기 도구만 쓴다) */
@@ -37,16 +37,14 @@ export const SERVER_INSTRUCTIONS =
 const kstToday = () => new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10);
 const text = (t: string, isError?: boolean): ToolResult => ({ content: [{ type: "text", text: t }], ...(isError ? { isError: true } : {}) });
 const fail = (e: ToolError) => text(toolErrorText(e), true);
-/** undefined 인자는 넘기지 않는다 */
 const defined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
-/** 성공 결과 + 토큰 만료 7일 이내면 첫 줄 안내(T4) */
+/** 성공 결과 + 토큰 만료 7일 이내면 첫 줄 안내 */
 function done(r: InvokeResult, ctx: Ctx, body: string, isError = false): ToolResult {
   const notice = expiryNotice(r.meta?.expiresAt ?? null, ctx.today ?? kstToday());
   return text(notice ? `${notice}\n${body}` : body, isError);
 }
 
-/** 하나 부르고 → 오류면 isError, 아니면 포맷 */
 const call = (op: string, args: (a: Record<string, unknown>) => Record<string, unknown>,
   fmt: (data: unknown, a: Record<string, unknown>, ctx: Ctx) => string | { text: string; isError: boolean }) =>
   async (invoke: Invoke, a: Record<string, unknown>, ctx: Ctx): Promise<ToolResult> => {
@@ -57,7 +55,7 @@ const call = (op: string, args: (a: Record<string, unknown>) => Record<string, u
   };
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-/** slug 또는 제목 일부(D14). 생략하면 서버가 유일한 진행 중 스터디로 — 설명은 instructions 가 대신한다(tools/list 예산) */
+/** slug 또는 제목 일부. 생략하면 서버가 유일한 진행 중 스터디로 — 설명은 instructions 가 대신한다(tools/list 예산) */
 const study = z.string().optional();
 const READ = { readOnlyHint: true, openWorldHint: false };
 const slugOfLink = (link: string) => decodeURIComponent(/\/my-study\/([^/?#]+)/.exec(link)?.[1] ?? "");
@@ -67,11 +65,11 @@ const previewRun = call("curriculum_plan_preview", (a) => ({ study: a.study, pla
   return { text: formatPreview(p, { slug: typeof a.study === "string" ? a.study : "기본 스터디" }), isError: p.ok === false };   // 검증 오류도 isError
 });
 
-/* ---------- 시험(0037) ---------- */
+/* ---------- 시험 ---------- */
 /** 숫자 id 또는 제목 정확 일치(TS 측 해석 — DB op 는 id 만 받는다) */
 const task = z.union([z.string(), z.number().int().nonnegative()]).describe("task id or exact title");
-/** sgtudy.exam/v1(스펙 §3.2) — 서버 exam_validate 와 같은 상한. 유형별 answer 모양(보기 번호·OX·허용 답)은 계약 문구와 서버가 맡는다:
-    유형별 discriminatedUnion 은 tools/list 예산(8,000자)을 넘긴다. 답은 다듬지 않는다(단답 비교는 서버 exam_norm).
+/** sgtudy.exam/v1 — 서버 exam_validate 와 같은 상한. 유형별 answer 모양(보기 번호·OX·허용 답)은 계약 문구와 서버가 맡는다:
+    유형별 discriminatedUnion 은 tools/list 예산(9,000자)을 넘긴다. 답은 다듬지 않는다(단답 비교는 서버 exam_norm).
     reveal 은 계약·웹 JSON 과 같게 받되 exam_draft_put 이 무시한다(공개 시점은 웹에서만) */
 const examDoc = z.strictObject({
   questions: z.array(z.strictObject({
@@ -143,7 +141,7 @@ const resolveNode = (invoke: Invoke, a: Record<string, unknown>) => resolveIn(in
   codes: ["NODE_NOT_FOUND", "NODE_AMBIGUOUS"],
 });
 
-/* ---------- 그림 올리기(0045) ---------- */
+/* ---------- 그림 올리기 ---------- */
 const NODE_FIX = 'get_curriculum(detail:"full") 로 회차·과제의 id 나 제목을 확인해 node 에 넣고 다시 부르세요';
 const UPLOAD_HINT: Record<string, string> = {
   NODE_NOT_FOUND: NODE_FIX,
@@ -156,7 +154,7 @@ function uploadFail(e: ToolError): ToolResult {
 const IMAGE_LIMIT = 20;
 const SVG_MAX = 2_097_152;
 const HEAD = 64;
-/** finish 의 사전 검사(D27, 방어 심층) — 래스터는 앞 64바이트, SVG 는 통째로(≤2MB) 금지 규칙까지. 못 읽으면 null */
+/** finish 의 사전 검사(방어 심층) — 래스터는 앞 64바이트, SVG 는 통째로(≤2MB) 금지 규칙까지. 못 읽으면 null */
 async function checkUploaded(st: ImageStorage, path: string, mime: string): Promise<string[] | null> {
   if (mime === "image/svg+xml") {
     const all = await st.readAll(path, SVG_MAX);
@@ -324,7 +322,7 @@ export const TOOLS: ToolDef[] = [
     inputSchema: {
       study,
       node: z.union([z.string(), z.number().int().nonnegative()]).describe('item id, round ("3주차") or exact title'),
-      fileName: z.string(),   // 이름 규칙(D25, 1~120자)은 서버가 본다 — 예산
+      fileName: z.string(),   // 이름 규칙(1~120자, 공백·따옴표 등 금지)은 서버가 본다 — 예산
       contentType: z.enum(IMAGE_MIME),
       size: z.number().int().min(1).max(10_485_760),
       replace: z.boolean().optional(),

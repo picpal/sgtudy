@@ -4,7 +4,7 @@ import { SAY_MAX, type ChatLine, type Draft, type Dropped, type Field, type Requ
 /** 모델 입력 한 줄 — OpenAI Responses API input(EasyInputMessage)과 같은 모양 */
 export type ChatInput = { role: "user" | "assistant"; content: string };
 
-/* 모델에 보내는 글(D9·§6). system(instructions) 은 요청 사이 바이트가 같다(프롬프트 캐시) — 오늘 날짜·사용자 값은 messages 의 데이터 블록으로만 */
+/* 모델에 보내는 글. system(instructions) 은 요청 사이 바이트가 같다(프롬프트 캐시) — 오늘 날짜·사용자 값은 messages 의 데이터 블록으로만 */
 
 /** 데이터 블록 안 글 — 태그를 닫거나 새로 열 수 없게 escape, 제어문자 제거 */
 export const escapeData = (s: string) => stripControl(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -82,7 +82,7 @@ export type PromptState = {
 };
 
 /**
- * messages 조립(D9) — 지난 assistant 는 say 텍스트만, 지난 user 는 <user_answer> 블록, 마지막 user 턴에 서버 계산 데이터 블록.
+ * messages 조립 — 지난 assistant 는 say 텍스트만, 지난 user 는 <user_answer> 블록, 마지막 user 턴에 서버 계산 데이터 블록.
  * 클라이언트가 assistant 자리에 JSON·지시를 넣어도 그대로 문자열(say)로만 들어간다.
  */
 export function buildMessages(s: PromptState): ChatInput[] {

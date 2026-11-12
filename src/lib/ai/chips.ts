@@ -2,7 +2,7 @@ import { clampCp, maxEndDate } from "@/components/room-new/validate";
 import { addDays, isYmd, stripControl } from "./normalize";
 import { ACCESS_VALUES, STYLE_VALUES, type Ask, type ChipOption, type Draft, type Field, type RequiredField } from "./schema";
 
-/* 선택지 칩(D14·§4.2) — 모델 options 를 검증하고, 없거나 틀리면 필드별 기본 칩으로 바꾼다 */
+/* 선택지 칩 — 모델 options 를 검증하고, 없거나 틀리면 필드별 기본 칩으로 바꾼다 */
 
 const MAX_OPTIONS = 6;
 const LABEL_MAX = 30;

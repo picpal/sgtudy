@@ -1,4 +1,4 @@
-/** 사람별 과제 상태 — docs/claude-design-prompt.md §2.4 */
+/** 사람별 과제 상태 */
 export type TaskStatus = "planned" | "open" | "done" | "late" | "missed";
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -9,7 +9,6 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   missed: "미제출",
 };
 
-/** 방 상태 */
 export type RoomStatus = "recruit" | "active" | "ended";
 
 /** 참가 상태 문구 — 배지·목록 마크·참가 카드 공통 (상태 라벨은 붙여 쓴다: 모집중·진행중·참가중·승인 대기중) */

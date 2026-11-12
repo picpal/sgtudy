@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-/* MCP 그림 올리기의 Storage 쪽 — anon 키 + 세션 없는 클라이언트(invoke.ts 와 같은 설정)만 쓴다 (md-images 스펙 D21).
-   anon 에게 열린 것은 0045 정책의 "열린 업로드 티켓의 그 경로 하나"뿐이다: 서명 업로드 URL 발급(INSERT 판정)과 finish 검사용 읽기(SELECT).
+/* MCP 그림 올리기의 Storage 쪽 — anon 키 + 세션 없는 클라이언트(invoke.ts 와 같은 설정)만 쓴다.
+   anon 에게 열린 것은 Storage 정책의 "열린 업로드 티켓의 그 경로 하나"뿐이다: 서명 업로드 URL 발급(INSERT 판정)과 finish 검사용 읽기(SELECT).
    관리자 키는 이 경로에 들이지 않는다 — 소스 검사 테스트로 고정(storage.test.ts) */
 const BUCKET = "attachments";
 

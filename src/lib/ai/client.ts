@@ -11,7 +11,7 @@ import { roundsModelFor } from "./rounds/schema";
 import { ModelTurn } from "./schema";
 
 /*
- * 실제 모델 호출(§5.3·D2~D4, 변경: 사용자 지정 OpenAI luna). Responses API · 비스트리밍 · Structured Outputs(strict, zodTextFormat) ·
+ * 실제 모델 호출(OpenAI). Responses API · 비스트리밍 · Structured Outputs(strict, zodTextFormat) ·
  * reasoning effort low · 도구 없음 · store:false(응답을 OpenAI 쪽 대화 상태로 남기지 않는다).
  * max_output_tokens 는 추론 토큰을 포함하므로 출력보다 넉넉히 — 잘리면(status incomplete) 503 으로.
  * 실패(타임아웃·429·5xx·거절·잘림·파싱 실패)는 모두 { ok:false, status } — 라우트가 503 AI_UNAVAILABLE 로 바꾼다. 원문 메시지는 밖으로 내지 않는다.
@@ -63,8 +63,8 @@ export const openaiCallModel: CallModel = async ({ system, messages }) => {
 };
 
 /**
- * 회차 초안(D28) — 26회차 ≈ 6k 토큰 + 추론이라 12,000 상한 · 50초 · 재시도 없음(라우트 maxDuration 60 안).
- * 출력 배열 길이를 쓸 회차 수로 못박는다(strict minItems = maxItems, D39) — 스키마가 n 마다 달라 n 별로 한 번 만들어 둔다
+ * 회차 초안 — 26회차 ≈ 6k 토큰 + 추론이라 12,000 상한 · 50초 · 재시도 없음(라우트 maxDuration 60 안).
+ * 출력 배열 길이를 쓸 회차 수로 못박는다(strict minItems = maxItems) — 스키마가 n 마다 달라 n 별로 한 번 만들어 둔다
  */
 const roundsFormats = new Map<number, ReturnType<typeof zodTextFormat>>();
 const roundsFormat = (n: number) => {
@@ -78,7 +78,7 @@ export const openaiCallRounds: CallRounds = async ({ system, messages, write, ti
   return r.ok ? { ok: true, output: r.parsed, usage: r.usage, model: r.model } : r;
 };
 
-/** 용어 해설(D10) — 출력 ≈450, 1500 상한 · 25s · 재시도 없음(라우트 maxDuration 30 안) */
+/** 용어 해설 — 출력 ≈450, 1500 상한 · 25s · 재시도 없음(라우트 maxDuration 30 안) */
 const EXPLAIN = { format: zodTextFormat(ExplainOut, "term_explain"), cacheKey: "sgtudy-term-explain", maxOutputTokens: 1500, request: { timeout: 25_000, maxRetries: 0 } };
 export const openaiCallExplain: CallExplain = async ({ system, messages }) => {
   const r = await callStructured(EXPLAIN, { system, messages });

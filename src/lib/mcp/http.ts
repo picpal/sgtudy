@@ -1,4 +1,4 @@
-/* /api/mcp 의 HTTP 경계 〔C#6·#11〕 — 본문 상한 읽기 · 거부 응답(토큰·Authorization 을 싣지 않는다) */
+/* /api/mcp 의 HTTP 경계 — 본문 상한 읽기 · 거부 응답(토큰·Authorization 을 싣지 않는다) */
 export const MAX_BODY_BYTES = 512 * 1024;
 
 type ReadResult = { ok: true; value: unknown } | { ok: false; status: 400 | 413; code: "PARSE_ERROR" | "PAYLOAD_TOO_LARGE" };
@@ -30,13 +30,13 @@ export async function readJsonCapped(req: Request, max = MAX_BODY_BYTES): Promis
   }
 }
 
-/** JSON {error: code}. 401 → WWW-Authenticate(형식·폐기·만료 = invalid_token, 자격 없음(AUTH_REQUIRED) = error 생략 — RFC 6750 §3.1), 429 → Retry-After */
-/** 〔리뷰 I1〕 JSON-RPC 배치(배열 본문) 거부 — 1 POST = 최대 100 메시지가 HTTP 요청 단위 계량(N7)을 우회한다. MCP 2025-06-18 부터 배치 없음 */
+/** JSON-RPC 배치(배열 본문) 거부 — 1 POST = 최대 100 메시지가 HTTP 요청 단위 계량을 우회한다. MCP 2025-06-18 부터 배치 없음 */
 export function rejectBatch(): Response {
   return new Response(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Batch requests are not supported" } }),
     { status: 400, headers: { "content-type": "application/json" } });
 }
 
+/** JSON {error: code}. 401 → WWW-Authenticate(형식·폐기·만료 = invalid_token, 자격 없음(AUTH_REQUIRED) = error 생략 — RFC 6750 §3.1), 429 → Retry-After */
 export function deny(status: number, code: string, retryAfterSec?: number): Response {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (status === 401) headers["www-authenticate"] = code === "AUTH_REQUIRED" ? 'Bearer realm="sgtudy"' : 'Bearer realm="sgtudy", error="invalid_token"';

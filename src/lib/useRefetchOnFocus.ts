@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-/** on 인 동안 창으로 돌아오면(포커스 · 탭이 다시 보임) fn 을 부른다 — 승인 대기 화면이 승인을 놓치지 않게 (시나리오 QA #9) */
+/** on 인 동안 창으로 돌아오면(포커스 · 탭이 다시 보임) fn 을 부른다 — 승인 대기 화면이 승인을 놓치지 않게 */
 export function useRefetchOnFocus(on: boolean, fn: () => void): void {
   const ref = useRef(fn);
   useEffect(() => {
