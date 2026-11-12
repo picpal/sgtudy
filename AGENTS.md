@@ -14,3 +14,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 2. Comments say WHY only: a non-obvious constraint, a workaround's reason, or a gotcha. Don't restate what the code does. If a comment contradicts the code, fix the comment. Never trust it over the code.
 3. No issue, ticket, commit, plan, or migration IDs in comments (`#123`, `Q1-06`, `D16`, `§9`, hashes, `(0054)`). History lives in git and `docs/`. If an ID carries a rule the reader needs, write the rule out in a few words.
 4. Bugs: reproduce with a failing test first, fix, then show it passing.
+
+## UI consistency
+
+1. Copies: if the element you change is a copy of a shared class constant or component (a separate constant or inline string whose classes mostly match it), replace it with the shared one and delete the copy. Editing the copy's value is not reuse.
+2. All states: when you move or restyle a button or toggle, grep every branch that renders it (on/off, empty state, list/detail) and keep it in the same place and shape across them, including right after it is pressed. For a branch you leave as is, say why in your report.
