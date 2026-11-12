@@ -14,7 +14,7 @@ export const registerFile = (nodeId: string, f: { path: string; name: string; mi
 export const discardFile = (fileId: string, client?: Db) => rpc<{ id: string; status: "deleted" }>("file_discard", { p_file: fileId }, client);
 /**
  * 빼기 = "discard" 일 때 컴포넌트가 부르는 것. 실패해도 throw 하지 않는다(목록에서 빼는 건 그대로).
-  * 실패하면 false — "목록에서만 빼기" 와 같아진다. 미연결 파일은 서버가 24시간 뒤 정리.
+ * 실패하면 false — "목록에서만 빼기" 와 같아진다. file_discard RPC 가 없는 DB(PGRST202)에서도 그렇게 물러난다. 미연결 파일은 서버가 24시간 뒤 정리.
  */
 export async function discardUnattached(fileId: string, client?: Db): Promise<boolean> {
   try {

@@ -69,8 +69,8 @@ function nextOf(d: RoomDetail, tree: Tree, today: string): NextDue | null {
 
 /** 참가 카드 동작: owner 그룹장 · leave 모집 기간 참가자(취소 가능) · joined 진행·종료 참가자 · pending 승인 대기 · closed 그 외 */
 export type StudyAction = "owner" | "leave" | "joined" | "pending" | "closed";
-/** draft = 모집 시작 전(준비중). status 는 recruit 로 접히므로 화면은 draft 로 구분한다 */
-/** archived: 보관된 방(모든 표기를 "보관된 스터디" 로). leaveRequest: 진행 중 내 탈퇴 요청 */
+/** draft = 모집 시작 전(준비중). status 는 recruit 로 접히므로 화면은 draft 로 구분한다.
+ *  archived: 보관된 방(모든 표기를 "보관된 스터디" 로). leaveRequest: 진행 중 내 탈퇴 요청 */
 export type StudyRoom = Omit<Room, "action"> & { action: StudyAction; draft: boolean; archived: boolean; leaveRequest: { on: string; reason: string | null } | null };
 
 
@@ -145,7 +145,7 @@ export function toSidebarGroups(ms: MeStudies, today: string): SidebarGroup[] {
       label: g.label,
       items: g.items.map((it) => {
         const w = it.when;
-        // 진행중 방에 열린 과제가 없으면 서버는 kind "end"(방 종료일)를 준다 → "MM.DD 까지"
+        // 진행중 방에 열린 과제가 없으면 서버는 kind "end"(방 종료일)를 준다 → "MM.DD 까지"(올해가 아니면 연도 포함)
         const d = dateShort(w.date, today);
         const when = w.kind === "deadline" ? `${d} 마감` : w.kind === "start" ? `${d} 시작` : w.kind === "recruitEnd" ? `${d} 모집 마감` : g.kind === "active" ? `${d} 까지` : `${d} 종료`;
         return w.kind === "deadline" ? { id: it.slug, title: it.title, intro: it.intro, when, left: diffDays(today, w.date) } : { id: it.slug, title: it.title, intro: it.intro, when };

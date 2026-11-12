@@ -51,5 +51,5 @@ export type RoundsRequest = z.infer<typeof RoundsRequest>;
 /** 미리보기 표시용 회차 한 줄 — plan.ops 와 1:1. padded = 모델이 끝내 안 써서 서버가 빈 채움 회차로 넣었다 */
 export type RoundView = { index: number; label: string; startDate: string; endDate: string; title: string; goalMd: string; tasks: string[]; exam: boolean; padded?: true };
 export type RoundsStats = { rounds: number; tasks: number; exams: number; cadenceDays: 7 | 14 };
-/** 응답 200. padded = 모델이 모자라게 내서(한 번 더 요청한 뒤에도) 서버가 기본 제목으로 채운 회차 수 */
+/** 응답 200. padded = 모델이 모자라게 내서(시간이 남으면 한 번 더 요청한 뒤에도) 서버가 기본 제목으로 채운 회차 수 */
 export type RoundsResponse = { plan: PlanDoc; rounds: RoundView[]; stats: RoundsStats; padded: number };

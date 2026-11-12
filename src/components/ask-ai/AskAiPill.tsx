@@ -80,7 +80,7 @@ export function AskAiPill({ pick, onAsk }: { pick: SelectionPick; onAsk: () => v
   );
 }
 
-/** 40자 초과 선택 — 버튼이 갑자기 안 뜨는 것처럼 보이지 않게 같은 자리에 안내만 */
+/** 용어로 받을 수 없는 선택(tooLong) — 버튼이 갑자기 안 뜨는 것처럼 보이지 않게 같은 자리에 안내만 */
 function TooLongHint({ pick, mobile }: { pick: SelectionPick; mobile: boolean }) {
   const cls = "flex items-center justify-center rounded-full bg-surface-2 px-4 text-[13px] font-medium text-ink-2 shadow-[0_6px_20px_rgba(27,34,48,.18)]";
   if (mobile) {

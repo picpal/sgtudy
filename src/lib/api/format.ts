@@ -67,7 +67,7 @@ export function curIndexOf(rounds: RoundSummary[], today: string): { index: numb
   return null;
 }
 
-/** recruit 앞 3개 / active [cur-1, cur, cur+1] + 완료 접두 / ended 전부 */
+/** recruit 앞 3개 / active 현재 회차와 앞뒤 하나씩 3개(첫·끝 회차면 창이 안쪽으로 밀려 [0,1,2]·[n-3,n-2,n-1]) + 완료 접두 / ended 전부 */
 export function roundsWindow(rounds: RoundSummary[], status: RoomStatusDto, today: string): { rows: RoundSummary[]; more: string; lo: number } {
   const n = rounds.length;
   if (status === "ended") return { rows: rounds, more: "", lo: 0 };

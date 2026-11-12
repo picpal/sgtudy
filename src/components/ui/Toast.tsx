@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 export type ToastMsg = { text: string; tone: "ok" | "bad"; action?: { label: string; onClick: () => void } } | null;
 
 export function Toast({ msg, onClose }: { msg: ToastMsg; onClose: () => void }) {
-  // 버튼이 있는 토스트는 hover·포커스 동안 멈춘다(WCAG 2.2.1)
+  // 버튼이 있는 토스트는 마우스를 올리거나 포커스가 있는 동안 닫지 않고, 벗어나면 처음부터 다시 잰다(WCAG 2.2.1)
   // 붙잡은 토스트를 객체로 기억 — 새 토스트가 오면 자동으로 풀린다
   const [heldMsg, setHeldMsg] = useState<ToastMsg>(null);
   const paused = !!msg?.action && heldMsg === msg;

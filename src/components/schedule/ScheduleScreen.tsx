@@ -80,7 +80,7 @@ export function ScheduleScreen({ initial }: { initial: ScheduleResponse }) {
   };
   const toggle = (id: string) => setOff(on(id) ? [...off, id] : off.filter((x) => x !== id));
 
-  // 날짜를 누르면 일 패널을 화면으로 끌어온다(페이지 스크롤). ≤900 (CSS 는 Tailwind max-[901px] = width < 901, JS 는 max-width: 900px — 같은 구간)
+  // 날짜를 누르면 일 패널을 화면으로 끌어온다(페이지 스크롤). 좁은 화면(JS 는 max-width: 900px = width ≤ 900, CSS 는 max-[901px] = width < 901 — 900~901 사이 소수 폭만 어긋난다)
   // 에서는 패널이 달력 아래라 항상, 넓은 화면은 요약 열이 붙지 못해(화면보다 길다) 패널 머리가 화면 밖일 때만
   const dayRef = useRef<HTMLElement>(null);
   const [asideRef, asideFits] = useStickyFit<HTMLElement>();

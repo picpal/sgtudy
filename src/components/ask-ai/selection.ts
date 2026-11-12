@@ -5,7 +5,7 @@ import { SOURCES, type Source } from "@/lib/ai/explain/schema";
  * 허용 = data-ask-ai="<source>" 컨테이너 안, anchor·focus 가 같은 컨테이너. 그 안이라도 제외 영역(off·입력·편집·코드·버튼)이면 없음
  */
 
-/** tooLong = 허용 영역 안이지만 용어 길이를 넘은 선택 — 알약 대신 안내만 띄운다(묻지 않는다).
+/** tooLong = 허용 영역 안이지만 용어로 받을 수 없는 선택(40cp 초과·줄바꿈 2개 이상·부호만) — 알약 대신 안내만 띄운다(묻지 않는다).
  * nodeId = 응시 화면(exam_take)의 시험 — 컨테이너의 data-ask-ai-node */
 export type SelectionPick = { term: string; source: Source; context: string; rect: DOMRect; container: HTMLElement; nodeId?: string; tooLong?: boolean };
 

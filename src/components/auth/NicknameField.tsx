@@ -39,7 +39,7 @@ export function NicknameField({ value, onChange, original, onHint, autoFocus }: 
   }, [dKey, debounced, original]);
 
   const mine = check?.key === key ? check : null;
-  // 이미 쓰이는 닉네임이면 쓸 수 있는 대안 2~3개 — 같은 nickname_check 로 확인, 입력 세대(key)에 단다
+  // 이미 쓰이는 닉네임이면 쓸 수 있는 대안 최대 3개(없을 수도 있다) — 같은 nickname_check 로 확인, 입력 세대(key)에 단다
   const taken = mine?.r.reason === "taken" && !mine.error;
   const [alts, setAlts] = useState<{ key: string; list: string[] } | null>(null);
   useEffect(() => {

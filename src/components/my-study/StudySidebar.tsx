@@ -11,7 +11,7 @@ import type { SidebarGroup } from "@/data/my-study";
 /** collapsed: 커리큘럼 편집 화면이 열린 동안 넓은 화면에서는 목록을 접어 편집기에 폭을 준다 (좁은 화면은 원래 한 줄로 접혀 있다) */
 export function StudySidebar({ selected, groups, collapsed = false }: { selected: string; groups: SidebarGroup[]; collapsed?: boolean }) {
   const [q, setQ] = useState("");
-  // ≤900: 선택한 방 내용이 먼저 보이도록 목록은 접어 둔다. 넓은 화면은 항상 펼침
+  // ≤900: 선택한 방 내용이 먼저 보이도록 목록은 접어 둔다. 넓은 화면은 collapsed 가 아니면 펼침
   const [open, setOpen] = useState(false);
   const shown = filterSidebarGroups(groups, q);
   const total = groups.reduce((a, g) => a + g.items.length, 0);
