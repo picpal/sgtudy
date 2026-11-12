@@ -2,13 +2,13 @@
  * 작은 마크다운 파서 — 에디터(ui/markdown-editor)가 만들어 내는 모양을 그대로 읽는다:
  * 제목(#~###, 더 깊으면 ###)·문단(줄바꿈 유지)·목록(-, *, 1. — 들여쓰면 하위 목록)·체크리스트(- [ ])·인용(>)·코드 블록(```)·구분선(---)·GFM 표·접기(:::details),
  * 인라인은 굵게·기울임·취소선·코드·http(s) 링크·그림.
- * 결과는 데이터일 뿐이고 화면은 React 요소로 그린다(dangerouslySetInnerHTML 없음) → 원문 HTML 은 글자로 남는다 (Q2-10).
+ * 결과는 데이터일 뿐이고 화면은 React 요소로 그린다(dangerouslySetInnerHTML 없음) → 원문 HTML 은 글자로 남는다.
  */
 import { parseGfmTable, type TableModel } from "@/lib/markdown/gfmTable";
 
 export { parseInline, type MdInline } from "@/lib/markdown/inline";
 
-/** 목록 항목 — text 는 이어진 줄을 \n 으로 품는다, sub 는 하위 목록 (md-images 스펙 D10·D11) */
+/** text 는 이어진 줄을 \n 으로 품는다, sub 는 하위 목록 */
 export type MdItem = { text: string; done?: boolean; sub: MdBlock[] };
 export type MdBlock =
   | { type: "h"; level: 1 | 2 | 3; text: string }
@@ -23,7 +23,7 @@ export type MdBlock =
   | { type: "table"; table: TableModel };
 
 const H = /^(#{1,6})\s+(.+)$/;
-// 글자 없는 항목("- [ ]" — 줄 끝 공백은 trim 으로 빠진다)도 체크리스트 (Q1-11)
+// 글자 없는 항목("- [ ]" — 줄 끝 공백은 trim 으로 빠진다)도 체크리스트
 const TASK = /^[-*+]\s+\[([ xX])\](?:\s+(.*))?$/;
 const UL = /^[-*+]\s+(.*)$/;
 const OL = /^(\d+)[.)]\s+(.*)$/;
@@ -32,12 +32,12 @@ const HR = /^(?:-{3,}|\*{3,}|_{3,})$/;
 const QUOTE = /^>\s?/;
 const TABLE_DELIM = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
 const LIST_DEPTH = 4;
-// 접기 — 여는 줄 ":::details 제목", 닫는 줄 ":::" (D8). 중첩은 3단계까지
+// 접기 — 여는 줄 ":::details 제목", 닫는 줄 ":::". 중첩은 3단계까지
 const DETAILS = /^:::details(?:\s+(.*))?$/;
 const DETAILS_END = /^:::$/;
 const DETAILS_DEPTH = 3;
 
-/** 소개 본문은 "스터디 소개" h3 아래에 놓이므로 # → h4, ## → h5, ### → h6 (V2-06) */
+/** 소개 본문은 "스터디 소개" h3 아래에 놓이므로 # → h4, ## → h5, ### → h6 */
 export const headingTag = (level: 1 | 2 | 3) => (["h4", "h5", "h6"] as const)[level - 1];
 
 type ListBlock = Extract<MdBlock, { type: "ul" | "ol" | "task" }>;
@@ -85,7 +85,6 @@ function parseBlocks(src: string, depth: number): MdBlock[] {
     stack = [];
   };
 
-  /** 목록 줄 하나를 들여쓰기에 맞는 단계에 붙인다 (D10) */
   const addListLine = (indent: number, l: ListLine) => {
     para = null;
     if (stack.length === 0) {

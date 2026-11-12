@@ -33,7 +33,7 @@ const reducer = (rows: UploadRow[], a: Act) => (a.type === "reset" ? [] : upload
 const CONCURRENCY = 2;
 const HEAD_BYTES = 64;
 
-/** 그림이라고 고른 파일의 앞부분이 그 형식인지(D27 웹 사전 검사) — 아니면 줄 오류 문구. SVG 는 통째로(≤2MB) 읽어 금지 규칙도 본다.
+/** 그림이라고 고른 파일의 앞부분이 그 형식인지(웹 사전 검사) — 아니면 줄 오류 문구. SVG 는 통째로(≤2MB) 읽어 금지 규칙도 본다.
     읽지 못하면 검사를 건너뛴다(서버·버킷이 다시 본다) */
 async function imageMismatch(file: File, mime: string): Promise<string | null> {
   if (!isImageMime(mime)) return null;
@@ -182,7 +182,7 @@ export function useNodeFileUploads({ nodeId, saved, selected, onSelect, toast }:
     const added: UploadRow[] = [];
     for (const f of list) {
       const k = crypto.randomUUID();
-      // 실패 줄도 자리를 차지한다 (종류별 — 그림 20 / 파일 5, 0045)
+      // 실패 줄도 자리를 차지한다 (종류별 — 그림 20 / 파일 5)
       const check = checkNodeFile(f, [...rowsRef.current, ...added]);
       if (!check.ok) {
         added.push({ key: k, fileId: "", name: f.name, size: f.size, status: "error", progress: 0, error: check.error });

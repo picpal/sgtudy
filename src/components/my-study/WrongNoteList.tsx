@@ -25,7 +25,6 @@ type Props = {
   busy: boolean;
   onPractice: (slug: string, answers: WrongNoteAnswer[]) => Promise<PracticeOutcome>;
   onMaster: (slug: string, questionId: string, on: boolean) => Promise<boolean>;
-  /** 다시 볼 문제(★, 0051) 켜기·끄기 */
   onBookmark: (slug: string, questionId: string, on: boolean) => Promise<boolean>;
   /** 묶음 채점 막대를 본문 카드 끝까지 — 그 화면 카드 안쪽 여백만큼 음수 마진 + 같은 여백(기본 = 내 스터디 본문 카드) */
   barInset?: string;
@@ -44,7 +43,7 @@ const noop = () => {};
 const itemsOf = (ss: NoteStudy[]) => ss.flatMap((s) => s.rounds.flatMap((r) => r.exams.flatMap((ex) => ex.items ?? [])));
 
 /**
- * 오답노트 본문(스펙 §6.1·§6.2·§6.5 · D22~) — 방 탭(스터디 1개)과 내 과제 보기(여러 개)가 같이 쓴다. 데이터·호출은 부모(useWrongNote).
+ * 방 탭(스터디 1개)과 내 과제 보기(여러 개)가 같이 쓴다. 데이터·호출은 부모(useWrongNote).
  * 첫 화면은 회차 카드, 카드를 누르면 그 회차 상세(문항·다시 풀기·문항 이동). 필터는 두 화면이 같은 상태를 쓴다
  */
 export function WrongNoteList({ studies, pending, scope, studyFilter = "all", busy, onPractice, onMaster, onBookmark, barInset = BAR_INSET, round = null, onOpenRound = noop, onBack = noop, periods }: Props) {
@@ -57,7 +56,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   const [runs, setRuns] = useState<Record<string, Run>>({});
   const [batches, setBatches] = useState<Record<string, Batch>>({});
   const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
-  // 다른 회차로 가면(목록 포함) 다시 풀기 입력은 버린다(D15 — 잃어도 되는 값)
+  // 다른 회차로 가면(목록 포함) 다시 풀기 입력은 버린다(잃어도 되는 값)
   const [shownRound, setShownRound] = useState(round);
   if (shownRound !== round) {
     setShownRound(round);
@@ -128,12 +127,12 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
   const visible = visibleOf(filter, showMastered);
   const selected = applyFilter(studies, "all", true, studyFilter);
   const totals = totalsOf(selected);
-  // 내 과제에서 스터디 하나를 고르면(?study=) 그 섹션 머리(h2)를 남기고 빈 문구는 섹션 한 줄로(스펙 §6.5)
+  // 내 과제에서 스터디 하나를 고르면(?study=) 그 섹션 머리(h2)를 남기고 빈 문구는 섹션 한 줄로
   const oneSection = scope === "all" && selected.length === 1;
   const empty = oneSection && !pending ? null : emptyState(selected, { pending, showMastered, scope, visible });
   const starCount = starEntries(selected).length;
 
-  // 필터를 바꿔 목록에서 빠진 문항의 입력은 버린다(D15 — 잃어도 되는 값)
+  // 필터를 바꿔 목록에서 빠진 문항의 입력은 버린다(잃어도 되는 값)
   const changeView = (f: Filter, m: boolean) => {
     const keep = new Set(itemsOf(visibleOf(f, m)).map((it) => it.question.id));
     setFilter(f);
@@ -216,7 +215,7 @@ export function WrongNoteList({ studies, pending, scope, studyFilter = "all", bu
 
   const openStars = () => setStarIds(new Set(starEntries(selected).map((e) => e.item.question.id)));
   // 필터 줄·★ 보기에선 오른쪽 끝(sm:ml-auto) — 빈 상태만 가운데. 필터가 아니라 동작이라 민트(navy 는 켜진 칩 ink 와 구분이 안 된다)
-  // 모바일(<640)은 칩(~281px)과 한 줄에 못 들어가 혼자 오른쪽 끝에 매달렸다 — 두 화면 다 줄 전체 폭으로 칩 아래(★ 보기는 「회차 목록으로」 아래)
+  // 모바일(<640)은 칩(~281px)과 한 줄에 못 들어가 혼자 오른쪽 끝에 매달린다 — 두 화면 다 줄 전체 폭으로 칩 아래(★ 보기는 「회차 목록으로」 아래)
   const starButton = (place = "justify-center max-sm:w-full sm:ml-auto") => (
     <button
       type="button"
@@ -439,7 +438,7 @@ type RoundCardProps = {
   onOpen: () => void;
 };
 
-/** 회차 카드(D22) — 회차명·기간·시험 수·오답/미답/다시 풀어 맞힘/외움/잠김. 전부 잠긴 회차는 열 수 없다(자물쇠 + 열리는 날) */
+/** 전부 잠긴 회차는 열 수 없다(자물쇠 + 열리는 날) */
 function RoundCard({ round, shown, filtered, period, onOpen }: RoundCardProps) {
   const st = roundStats(round);
   const stars = roundStarCount(round);

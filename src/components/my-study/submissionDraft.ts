@@ -1,7 +1,7 @@
 import type { FileMeta } from "@/lib/api/types";
 
 /* 이 기기 임시 저장 — localStorage 에만 둔다. 서버(submission_upsert)를 부르지 않는다:
-   처음 호출이 곧 제출이라 시각·지각이 고정된다 (스펙 Review Focus 1) */
+   처음 호출이 곧 제출이라 시각·지각이 고정된다 */
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
 export type Draft = { body: string; links: string[]; files: FileMeta[]; at: string };
 type Saved = { bodyMd: string; links: string[]; files: Pick<FileMeta, "id">[] };

@@ -25,7 +25,7 @@ export const TABS: [TabId, string][] = [
 
 const STATUS_BG: Record<RoomStatus, string> = { recruit: "#2F5BC2", active: "#0D7A64", ended: "#5B6675" };
 
-/** draft(모집 시작 전)는 방 목록 카드와 같은 "준비중" 회색 배지 (Q2-03). archived 는 "보관됨" 회색 (시나리오 QA #6) */
+/** draft(모집 시작 전)는 방 목록 카드와 같은 "준비중" 회색 배지. archived 가 우선 */
 export function StatusBadge({ status, draft, archived }: { status: RoomStatus; draft?: boolean; archived?: boolean }) {
   if (archived)
     return (
@@ -88,14 +88,14 @@ const writeMeta = (open: boolean) => {
   window.dispatchEvent(new Event(META_EVENT));
 };
 
-/** onShare: 공개 방 주소 복사 · more: 더보기 메뉴 · noticeUnread: 안 읽은 공지가 있다(공지 탭 점, D9) */
+/** onShare: 공개 방 주소 복사 · more: 더보기 메뉴 · noticeUnread: 안 읽은 공지가 있다(공지 탭 점) */
 export function StudyHeaderInfo({ room, tab, onTab, onShare, more, noticeUnread = false }: { room: StudyRoom; tab: TabId; onTab: (t: TabId) => void; onShare: () => void; more: MoreMenuItem[]; noticeUnread?: boolean }) {
   const metaOpen = useSyncExternalStore(subscribeMeta, readMeta, () => false);
   return (
     <>
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          {/* 긴 제목은 두 줄에서 줄인다(전체는 title·방 화면) — 좁은 폭에서 헤더가 화면을 덮지 않게 (Q3-14) */}
+          {/* 긴 제목은 두 줄에서 줄인다(전체는 title·방 화면) — 좁은 폭에서 헤더가 화면을 덮지 않게 */}
           <h1 title={room.title} className="m-0 line-clamp-2 break-words text-[30px] font-bold leading-[1.3] tracking-[-0.02em] max-sm:text-[22px]">
             {room.title}
           </h1>

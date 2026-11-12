@@ -1,5 +1,5 @@
 /**
- * 개인 목표 상세·편집 폼·회차 상세 섹션의 순수 로직 (스펙 §4.5·§4.6·§5.4·§6). React 와 무관.
+ * 개인 목표 상세·편집 폼·회차 상세 섹션의 순수 로직. React 와 무관.
  */
 import type { PersonalPatch } from "@/lib/api/personal";
 import type { Tone } from "@/lib/palette";
@@ -23,7 +23,6 @@ const NONE: PersonalActions = { edit: false, complete: false, archive: false, re
 export const LEADER_NOTE = "팀원이 만든 목표예요 · 그룹장은 보관·삭제만 할 수 있어요";
 
 /**
- * 누가 무엇을 할 수 있나 (스펙 §5.4).
  * 소유자(eligible = 그룹장이거나 ACTIVE 멤버 — Curriculum.personal.canAdd 와 같은 자격): 방 RECRUIT·ACTIVE 면 고치기·보관·삭제, ACTIVE 면 완료.
  * 보관된 목표는 고치기·완료 없음(TASK_ARCHIVED), 회차째 보관됐으면 여기서 해제할 수 없다(PARENT_ARCHIVED).
  * 그룹장(남의 것): 보관/해제, 삭제는 제출 없을 때만. 그 외: 없음.
@@ -47,7 +46,6 @@ export const isDone = isDoneCode;
 /** 개인 목표 소유자 — people = [소유자] (서버 task_node_json). 진행목표·간트·상세·회차 섹션 공용 */
 export const ownerOf = (n: LeafNode): Person | null => n.people.find((p) => p.userId === n.ownerId) ?? n.people[0] ?? null;
 
-/** 소유자의 코드 */
 export const ownerCode = (n: LeafNode): Code => ownerOf(n)?.c ?? "P";
 
 /** 상세 기간 줄 끝의 상태 — 완료·미완료는 코드로, 그 밖에는 기간 상태(시작 전 / 진행 중 · 마감 D-n) */
@@ -59,12 +57,11 @@ export function statusText(n: LeafNode, today: string): string {
 /** 상태 글자색 — CODE_COLOR(보드·/tasks 와 같은 색): 기한내 초록 · 늦게 완료 호박 · 기한 지남 빨강. 진행·예정은 기본색 */
 export const statusColor = (c: Code): string | undefined => (isDone(c) || c === "M" ? CODE_COLOR[c] : undefined);
 
-/** 삭제 확인 문구 (스펙 §4.6) — 그룹장·제출 있음은 삭제 자체가 없다(보관만) */
-/** 그룹장이 남의 개인 목표를 보관할 때 확인 문구 — 서버가 소유자에게 PERSONAL_ARCHIVED 알림을 보낸다 (0024, 시나리오 QA #7) */
+/** 그룹장이 남의 개인 목표를 보관할 때 확인 문구 — 서버가 소유자에게 PERSONAL_ARCHIVED 알림을 보낸다 */
 export const archiveOthersText = (name: string): string => `${name} 님의 개인 목표를 보관할까요? ${name} 님에게 알림이 가요 · 보관을 풀면 다시 보여요.`;
+/** 삭제 확인 문구 — 그룹장·제출 있음은 삭제 자체가 없다(보관만) */
 export const removeText = (n: LeafNode): string => (n.subAll > 0 ? "완료 기록과 제출 내용까지 함께 지워져요. 삭제할까요?" : "이 목표를 삭제할까요? 되돌릴 수 없어요.");
 
-/** 편집 폼 값 */
 export type PersonalDraft = { title: string; desc: string; s: string; e: string; roundId: string };
 export const draftOf = (n: LeafNode): PersonalDraft => ({ title: n.title, desc: n.desc, s: n.s, e: n.e, roundId: n.roundId });
 
@@ -80,10 +77,9 @@ export function personalPatch(n: LeafNode, d: PersonalDraft): PersonalPatch {
   return p;
 }
 
-/** 편집 폼 회차 이동 미리보기 (시안 B-2) */
 export function movePreview(label: string, period: { s: string; e: string } | null, sameRound: boolean, today?: string): string {
   if (sameRound) return "";
-  // 날짜 표기는 rangeShort (Q2-13 — 오늘과 다른 해면 연도). today 생략 = 기간 시작 해 기준
+  // 날짜 표기는 rangeShort(오늘과 다른 해면 연도). today 생략 = 기간 시작 해 기준
   return period ? `${label}로 옮기면 기간이 ${rangeShort(period.s, period.e, today ?? period.s)} 로 바뀌어요` : `${label}로 옮겨도 기간은 그대로예요`;
 }
 
@@ -103,7 +99,7 @@ export function pickRound(n: LeafNode, d: PersonalDraft, roots: ParentNode[], id
 }
 
 /**
- * 편집 폼을 열 때 화면으로 끌어올리나 (QA Q1-8) — top = 상세 섹션 머리의 화면 기준 위치.
+ * 편집 폼을 열 때 화면으로 끌어올리나 — top = 상세 섹션 머리의 화면 기준 위치.
  * 위로 지나갔거나 화면 위쪽 40% 아래에 있으면(390: 방 머리·아코디언·탭 아래 약 600px) 맨 위로 맞춘다.
  */
 export const formScrollNeeded = (top: number, viewportH: number): boolean => top < 0 || top > viewportH * 0.4;
@@ -149,7 +145,6 @@ export function sectionCounts(round: ParentNode, meId: string | null, isLeader: 
   return { mine, others, othersArchived: groups.reduce((a, g) => a + g.items.length, 0) - others };
 }
 
-/** 팀원 개인 목표 소제목 — "팀원 개인 목표 {n}{unit}" + 그룹장에게 보이는 보관 목표가 있으면 " · 보관 {m}" (시안 C-2·C-4) */
 export const othersHeading = (n: number, archived: number, unit = ""): string => `팀원 개인 목표 ${n}${unit}${archived > 0 ? ` · 보관 ${archived}` : ""}`;
 
 /** 제출 카드(LeafBody) 다시 받기 판단. skip = 카드에서 처음 제출한 그때의 코드(from)와 노드(at) */
@@ -165,16 +160,16 @@ export function cardSync(seen: Code | null, code: Code | null, skip: CardSkip, n
   return { remount: false, skip };
 }
 
-/** 서버 오류 코드 → 스펙 §6 문구 (서버 문구보다 자세한 것만) */
+/** 서버 오류 코드 → 화면 문구 (서버 문구보다 자세한 것만) */
 export const PERSONAL_ERROR_TEXT: Record<string, string> = {
-  // 상세 안(완료 취소 버튼)·회차 섹션·/tasks 어디서 나도 맞는 문구 — 빠져나갈 방법(기록 비우기, QA Q1-2)까지 알린다
+  // 상세 안(완료 취소 버튼)·회차 섹션·/tasks 어디서 나도 맞는 문구 — 빠져나갈 방법(기록 비우기)까지 알린다
   SUBMISSION_HAS_CONTENT: "기록이 있는 목표는 완료를 취소할 수 없어요 · 상세의 기록에서 내용·링크·파일을 모두 비워 저장한 뒤 취소해 주세요",
 };
 /** 개인 목표 RPC 실패 문구 — my-study·/tasks 공용 (같은 오류는 같은 문구) */
 export const personalErrorText = (e: { code: string; message: string }): string => PERSONAL_ERROR_TEXT[e.code] ?? e.message;
 
 /**
- * 개요 내 카드의 개인 목표 줄 문구 — 시작 전 회차(모집 중 첫 회차 등)를 "이번 회차" 라 부르지 않는다 (시나리오 QA #14).
+ * 개요 내 카드의 개인 목표 줄 문구 — 시작 전 회차(모집 중 첫 회차 등)를 "이번 회차" 라 부르지 않는다.
  * empty = 목표 없음(숫자 없이 문구만). 아니면 text 뒤에 "d/t 완료" 가 붙는다.
  */
 export function personalLineText(st: { done: number; total: number }, round: { label: string | null; s: string } | null, today: string): { empty: boolean; text: string } {

@@ -12,13 +12,13 @@ export type PracticeOutcome = { ok: true; results: WrongNotePracticeResult["resu
 
 type Opts = {
   toast: (m: ToastMsg) => void;
-  /** 거짓이면 받지 않는다 — 내 과제는 「오답노트」 보기가 처음 열릴 때 받는다(D19). 한 번 받으면 deps 가 바뀔 때만 다시 */
+  /** 거짓이면 받지 않는다 — 내 과제는 「오답노트」 보기가 처음 열릴 때 받는다. 한 번 받으면 deps 가 바뀔 때만 다시 */
   enabled?: boolean;
 };
 
 /**
- * 오답노트 데이터 — 방 탭(fetchWrongNote)·내 과제(fetchWrongNoteMine) 공용(D17~D21). 로더만 다르고 연습·외움은 같다.
- * 연습·외움 응답은 목록을 다시 받지 않고 합친다(mergePractice·setMastered) — 머리줄은 화면이 totalsOf 로 다시 센다(D21).
+ * 오답노트 데이터 — 방 탭(fetchWrongNote)·내 과제(fetchWrongNoteMine) 공용. 로더만 다르고 연습·외움은 같다.
+ * 연습·외움 응답은 목록을 다시 받지 않고 합친다(mergePractice·setMastered) — 머리줄은 화면이 totalsOf 로 다시 센다.
  * 목록과 서버가 어긋난 오류(노트에 없음·잠김…)는 토스트 + 다시 받기
  */
 export function useWrongNote(load: () => Promise<NoteStudy[]>, deps: readonly unknown[], { toast, enabled = true }: Opts) {

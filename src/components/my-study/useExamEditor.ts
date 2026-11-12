@@ -13,7 +13,7 @@ export type ExamFieldErr = { index: number; field: string; message: string };
 const at = (e: ExamFieldErr) => (e.index < 0 ? e.message : `${e.index + 1}번 문항 · ${e.message}`);
 
 /**
- * 출제 화면 상태(스펙 §4.2) — exam_get → 초안(toDraft) → draftReduce 로 고치고 [문제 저장] = exam_put 한 번.
+ * 출제 화면 상태 — exam_get → 초안(toDraft) → draftReduce 로 고치고 [문제 저장] = exam_put 한 번.
  * base = 마지막으로 서버에서 받은 초안, dirty = 지금 초안이 base 와 다르다(미저장 가드 S.examDirty 의 근원).
  * onChanged: 저장·발행이 성공하면(트리의 시험 요약·배지를 다시 받게) 부른다
  */
@@ -97,7 +97,7 @@ export function useExamEditor(slug: string, nodeId: string, toast: (m: ToastMsg)
     [reload],
   );
 
-  /** 한 번에 하나 — 진행 중이면 끝난 뒤 task 를 다시 부른다 */
+  /** 한 번에 하나 — 진행 중이면 끝난 뒤 again 을 부른다 */
   const serial = useCallback((task: () => Promise<boolean>, again: () => Promise<boolean>): Promise<boolean> => {
     if (inflight.current) return inflight.current.then(again, again);
     const p = task().finally(() => {
@@ -174,7 +174,7 @@ export function useExamEditor(slug: string, nodeId: string, toast: (m: ToastMsg)
     setFieldErr(null);
   }, []);
 
-  /** 초안을 통째로 바꾼다 — AI 탭의 JSON 가져오기 등(Task 8). 잠겼으면 바꾸지 않고 false */
+  /** 초안을 통째로 바꾼다 — AI 탭의 JSON 가져오기 등. 잠겼으면 바꾸지 않고 false */
   const replace = useCallback(
     (d: ExamDraft): boolean => {
       if (locked) return false;

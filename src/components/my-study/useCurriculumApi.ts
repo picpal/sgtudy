@@ -25,12 +25,12 @@ export type CurriculumApi = {
   /** from: "list" — 진행목표 목록에서 지웠다. 실패해도 편집 화면을 열지 않는다.
    *  "child" — 회차 편집 화면의 과제 섹션에서 지웠다. 열린 편집 화면(editSel)을 그대로 둔다. okText = 성공 토스트(기본 "삭제했어요") */
   remove: (id: string, from?: "edit" | "list" | "child", okText?: string) => Promise<void>;
-  /** 다른 화면으로 떠나며 저장한 적 없는 빈 새 회차를 지운다 (Q2-8) — 화면 상태를 건드리지 않는다(바꾸면 주소 동기화가 history.back 으로 이동을 덮는다). 실패는 조용히 */
+  /** 다른 화면으로 떠나며 저장한 적 없는 빈 새 회차를 지운다 — 화면 상태를 건드리지 않는다(바꾸면 주소 동기화가 history.back 으로 이동을 덮는다). 실패는 조용히 */
   discard: (id: string) => void;
   /** from: "list" — 결과를 편집 화면 문구 대신 토스트로 */
   archive: (id: string, on: boolean, from?: "edit" | "list") => Promise<void>;
   /** 성공(또는 바뀐 것 없음)이면 true */
-  /** opts.shift: 회차·묶음 시작일 변경을 하위(과제·개인 목표)에도 같은 날수만큼 (D2).
+  /** opts.shift: 회차·묶음 시작일 변경을 하위(과제·개인 목표)에도 같은 날수만큼.
    *  ov.files 가 있으면 node_files_set 을 먼저 — 성공하면 opts.onFiles(새 붙은 목록), 실패하면 ov.files 를 남기고 false.
    *  skipFiles: 붙은 목록을 못 불러왔다 — 일부 목록으로 바꿔 쓰지 않게(node_files_set 은 통째 교체) 첨부는 보내지 않는다 */
   save: (n: TreeNode, ov: Overrides, opts?: SaveOpts) => Promise<boolean>;
@@ -41,23 +41,23 @@ export type CurriculumApi = {
   /** 제출·시험 제출 성공 뒤 — 커리큘럼(목록·보드·간트의 사람별 코드·n/총)과 서버 props(개요 회차 수·이번 회차 사람별 상태)를 다시 받고,
    *  다른 화면(내 과제·뒤로 가기로 되살아날 이 화면)이 다음 마운트에 다시 받게 표시한다 */
   submitted: () => void;
-  /* 개인 목표 (0014) — 낙관적 처리 없이 응답 Curriculum 으로 교체, 실패는 fail 경로(서버 문구 토스트) */
+  /* 개인 목표 — 낙관적 처리 없이 응답 Curriculum 으로 교체, 실패는 fail 경로(서버 문구 토스트) */
   /** 회차에 내 목표 추가(기간 = 서버 기본: 회차 기간). 성공하면 true */
   createPersonal: (roundId: string, title: string) => Promise<boolean>;
-  /** 완료 표시/취소. 완료 토스트에는 "되돌리기"(→ 완료 취소) 버튼 (결정 3). 성공하면 true */
+  /** 완료 표시/취소. 완료 토스트에는 "되돌리기"(→ 완료 취소) 버튼. 성공하면 true */
   completePersonal: (id: string, done: boolean) => Promise<boolean>;
   /** 제목·설명·기간·회차 수정. okText = 성공 토스트(기본 "저장했어요"), failPrefix = 실패 토스트 앞말(첨부만 먼저 저장된 경우). 성공하면 응답 Curriculum(warnings 확인용), 실패면 null */
   updatePersonal: (id: string, patch: PersonalPatch, okText?: string, failPrefix?: string) => Promise<Curriculum | null>;
   archivePersonal: (id: string, on: boolean) => Promise<boolean>;
   removePersonal: (id: string) => Promise<boolean>;
-  /** 편집 모드 진입 전 권한 재확인 (시나리오 QA #10) — 거뒀으면 토스트 + 보기로 두고 false */
+  /** 편집 모드 진입 전 권한 재확인 — 거뒀으면 토스트 + 보기로 두고 false */
   recheckEdit: () => Promise<boolean>;
 };
 
 export type CreateOpts = { title?: string; open?: boolean; taskType?: "common" | "designated"; exam?: true };
 
 /** onSaved: 저장에 성공하면 그 안내 문구(S.saved 와 같은 글) — 저장하고 화면을 떠나는 호출자가 토스트로 보여 준다 */
-/** baseFiles: 편집 화면이 붙어 있다고 보는 id(불러온·마지막 저장 목록) — 있으면 3인자 node_files_set(0045, D30): 그 사이 다른 곳이 붙인 파일은 지우지 않는다 */
+/** baseFiles: 편집 화면이 붙어 있다고 보는 id(불러온·마지막 저장 목록) — 있으면 3인자 node_files_set: 그 사이 다른 곳이 붙인 파일은 지우지 않는다 */
 export type SaveOpts = { shift?: boolean; onFiles?: (f: FileMeta[]) => void; skipFiles?: boolean; onSaved?: (text: string) => void; baseFiles?: string[] };
 
 export const dropKey = <T,>(rec: Record<string, T>, key: string) => {
@@ -119,7 +119,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
         const created = pool.sort((a, b) => b.sortOrder - a.sortOrder)[0];
         setCur(cur);
         update((p) => ({ ov: { ...p.ov, added: popOne(p.ov.added, key, label) }, ...(open ? { editSel: created?.id ?? null, justAdded: created?.id ?? null } : {}) }));
-        if (open) toast({ text: parentId ? "새 과제를 추가했어요" : "새 회차를 추가했어요", tone: "ok" }); // Q3-14 — 빠른 추가는 행이 나타나는 것으로 충분
+        if (open) toast({ text: parentId ? "새 과제를 추가했어요" : "새 회차를 추가했어요", tone: "ok" }); // 빠른 추가는 행이 나타나는 것으로 충분
         router.refresh(); // 개요의 회차 창·현재 회차는 room_get(detail) 에서 온다
         if (opts.exam && created) {
           try {
@@ -155,7 +155,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       try {
         setCur(await nodeDelete(slug, id));
         update((p) => ({ ov: { ...p.ov, removed: dropKey(p.ov.removed, id) } }));
-        toast({ text: okText, tone: "ok" }); // Q3-14
+        toast({ text: okText, tone: "ok" });
         router.refresh();
       } catch (e) {
         // 되돌림 — 편집 화면에서 지웠으면 그 화면을 다시 연다, 목록에서 지웠으면 행만 돌아온다
@@ -187,7 +187,7 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
   const save = useCallback(
     async (n: TreeNode, ov: Overrides, opts: SaveOpts = {}) => {
       const patch: NodePatch = patchOf(n, ov);
-      // 회차·묶음 시작일을 옮기면서 "하위도 함께" 를 골랐을 때 (시나리오 QA D2) — 시작일이 바뀐 패치에만
+      // 회차·묶음 시작일을 옮기면서 "하위도 함께" 를 골랐을 때 — 시작일이 바뀐 패치에만
       if (opts.shift && patch.startDate && !n.leaf) patch.shiftDescendants = true;
       const files = opts.skipFiles ? undefined : ov.files[n.id];
       // 저장하는 사이 업로드가 끝나 선택이 바뀌었으면 그 새 선택은 남긴다 (보낸 목록과 같을 때만 지운다)
@@ -220,15 +220,15 @@ export function useCurriculumApi(slug: string, setCur: Dispatch<SetStateAction<C
       try {
         const cur = await nodeUpdate(slug, n.id, patch);
         setCur(cur);
-        // 태그가 실제로 바뀌었는지 여기서는 알 수 없다 → "다시 골랐어요" 문구는 쓰지 않는다 (Q1-17). 이전 오류 토스트는 닫는다 (Q2-09)
+        // 태그가 실제로 바뀌었는지 여기서는 알 수 없다 → "다시 골랐어요" 문구는 쓰지 않는다. 이전 오류 토스트는 닫는다
         toast(null);
         const text = shiftedText(cur.shifted);
         update((p) => ({ ov: dropFields(p.ov), saved: text }));
         opts.onSaved?.(text);
-        router.refresh(); // 자동 태그가 바뀌었을 수 있다(D9)
+        router.refresh(); // 자동 태그가 바뀌었을 수 있다
         return true;
       } catch (e) {
-        // 실패한 수정은 되돌린다 — 트리에 저장되지 않은 값이 남지 않게 (Q2-09). 첨부는 이미 저장됐다
+        // 실패한 수정은 되돌린다 — 트리에 저장되지 않은 값이 남지 않게. 첨부는 이미 저장됐다
         update((p) => ({ ov: dropFields(p.ov), saved: "" }));
         fail(e, steps[0] === "files" ? "첨부 파일은 저장했어요 · " : "");
         return false;

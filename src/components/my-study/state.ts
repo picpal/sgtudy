@@ -8,7 +8,7 @@ export type BoardMode = "mine" | "team";
 export type Zoom = "day" | "week";
 /** 보기 상세를 연 곳 — 방 탭(보드 카드·개요 카드 등) 또는 다른 화면(내 과제·내 일정의 과제 링크) */
 export type ViewFrom = TabId | TaskOrigin;
-/** 저장하지 않은 수정이 있는 채로 다른 노드·모드·추가·탭(Q2-1)·다른 화면 주소(헤더 메뉴 등)로 가려 할 때 보류한 목적지 (Q2-05) */
+/** 저장하지 않은 수정이 있는 채로 다른 노드·모드·추가·탭·다른 화면 주소(헤더 메뉴 등)로 가려 할 때 보류한 목적지 */
 export type Leave = { sel: string | null } | { mode: CurMode } | { add: string | null } | { tab: TabId } | { href: string } | { view: string | null };
 
 /** 화면 안 모든 상태 — 방(URL) 이 바뀌면 통째로 리셋된다 */
@@ -25,7 +25,7 @@ export type ScreenState = {
   editFrom: { view: string } | "list" | null;
   /** 보기 모드 상세 화면에 열린 항목 — 있으면 목록 대신 읽기 전용 상세 (URL ?item=, mode 없음) */
   viewSel: string | null;
-  /** 보기 상세가 열리며 한 번 옮길 포커스 — 보드·캘린더·간트·알림 진입은 제출 영역 (스펙 §2.6) */
+  /** 보기 상세가 열리며 한 번 옮길 포커스 — 보드·캘린더·간트·알림 진입은 제출 영역 */
   viewFocus: "submission" | null;
   /** 보기 상세(·그 안에서 옮겨 간 항목·편집)를 연 곳 — 상세의 [← 보드] 가 그리로 돌아간다. null = 모름(새로고침·알림 링크) → 진행목표 목록.
    *  브라우저 뒤로 가기가 돌아갈 기록(상세 기록 바로 아래)과 같게 맞춘다. 열린 항목이 없어지면 지운다 (MyStudyScreen) */
@@ -38,19 +38,19 @@ export type ScreenState = {
   othersPersonal: boolean;
   /** 방금 추가한 항목 — 편집 화면이 열리면 제목을 선택해 바로 고쳐 쓰게 한다 */
   justAdded: string | null;
-  /** "회차 추가" 로 방금 만들고 아직 한 번도 저장하지 않은 항목 — 저장 없이 편집 화면을 떠나면 빈 채로 남지 않게 지운다 (Q2-8) */
+  /** "회차 추가" 로 방금 만들고 아직 한 번도 저장하지 않은 항목 — 저장 없이 편집 화면을 떠나면 빈 채로 남지 않게 지운다 */
   fresh: string | null;
   confirm: boolean;
   leave: Leave | null;
   /** 첨부를 올리는 중인 편집 항목 id — ov 수정이 없어도 떠나기 전에 묻는다 (EditView 가 맞춘다) */
   uploading: string | null;
-  /** 시험 문항을 고치고 [문제 저장] 하지 않은 편집 항목 id — ov 밖의 수정이라 uploading 과 같이 떠나기 전에 묻는다 (EditView 가 맞춘다, 0037) */
+  /** 시험 문항을 고치고 [문제 저장] 하지 않은 편집 항목 id — ov 밖의 수정이라 uploading 과 같이 떠나기 전에 묻는다 (EditView 가 맞춘다) */
   examDirty: string | null;
   /** 보기 상세에 저장하지 않은 것이 있는 항목 id — 개인 목표 편집 폼의 수정·올리는 중인 파일, 또는 과제 제출 카드의 제출하지 않은 작성 내용. 보기 모드라 ov 에 없다. 탭·뒤로 가기 전에 묻는다 (DetailView 가 맞춘다) */
   personalUnsaved: string | null;
-  /** 공지 탭에 펼친 공지 id (아코디언, D14) */
+  /** 공지 탭에 펼친 공지 id (아코디언) */
   noticeOpen: string | null;
-  /** 공지 탭 인라인 작성 폼 — "new" = 새 공지, 그 밖은 고치는 공지 id (D18) */
+  /** 공지 탭 인라인 작성 폼 — "new" = 새 공지, 그 밖은 고치는 공지 id */
   noticeEdit: { id: string } | null;
   /** 공지 작성 폼에 저장하지 않은 글이 있다 — 탭·헤더 메뉴로 떠나기 전에 묻는다 (NoticeTab 이 맞춘다) */
   noticeUnsaved: boolean;
@@ -103,7 +103,7 @@ export const INITIAL_STATE: ScreenState = {
 export type Patch = Partial<ScreenState> | ((prev: ScreenState) => Partial<ScreenState>);
 export type Update = (patch: Patch) => void;
 
-/** 댓글 딥링크(#comment-{id})로 들어온 과제 상세는 제출 영역으로 끌어가지 않는다 — 댓글로 가야 한다(댓글 스펙 D16①) */
+/** 댓글 딥링크(#comment-{id})로 들어온 과제 상세는 제출 영역으로 끌어가지 않는다 — 댓글로 가야 한다 */
 export const leafFocusForHash = (hash: string | null | undefined): ScreenState["viewFocus"] => (hash && commentIdOfHash(hash) ? null : "submission");
 
 /** 보드 카드·캘린더 팝오버·간트 리프·개요 카드·알림 → 그 과제의 보기 상세. from = 누른 곳(지금 탭), 알림 진입은 null. hash = 알림 링크의 해시(# 없이) */
@@ -130,12 +130,11 @@ export function modeSwitchPatch(S: ScreenState, mode: CurMode): Partial<ScreenSt
 /** 편집 화면 [저장] 이 저장한 뒤 돌아갈 곳 — 들어오기 전 화면(목록 · 편집을 연 항목의 상세). 모르면 지금 항목의 보기 상세 */
 export const editReturn = (S: Pick<ScreenState, "editFrom">): Leave => (S.editFrom === "list" ? { sel: null } : S.editFrom ? { view: S.editFrom.view } : { mode: "view" });
 
-/** 오버라이드 한 키만 갱신하는 헬퍼 */
 export const patchOv = <K extends keyof Overrides>(prev: ScreenState, key: K, value: Overrides[K]): Partial<ScreenState> => ({ ov: { ...prev.ov, [key]: value } });
 
-/** 진행목표·간트 필터 칩 — 두 칩은 서로 끈다("내 것만" 은 남의 목표를 숨기므로 둘 다 켜지면 "팀원 목표" 가 아무 일도 하지 않는다) */
 /** 개요 "팀원 개인 목표 보기 →" — 열려 있던 상세·편집 항목을 닫고 진행목표 보기 목록 + 팀원 목표 칩 (두 칩은 서로 끈다) */
 export const SHOW_OTHERS_PATCH: Partial<ScreenState> = { tab: "curriculum", curMode: "view", othersPersonal: true, mineOnly: false, viewSel: null, editSel: null, viewFocus: null, calPick: null };
+/** 진행목표·간트 필터 칩 — 두 칩은 서로 끈다("내 것만" 은 남의 목표를 숨기므로 둘 다 켜지면 "팀원 목표" 가 아무 일도 하지 않는다) */
 export const toggleMinePatch = (p: ScreenState): Partial<ScreenState> => ({ mineOnly: !p.mineOnly, othersPersonal: p.mineOnly ? p.othersPersonal : false });
 export const toggleOthersPatch = (p: ScreenState): Partial<ScreenState> => ({ othersPersonal: !p.othersPersonal, mineOnly: p.othersPersonal ? p.mineOnly : false });
 
@@ -143,7 +142,7 @@ export const toggleOthersPatch = (p: ScreenState): Partial<ScreenState> => ({ ot
 export const editUnsaved = (S: Pick<ScreenState, "ov" | "uploading" | "examDirty">, id: string | null): boolean =>
   isDirty(S.ov, id) || (!!id && (S.uploading === id || S.examDirty === id));
 
-/** 진행목표 편집 화면(·공지 작성 폼)에 저장하지 않은 수정이 열려 있다 — 탭·헤더 메뉴·뒤로 가기로 떠나기 전에 묻는다 (Q2-1) */
+/** 진행목표 편집 화면·보기 상세(·공지 작성 폼)에 저장하지 않은 수정이 열려 있다 — 탭·헤더 메뉴·뒤로 가기로 떠나기 전에 묻는다 */
 export const blocksLeave = (S: ScreenState, canEdit: boolean): boolean =>
   (S.tab === "notice" && S.noticeUnsaved) ||
   (S.tab === "curriculum" && (S.personalUnsaved !== null || (canEdit && S.curMode === "edit" && editUnsaved(S, S.editSel))));

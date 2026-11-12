@@ -3,15 +3,15 @@ import { isImageMime } from "@/lib/files/imageMime";
 import { ACCEPT, extOf, mimeOf, SUB_LIMITS, type FileCheck } from "./submission";
 import { fromSaved, removePlanOf, type UploadRow } from "./uploads";
 
-/* 항목(노드) 첨부 순수 로직 — 0030·0045 DB 규칙과 같은 값·모양 */
+/* 항목(노드) 첨부 순수 로직 — DB 규칙과 같은 값·모양 */
 
-/** 0045 node_image_limit()=20 · node_file_limit()=5(그림 아닌 것) · node_svg_max_bytes() (md-images 스펙 D18) */
+/** DB node_image_limit() · node_file_limit()(그림 아닌 것) · node_svg_max_bytes() 와 같은 값 */
 export const NODE_FILE_LIMITS = { images: 20, files: 5, svgBytes: 2_097_152 } as const;
 export const NODE_FILE_HINT = "그림(PNG·JPG·GIF·WEBP·SVG) 20개 · 파일(PDF·ZIP·TXT·MD) 5개 · 파일당 10MB(SVG 2MB)";
-/** 노드 첨부 고르기 accept — 제출 ACCEPT + SVG(노드 첨부만, D19) */
+/** 노드 첨부 고르기 accept — 제출 ACCEPT + SVG(노드 첨부만) */
 export const NODE_ACCEPT = `${ACCEPT},image/svg+xml,.svg`;
 
-/** 제출 mimeOf + SVG (0045 node_doc_mime_types) */
+/** 제출 mimeOf + SVG (DB node_doc_mime_types 와 같게) */
 export function nodeMimeOf(f: { name: string; type: string }): string | null {
   if (f.type === "image/svg+xml" || (f.type === "" && extOf(f.name) === "svg")) return "image/svg+xml";
   return mimeOf(f);

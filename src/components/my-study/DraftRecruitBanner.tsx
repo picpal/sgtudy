@@ -13,8 +13,8 @@ export const draftBannerText = (isPublic: boolean) =>
   `아직 준비중이라 ${isPublic ? "둘러보기에 보이지 않아요" : "초대 링크를 받아도 참가할 수 없어요"} · 회차를 준비한 뒤 모집을 시작하세요`;
 
 /**
- * 내 스터디 준비중 막대 — 방을 만들면 곧바로 진행목표 편집으로 와서 방 페이지의 「모집 시작」을 놓친다(공개방이 목록에 안 보인다는 신고).
- * 준비중 방의 그룹장에게만 그린다(그 밖의 사람은 준비중 방에 들어올 수 없고 할 수 있는 일도 없다). 확인 창·RPC 는 그룹장 패널과 같다
+ * 방을 만들면 곧바로 진행목표 편집으로 와서 방 페이지의 「모집 시작」을 놓친다.
+ * 준비중 방의 그룹장에게만 그린다(그 밖의 사람은 준비중 방에 들어올 수 없다). 확인 창·RPC 는 그룹장 패널과 같다
  */
 export function DraftRecruitBanner({ detail, toast }: Props) {
   const run = useOpenRecruit(detail.slug, toast);

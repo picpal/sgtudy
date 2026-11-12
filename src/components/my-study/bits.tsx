@@ -12,14 +12,13 @@ import { CODE_LABEL, CODE_STATUS, type Code, type Person } from "./model";
 export const toneOfName = toneOf;
 
 /**
- * 누르는 영역 44px — 보이는 크기는 그대로 두고 가상 요소로만 키운다(Q1-5·Q2-5).
+ * 누르는 영역 44px — 보이는 크기는 그대로 두고 가상 요소로만 키운다.
  * HIT_Y: 너비는 그대로, 세로 44px(가로로 이웃과 나란한 칩·세그). HIT_SQ: 44x44(아이콘 버튼).
  * 이웃과 겹치지 않으려면 위아래 줄 간격은 (44 − 보이는 높이) 이상, 아이콘 버튼 사이는 44 − 보이는 크기 이상.
  */
 export const HIT_Y = "relative before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-['']";
 export const HIT_SQ = "relative before:absolute before:left-1/2 before:top-1/2 before:h-11 before:w-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-['']";
 
-/** 세그먼트 컨트롤 */
 export function Seg<T extends string>({ label, value, options, onChange, grow, disabled, describedBy }: { label: string; value: T; options: [T, string][]; onChange: (v: T) => void; grow?: boolean; disabled?: boolean; describedBy?: string }) {
   return (
     <div role="group" aria-label={label} aria-describedby={describedBy} className={`flex rounded-[12px] bg-bg p-[3px] ${grow ? "w-full" : ""} ${disabled ? "opacity-60" : ""}`}>
@@ -42,14 +41,12 @@ export function Seg<T extends string>({ label, value, options, onChange, grow, d
   );
 }
 
-/** 필터 칩 */
 export function Chip({ on, onClick, children, withAvatar }: { on: boolean; onClick: () => void; children: ReactNode; withAvatar?: boolean }) {
   return (
     <button
       type="button"
       aria-pressed={on}
       onClick={onClick}
-      // 보이는 칩은 34px, 누르는 영역은 위아래로 5px 늘려 44px (before 의사 요소)
       className={`${HIT_Y} inline-flex h-[34px] items-center gap-[6px] rounded-[17px] border pr-3 text-[13px] ${withAvatar ? "pl-[6px]" : "pl-3"} ${
         on ? "border-ink bg-ink font-semibold text-white" : "border-line-3 bg-surface font-medium text-ink-3"
       }`}
@@ -59,10 +56,10 @@ export function Chip({ on, onClick, children, withAvatar }: { on: boolean; onCli
   );
 }
 
-/** 개인 목표 막대 [bg, 글자, border] — 흰 바탕 + slate 글자 + 1.5px slate 점선 (캘린더·간트 공용, 내 일정 PERSONAL_LOOK 과 같은 값 — 시안 A-8) */
+/** 개인 목표 막대 [bg, 글자, border] — 캘린더·간트 공용, 내 일정 PERSONAL_LOOK 과 같은 값 */
 export const PERSONAL_BAR: [string, string, string] = [PERSONAL_LOOK.fill, PERSONAL_LOOK.color, PERSONAL_LOOK.line];
 
-/** 보관 배지 — 이탈한 팀원의 개인 목표면 "보관됨 · 이탈" (시안 C-2) */
+/** left = 이탈한 팀원의 개인 목표 */
 export function ArchivedBadge({ left = false }: { left?: boolean }) {
   return (
     <span data-archived-badge className="shrink-0 rounded-[6px] bg-slate-soft px-[7px] py-[2px] text-[11px] font-bold text-ink-3">
@@ -71,7 +68,6 @@ export function ArchivedBadge({ left = false }: { left?: boolean }) {
   );
 }
 
-/** 과제 유형 배지: 공통 = mint, 지정 = lav, 개인 = slate */
 export function TypeBadge({ type }: { type: TaskType }) {
   const c = type === "공통" ? PAL.mint : type === "개인" ? PAL.slate : PAL.lav;
   return (
@@ -81,7 +77,7 @@ export function TypeBadge({ type }: { type: TaskType }) {
   );
 }
 
-/** 시험 리프 배지(0037) — 유형 배지 옆. 초안이면 "초안" 을 덧붙인다(status 로 판정, warnings 아님) */
+/** draft 는 status 로 판정한다(warnings 아님) */
 export function ExamBadge({ draft }: { draft: boolean }) {
   return (
     <span data-exam-badge className="inline-flex shrink-0 items-center gap-1">
@@ -97,7 +93,6 @@ export function ExamBadge({ draft }: { draft: boolean }) {
   );
 }
 
-/** 흰 링이 둘린 상태 아이콘 (아바타 우하단 오버레이용) */
 export function RingedStatus({ status, size }: { status: TaskStatus; size: number }) {
   return (
     <span className="flex rounded-full bg-white p-px">
@@ -108,17 +103,14 @@ export function RingedStatus({ status, size }: { status: TaskStatus; size: numbe
 
 type StackProps = {
   people: Person[];
-  /** 아바타 크기 */
   size: number;
-  /** 링 색 (배경과 같은 색) */
+  /** 배경과 같은 색 */
   ring: string;
   iconSize: number;
   max?: number;
-  /** "+N" 원 크기 */
   overflowSize?: number;
 };
 
-/** 아바타 스택 — 겹침 -6, 최대 max 명, 초과분 "+N" */
 export function AvatarStack({ people, size, ring, iconSize, max = 4, overflowSize = size + 2 }: StackProps) {
   const shown = people.slice(0, max);
   const over = people.length - shown.length;
@@ -144,7 +136,6 @@ export function AvatarStack({ people, size, ring, iconSize, max = 4, overflowSiz
   );
 }
 
-/** 코드 아이콘 나열 (캘린더 끝·간트 좌측) */
 export function CodeIcons({ codes, size, max }: { codes: Code[]; size: number; max: number }) {
   return (
     <span className="flex shrink-0 items-center gap-[2px]">
@@ -158,7 +149,6 @@ export function CodeIcons({ codes, size, max }: { codes: Code[]; size: number; m
 
 export const statusLabelOf = (s: TaskStatus) => STATUS_LABEL[s];
 
-/** 44 원형 아이콘 버튼 (동작 없음) */
 export function RoundIconButton({ label, children, size = 44, title, onClick }: { label: string; children: ReactNode; size?: number; title?: string; onClick?: () => void }) {
   return (
     <button type="button" aria-label={label} title={title} onClick={onClick} className="flex shrink-0 items-center justify-center rounded-full border border-line bg-surface" style={{ width: size, height: size }}>
@@ -167,7 +157,6 @@ export function RoundIconButton({ label, children, size = 44, title, onClick }: 
   );
 }
 
-/** 36 높이 라운드 보조 버튼 */
 export function PillButton({ onClick, children, weight = 400 }: { onClick: () => void; children: ReactNode; weight?: 400 | 500 | 600 }) {
   return (
     <button type="button" onClick={onClick} className={`${HIT_Y} inline-flex h-9 items-center rounded-[18px] border border-line bg-surface px-3 text-[13px] text-ink`} style={{ fontWeight: weight }}>

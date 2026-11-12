@@ -53,10 +53,8 @@ export const EMPTY_OVERRIDES: Overrides = { titles: {}, descs: {}, dates: {}, ty
 /** 편집 패널이 "저장" 전까지 모아 두는 필드 — 구조 변경(added/removed/archived)은 즉시 RPC 라 미저장 대상이 아니다 */
 const FIELD_KEYS = ["titles", "descs", "dates", "typeOv", "assignOv", "files"] as const;
 
-/** 그 노드에 저장하지 않은 수정이 있나 (Q2-05) */
 export const isDirty = (ov: Overrides, id: string | null): boolean => !!id && FIELD_KEYS.some((k) => id in ov[k]);
 
-/** 한 노드의 미저장 수정만 버린다 */
 export function dropFieldOv(ov: Overrides, id: string): Overrides {
   const out = { ...ov };
   FIELD_KEYS.forEach((k) => {
@@ -82,7 +80,6 @@ export function dropSentFieldOv(ov: Overrides, sent: Overrides, id: string): Ove
 /** 구조 오버라이드만 남긴다 — 커리큘럼 편집 패널 밖(개요·보드·캘린더·간트)에는 저장된 값만 보인다 */
 export const stripFieldOv = (ov: Overrides): Overrides => ({ ...ov, titles: {}, descs: {}, dates: {}, typeOv: {}, assignOv: {}, files: {} });
 
-/** 추가(미저장) 노드의 임시 id */
 export const tempId = (parentId: string, i: number) => `${parentId}.new${i}`;
 const TEMP_ORDER = 10_000;
 
@@ -99,9 +96,9 @@ type NodeBase = {
   desc: string;
   s: string;
   e: string;
-  /** 저장된(서버) 시작일 — 편집 중 오버라이드와 비교해 "하위도 함께 옮길까요" 를 묻는다 (시나리오 QA D2) */
+  /** 저장된(서버) 시작일 — 편집 중 오버라이드와 비교해 "하위도 함께 옮길까요" 를 묻는다 */
   s0?: string;
-  /** 만든 사람 닉네임 (0024 createdBy — 그 이전·시드 노드는 null) — 상세에 "OO 님이 추가" (시나리오 QA #13) */
+  /** 만든 사람 닉네임 (createdBy 도입 전·시드 노드는 null) — 상세에 "OO 님이 추가" */
   by?: string | null;
   archived: boolean;
   /** 자기는 보관이 아니고 상위가 보관돼 함께 숨겨진 상태 — 이 노드에서는 "보관 해제" 를 할 수 없다 */
@@ -130,7 +127,7 @@ export type LeafNode = NodeBase & {
   ownerRank: number;
   /** 개인 목표 소유자가 ACTIVE 명단에 없다(이탈) — "보관됨 · 이탈" 배지, 그룹장 "보관 해제" 없음(서버 OWNER_NOT_ACTIVE) */
   ownerLeft: boolean;
-  /** 0037 — 시험 리프 요약(서버 DTO 그대로). 시험 아님 → null. 초안 판정은 exam.status(warnings 아님) */
+  /** 시험 아님 → null. 초안 판정은 exam.status(warnings 아님) */
   exam?: ExamSummary | null;
 };
 export type ParentNode = NodeBase & { leaf: false; label: string | null; kids: TreeNode[]; childCount: number; asg: number; sub: number; pct: number };
@@ -154,8 +151,8 @@ const after = (a: string, b: string) => parseISO(a) > parseISO(b);
 const before = (a: string, b: string) => parseISO(a) < parseISO(b);
 
 /**
- * 제출이 있는 과제에서 미리 막을 편집 — 저장 때 서버가 거절하는 것을 토글 단계에서 보여 준다 (시나리오 QA #11).
- * 서버 node_update(0023): 제출물이 있으면 유형 변경 불가(NODE_HAS_SUBMISSIONS), 제출한 담당자는 뺄 수 없음(ASSIGNEE_HAS_SUBMISSION).
+ * 제출이 있는 과제에서 미리 막을 편집 — 저장 때 서버가 거절하는 것을 토글 단계에서 보여 준다.
+ * 서버 node_update: 제출물이 있으면 유형 변경 불가(NODE_HAS_SUBMISSIONS), 제출한 담당자는 뺄 수 없음(ASSIGNEE_HAS_SUBMISSION).
  */
 export function leafLocks(n: Pick<LeafNode, "subAll" | "people" | "personal">): { typeReason: string | null; lockedIds: Set<string>; assignReason: string } {
   const lockedIds = new Set(n.people.filter((p) => isDoneCode(p.c)).map((p) => p.userId));
@@ -216,7 +213,7 @@ export function buildTree(cur: Curriculum, ov: Overrides, today: string): Tree {
       if (!recompute) people = n.task.people.map((p) => ({ userId: p.userId, name: p.nickname, tone: p.tone, c: STATUS_CODE[p.status] }));
       else {
         // 공통 담당 = (원래 공통 과제였다면) 이미 배정된 사람 ∪ 배정 자격(assignFrom 없음 ∨ 마감 ≥ assignFrom) — 서버 assignment_resync 1단계와 같은 규칙.
-        // 지정→공통 전환은 서버가 기존 DESIGNATED 배정을 먼저 해제한다(node_update 0028) → 기존 담당 유지는 원래 COMMON 배정에만
+        // 지정→공통 전환은 서버가 기존 DESIGNATED 배정을 먼저 해제한다(node_update) → 기존 담당 유지는 원래 COMMON 배정에만
         const keepKnown = n.task.type === "common";
         const commonDoers = doers.filter((m) => (keepKnown && known.has(m.userId)) || !m.assignFrom || e >= m.assignFrom);
         const chosen = type === "공통" ? commonDoers : ov.assignOv[n.id] ? doers.filter((m) => ov.assignOv[n.id].includes(m.userId)) : doers.filter((m) => known.has(m.userId));
@@ -439,15 +436,14 @@ export function removePlan(n: TreeNode): RemovePlan {
     if (n.archived) return { kind: "none", reason: "제출물이 있어 삭제할 수 없어요 · 이미 보관돼 있어요" };
     return { kind: "archive", label: "보관", text: "제출물이 있어 삭제할 수 없어요. 대신 보관하면 참가자 화면에서 숨겨지고 제출물은 그대로 남아요. 보관할까요?" };
   }
-  // 하위 항목 수는 편집 목록에 보이는 팀 항목만 — 함께 지워지는 개인 목표(서버 0014 가 같이 지운다)는 따로 알린다
+  // 하위 항목 수는 편집 목록에 보이는 팀 항목만 — 함께 지워지는 개인 목표(서버가 같이 지운다)는 따로 알린다
   const p = personalDescendants(n);
   const k = descendantCount(n) - p;
   const head = k > 0 ? `이 항목과 하위 항목 ${k}개를 함께 삭제할까요? 되돌릴 수 없어요.` : "이 항목을 삭제할까요? 되돌릴 수 없어요.";
   return { kind: "delete", label: "삭제", text: p > 0 ? `${head} 개인 목표 ${p}개도 함께 삭제돼요.` : head };
 }
 
-/** 분석서 E4 — 상위 기간·방 기간 밖이면 경고 문구 (저장·생성은 막지 않는다) */
-/** today: 날짜 표기 기준(rangeShort — 오늘과 다른 해·해를 넘는 끝은 연도, Q2-13). 생략하면 방 시작 해 기준 */
+/** 경고만 낸다(저장·생성은 막지 않는다). today: 날짜 표기 기준(rangeShort — 오늘과 다른 해·해를 넘는 끝은 연도). 생략하면 방 시작 해 기준 */
 export function periodWarnings(n: { s: string; e: string }, parent: { s: string; e: string } | null, room: { start: string; end: string }, today: string = room.start): string[] {
   const out: string[] = [];
   if (parent && (n.s < parent.s || n.e > parent.e)) out.push(`상위 항목 기간(${rangeShort(parent.s, parent.e, today)})을 벗어났어요`);

@@ -9,13 +9,13 @@ import { answeredCount, examErrorAction } from "./exam";
 
 export type ExamSaveState = "idle" | "saving" | "saved" | "failed";
 
-/** 답을 고른 뒤 이만큼 조용하면 저장한다(스펙 §4.3) */
+/** 답을 고른 뒤 이만큼 조용하면 저장한다 */
 export const SAVE_DEBOUNCE_MS = 400;
 
 type Got = { nodeId: string; view: ExamView | null; error: ApiError | null };
 
 /**
- * 응시 화면 상태(스펙 §4.3) — exam_get · 답 즉시 저장(400ms 디바운스, 한 번에 하나씩 차례로) · 제출.
+ * 응시 화면 상태 — exam_get · 답 즉시 저장(400ms 디바운스, 한 번에 하나씩 차례로) · 제출.
  * 화면에 보이는 답 = 서버 답 위에 보내는 중·아직 보내지 않은 답을 덮은 것. 나갈 때(언마운트) 남은 답은 보내던 저장 뒤에 이어 보낸다.
  */
 export function useExamTake(slug: string, nodeId: string, toast: (m: ToastMsg) => void) {
@@ -182,7 +182,7 @@ export function useExamTake(slug: string, nodeId: string, toast: (m: ToastMsg) =
     }
   }, [drain, nodeId, refetch]);
 
-  /** 미제출자의 [정답·해설 보기](0054) — 정답이 실린 view 로 바꾼다. 실패는 토스트(상태가 바뀐 실패면 다시 불러온다) */
+  /** 미제출자의 [정답·해설 보기] — 정답이 실린 view 로 바꾼다. 실패는 토스트(상태가 바뀐 실패면 다시 불러온다) */
   const openAnswers = useCallback(async (): Promise<boolean> => {
     try {
       const view = await openExamAnswers(slug, nodeId);

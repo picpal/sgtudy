@@ -14,10 +14,8 @@ export function readItem(search: string): string | null {
   return isUrlItem(v) ? v : null;
 }
 
-/** 현재 주소에서 item(·mode)만 바꾼 주소. 항목이 있으면 진행목표 탭도 싣는다. 보기 상세는 mode 를 빼고, 편집은 mode=edit.
- *  알림·일정 링크의 ?task= 는 첫 화면을 여는 데만 쓰고 지운다 — 남으면 새로고침 때 지금 항목 대신 그 과제가 열린다.
- *  from = 보기 상세를 연 곳(state.viewFrom) — 진행목표 밖 방 탭이면 ?from= 으로 싣는다. 제출 뒤 router.refresh 가 화면을 다시 마운트하거나
- *  새로고침·앞으로 가기로 그 기록을 다시 열어도 [← 개요] 가 그대로다. 목록·편집 주소에서는 지운다 */
+/** 알림·일정 링크의 ?task= 는 첫 화면을 여는 데만 쓰고 지운다 — 남으면 새로고침 때 지금 항목 대신 그 과제가 열린다.
+ *  from(state.viewFrom)을 ?from= 으로 싣는 건 제출 뒤 router.refresh 재마운트·새로고침·앞으로 가기에도 [← 개요] 가 남게 하려는 것 */
 export function withItem(href: string, item: string | null, mode: CurMode = "edit", from: string | null = null): string {
   const u = new URL(href, "http://x");
   u.searchParams.delete("task");
@@ -34,7 +32,7 @@ export function withItem(href: string, item: string | null, mode: CurMode = "edi
   return `${u.pathname}${q ? `?${q}` : ""}${u.hash}`;
 }
 
-/** 보기 상세를 연 방 탭(?from=) — 진행목표 밖(개요·보드…)에서 연 상세만 싣는다. 모르는 값(내 과제 등 다른 화면)·진행목표 = null(기본 「진행목표」) */
+/** 모르는 값(내 과제 등 다른 화면)·진행목표 = null(기본 「진행목표」) */
 export const fromTab = (v: string | null | undefined): MyStudyTab | null =>
   v && v !== "curriculum" && (MY_STUDY_TABS as readonly string[]).includes(v) ? (v as MyStudyTab) : null;
 
@@ -57,7 +55,6 @@ export function urlStep(url: string | null, open: string | null, pushedHere: boo
   return url === null ? "push" : "replace";
 }
 
-/** 주소의 항목이 트리에 있으면 그 id, 없거나(삭제됨·잘못된 값) 비었으면 null = 목록 */
 export function itemTarget(url: string | null, exists: (id: string) => boolean): string | null {
   return url && exists(url) ? url : null;
 }
@@ -78,14 +75,13 @@ export function syncStep(url: string | null, urlMode: CurMode, open: string | nu
   return s;
 }
 
-/** 주소 → 열 화면. 편집은 권한자만(아니면 같은 항목의 보기 상세). 없는 항목은 목록.
- *  개인 목표(personal)는 편집 화면 대상이 아니다 — mode=edit 이어도 보기 상세 (서버도 PERSONAL_NODE 로 막는다) */
+/** 개인 목표(personal)는 편집 화면 대상이 아니다 — mode=edit 이어도 보기 상세 (서버도 PERSONAL_NODE 로 막는다) */
 export function itemFromUrl(search: string, exists: (id: string) => boolean, canEdit: boolean, personal: (id: string) => boolean = () => false): { id: string | null; mode: CurMode } {
   const id = itemTarget(readItem(search), exists);
   return { id, mode: id && canEdit && readMode(search) === "edit" && !personal(id) ? "edit" : "view" };
 }
 
-/** 방 만들기 직후 안내(?note=, 방 만들기 AI 2단계 D22·D35) — 회차 적용·모집 시작이 실패해도 방은 만들어졌다. 모르는 값은 무시 */
+/** 방 만들기 직후 안내(?note=) — 회차 적용·모집 시작이 실패해도 방은 만들어졌다. 모르는 값은 무시 */
 export const CREATE_NOTES = {
   "rounds-skipped": "회차 초안은 적용하지 못했어요 · 진행목표에서 직접 추가해 주세요",
   "recruit-skipped": "모집은 시작하지 못했어요 · 위의 [모집 시작] 으로 할 수 있어요",

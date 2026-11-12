@@ -1,9 +1,8 @@
 import type { RoomMemberDto } from "@/lib/api/types";
 
-/** 그룹장 "멤버 관리" 한 줄 — 그룹장은 늘 편집 가능(스위치 없음), ACTIVE 멤버만 스위치 */
 export type EditorRow = { userId: string; name: string; tone: RoomMemberDto["tone"]; leader: boolean; on: boolean };
 
-/** room_get.members → 멤버 관리 줄 (그룹장 먼저, 이탈·승인 대기 제외). ov = 낙관적 토글 값 */
+/** ov = 낙관적 토글 값 */
 export function editorRows(members: RoomMemberDto[], ov: Record<string, boolean> = {}): EditorRow[] {
   const rows = members
     .filter((m) => m.role === "leader" || m.status === "active")
@@ -11,7 +10,6 @@ export function editorRows(members: RoomMemberDto[], ov: Record<string, boolean>
   return [...rows.filter((r) => r.leader), ...rows.filter((r) => !r.leader)];
 }
 
-/** member_set_curriculum_editor 오류 → 토스트 문구 */
 export function editorErrorText(code: string, name: string): string {
   switch (code) {
     case "NOT_LEADER":

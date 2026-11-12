@@ -4,12 +4,12 @@ import type { TaskStatus } from "@/lib/types";
 import { dday, md, weekdayKo } from "@/lib/date";
 import { STATUS_CODE, codeLabel } from "./model";
 
-/* 과제 제출 순수 로직 (스펙 2026-10-16-task-submission-design §1.3·§2). React·Supabase 무관 */
+/* 과제 제출 순수 로직. React·Supabase 무관 */
 
-/** D10 제한값 — 0007:113-136, 버킷 0003:136-141 */
+/** 서버 submission_upsert·스토리지 버킷 제한과 같은 값 */
 export const SUB_LIMITS = { body: 50_000, bodyWarn: 45_000, links: 20, linkLen: 2000, files: 5, fileBytes: 10_485_760 } as const;
 
-/** 0007:13-14 allowed_mime_types() 와 같은 9개 */
+/** DB allowed_mime_types() 와 같은 목록 */
 export const ALLOWED_MIME: readonly string[] = [
   "image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf",
   "application/zip", "application/x-zip-compressed", "text/plain", "text/markdown",
@@ -21,10 +21,9 @@ const EXT_MIME: Record<string, string> = {
   pdf: "application/pdf", zip: "application/zip", txt: "text/plain", md: "text/markdown", markdown: "text/markdown",
 };
 
-/** 파일 고르기 accept 속성 */
 export const ACCEPT = [...ALLOWED_MIME, ...Object.keys(EXT_MIME).map((e) => `.${e}`)].join(",");
 
-/** 키 확장자 — 서버 정규식 `\.[a-z0-9]{1,10}` (0007:193-194). 맞지 않으면 null(키에서 생략) */
+/** 키 확장자 — 서버 정규식 `\.[a-z0-9]{1,10}`. 맞지 않으면 null(키에서 생략) */
 export function extOf(name: string): string | null {
   const i = name.lastIndexOf(".");
   if (i <= 0) return null; // 점 없음 · ".env" 처럼 점으로 시작하는 이름 전체
@@ -32,7 +31,7 @@ export function extOf(name: string): string | null {
   return /^[a-z0-9]{1,10}$/.test(ext) ? ext : null;
 }
 
-/** `{room}/{node}/{user}/{uuid}[.ext]` — 원본명은 키에 넣지 않는다 (0007:168-169) */
+/** `{room}/{node}/{user}/{uuid}[.ext]` — 원본명은 키에 넣지 않는다 */
 export const objectKey = (roomId: string, nodeId: string, userId: string, uuid: string, name: string) => {
   const ext = extOf(name);
   return `${roomId}/${nodeId}/${userId}/${uuid}${ext ? `.${ext}` : ""}`;
@@ -60,7 +59,7 @@ export function checkFile(f: { name: string; type: string; size: number }, slots
 
 export type LinkAdd = { ok: true; links: string[] } | { ok: false; error: string };
 
-/** 링크 추가 — 서버 규칙(0007:116-125): trim, ≤20개, ^https?://\S+$, ≤2000자. 빈 입력은 error "" (조용히 무시) */
+/** 링크 추가 — 서버와 같은 규칙: trim, ≤20개, ^https?://\S+$, ≤2000자. 빈 입력은 error "" (조용히 무시) */
 export function addLink(raw: string, links: string[]): LinkAdd {
   const url = raw.trim();
   if (url === "") return { ok: false, error: "" };
@@ -72,7 +71,7 @@ export function addLink(raw: string, links: string[]): LinkAdd {
 }
 
 /**
- * 제출할 때 입력칸에 남은 링크 — [추가]를 안 눌러도 유효하면 포함하고, 틀렸으면 제출을 막는다 (시나리오 QA #3).
+ * 제출할 때 입력칸에 남은 링크 — [추가]를 안 눌러도 유효하면 포함하고, 틀렸으면 제출을 막는다.
  * 이미 넣은 링크는 그대로 둔다(오류 아님).
  */
 export function withPendingLink(raw: string, links: string[]): { links: string[]; error: string | null; included: boolean } {
@@ -85,8 +84,8 @@ export function withPendingLink(raw: string, links: string[]): { links: string[]
 export const EMPTY_BLOCKER = "내용·링크·파일 중 하나는 있어야 해요";
 
 /**
- * 빈 저장을 허용하나 — 이미 완료한 개인 목표 기록만 (QA Q1-2). 비워 저장하면 완료(빈 제출)는 남고, 그 뒤 완료 취소가 된다.
- * 팀 과제의 "하나는 있어야" 는 화면(EMPTY_BLOCKER)과 서버(0022 submission_upsert — SUBMISSION_EMPTY) 양쪽 규칙이다.
+ * 빈 저장을 허용하나 — 이미 완료한 개인 목표 기록만. 비워 저장하면 완료(빈 제출)는 남고, 그 뒤 완료 취소가 된다.
+ * 팀 과제의 "하나는 있어야" 는 화면(EMPTY_BLOCKER)과 서버(submission_upsert — SUBMISSION_EMPTY) 양쪽 규칙이다.
  * 서버도 개인 목표(PERSONAL)만 빈 저장을 받는다.
  */
 export const emptyAllowed = (personal: boolean, mine: Submission | null): boolean => personal && mine !== null;
@@ -113,8 +112,8 @@ export type MyCardState =
 
 const ARCHIVED_NOTE = "보관된 과제라 제출·수정할 수 없어요";
 
-/** 내 제출 카드 상태 — 스펙 §2.2 표, 위에서부터 첫 일치 (Review Focus 2) */
-/** roomArchived: 보관된 방(화면은 room="ended" 로 넘긴다) — 문구만 "보관된 스터디" (시나리오 QA #6) */
+/** 내 제출 카드 상태 — 위에서부터 첫 일치 */
+/** roomArchived: 보관된 방(화면은 room="ended" 로 넘긴다) — 문구만 "보관된 스터디" */
 export function myCardStateOf(d: TaskDetail, room: RoomStatus, roomArchived = false): MyCardState {
   const mine = d.mySubmission;
   // 리프를 보관하면 배정이 풀려(isAssignee=false) 아래 "담당에서 빠져" 로 떨어지므로 보관을 먼저 본다
@@ -124,7 +123,7 @@ export function myCardStateOf(d: TaskDetail, room: RoomStatus, roomArchived = fa
   if (room === "ended" || roomArchived) return mine ? { kind: "readonly", note: `${ended} 더 고칠 수 없어요` } : { kind: "blocked", note: `${ended} 제출할 수 없어요` };
   if (room !== "active") return { kind: "blocked", note: "스터디가 시작되면 제출할 수 있어요" };
   if (d.node.archived) return mine ? { kind: "readonly", note: ARCHIVED_NOTE } : { kind: "blocked", note: ARCHIVED_NOTE };
-  // 개인 목표는 본인이 기간을 정하므로 시작일 전에도 제출할 수 있다 (서버 0017 submission_upsert 와 같은 규칙)
+  // 개인 목표는 본인이 기간을 정하므로 시작일 전에도 제출할 수 있다 (서버 submission_upsert 와 같은 규칙)
   if (d.today < d.node.startDate && d.node.task?.type !== "personal") return { kind: "blocked", note: `${md(d.node.startDate)}(${weekdayKo(d.node.startDate)})부터 제출할 수 있어요` };
   return mine ? { kind: "submitted" } : { kind: "compose" };
 }
@@ -132,15 +131,15 @@ export function myCardStateOf(d: TaskDetail, room: RoomStatus, roomArchived = fa
 /** 리프 설명이 비었을 때 안내 — 개인 목표는 "과제" 라 부르지 않는다 */
 export const emptyDescText = (personal: boolean) => (personal ? "설명이 아직 없어요" : "과제 설명이 아직 없어요");
 
-/** 주 버튼 문구 — 마감 = end 다음날 00:00 KST, 날짜 비교로 충분. 개인 목표는 늘 "저장" (시안 A-7) */
+/** 주 버튼 문구 — 마감 = end 다음날 00:00 KST, 날짜 비교로 충분. 개인 목표는 늘 "저장" */
 export const submitLabel = (mine: Submission | null, today: string, end: string, personal = false) =>
   personal ? "저장" : mine ? "수정 저장" : today > end ? "지각 제출하기" : "제출하기";
 
-/** 저장 성공 토스트 — 개인 목표는 "저장했어요", 처음 저장이면 완료도 됐다고 알린다 (QA Q1-3) */
+/** 저장 성공 토스트 — 개인 목표는 "저장했어요", 처음 저장이면 완료도 됐다고 알린다 */
 export const savedToast = (edited: boolean, isLate: boolean, personal: boolean): string =>
   personal ? (edited ? "저장했어요" : "저장했어요 · 완료로 표시했어요") : edited ? "수정했어요" : isLate ? "지각 제출했어요" : "제출했어요";
 
-/** 개인 목표 상세인가 — 제출 카드 문구를 완료 문구로 (스펙 §6) */
+/** 개인 목표 상세인가 — 제출 카드 문구를 완료 문구로 */
 export const isPersonalDetail = (d: TaskDetail): boolean => d.node.task?.type === "personal";
 
 /** 카드 머리 배지 — 개인 목표는 model.codeLabel 과 같은 문구(기한내 완료 · 늦게 완료 · 기한 지남) */
@@ -167,7 +166,7 @@ export const showAllSubmitted = (d: TaskDetail): boolean => d.allSubmitted && !i
 /** 저장된 내 제출의 지각 안내 */
 export const lateNote = (personal: boolean): string => (personal ? "마감 뒤에 완료해 늦게 완료로 기록됐어요" : "마감 뒤에 처음 제출해 지각으로 기록됐어요");
 
-/** 현황 머리 — 팀 "제출 현황 n/m", 개인은 소유자 한 줄뿐이라 개수 없이 (보관이면 서버가 0/0 을 준다 — 스펙 §5.3) */
+/** 현황 머리 — 팀 "제출 현황 n/m", 개인은 소유자 한 줄뿐이라 개수 없이 (보관이면 서버가 0/0 을 준다) */
 export const statusHeadOf = (personal: boolean, sub: number, asg: number): string => (personal ? "완료 현황" : `제출 현황 ${sub}/${asg}`);
 
 /** 현황 줄 상태 문구 — 개인은 codeLabel. 보관된 개인 목표는 완료했을 때만(그 밖은 "보관됨" 표시가 대신한다) */
@@ -179,13 +178,13 @@ export function rowStatusText(status: TaskStatus, personal: boolean, archived: b
 /** 내 카드가 없을 때(담당 아님) 안내 */
 export const notAssignedText = (personal: boolean): string => (personal ? "팀원의 개인 목표예요" : "담당 과제가 아니에요 · 제출 현황만 볼 수 있어요");
 
-/** 개인 목표 처음 작성 — 저장 = 완료임을 저장 전에 알린다 (QA Q1-3) */
+/** 개인 목표 처음 작성 — 저장 = 완료임을 저장 전에 알린다 */
 export const PERSONAL_SAVE_NOTE = "기록을 저장하면 완료로 표시돼요";
 
 /**
- * 작성 화면 왼쪽 안내 + 경고색 여부 (Ruling: 빈 상태는 처음엔 중립색, 입력했다 비웠을 때만 경고색 — 팀·개인 공통).
+ * 작성 화면 왼쪽 안내 + 경고색 여부 (빈 상태는 처음엔 중립색, 입력했다 비웠을 때만 경고색 — 팀·개인 공통).
  * 개인 목표 첫 작성은 "저장 = 완료" 와 "완료로 표시"(내용 없는 완료)를 함께 알린다.
- * 완료한 개인 기록을 모두 비우면(empty, 저장 가능) 완료는 남고 그 뒤 취소할 수 있음을 알린다 (QA Q1-2).
+ * 완료한 개인 기록을 모두 비우면(empty, 저장 가능) 완료는 남고 그 뒤 취소할 수 있음을 알린다.
  */
 export function composerHint(o: { blocker: string | null; editing: boolean; late: boolean; personal: boolean; touched: boolean; empty?: boolean }): { text: string | null; warn: boolean } {
   const firstPersonal = o.personal && !o.editing;
@@ -235,7 +234,7 @@ export type StatusRow = {
   me: boolean;
   /** 담당자가 아닌데 제출이 있는 사람(해제·이탈) */
   released: boolean;
-  /** task_get.submissions 에 있는 것만 — 없으면 null (Review Focus 4) */
+  /** task_get.submissions 에 있는 것만 — 없으면 null */
   submission: (Submission & { author: Person }) | null;
 };
 
@@ -275,7 +274,7 @@ export function withMySubmission(d: TaskDetail, s: Submission, meId: string | nu
   return next;
 }
 
-/** 진입 포커스 대상 — 작성 가능한 미제출 담당자만 내 카드, 그 외 현황 (스펙 §2.6) */
+/** 진입 포커스 대상 — 작성 가능한 미제출 담당자만 내 카드, 그 외 현황 */
 export const focusTargetOf = (s: MyCardState): "mine" | "status" => (s.kind === "compose" ? "mine" : "status");
 
 export type SubmitErrorAction =

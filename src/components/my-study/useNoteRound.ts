@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { withRound } from "./wrongNote";
 
 /**
- * 오답노트 회차 상세 ↔ 주소 ?round= (D23). 주소가 원본 — 열기 = push(뒤로 가기 = 카드 목록), 닫기 = 이 화면이 쌓은 기록이면 back,
+ * 오답노트 회차 상세 ↔ 주소 ?round=. 주소가 원본 — 열기 = push(뒤로 가기 = 카드 목록), 닫기 = 이 화면이 쌓은 기록이면 back,
  * 새로고침·링크로 바로 열린 상세면 replace(아래 기록이 목록이라는 보장이 없다 — 커리큘럼 상세의 origin 복귀와 같은 규칙).
  * 같은 화면 안에서 쿼리만 바꾼다(Native History API — useSearchParams 가 따라온다, 서버 왕복 없음)
  */

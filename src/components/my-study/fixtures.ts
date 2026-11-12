@@ -1,6 +1,6 @@
 /**
- * 테스트 픽스처 — aws 목업 트리를 Curriculum(NodeDto[]) 로 옮긴 것 (mystudy §3.3 회귀값).
- * `.test.ts` 가 아니라서 vitest include 에 걸리지 않는다 — 테스트끼리 서로 import 해서 describe 가 두 번 도는 일을 막는다(preflight A11).
+ * 테스트 픽스처 — aws 목업 트리를 Curriculum(NodeDto[]) 로 옮긴 것.
+ * `.test.ts` 가 아니라서 vitest include 에 걸리지 않는다 — 테스트끼리 서로 import 해서 describe 가 두 번 도는 일을 막는다.
  */
 import type { Curriculum, CurriculumMember, NodeDto } from "@/lib/api/types";
 import type { TaskStatus } from "@/lib/types";
@@ -23,7 +23,7 @@ const leaf = (id: string, parentId: string, roundId: string, depth: number, orde
   task: { type, people: people.map(([uid, status]) => ({ userId: uid, nickname: byId[uid].nickname, tone: byId[uid].tone, status })), assigned: people.length, submitted: people.filter(([, st]) => st === "done" || st === "late").length, state: "progress" },
   exam: null,
 });
-/** 개인 목표 — people = [소유자], ownerId (서버 0014 curriculum_get 과 같은 모양) */
+/** 개인 목표 — people = [소유자], ownerId (서버 curriculum_get 과 같은 모양) */
 const mine = (id: string, roundId: string, order: number, title: string, owner: string, st: TaskStatus, s: string, e: string): NodeDto =>
   ({ ...leaf(id, roundId, roundId, 3, order, title, "personal", s, e, [[owner, st]]), ownerId: owner });
 const ALL4 = (st: TaskStatus): [string, TaskStatus][] => [["u2", st], ["u3", st], ["u1", st], ["u4", st]];

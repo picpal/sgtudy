@@ -8,7 +8,7 @@ import { relativeTime } from "@/lib/api/notifications";
 import type { Notice } from "@/lib/api/types";
 import { MarkdownView } from "./MarkdownView";
 
-/** "나중에" 로 넘긴 공지 `id:rev` — 이번 브라우저 탭(세션)에서만 다시 띄우지 않는다 (D7). 다시 알리기(rev+1)는 다시 뜬다 */
+/** "나중에" 로 넘긴 공지 `id:rev` — 이번 브라우저 탭(세션)에서만 다시 띄우지 않는다. 다시 알리기(rev+1)는 다시 뜬다 */
 export const laterKey = (slug: string) => `notice-later:${slug}`;
 const readLater = (slug: string): string[] => {
   try {
@@ -27,16 +27,15 @@ const writeLater = (slug: string, ids: string[]) => {
 
 type Props = {
   slug: string;
-  /** notice_inbox.popups — 고정 → 오래된 순(D5). 서버가 그룹장·이탈·종료/보관 방엔 [] 를 준다(D12·D17) */
+  /** notice_inbox.popups — 고정 → 오래된 순. 서버가 그룹장·이탈·종료/보관 방엔 [] 를 준다 */
   popups: Notice[];
   /** 다른 확인 대화상자·이탈 확인이 떠 있으면 기다린다 */
   hold: boolean;
-  /** [확인] 뒤 남은 안 읽은 공지가 있나 — 탭 점(D9) */
+  /** [확인] 뒤 남은 안 읽은 공지가 있나 — 탭 점 */
   onAck: (unread: boolean) => void;
 };
 
 /**
- * 방 진입 공지 팝업 (스펙 §6.4) — 흐린 배경 위 대화상자(모바일은 아래 시트), 여러 개면 1/N 순서대로.
  * [확인] = 읽음(notice_read, 다시 안 뜸) · Esc·X·[나중에] = 지금 장만 이번 세션 숨기고 다음 장 · 배경 클릭은 무반응.
  */
 export function NoticePopup({ slug, popups, hold, onAck }: Props) {
@@ -120,7 +119,7 @@ export function NoticePopup({ slug, popups, hold, onAck }: Props) {
   if (!cur) return null;
   const step = total - queue.length + 1;
   return createPortal(
-    // 배경 클릭은 아무것도 하지 않는다 — 읽게 하려는 팝업이라 실수로 닫히지 않게 (D7)
+    // 배경 클릭은 아무것도 하지 않는다 — 읽게 하려는 팝업이라 실수로 닫히지 않게
     <div data-notice-popup className="fixed inset-0 z-[45] flex items-center justify-center bg-[rgba(27,34,48,.45)] p-4 backdrop-blur-sm max-sm:items-end max-sm:p-0">
       <div
         ref={box}

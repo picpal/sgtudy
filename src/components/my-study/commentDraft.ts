@@ -1,6 +1,6 @@
 import type { MentionPick } from "@/lib/mention";
 
-/* 댓글 작성 중 글 — 이 기기 localStorage 에만 둔다(D24). 이탈 가드에는 넣지 않는다: 짧은 글이라 화면 이동을 무겁게 하지 않고 돌아오면 복원 */
+/* 댓글 작성 중 글 — 이 기기 localStorage 에만 둔다. 이탈 가드에는 넣지 않는다: 짧은 글이라 화면 이동을 무겁게 하지 않고 돌아오면 복원 */
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
 export type CommentDraft = { text: string; picks: MentionPick[] };
 /** 이보다 오래된 임시 저장은 읽을 때 지운다 — 노드마다 키가 쌓이고 공용 기기에 남지 않게 */
@@ -34,7 +34,6 @@ export function readCommentDraft(store: Store, key: string, now = Date.now()): C
   }
 }
 
-/** 빈 글이면 지운다 */
 export function writeCommentDraft(store: Store, key: string, d: CommentDraft): void {
   try {
     if (d.text.trim() === "") store?.removeItem(key);

@@ -12,14 +12,14 @@ import { addLink as addLinkRule, checkFile, emptyAllowed, objectKey, isPersonalD
 import { clearDraft, contentDiffers, draftDiffers, draftKey, readDraft, writeDraft, type Draft } from "./submissionDraft";
 import { fromSaved, readyIds, removePlanOf, slotsLeft, uploadsReducer, type UploadAction, type UploadRow } from "./uploads";
 
-/* 작성 상태 · 업로드 큐 · 이 기기 임시 저장 · 제출 (스펙 §2.3·§2.7·§2.8).
-   서버 저장은 주 버튼(submit)에서만 — 임시 저장은 localStorage 만 쓴다 (Review Focus 1) */
+/* 작성 상태 · 업로드 큐 · 이 기기 임시 저장 · 제출.
+   서버 저장은 주 버튼(submit)에서만 — 임시 저장은 localStorage 만 쓴다 */
 
 type Args = {
   nodeId: string;
   userId: string;
   detail: TaskDetail;
-  /** 서버가 돌려준 Submission — 응답으로만 화면을 바꾼다 (R4) */
+  /** 서버가 돌려준 Submission — 응답으로만 화면을 바꾼다 */
   onSaved: (s: Submission) => void;
   onRefetch: () => void;
   toast: (m: ToastMsg) => void;
@@ -169,7 +169,7 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
       queue.current = queue.current.filter((k) => k !== row.key);
       aborts.current.get(row.key)?.abort();
     }
-    if (plan === "discard") void discardUnattached(row.fileId); // D1 미정 — 0015 가 없으면 목록에서만 빠진다
+    if (plan === "discard") void discardUnattached(row.fileId); // 서버 정리가 실패해도 목록에서는 빠진다
     files.current.delete(row.key);
     dispatch({ type: "remove", key: row.key });
     rowsRef.current = rowsRef.current.filter((r) => r.key !== row.key);
@@ -284,8 +284,8 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
 
   /* ---------- 제출 ---------- */
   const personal = isPersonalDetail(detail);
-  // 완료한 개인 기록은 모두 비워도 저장된다 (QA Q1-2) — 팀 과제는 하나는 있어야
-  // 입력칸에 남은 링크 — 유효하면 제출에 포함한다 (시나리오 QA #3)
+  // 완료한 개인 기록은 모두 비워도 저장된다 — 팀 과제는 하나는 있어야
+  // 입력칸에 남은 링크 — 유효하면 제출에 포함한다
   const pendingLink = withPendingLink(linkInput, links);
   const blocker = submitBlocker({ body, links: pendingLink.links, files: rows }, online, { allowEmpty: emptyAllowed(personal, mine) });
   const label = submitLabel(mine, detail.today, detail.node.endDate, personal);
@@ -334,7 +334,7 @@ export function useSubmissionComposer({ nodeId, userId, detail, onSaved, onRefet
 
   return {
     mine,
-    /** 이 화면에서 무언가 바꿨다 — 수정 취소 전에 묻는다 (Q1-11) */
+    /** 이 화면에서 무언가 바꿨다 — 수정 취소 전에 묻는다 */
     dirty,
     /** 나가기 전에 물을 것이 있다 (공백뿐·기준과 같음은 아니다) */
     unsaved,

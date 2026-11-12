@@ -42,7 +42,7 @@ type Props = {
 };
 
 /**
- * 오답 문항 하나(스펙 §6.1·§6.4). 기본 = 내 제출 답만(정답 키를 지운 사본, 「정답」 태그 없음) + [다시 풀기]·[외웠어요] + 「정답·해설」 펼침.
+ * 기본 = 내 제출 답만(정답 키를 지운 사본, 「정답」 태그 없음) + [다시 풀기]·[외웠어요] + 「정답·해설」 펼침.
  * 다시 풀기 = 같은 자리에서 응시 입력(take) → [채점](서버) → 결과(정답 표시·해설 자동 펼침). 정오는 서버 응답 그대로
  */
 export function WrongNoteItemView({ it, idx, run, inBatch, busy, fieldError, onStart, onAnswer, onGrade, onClose, onMaster, onBookmark }: Props) {
@@ -133,7 +133,7 @@ export function WrongNoteItemView({ it, idx, run, inBatch, busy, fieldError, onS
               </button>
             )}
           </div>
-          {/* 열면 위 보기 목록에 정답 태그가 붙고 여기 해설 — 정답은 해설 유무와 무관하게 이 안에서(D13) */}
+          {/* 열면 위 보기 목록에 정답 태그가 붙고 여기 해설 — 해설이 없어도 정답은 이걸 열어야 보인다 */}
           <details open={reveal} onToggle={(e) => setReveal(e.currentTarget.open)} className="rounded-[10px] bg-surface-2 px-3 text-[13px]">
             <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-ink-2">정답·해설</summary>
             <div className="pb-3">
@@ -146,7 +146,7 @@ export function WrongNoteItemView({ it, idx, run, inBatch, busy, fieldError, onS
   );
 }
 
-/** 다시 볼 문제(★) 토글 — 이름은 고정, 켜짐은 aria-pressed(스크린리더가 「눌림」 으로 읽는다). 44px 누름 영역 */
+/** 이름은 고정, 켜짐은 aria-pressed(스크린리더가 「눌림」 으로 읽는다) */
 export function StarToggle({ on, disabled, onToggle }: { on: boolean; disabled?: boolean; onToggle: () => void }) {
   return (
     <button

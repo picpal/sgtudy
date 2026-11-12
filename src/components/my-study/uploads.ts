@@ -1,7 +1,7 @@
 import type { FileMeta } from "@/lib/api/types";
 import { SUB_LIMITS } from "./submission";
 
-/* 작성 화면 첨부 목록 상태 (스펙 §2.3·§3 "빼기"). React 무관 리듀서 */
+/* 작성 화면 첨부 목록 상태. React 무관 리듀서 */
 
 export type UploadRow = {
   /** 목록 안 식별자 — 저장된 파일은 `saved:{id}`, 새 업로드는 호출자가 정한다 */
@@ -55,10 +55,10 @@ export const slotsLeft = (rows: UploadRow[], limit: number = SUB_LIMITS.files) =
 export const readyIds = (rows: UploadRow[]) => rows.filter((r) => r.status === "ready").map((r) => r.fileId);
 
 /**
- * 빼기 의미 (Review Focus 5):
+ * 빼기 의미:
  * - 올리는 중 → abort(요청 취소)
  * - 저장된 제출에 붙은 파일 → drop(목록에서만, 다음 저장이 soft delete)
- * - 미연결 READY 파일 → discard(서버 file_discard 로 한도에서 뺀다 — 0015, 어댑터가 없으면 drop 처럼 동작)
+ * - 미연결 READY 파일 → discard(서버 file_discard 로 한도에서 뺀다 — 어댑터가 없으면 drop 처럼 동작)
  * - 실패 줄 → drop
  */
 export function removePlanOf(row: UploadRow, savedIds: ReadonlySet<string>): "drop" | "discard" | "abort" {

@@ -6,9 +6,9 @@ import { md } from "@/lib/date";
 import type { Tone } from "@/lib/palette";
 import { isAnswered } from "./exam";
 
-/* 오답노트 순수 로직 (스펙 2026-10-23-wrong-answer-note-design §6). React·Supabase 무관.
+/* 오답노트 순수 로직. React·Supabase 무관.
  * 방 탭(스터디 1개)과 내 과제 「오답노트」 보기(여러 개)가 같은 함수를 쓴다 — 전부 NoteStudy[] 기준.
- * 정오는 계산하지 않는다(채점은 서버 exam_grade 하나, D6) — 연습 응답을 목록에 합칠 뿐이다 */
+ * 정오는 계산하지 않는다(채점은 서버 exam_grade 하나) — 연습 응답을 목록에 합칠 뿐이다 */
 
 /** 화면 공용 모양. title·tone 은 내 과제 보기에서만(방 탭은 스터디 머리줄이 없다) */
 export type NoteStudy = { slug: string; title?: string; tone?: Tone; hasExam: boolean; rounds: WrongNoteRound[] };
@@ -17,7 +17,7 @@ export const toNoteStudies = (v: WrongNote, slug: string): NoteStudy[] => [{ slu
 export const toNoteStudiesMine = (m: WrongNoteMine): NoteStudy[] =>
   m.studies.map((s) => ({ slug: s.slug, title: s.title, tone: s.tone, hasExam: s.hasExam, rounds: s.rounds }));
 
-/* ---------- 필터 (D11) ---------- */
+/* ---------- 필터 ---------- */
 
 export type Filter = "all" | "open" | "retriedOk";
 export const FILTERS: readonly Filter[] = ["all", "open", "retriedOk"];
@@ -48,7 +48,7 @@ export function applyFilter(studies: NoteStudy[], filter: Filter, showMastered: 
 
 /* ---------- 합계 · 문구 ---------- */
 
-/** 머리줄 합계 — 화면의 정본(D21). 서버 wrong_note_totals 와 같은 규칙: wrong 은 외운 것 포함, locked = 잠긴 시험 lockedCount 합 */
+/** 머리줄 합계 — 화면의 정본. 서버 wrong_note_totals 와 같은 규칙: wrong 은 외운 것 포함, locked = 잠긴 시험 lockedCount 합 */
 export function totalsOf(studies: NoteStudy[]): WrongNoteTotals {
   const t: WrongNoteTotals = { wrong: 0, retriedOk: 0, mastered: 0, locked: 0 };
   for (const s of studies) for (const r of s.rounds) for (const ex of r.exams) {
@@ -80,7 +80,7 @@ const NO_WRONG_TEXT = "틀린 문항이 없어요 · 제출한 시험을 전부 
 export type EmptyState = { text: string; masteredLink?: boolean };
 
 /**
- * 목록 전체의 빈 상태(스펙 §6.2 방 탭 · §6.5 내 과제). null = 목록을 그린다.
+ * 목록 전체의 빈 상태. null = 목록을 그린다.
  * scope "room" = 방 탭(스터디 1개), "all" = 내 과제(여러 개). 스터디 0 개는 null — 내 과제는 기존 TasksEmpty noStudy 를 쓴다.
  * visible(= applyFilter 결과)을 주면 필터로 빈 경우 「조건에 맞는 문항이 없어요」. 잠긴 시험만 있으면 null(잠금 카드만 그린다)
  */
@@ -100,7 +100,7 @@ export function emptyState(
   return null;
 }
 
-/** 내 과제 보기의 스터디 섹션 한 줄(스펙 §6.5). visible = 그 스터디의 필터 결과. null = 시험 카드를 그린다 */
+/** 내 과제 보기의 스터디 섹션 한 줄. visible = 그 스터디의 필터 결과. null = 시험 카드를 그린다 */
 export function studyEmptyLine(s: NoteStudy, visible?: NoteStudy): string | null {
   if (!s.hasExam) return "아직 시험이 없는 방이에요";
   if (s.rounds.length === 0) return "틀린 문항이 없어요";
@@ -160,19 +160,16 @@ function mapItems(studies: NoteStudy[], f: (it: WrongNoteItem) => WrongNoteItem)
   }));
 }
 
-/** 연습 응답의 문항별 practice 를 목록에 반영 */
 export const mergePractice = (studies: NoteStudy[], results: WrongNotePracticeResult["results"]): NoteStudy[] =>
   mapItems(studies, (it) => (it.question.id in results ? { ...it, practice: results[it.question.id].practice } : it));
 
-/** 외웠어요 / 다시 노트에 */
 export const setMastered = (studies: NoteStudy[], questionId: string, on: boolean): NoteStudy[] =>
   mapItems(studies, (it) => (it.question.id === questionId ? { ...it, mastered: on } : it));
 
-/** 다시 볼 문제(★) 켜기·끄기 */
 export const setBookmarked = (studies: NoteStudy[], questionId: string, on: boolean): NoteStudy[] =>
   mapItems(studies, (it) => (it.question.id === questionId ? { ...it, bookmarked: on } : it));
 
-/* ---------- 다시 볼 문제(★, 0051) ---------- */
+/* ---------- 다시 볼 문제(★) ---------- */
 
 /** ★ 모아 보기 한 줄 — 문항 + 원래 자리(스터디·회차·시험). 필터·외움과 무관 */
 export type StarEntry = { study: NoteStudy; round: WrongNoteRound; exam: WrongNoteExam; item: WrongNoteItem };
@@ -194,7 +191,7 @@ export const roundStarCount = (r: WrongNoteRound): number =>
 
 /* ---------- 오류 → 화면 동작 ---------- */
 
-/** 0046 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */
+/** 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */
 export const WRONG_NOTE_ERROR_KO: Record<string, string> = {
   WRONG_NOTE_NOT_IN: "오답노트에 없는 문항이에요",
   WRONG_NOTE_LOCKED: "정답이 공개된 뒤에 다시 풀 수 있어요",
@@ -214,7 +211,7 @@ const REFETCH = new Set(["WRONG_NOTE_NOT_IN", "WRONG_NOTE_LOCKED", "NODE_NOT_FOU
 
 const textOf = (e: ApiError): string => (e.message && e.message !== e.code ? e.message : (WRONG_NOTE_ERROR_KO[e.code] ?? e.message));
 
-/** wrong_note_practice·wrong_note_master 실패 → 화면 동작 */
+/** wrong_note_practice·master·bookmark 실패 → 화면 동작 */
 export function wrongNoteErrorAction(e: ApiError): WrongNoteErrorAction {
   if (REFETCH.has(e.code)) return { kind: "refetch", text: textOf(e) };
   if (e.code === "VALIDATION_FAILED") return { kind: "field", questionId: e.details?.questionId ? String(e.details.questionId) : null, text: WRONG_NOTE_ERROR_KO.VALIDATION_FAILED };
@@ -223,7 +220,7 @@ export function wrongNoteErrorAction(e: ApiError): WrongNoteErrorAction {
   return { kind: "toast", text: textOf(e) };
 }
 
-/* ---------- 회차 카드 · 상세 (D22~) ---------- */
+/* ---------- 회차 카드 · 상세 ---------- */
 
 /** 회차 기간 — 응답에 없어 화면이 커리큘럼(방 탭)·me_tasks(내 과제)에서 넘긴다. 모르면 기간 줄을 뺀다 */
 export type RoundPeriods = Record<string, { startDate: string; endDate: string }>;
@@ -278,7 +275,6 @@ export const periodLine = (p: { startDate: string; endDate: string } | undefined
 /** 화면에 보이는(필터 결과) 문항 수 — 잠긴 시험은 세지 않는다 */
 export const visibleCount = (r: WrongNoteRound): number => r.exams.reduce((n, ex) => n + (ex.locked ? 0 : (ex.items ?? []).length), 0);
 
-/** id 회차와 그 스터디 — 없으면 null */
 export function findRound(studies: NoteStudy[], id: string): { study: NoteStudy; round: WrongNoteRound } | null {
   for (const study of studies) for (const round of study.rounds) if (round.id === id) return { study, round };
   return null;

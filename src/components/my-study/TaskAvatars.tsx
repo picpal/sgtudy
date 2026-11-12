@@ -6,25 +6,23 @@ import type { Tone } from "@/lib/palette";
 import type { TaskStatus } from "@/lib/types";
 import { HIT_Y, RingedStatus } from "./bits";
 
-export type TaskAvatar = { key: string; name: string; tone?: Tone; id?: string; status: TaskStatus; /** 툴팁 — "이름 · 상태" */ title: string };
+export type TaskAvatar = { key: string; name: string; tone?: Tone; id?: string; status: TaskStatus; title: string };
 
 /** 이 인원부터 접는다 — 3명 + "+N" */
 export const COLLAPSE_AT = 5;
 const SHOWN = 3;
-/** 펼친 뒤 저절로 접히기까지 */
 export const AUTO_COLLAPSE_MS = 3000;
-/** 겹침 */
 const OVERLAP = 6;
 
 type Props = {
   people: TaskAvatar[];
-  /** 아바타 크기 / 상태 아이콘 크기 — 4명 이하 */
+  /** 4명 이하일 때 */
   size: number;
   iconSize: number;
   /** 5명 이상일 때 한 단계 작은 크기 */
   compactSize: number;
   compactIconSize: number;
-  /** 링 색 (배경과 같은 색) */
+  /** 배경과 같은 색 */
   ring: string;
 };
 

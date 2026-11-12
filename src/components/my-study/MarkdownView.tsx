@@ -4,7 +4,6 @@ import { createElement, Fragment, memo, useMemo, useState, type CSSProperties } 
 import { imgLabel } from "@/lib/markdown/inline";
 import { headingTag, parseInline, parseMarkdown, type MdBlock, type MdInline, type MdItem } from "./markdown";
 
-/** 줄바꿈(\n)을 <br> 로 — 표 셀(<br>)·문단 안 줄바꿈 */
 function Lines({ text, images }: { text: string; images?: ImageResolver }) {
   return (
     <>
@@ -19,8 +18,8 @@ function Lines({ text, images }: { text: string; images?: ImageResolver }) {
 }
 
 /**
- * 설명 속 그림을 그 노드의 첨부로 푸는 쪽(md-images 스펙 §3.1) — 노드 설명(DetailView·LeafBody)만 넘긴다.
- * url 은 서명 URL 뿐이다: 사용자가 쓴 주소는 <img src> 에 들어갈 길이 없다(T1·T5).
+ * 설명 속 그림을 그 노드의 첨부로 푸는 쪽 — 노드 설명(DetailView·LeafBody)만 넘긴다.
+ * url 은 서명 URL 뿐이다: 사용자가 쓴 주소는 <img src> 에 들어갈 길이 없다.
  */
 export type ImageResolver = {
   resolve(name: string): { state: "loading" } | { state: "missing" } | { state: "ok"; fileId: string; url: string; svg: boolean };
@@ -37,7 +36,7 @@ const BOX_INLINE = "rounded-[6px] border border-dashed border-line-dash px-[5px]
 // 글 사이 그림은 줄 높이 안의 작은 그림(누르면 라이트박스) — 원본 크기로 그리면 줄이 커진다
 const INLINE_IMG = "inline-block h-[1.5em] w-auto max-w-[8em] rounded-[4px] align-middle";
 const INLINE_SKELETON = "inline-block h-[1.5em] w-[2.5em] rounded-[4px] bg-surface-2 align-middle motion-safe:animate-pulse";
-// 블록 그림 최대 높이(D6) — 크기 예약 계산에도 같은 값
+// 블록 그림 최대 높이 — 크기 예약 계산에도 같은 값
 const BLOCK_MAX_H = "min(560px, 70vh)";
 
 /**
@@ -48,7 +47,6 @@ const natural = new Map<string, { w: number; h: number }>();
 /** 테스트용 */
 export const imageSizeCache = natural;
 
-/** 블록 그림 자리 — 원본 크기를 알면 그 비율·최종 폭 그대로, 모르면 640px·16:10 */
 function blockBox(fileId: string): CSSProperties {
   const d = natural.get(fileId);
   if (!d) return { width: 640, aspectRatio: "16 / 10" };
@@ -56,7 +54,7 @@ function blockBox(fileId: string): CSSProperties {
   return { width: `min(${d.w}px, calc(${BLOCK_MAX_H} * ${r.toFixed(4)}))`, aspectRatio: `${d.w} / ${d.h}` };
 }
 
-/** 첨부 그림 하나 — 로딩 스켈레톤 → 그림, 못 불러오면 한 번 다시 서명하고 그래도 안 되면 실패 상자 (D5·D6·D14) */
+/** 못 불러오면 한 번 다시 서명하고, 그래도 안 되면 실패 상자 */
 function AttachedImg({ s, name, images, block }: { s: ImgToken; name: string; images: ImageResolver; block: boolean }) {
   const r = images.resolve(name);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
@@ -77,7 +75,7 @@ function AttachedImg({ s, name, images, block }: { s: ImgToken; name: string; im
     }
   };
   const img = (
-    // eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다(스펙 D17)
+    // eslint-disable-next-line @next/next/no-img-element -- 서명 URL·SVG 는 next/image 최적화 대상이 아니다
     <img
       src={r.url}
       alt={s.alt || name}
@@ -114,7 +112,6 @@ function AttachedImg({ s, name, images, block }: { s: ImgToken; name: string; im
   );
 }
 
-/** 돋보기(+) — 「눌러서 확대」 힌트·첨부 썸네일 */
 export function ZoomIcon({ size = 11 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
@@ -124,7 +121,7 @@ export function ZoomIcon({ size = 11 }: { size?: number }) {
   );
 }
 
-/** 그림 토큰 — 외부 그림은 불러오지 않고 링크로(D2), 첨부 그림은 풀 노드가 없으면 자리표시 글자(D4) */
+/** 외부 그림은 불러오지 않고 링크로, 첨부 그림은 풀 노드가 없으면 자리표시 글자 */
 function Img({ s, images, block = false }: { s: ImgToken; images?: ImageResolver; block?: boolean }) {
   if (s.src.kind === "external") {
     return <a href={s.src.href} target="_blank" rel="noopener noreferrer nofollow" className="text-mint underline">그림 링크: {imgLabel(s)}</a>;
@@ -133,13 +130,12 @@ function Img({ s, images, block = false }: { s: ImgToken; images?: ImageResolver
   return <AttachedImg s={s} name={s.src.name} images={images} block={block} />;
 }
 
-/** 그림 하나뿐인 글(문단·목록 항목)이면 그 토큰 — 블록 그림으로 그린다(D6). 표 셀은 글 사이 그림처럼 작게 */
+/** 그림 하나뿐인 글(문단·목록 항목)은 블록 그림으로. 표 셀은 글 사이 그림처럼 작게 */
 function soleImg(text: string): ImgToken | null {
   const only = parseInline(text.trim());
   return only.length === 1 && only[0].t === "img" ? only[0] : null;
 }
 
-/** 목록 항목 글 — 그림 하나뿐이면 블록 그림 */
 function ItemText({ text, images }: { text: string; images?: ImageResolver }) {
   const img = soleImg(text);
   return img ? <Img s={img} images={images} block /> : <Lines text={text} images={images} />;
@@ -161,10 +157,8 @@ export function Inline({ text, images }: { text: string; images?: ImageResolver 
   );
 }
 
-// ul 단계별 기호 disc → circle → square → square (스펙 §4.4)
 const UL_STYLE = ["list-disc", "list-[circle]", "list-[square]", "list-[square]"];
 
-/** 목록(하위 목록은 항목 안에서 재귀) — 항목 글은 이어진 줄(\n)을 <br> 로 */
 function ListBlock({ b, level, images }: { b: Extract<MdBlock, { type: "ul" | "ol" | "task" }>; level: number; images?: ImageResolver }) {
   const sub = (it: MdItem) => it.sub.length > 0 && (
     <div className="mt-[2px] flex flex-col gap-[2px]">
@@ -244,7 +238,6 @@ function Block({ b, images, doc = false }: { b: MdBlock; images?: ImageResolver;
       return createElement(headingTag(b.level), { className: `m-0 font-bold text-ink ${size}` }, <Inline text={b.text} />);
     }
     case "p": {
-      // 문단에 그림 하나뿐이면 블록 그림(D6)
       const img = soleImg(b.lines.join("\n"));
       if (img) return <p className="m-0"><Img s={img} images={images} block /></p>;
       return <p className="m-0"><Lines text={b.lines.join("\n")} images={images} /></p>;
@@ -260,7 +253,7 @@ function Block({ b, images, doc = false }: { b: MdBlock; images?: ImageResolver;
         </blockquote>
       );
     case "details":
-      // 네이티브 <details> — 키보드·펼침 상태 낭독이 공짜(D9). 기본 닫힘, 제목의 그림은 자리표시(summary 안 버튼 금지)
+      // 네이티브 <details> — 키보드·펼침 상태 낭독이 공짜. 기본 닫힘, 제목의 그림은 자리표시(summary 안 버튼 금지)
       return (
         <details className="group rounded-[10px] border border-line">
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-[10px] px-3 font-semibold text-ink [&::-webkit-details-marker]:hidden">
@@ -298,7 +291,7 @@ function Block({ b, images, doc = false }: { b: MdBlock; images?: ImageResolver;
                 <tr key={k}>
                   {r.map((c, j) => (
                     <td key={j} className="border border-line-3 px-[10px] py-[6px] align-top" style={{ textAlign: ALIGN[b.table.align[j] ?? "none"] }}>
-                      {/* 빈 칸도 한 줄 높이 — 빈 행이 납작하게 접히지 않게(에디터 표와 같게, Q1-11) */}
+                      {/* 빈 칸도 한 줄 높이 — 빈 행이 납작하게 접히지 않게(에디터 표와 같게) */}
                       {c.trim() ? <Lines text={c} images={images} /> : "\u00a0"}
                     </td>
                   ))}
@@ -311,7 +304,7 @@ function Block({ b, images, doc = false }: { b: MdBlock; images?: ImageResolver;
   }
 }
 
-/** 마크다운 본문(스터디 소개·회차/과제 설명) — doc 이면 긴 가이드용 제목·구분선 여백(노드 설명 전용) — 파싱 결과를 React 요소로만 그린다. images 가 있으면 그림 토큰을 그 노드의 첨부로 푼다 */
+/** doc = 긴 가이드용 제목·구분선 여백(노드 설명 전용). 파싱 결과를 React 요소로만 그린다 */
 // memo + 파싱 useMemo — 라이트박스를 열고 닫는 등 부모만 다시 그릴 때 13~18k자 설명을 다시 파싱·그리지 않게
 export const MarkdownView = memo(function MarkdownView({ src, className = "text-[14px] leading-[1.75]", images, doc = false }: { src: string; className?: string; images?: ImageResolver; doc?: boolean }) {
   const blocks = useMemo(() => parseMarkdown(src), [src]);

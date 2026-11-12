@@ -85,9 +85,9 @@ export function reorderIndex(parent: ParentNode, id: string, dir: -1 | 1): numbe
 export type RowMove = { key: string; label: string; parentId: string; index?: number; cross: boolean };
 
 /**
- * 편집 목록 행 메뉴 — 드래그 없이(390·키보드) 순서를 바꾸고 회차를 옮긴다 (Q2-4). 서버 계약은 dropPlan 과 같다:
+ * 편집 목록 행 메뉴 — 드래그 없이(390·키보드) 순서를 바꾸고 회차를 옮긴다. 서버 계약은 dropPlan 과 같다:
  * 위로/아래로 = reorderIndex(개인 목표 건너뜀), 내어쓰기 = 묶음 안 과제를 회차 바로 아래·묶음 바로 다음으로(node_outdent 와 같은 자리),
- * 다른 회차로 = 보관·임시 아닌 다른 회차의 끝. 들여쓰기는 없다 — UI 는 회차 → 과제 2단계, 묶음을 새로 만들지 않는다(goal-subtasks 스펙 §2.2).
+ * 다른 회차로 = 보관·임시 아닌 다른 회차의 끝. 들여쓰기는 없다 — UI 는 회차 → 과제 2단계, 묶음을 새로 만들지 않는다.
  * 회차·보관·임시·개인 행(편집 모드에 없는 전제)과 보관된 부모 아래는 빈 목록.
  */
 export function rowMoves(nodes: TreeNode[], roots: ParentNode[], id: string): RowMove[] {
@@ -133,7 +133,7 @@ export function withAddRows(rows: TreeNode[], roots: ParentNode[], closed: Recor
 }
 
 /**
- * 보기 모드 목록 (시안 C-2): 회차 → 팀 과제 → 내 개인 목표 → "＋ 내 목표 추가"(canAdd·펼친 비보관 회차) → 소제목 "팀원 개인 목표 n" → 남의 개인 목표.
+ * 보기 모드 목록: 회차 → 팀 과제 → 내 개인 목표 → "＋ 내 목표 추가"(canAdd·펼친 비보관 회차) → 소제목 "팀원 개인 목표 n" → 남의 개인 목표.
  * rows 는 visibleNodes 순서(각 회차에서 팀 → 내 것 → 남의 것)여야 한다. 개인 목표는 늘 회차의 직계 자식이다.
  */
 export function withPersonalAddRows(rows: TreeNode[], roots: ParentNode[], closed: Record<string, boolean>, canAdd: boolean, meId: string | null = null): ListEntry[] {
@@ -279,13 +279,13 @@ export function roundsOutsidePeriod(nodes: PeriodNode[], period: { start: string
 }
 
 /**
- * 시작 전(준비·모집) 지정 과제 안내 — 아직 담당으로 고를 참가자가 없거나 적다 (시나리오 QA #12).
+ * 시작 전(준비·모집) 지정 과제 안내 — 아직 담당으로 고를 참가자가 없거나 적다.
  * 공통 과제는 서버가 들어오는 참가자에게 자동 배정한다.
  */
 export const designatedHint = (status: "draft" | "recruit" | "active" | "ended"): string | null =>
   status === "draft" || status === "recruit" ? "시작 전이라 참가자가 아직 다 모이지 않았어요 · 지정 과제의 담당은 참가자가 들어온 뒤 정해 주세요 · 공통 과제는 들어오는 사람에게 자동으로 배정돼요" : null;
 
-/* ---------- 회차 날짜 변경 시 하위 동반 이동 (시나리오 QA D2 — node_update shiftDescendants, 0024) ---------- */
+/* ---------- 회차 날짜 변경 시 하위 동반 이동 (node_update shiftDescendants) ---------- */
 
 export type ShiftAsk = { days: number; tasks: number; personal: number; groups: number };
 
@@ -324,6 +324,6 @@ export function shiftedText(s: ShiftedCounts | undefined): string {
   return what ? `저장했어요 · ${what}도 ${way(s.days)} 옮겼어요` : "저장했어요";
 }
 
-/** 띄운 확인(a)이 지금 편집 값으로 다시 계산한 질문(b)과 같은가 — 다르면 확인을 닫는다 (최종 리뷰 Minor 4) */
+/** 띄운 확인(a)이 지금 편집 값으로 다시 계산한 질문(b)과 같은가 — 다르면 확인을 닫는다 */
 export const sameShiftAsk = (a: ShiftAsk, b: ShiftAsk | null): boolean =>
   !!b && a.days === b.days && a.tasks === b.tasks && a.personal === b.personal && a.groups === b.groups;

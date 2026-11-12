@@ -5,10 +5,8 @@ import { dday, md, weekdayKo } from "@/lib/date";
 import type { TaskStatus } from "@/lib/types";
 import { notAssignedText, stampKst } from "./submission";
 
-/* 회차 시험 순수 로직 (스펙 2026-10-21-round-exam-design §4). React·Supabase 무관 */
-
 export const QTYPE_KO: Record<ExamQType, string> = { single: "객관식", multi: "복수 선택", ox: "O/X", short: "단답" };
-/** 제출한 사람에게 언제 보여 주나(0054 — 미제출자에겐 기본으로 보여 주지 않는다) */
+/** 제출한 사람에게 언제 보여 주나 — 미제출자에겐 기본으로 보여 주지 않는다 */
 export const REVEAL_KO: Record<ExamReveal, string> = { after_submit: "제출 직후", after_deadline: "마감 후" };
 export const DIFFICULTY_KO: Record<ExamDifficulty, string> = { easy: "쉬움", normal: "보통", hard: "어려움" };
 
@@ -16,10 +14,9 @@ export const DIFFICULTY_KO: Record<ExamDifficulty, string> = { easy: "쉬움", n
 export const isAnswered = (a: unknown): boolean => a != null && a !== "" && !(Array.isArray(a) && a.length === 0);
 export const answeredCount = (qs: ExamQuestion[], answers: Record<string, unknown>): number => qs.filter((q) => isAnswered(answers[q.id])).length;
 
-/** 트리 요약 → 초안인가(편집 목록 "초안" 배지). warnings 는 변경 RPC 응답에서 덮이므로 이것으로 판정한다 */
+/** warnings 는 변경 RPC 응답에서 덮이므로 status 로 판정한다 */
 export const isExamDraft = (e: ExamSummary | null | undefined): boolean => e?.status === "draft";
 
-/** 편집 화면 머리 "초안 · 4문항 · 5점" (요약에 수가 없으면 상태만) */
 export function examHead(e: ExamSummary): string {
   const st = e.status === "draft" ? "초안" : "발행됨";
   return e.questionCount == null ? st : `${st} · ${e.questionCount}문항 · ${e.totalPoints ?? 0}점`;
@@ -27,7 +24,7 @@ export function examHead(e: ExamSummary): string {
 
 export const CLOSED_NOTE = "마감이 지나 제출할 수 없는 시험이에요";
 
-/* 미응시자 정답 공개(0054) — 편집자 옵션을 켜면 마감 뒤 미제출 담당자가 직접 열고, 그 뒤 응시는 「정답 본 뒤 응시」로 남는다 */
+/* 미응시자 정답 공개 — 편집자 옵션을 켜면 마감 뒤 미제출 담당자가 직접 열고, 그 뒤 응시는 「정답 본 뒤 응시」로 남는다 */
 export const ANSWERS_SEEN_BADGE = "정답 본 뒤 응시";
 export const ANSWERS_SEEN_TAKE_NOTE = "정답을 본 뒤 응시하면 결과에 표시돼요";
 export const OPEN_ANSWERS_OFFER = "마감이 지나 미응시자에게도 정답·해설이 공개됐어요";
@@ -35,19 +32,19 @@ export const OPEN_ANSWERS_ASK = "정답을 본 뒤 응시하면 결과에 「정
 export const REVEAL_UNSUBMITTED_LABEL = "미응시자에게도 정답 공개";
 export const REVEAL_UNSUBMITTED_HINT = "마감이 지나면 아직 응시하지 않은 담당자도 정답·해설을 볼 수 있어요";
 export const REVEAL_UNSUBMITTED_ASK = "미응시자가 정답을 보면 이후 응시는 「정답 본 뒤 응시」로 표시돼요";
-/* 응시 중 AI 질문 허용(0055) — 켜면 응시 화면 문항에서 「AI에게 물어보기」. 결과에는 쓴 여부를 표시하지 않는다 */
+/* 응시 중 AI 질문 허용 — 켜면 응시 화면 문항에서 「AI에게 물어보기」. 결과에는 쓴 여부를 표시하지 않는다 */
 export const AI_DURING_TAKE_LABEL = "응시 중 AI 질문 허용";
 export const AI_DURING_TAKE_HINT = "응시 화면에서 문제 속 용어를 선택해 AI에게 뜻을 물을 수 있어요";
 export const AI_DURING_TAKE_ASK = "AI는 용어·개념만 설명하고 정답이나 풀이는 알려 주지 않아요. 응시자가 AI를 썼는지는 결과에 표시되지 않아요";
 /** 문항별 정답률 아래 — 정답 본 뒤 응시는 정답률에서 뺀다 */
 export const seenExcludedText = (n: number): string | null => (n > 0 ? `${ANSWERS_SEEN_BADGE} ${n}명 제외` : null);
 
-/** 응시 화면 안내 문구(스펙 §4.3). 풀 수 있거나 제출했으면 null(결과 화면이 대신). personalQuiet = 담당 아님 문구를 숨기는 화면 */
+/** 풀 수 있거나 제출했으면 null(결과 화면이 대신). personalQuiet = 담당 아님 문구를 숨기는 화면 */
 export function takeNote(v: ExamView, personalQuiet: boolean): string | null {
   if (v.viewer.canTake) return null;
   switch (v.viewer.reason) {
     case "not_published": return "아직 발행되지 않은 시험이에요";
-    // 편집자는 문항을 보기 상세가 아니라 편집 화면에서 본다 — 시작 전 발행 시험을 발행 안 된 줄 알지 않게(시험 313)
+    // 편집자는 문항을 보기 상세가 아니라 편집 화면에서 본다 — 시작 전 발행 시험을 발행 안 된 줄 알지 않게
     case "not_started": return v.viewer.canEdit ? `발행했어요 · ${mdw(v.node.startDate)}부터 멤버가 풀 수 있어요 · 문항은 [편집]에서 볼 수 있어요` : `${md(v.node.startDate)} 부터 풀 수 있어요`;
     case "archived": return "보관된 시험이에요";
     case "not_assignee": return personalQuiet ? null : notAssignedText(false);
@@ -69,7 +66,7 @@ export function publishedEditNote(v: ExamView): string | null {
   return v.today < v.node.startDate ? `${head} · 문항은 ${mdw(v.node.startDate)}부터 멤버에게 보여요` : head;
 }
 
-/** 시험 응시 카드 머리 배지 — 과제 제출 배지(myBadgeOf)와 같은 말. 담당이 아니거나 아직 풀 수 없는 상태(발행 전·스터디 대기·보관)는 없음 */
+/** 과제 제출 배지(myBadgeOf)와 같은 말 */
 export function examBadgeOf(v: ExamView): { status: TaskStatus; text: string } | null {
   const a = v.attempt;
   if (a?.status === "submitted") return a.isLate ? { status: "late", text: "지각 제출" } : { status: "done", text: "기한내 제출" };
@@ -81,12 +78,10 @@ export function examBadgeOf(v: ExamView): { status: TaskStatus; text: string } |
   return null;
 }
 
-/** 시험 응시 카드 머리 아래 한 줄 */
 export const examPanelSub = (end: string): string => `문제를 풀고 여기서 제출해요 · 마감 ${md(end)}(${weekdayKo(end)})`;
 
 const pctOf = (score: number, max: number) => (max > 0 ? Math.round((score / max) * 100) : 0);
 
-/** 결과 카드 요약. 정오 공개 = "4/5점 (80%) · 3/4 문항 정답", after_deadline 마감 전 = 점수만 + "정답·해설은 MM.DD 마감 뒤에 열려요" */
 export function resultSummary(v: ExamView): { headline: string; sub: string | null } {
   const a = v.attempt;
   if (!a || a.status !== "submitted" || a.score == null || a.maxScore == null) return { headline: "", sub: null };
@@ -98,11 +93,9 @@ export function resultSummary(v: ExamView): { headline: string; sub: string | nu
   return { headline: score, sub: `정답·해설은 ${md(v.node.endDate)} 마감 뒤에 열려요` };
 }
 
-/** "10.18(일) 21:03 제출 · 기한 내|지각" */
 export const submittedLine = (a: Pick<ExamAttempt, "submittedAt" | "isLate">): string | null =>
   a.submittedAt ? `${stampKst(a.submittedAt)} 제출 · ${a.isLate ? "지각" : "기한 내"}` : null;
 
-/** 편집자 결과 요약 줄 — "3/4 제출 · 평균 3.7/5 · 최고 5". 제출 0명이면 평균·최고 없음 */
 export function resultsHead(r: Pick<ExamResults, "submitted" | "assigned" | "maxScore" | "avg" | "max">): string {
   const parts = [`${r.submitted}/${r.assigned} 제출`];
   if (r.avg != null) parts.push(`평균 ${Math.round(r.avg * 10) / 10}/${r.maxScore}`);
@@ -110,24 +103,20 @@ export function resultsHead(r: Pick<ExamResults, "submitted" | "assigned" | "max
   return parts.join(" · ");
 }
 
-/** 문항별 정답률 글자 — 제출 0명(null)이면 "—" */
 export const rateText = (pct: number | null): string => (pct == null ? "—" : `${pct}%`);
 
 const KST_YMD = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" });
-/** 제출 시각 → KST 날짜 "10.18" */
 export const kstMd = (iso: string): string => md(KST_YMD.format(new Date(iso)));
 
-/** 제출 확인 문구 */
 export const submitAsk = (unanswered: number): string =>
   unanswered > 0 ? `답하지 않은 ${unanswered}문항이 있어요 · 제출하면 다시 풀 수 없어요` : "제출하면 다시 풀 수 없어요";
 
-/** 문항별 결과(내 답·정답·정오). 공개 전이면 answer undefined · correct·earned null */
 export function questionResult(q: ExamQuestion, a: ExamAttempt | null): { mine: unknown; answer: unknown; correct: boolean | null; earned: number | null } {
   const r = a?.results?.[q.id];
   return { mine: a?.answers[q.id] ?? null, answer: q.answer, correct: r ? r.correct : null, earned: r ? r.earned : null };
 }
 
-/** 편집 화면 잠금 문구 — 서버 locked(응시 행 1건~). 제출 0명이면 응시 중 문구 */
+/** 서버 locked 는 응시 행 1건부터 — 제출 0명이면 lockTextStarted */
 export const lockText = (n: number) => `${n}명이 제출해 문항은 잠겼어요 · 문제 글·해설·공개 시점만 고칠 수 있어요`;
 export const lockTextStarted = "응시가 시작돼 문항은 잠겼어요 · 문제 글·해설·공개 시점만 고칠 수 있어요";
 /** [초안으로] 비활성 이유 — 잠금 문구와 같은 주어(제출 n명 / 응시 시작) */
@@ -136,7 +125,7 @@ export const unpublishLockText = (n: number) => `${n > 0 ? `${n}명이 제출해
 export const publishAskText = (assignees: number, unsaved: string | null) =>
   `${assignees > 0 ? "담당 팀원에게 알림이 가요" : "담당자가 아직 없어 알림은 가지 않아요"}${unsaved ? ` · ${unsaved}을 먼저 저장해요` : ""}`;
 
-/** AI 탭 지시문(스펙 §4.2) — 사용자가 Claude Code 등에 붙여 넣는다. 도구 이름은 서버 계약 문구(create_exam_draft)와 같다 */
+/** 사용자가 Claude Code 등에 붙여 넣는다. 도구 이름은 서버 계약 문구(create_exam_draft)와 같다 */
 export function aiInstruction(slug: string, nodeId: string, title: string, brief: ExamBrief | null): string {
   const where = `study: "${slug}", task: "${nodeId}"`;
   const lines = [`sgtudy 의 "${slug}" 스터디 과제 「${title}」(task ${nodeId}) 의 시험 문제를 만들어 줘.`, `1. get_exam_brief 도구로 브리프와 문항 규칙을 읽어 (${where}).`];
@@ -196,7 +185,7 @@ function dropChoice(q: ExamDraftQuestion, c: number): ExamDraftQuestion {
   return { ...q, choices, answer: (q.answer as number[]).filter((x) => x !== c).map(shift) };
 }
 
-/** 초안 편집 리듀서(불변). 구조 잠금이면 유형·보기·정답·배점·추가·삭제·이동을 무시(그대로 반환) — 문제 글·해설·공개 시점만 */
+/** 구조 잠금이면 문제 글·해설·공개 시점만 바뀐다 */
 export function draftReduce(d: ExamDraft, locked: boolean, action: DraftAction): ExamDraft {
   if (locked && STRUCTURAL.has(action.type)) return d;
   const qs = d.questions;
@@ -235,12 +224,11 @@ export function draftReduce(d: ExamDraft, locked: boolean, action: DraftAction):
   }
 }
 
-/** 복수 선택 정답 토글(정렬 유지) — setAnswer 에 넘길 값 */
 export const toggleIndex = (xs: number[], c: number): number[] => (xs.includes(c) ? xs.filter((x) => x !== c) : [...xs, c].sort((a, b) => a - b));
 
 /* ---------- 오류 → 화면 동작 ---------- */
 
-/** 0037 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */
+/** 서버 문구가 정본 — 문구가 비었거나 코드 그대로일 때만 쓴다 */
 export const EXAM_ERROR_KO: Record<string, string> = {
   EXAM_NODE: "시험 과제는 시험 화면에서 제출해요",
   EXAM_NOT_FOUND: "시험이 없는 과제예요",
@@ -269,7 +257,6 @@ const EXAM_REFETCH = new Set([
 
 const textOf = (e: ApiError): string => (e.message && e.message !== e.code ? e.message : (EXAM_ERROR_KO[e.code] ?? e.message));
 
-/** exam_* 실패 → 화면 동작 */
 export function examErrorAction(e: ApiError): ExamErrorAction {
   if (EXAM_REFETCH.has(e.code)) return { kind: "refetch", text: textOf(e) };
   if (e.code === "VALIDATION_FAILED") {

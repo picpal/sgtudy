@@ -9,10 +9,10 @@ import type { ImageResolver } from "./MarkdownView";
 type Listed = { node: string; files: FileMeta[] | null };
 
 /**
- * 보기 상세 한 노드의 첨부 목록 + 설명 속 그림 resolver (md-images 스펙 §4.1).
+ * 보기 상세 한 노드의 첨부 목록 + 설명 속 그림 resolver.
  * 설명(MarkdownView)과 첨부 목록(NodeAttachments)이 같은 목록·같은 서명 URL 을 쓴다 — fetch 는 마운트 뒤 한 번.
- * 그림 URL 은 이미지 파일만 inline 서명(1시간). 같은 이름이 여럿이면 목록의 마지막(= 가장 늦게 붙은 것, D5).
- * 썸네일·설명 그림·라이트박스가 같은 서명 URL 을 쓰고, 라이트박스는 openId 하나로 연다(B3)
+ * 그림 URL 은 이미지 파일만 inline 서명(1시간). 같은 이름이 여럿이면 목록의 마지막(= 가장 늦게 붙은 것).
+ * 썸네일·설명 그림·라이트박스가 같은 서명 URL 을 쓰고, 라이트박스는 openId 하나로 연다
  */
 export function useNodeFiles(nodeId: string) {
   const [listed, setListed] = useState<Listed>({ node: nodeId, files: null });

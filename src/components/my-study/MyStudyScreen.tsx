@@ -69,7 +69,7 @@ type Props = {
   askAi?: boolean;
 };
 
-/** 개인 목표 id 인가 — 편집 화면 대상이 아니다(편집 URL 로 와도 보기 상세) */
+/** 개인 목표는 편집 화면 대상이 아니다(편집 URL 로 와도 보기 상세) */
 const isPersonalId = (nodes: Curriculum["nodes"], id: string) => nodes.some((n) => n.id === id && n.task?.type === "personal");
 
 // 목록 주소(항목 없음)의 ?tab= 을 화면 탭에 맞춘다 — 항목이 열린 주소는 건드리지 않는다
@@ -91,7 +91,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const [submitSlot, setSubmitSlot] = useState<HTMLDivElement | null>(null);
   // 커리큘럼 편집 — 그룹장 + 그룹장이 권한을 준 팀원. node_* 응답의 myPermissions 로 갱신된다(거둬지면 false)
   const canEdit = canEditCurriculumOf({ myPermissions: cur.myPermissions, me: detail.me });
-  // 알림 링크 ?task={nodeId}(D8): 그 리프가 이 방 커리큘럼에 있으면 커리큘럼 탭 + 리프 열림으로 시작(goLeafPatch 가 tab 을 curriculum 으로 바꾼다)
+  // 알림 링크 ?task={nodeId}: 그 리프가 이 방 커리큘럼에 있으면 커리큘럼 탭 + 리프 열림으로 시작(goLeafPatch 가 tab 을 curriculum 으로 바꾼다)
   const focusLeaf = initialLeaf && curriculum.nodes.some((n) => n.id === initialLeaf && n.task) ? initialLeaf : null;
   // ?item=: 새로고침하면 같은 화면 — 편집 권한 + mode=edit 이면 편집 화면, 아니면 보기 상세. 없는 id 면 목록 — 아래 URL 동기화가 주소에서 지운다
   const itemInit: Partial<ScreenState> =
@@ -108,7 +108,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     curMode: canEditCurriculumOf({ myPermissions: curriculum.myPermissions, me: detail.me }) ? initialMode : "view",
     // 내 과제·내 일정의 과제 링크로 들어왔으면 상세의 [← 내 과제] 가 그 화면으로 — 그 링크가 이 화면 기록을 출발지 기록 바로 위에 쌓았다.
     // 기억은 클라이언트 이동에만 있다(전체 불러오기는 서버·브라우저 모두 null 이라 하이드레이션이 어긋나지 않는다).
-    // 댓글 딥링크(#comment-{id})면 제출 영역으로 끌어가지 않는다(D16①) — viewFocus 는 effect 에서만 쓰여 마크업이 서버와 같다
+    // 댓글 딥링크(#comment-{id})면 제출 영역으로 끌어가지 않는다 — viewFocus 는 effect 에서만 쓰여 마크업이 서버와 같다
     ...(focusLeaf
       ? typeof window === "undefined"
         ? goLeafPatch(focusLeaf)
@@ -123,7 +123,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   }, []);
   const update = useCallback((patch: Patch) => setS((prev) => ({ ...prev, ...(typeof patch === "function" ? patch(prev) : patch) })), []);
   const today = cur.today;
-  // 편집 패널의 미저장 수정은 커리큘럼 탭에서만 보인다 — 다른 탭·개요는 저장된 값만 (Q2-05)
+  // 편집 패널의 미저장 수정은 커리큘럼 탭에서만 보인다 — 다른 탭·개요는 저장된 값만
   const tree = useMemo(() => buildTree(cur, S.ov, today), [cur, S.ov, today]);
   const savedOv = useMemo(() => stripFieldOv(S.ov), [S.ov]);
   const savedTree = useMemo(() => buildTree(cur, savedOv, today), [cur, savedOv, today]);
@@ -133,7 +133,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   const groups = useMemo(() => toSidebarGroups(studies, today), [studies, today]);
   // 연 곳 = 지금 탭 — 상세의 [← 보드] 와 브라우저 뒤로 가기(아래 backTab)가 같은 탭으로 돌아간다
   const goLeaf = useCallback((id: string) => update((p) => goLeafPatch(id, p.tab)), [update]);
-  // 이 화면의 key(page.tsx: task·tab) — 이탈 가드가 "같은 화면 주소" 를 같은 규칙으로 판정한다 (E 리뷰 minor 1)
+  // 이 화면의 key(page.tsx: task·tab) — 이탈 가드가 "같은 화면 주소" 를 같은 규칙으로 판정한다
   useEffect(() => setScreenKey({ tab: initialTab, task: initialLeaf ?? "" }), [initialTab, initialLeaf]);
   const api = useCurriculumApi(detail.slug, setCur, update, setToast, detail.me);
   // 브라우저 뒤로·앞으로 가기로 되살아난 화면은 그때의 서버 props(커리큘럼·방 정보)로 시작한다 — 그 뒤 제출·완료가 있었으면 한 번 다시 받는다
@@ -143,13 +143,13 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     router.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 때 한 번
   }, []);
-  // 같은 화면에서 알림(#applications · #leave-requests)을 누르면 Next 는 화면을 그대로 둔다 — 다른 탭에 있었으면 개요로 (시나리오 QA #8)
+  // 같은 화면에서 알림(#applications · #leave-requests)을 누르면 Next 는 화면을 그대로 둔다 — 다른 탭에 있었으면 개요로
   const onAnnounce = useCallback(
     (h: string) => (OVERVIEW_ANCHORS as readonly string[]).includes(h) && update((p) => tabPatch(p, "overview", canEdit)),
     [update, canEdit],
   );
   useHashAnnounce(onAnnounce);
-  // 공지(0040) — 탭 점(D9)·진입 팝업(D5) 은 첫 페인트 뒤 notice_inbox 로 (D15). 승인 대기는 볼 수 없다(D10)
+  // 공지 탭 점·진입 팝업은 첫 페인트 뒤 notice_inbox 로. 승인 대기는 볼 수 없다
   const noticeViewer: NoticeViewer = isLeader ? "leader" : detail.me?.state === "active" ? "member" : detail.me?.state === "inactive" ? "left" : "pending";
   const [noticeUnread, setNoticeUnread] = useState(false);
   const [popups, setPopups] = useState<Notice[]>([]);
@@ -183,7 +183,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     setNoticeUnread(unread);
     setNoticeReload((n) => n + 1);
   }, []);
-  // 승인 대기 중에 열어 둔 화면 — 다른 탭에서 돌아오면 다시 불러 승인(참가 확정)을 반영한다 (시나리오 QA #9)
+  // 승인 대기 중에 열어 둔 화면 — 다른 탭에서 돌아오면 다시 불러 승인(참가 확정)을 반영한다
   useRefetchOnFocus(detail.me?.state === "pending", router.refresh);
   const closeToast = useCallback(() => setToast(null), []);
 
@@ -199,10 +199,10 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // overView: 지금 편집 기록을 같은 항목의 보기 상세 기록 위에 쌓았는지 (상세 → "편집" = push, 뒤로 = 상세)
   const overView = useRef(false);
   const backTab = useRef<TabId | null>(null);
-  // closedByBack: 이 화면이 상세·편집을 history.back 으로 닫았다 — 그 back 의 popstate 에서만 목록 주소 ?tab= 을 화면 탭에 맞춘다 (F 리뷰 m1)
+  // closedByBack: 이 화면이 상세·편집을 history.back 으로 닫았다 — 그 back 의 popstate 에서만 목록 주소 ?tab= 을 화면 탭에 맞춘다
   const closedByBack = useRef(false);
   const shownTab = useRef<TabId>(S.tab);
-  // guardPop: 미저장 확인 때문에 popstate 가 되돌려 쌓은 기록 아래(뒤로 간 곳)의 항목·모드 — "버리기"로 그곳을 열면 replace 로 같은 기록을 하나 더 만들지 않고 back 으로 그 기록에 돌아간다 (재리뷰 nit)
+  // guardPop: 미저장 확인 때문에 popstate 가 되돌려 쌓은 기록 아래(뒤로 간 곳)의 항목·모드 — "버리기"로 그곳을 열면 replace 로 같은 기록을 하나 더 만들지 않고 back 으로 그 기록에 돌아간다
   const guardPop = useRef<{ id: string | null; mode: CurMode } | null>(null);
   // belowView: 편집 기록 바로 아래에 있는 보기 상세 기록(상세 → "편집" 으로 쌓았다)과 그 상세 기록의 pushed — 편집 안에서 다른 항목으로 옮겨(replace) 그 위가
   // 다른 항목의 편집이 되어도 남는다. [저장] 이 그 상세로 돌아가면 replace 대신 back 해서 상세 기록이 둘이 되지 않게 한다
@@ -288,7 +288,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       const { S: s, tree: t, openItem: open, canEdit: ce } = live.current;
       const ownBack = closedByBack.current;
       closedByBack.current = false;
-      // 다른 화면 주소로 돌아간 기록(클라이언트 이동으로 들어온 경우)은 Next 가 그 화면을 연다 — 그 주소에 ?item= 을 쌓거나 묻지 않는다 (재리뷰 R-3)
+      // 다른 화면 주소로 돌아간 기록(클라이언트 이동으로 들어온 경우)은 Next 가 그 화면을 연다 — 그 주소에 ?item= 을 쌓거나 묻지 않는다
       if (window.location.pathname !== studyPath) return;
       const url = readItem(window.location.search);
       const target = itemFromUrl(window.location.search, (id) => !!findNode(t.nodes, id), ce, (id) => {
@@ -298,8 +298,8 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       // 앞으로 가기로 돌아온 기록의 항목이 그새 삭제됐으면 주소에서도 지운다
       if (url && !target.id) window.history.replaceState(null, "", withItem(window.location.href, null));
       if (target.id === open && (target.id === null || (target.mode === "edit") === (s.curMode === "edit"))) {
-        // 화면 안 닫기(이 화면의 history.back)로 돌아온 목록 기록 — 화면은 이미 목록이고 위 탭 effect 는 다시 돌지 않는다 → 주소의 ?tab= 을 화면 탭에 맞춘다 (F 리뷰 n1).
-        // 다른 목록 기록(?tab=overview → 알림으로 ?tab=curriculum → 뒤로)은 곧 다시 마운트될 화면의 것이라 건드리지 않는다 (F 리뷰 m1)
+        // 화면 안 닫기(이 화면의 history.back)로 돌아온 목록 기록 — 화면은 이미 목록이고 위 탭 effect 는 다시 돌지 않는다 → 주소의 ?tab= 을 화면 탭에 맞춘다.
+        // 다른 목록 기록(?tab=overview → 알림으로 ?tab=curriculum → 뒤로)은 곧 다시 마운트될 화면의 것이라 건드리지 않는다
         if (target.id === null && ownBack) syncListTab(s.tab);
         return;
       }
@@ -338,11 +338,11 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [update, studyPath]);
-  // 같은 화면에서 ?item= 알림(묶음 일정 변경, 0028)을 누르면 key(id·task·tab)가 같아 다시 마운트되지 않는다 — 바뀐 initialItem 을 연다 (백로그 F 리뷰 I1).
+  // 같은 화면에서 ?item= 알림(묶음 일정 변경)을 누르면 key(id·task·tab)가 같아 다시 마운트되지 않는다 — 바뀐 initialItem 을 연다.
   // key 에 item 을 넣지 않는다: 상세는 pushState 로 주소에 item 을 쓰므로 router.refresh 뒤 화면 상태가 날아간다.
   // 이미 열린 항목·없는 항목은 그대로. 저장 안 한 편집은 이탈 가드가 이동을 보류하므로 여기 오지 않지만, 혹시 와도 덮지 않는다.
   // 열린 기록은 알림 이동이 목록(이전) 기록 위에 쌓은 것 → popstate 분기처럼 pushed 로 두어 닫으면 back.
-  // 상세 안에서 다른 항목으로 옮긴 뒤 같은 알림을 다시 누르면 initialItem 이 그대로다 → 벨이 알린 item(announceItem)을 주소가 그 item 이 된 렌더에서 연다 (재리뷰 m1).
+  // 상세 안에서 다른 항목으로 옮긴 뒤 같은 알림을 다시 누르면 initialItem 이 그대로다 → 벨이 알린 item(announceItem)을 주소가 그 item 이 된 렌더에서 연다.
   // 알림과 prop 변경이 같은 렌더에 오면 한 번만 연다 — 매 렌더 한 effect 에서 둘을 함께 본다
   const seenItem = useRef(initialItem);
   const askedItem = useRef<string | null>(null);
@@ -398,7 +398,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   });
 
   // 새로고침·링크로 바로 열린 편집 화면은 아래 기록이 목록이 아니다 — 수정을 시작하면 지금 기록을 목록으로 바꾸고 편집 기록을 쌓아,
-  // 브라우저 뒤로 가기가 다른 화면으로 조용히 떠나지 않고 위 popstate 의 "저장하지 않은 수정" 확인을 거치게 한다 (Q2-1)
+  // 브라우저 뒤로 가기가 다른 화면으로 조용히 떠나지 않고 위 popstate 의 "저장하지 않은 수정" 확인을 거치게 한다
   const editDirty = !!editOpen && editUnsaved(S, editOpen);
   useEffect(() => {
     if (!editDirty || !editOpen || pushed.current === editOpen || overView.current) return;
@@ -407,7 +407,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     pushed.current = editOpen;
     backTab.current = "curriculum";
   }, [editDirty, editOpen]);
-  // "회차 추가" 로 만든 뒤 한 번도 저장하지 않고 편집 화면을 떠나면(목록·다른 항목·탭·모드) 빈 회차를 남기지 않는다 (Q2-8).
+  // "회차 추가" 로 만든 뒤 한 번도 저장하지 않고 편집 화면을 떠나면(목록·다른 항목·탭·모드) 빈 회차를 남기지 않는다.
   // 과제를 하나라도 넣었으면 그대로 둔다. 다른 화면 주소로 떠나는 경우는 편집 화면(leaveGuard)이 맡는다
   const prevEdit = useRef<string | null>(editOpen);
   useEffect(() => {
@@ -420,7 +420,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 열린 편집 항목이 바뀔 때만
   }, [editOpen]);
 
-  // 참가 취소(모집 기간) · 신청 취소(승인 대기) · 탈퇴 요청/요청 취소(진행 중, D3) — 확인 대화상자 + 처리 중 가드 (Q1-01, Q1-12)
+  // 참가 취소(모집 기간) · 신청 취소(승인 대기) · 탈퇴 요청/요청 취소(진행 중) — 확인 대화상자 + 처리 중 가드
   const [confirm, setConfirmRaw] = useState<JoinCardAction | null>(null);
   const [reason, setReason] = useState("");
   const setConfirm = useCallback((k: JoinCardAction | null) => {
@@ -480,7 +480,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
   // 더보기: 방 설정(그룹장) · 참가/신청 취소 · 탈퇴 요청/요청 취소 (참가 카드와 같은 확인 대화상자)
   const more: MoreMenuItem[] = menuItemsOf(studyMoreItems(room.action, { canRequestLeave: room.action === "joined", leaveRequested: !!room.leaveRequest }), detail.slug, setConfirm, routes.myStudyTab(detail.slug, S.tab));
 
-  // "내 과제 보기" → 보드 탭으로 바꾼 뒤 탭 목록이 보이게 (Q3-18)
+  // "내 과제 보기" → 보드 탭으로 바꾼 뒤 탭 목록이 보이게
   const [tabJump, setTabJump] = useState(0);
   useEffect(() => {
     if (tabJump) document.getElementById("my-study-tabs")?.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -504,7 +504,7 @@ export function MyStudyScreen({ detail, curriculum, studies, initialTab = "overv
       </div>
     );
   const editRounds = async () => {
-    if (!(await api.recheckEdit())) return; // 권한 재확인 (시나리오 QA #10)
+    if (!(await api.recheckEdit())) return;
     update((p) => ({ tab: "curriculum", ...modeSwitchPatch({ ...p, viewSel: null }, "edit") }));
     setTabJump((n) => n + 1);
   };

@@ -65,7 +65,7 @@ export const BackIcon = () => (
   </svg>
 );
 
-/** 회차 오답노트 상세(D23·D24) — 시험 카드·문항 목록 + 오른쪽 따라오는 문항 이동(다시 푼 횟수 색 · 각주). 좁으면 하단 막대 [문항 이동] 바텀 시트 */
+/** 넓으면 오른쪽에 따라오는 문항 이동, 좁으면 하단 막대 [문항 이동] 바텀 시트 */
 export function WrongNoteDetail(p: Props) {
   const { study, round, visible, runs, batches, live } = p;
   const stats = roundStats(round);
@@ -287,7 +287,7 @@ type CardProps = {
   onEndBatch: () => void;
 };
 
-/** 시험 카드 — 잠금(개수·날짜만, 버튼 없음) 또는 오답 문항 목록 + [이 시험 다시 풀기] · 묶음 채점 하단 막대 */
+/** 잠긴 시험은 개수·날짜만(버튼 없음) */
 function ExamCard({ ex, live, runs, idxOf, batch, fieldErr, busy, barInset, onRun, onGrade, onMaster, onBookmark, onStartBatch, onGradeBatch, onEndBatch }: CardProps) {
   const titleId = `wn-exam-${ex.nodeId}`;
   if (ex.locked) {
