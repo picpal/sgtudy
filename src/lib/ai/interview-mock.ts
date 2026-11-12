@@ -4,7 +4,7 @@ import type { Field, ModelTurn } from "./schema";
 
 /*
  * AI_INTERVIEW_MOCK=1 대본 — 키 없이 로컬·E2E·DOM 확인용. 결정적: 남은 칸(missing)과 직전 질문으로 다음 말을 정한다.
- * 범위 밖 값(예: "500명")은 그대로 patch 에 실어 서버 정규화(dropped)를 보여 준다. 사용자 글에 "장애 테스트" 가 있으면 503 흉내.
+ * 범위 밖 값(예: "500명")은 그대로 patch 에 실어 서버 정규화(dropped)를 보여 준다. 사용자 글에 "장애 테스트" 가 있으면 모델 실패(529 과부하) 흉내 — 라우트가 503 AI_UNAVAILABLE 로 바꾼다.
  */
 
 export const MOCK_MODEL = "mock";

@@ -31,7 +31,7 @@ export function validateComment(body: string): { field: "body" | "mentions"; tex
   return null;
 }
 
-/** 오류 코드 기본 문구(서버 문구가 정본 — 문구가 비었을 때만) */
+/** 오류 코드 기본 문구 — 서버 문구가 있으면 그쪽이 우선. RATE_LIMITED 만 서버 문구와 관계없이 이 문구 */
 export const COMMENT_ERROR_KO: Record<string, string> = {
   COMMENT_NOT_FOUND: "댓글을 찾을 수 없어요 · 이미 삭제됐을 수 있어요",
   NOT_AUTHOR: "내가 쓴 댓글만 고칠 수 있어요",
