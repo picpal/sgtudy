@@ -43,7 +43,7 @@ export function ExamQuestionView(p: Props) {
 
   return (
     // data-qi·scroll-mt: 문항 이동(ExamNav)이 찾아 상단 고정 막대 아래로 스크롤한다. 머리는 이동 뒤 포커스 자리
-    // data-ask-ai: 응시 중(take)은 「AI에게 물어보기」 제외(D16) — 시험 옵션 「응시 중 AI 질문 허용」이면 exam_take(0055, 서버가 옵션을 다시 본다).
+    // data-ask-ai: 응시 중(take)은 「AI에게 물어보기」 제외 — 시험 옵션 「응시 중 AI 질문 허용」이면 exam_take(서버가 옵션을 다시 본다).
     // 결과는 허용 — 결과 화면의 정답·해설은 서버가 공개 판정을 거쳐 보낸 값
     <li role="group" aria-labelledby={headId} data-qi={no - 1} data-ask-ai={askAi} data-ask-ai-node={askAi === "exam_take" ? askAiNode : undefined} className="flex scroll-mt-24 flex-col gap-2">
       <div id={headId} tabIndex={-1} className="flex flex-col gap-1 outline-none">
