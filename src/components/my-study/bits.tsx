@@ -7,7 +7,7 @@ import { PAL, PERSONAL_LOOK, toneOf } from "@/lib/palette";
 import type { TaskStatus } from "@/lib/types";
 import { STATUS_LABEL } from "@/lib/types";
 import type { TaskType } from "@/data/my-study";
-import { CODE_LABEL, CODE_STATUS, type Code, type Person } from "./model";
+import { CODE_LABEL, CODE_STATUS, statusShares, urgentCode, type Code, type Person } from "./model";
 
 export const toneOfName = toneOf;
 
@@ -136,14 +136,29 @@ export function AvatarStack({ people, size, ring, iconSize, max = 4, overflowSiz
   );
 }
 
-export function CodeIcons({ codes, size, max }: { codes: Code[]; size: number; max: number }) {
+/** 인원이 몇이든 아이콘 하나 — 사람별 아이콘을 늘어놓으면 좁은 칸 밖으로 삐지고 "+N" 뒤에 미제출이 숨는다. 누가 어떤지는 눌러서 여는 화면(캘린더 팝오버·과제 상세)에서 */
+export function UrgentIcon({ codes, size = 13 }: { codes: Code[]; size?: number }) {
+  const c = urgentCode(codes);
   return (
-    <span className="flex shrink-0 items-center gap-[2px]">
-      {codes.slice(0, max).map((c, i) => (
-        <StatusIcon key={i} status={CODE_STATUS[c]} size={size} />
-      ))}
-      {codes.length > max && <span className="ml-[2px] text-[10px] font-bold">+{codes.length - max}</span>}
-    </span>
+    c && (
+      <span data-status={c} className="flex shrink-0">
+        <StatusIcon status={CODE_STATUS[c]} size={size} />
+      </span>
+    )
+  );
+}
+
+const SHARE_BG: Record<Code, string> = { D: "bg-done", L: "bg-late", M: "bg-missed", O: "bg-ghost", P: "bg-ghost" };
+/** 상태별 몫 밑줄 — 부모 막대(position 있는 요소) 폭을 나눠 써서 인원이 늘어도 자리를 더 차지하지 않는다 */
+export function ShareLine({ codes }: { codes: Code[] }) {
+  return (
+    codes.length > 0 && (
+      <span data-share aria-hidden="true" className="pointer-events-none absolute inset-x-[3px] bottom-[2px] flex h-[3px] overflow-hidden rounded-full">
+        {statusShares(codes).map(([c, n]) => (
+          <span key={c} className={SHARE_BG[c]} style={{ width: `${(n / codes.length) * 100}%` }} />
+        ))}
+      </span>
+    )
   );
 }
 

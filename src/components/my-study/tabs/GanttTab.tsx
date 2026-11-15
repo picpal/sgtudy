@@ -5,9 +5,9 @@ import { addDays, diffDays, md } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
 import { Avatar } from "@/components/ui/Avatar";
-import { Chip, CodeIcons, PERSONAL_BAR, Seg, TypeBadge } from "../bits";
+import { Chip, PERSONAL_BAR, Seg, ShareLine, TypeBadge, UrgentIcon } from "../bits";
 import { isDone, ownerCode, ownerOf } from "../personal";
-import { codeLabel, ganttRange, listClosed, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
+import { codeLabel, ganttRange, statusBreakdown, listClosed, visibleNodes, type ItemScope, type LeafNode, type LeafState, type Tree } from "../model";
 import { toggleMinePatch, toggleOthersPatch, type ScreenState, type Update, type Zoom } from "../state";
 
 type Props = { tree: Tree; S: ScreenState; update: Update; goLeaf: (id: string) => void; isLeader: boolean };
@@ -83,6 +83,10 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
         <span className="inline-flex items-center gap-[5px] text-[12px] text-ink-3">
           <span className="h-[14px] w-[2px] bg-danger" />오늘
         </span>
+        {/* 좁은 화면은 이름 열 아이콘을 숨기므로 그 설명도 숨긴다 */}
+        <span className="text-[12px] text-muted">
+          · <span className="max-sm:hidden">이름 끝 아이콘 = 가장 급한 제출 상태 · </span>막대 밑줄 = 상태별 인원 비율
+        </span>
       </div>
 
       {/* 좁은 화면은 이름 열을 ≈96px 로 줄이고 아이콘·퍼센트를 숨겨 차트 폭을 확보한다 */}
@@ -131,7 +135,8 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
               const owner = personal ? ownerOf(n) : null;
               // 남의 개인 목표에만 소유자 표시 — 내 것에는 "나" 칩·아바타 없음
               const other = personal && owner && owner.userId !== meId ? owner : null;
-              const what = personal ? `개인 목표${other ? ` · ${other.name}` : ""} · ${codeLabel(n, owner?.c ?? "P")}` : n.leaf ? (n.asg ? `${n.sub}/${n.asg} 제출` : "담당자 미정") : `${n.pct}%`;
+              const codes = n.leaf ? n.people.map((p) => p.c) : [];
+              const what = personal ? `개인 목표${other ? ` · ${other.name}` : ""} · ${codeLabel(n, owner?.c ?? "P")}` : n.leaf ? (codes.length ? statusBreakdown(n, codes) : "담당자 미정") : `${n.pct}%`;
               const tip = `${n.title} · ${md(n.s)}–${md(n.e)} · ${what}`;
               // 리프 막대 색 (회차·묶음은 아래 진척 막대 — 팀만)
               const bar = personal ? (done ? PERSONAL_DONE : PERSONAL_BAR) : n.leaf ? GBAR[n.state] : GBAR.planned;
@@ -148,7 +153,7 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
                         </svg>
                       </button>
                     )}
-                    <button type="button" onClick={() => (n.leaf ? goLeaf(n.id) : toggle(n.id))} title={tip} className="flex h-11 min-w-0 flex-1 items-center gap-[6px] bg-transparent p-0 text-left text-ink">
+                    <button type="button" onClick={() => (n.leaf ? goLeaf(n.id) : toggle(n.id))} title={tip} aria-label={n.leaf ? tip : undefined} className="flex h-11 min-w-0 flex-1 items-center gap-[6px] bg-transparent p-0 text-left text-ink">
                       {!n.leaf && n.d === 0 && n.label && <span className="shrink-0 rounded-[6px] bg-navy px-[6px] py-[2px] text-[11px] font-bold text-white max-sm:hidden">{n.label}</span>}
                       {personal && (
                         <span className="flex shrink-0 max-sm:hidden">
@@ -169,7 +174,7 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
                       {personal ? (
                         other && <span aria-hidden="true" className="max-w-[56px] truncate text-[12px] font-medium text-ink-3">{other.name}</span>
                       ) : n.leaf ? (
-                        <CodeIcons codes={n.people.map((p) => p.c)} size={13} max={4} />
+                        <UrgentIcon codes={codes} />
                       ) : (
                         <span data-pct className="text-[12px] font-bold">{n.pct}%</span>
                       )}
@@ -186,6 +191,7 @@ export function GanttTab({ tree, S, update, goLeaf, isLeader }: Props) {
                         style={{ left: x + 2, width: w - 4, background: bar[0], color: bar[1], border: bar[2], opacity: n.archived ? 0.5 : 1 }}
                       >
                         {w >= 44 ? (personal ? (done ? "✓ 완료" : "") : n.asg ? `${n.sub}/${n.asg}` : "미정") : ""}
+                        <ShareLine codes={codes} />
                       </span>
                     ) : (
                       <span title={tip} className="absolute top-[17px] block h-[10px] overflow-hidden rounded-[5px] bg-[#DCE5E2]" style={{ left: x + 2, width: w - 4 }}>

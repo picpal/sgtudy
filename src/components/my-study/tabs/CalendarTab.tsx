@@ -6,7 +6,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { addDays, md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
-import { Chip, CodeIcons, HIT_SQ, HIT_Y, PERSONAL_BAR, Seg, TypeBadge } from "../bits";
+import { Chip, HIT_SQ, HIT_Y, PERSONAL_BAR, Seg, ShareLine, TypeBadge, UrgentIcon } from "../bits";
 import {
   CODE_COLOR,
   CODE_STATE,
@@ -22,8 +22,6 @@ import {
   type Tree,
   type TreeMember,
   statusBreakdown,
-  statusShares,
-  urgentCode,
 } from "../model";
 import { calendarSource, calendarStart } from "../sources";
 import type { ScreenState, Update } from "../state";
@@ -332,22 +330,6 @@ export function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onCl
 
 /** 320 폭의 하루짜리 막대(양끝 여백 5px)는 기본 좌우 여백이면 아이콘 하나도 안 들어간다 */
 const NARROW_PAD = "max-sm:px-[3px]";
-/** 인원이 몇이든 아이콘 하나 — 사람별 아이콘을 늘어놓으면 좁은 칸 밖으로 삐지고 "+N" 뒤에 미제출이 숨는다. 누가 어떤지는 막대를 눌러 팝오버에서 */
-const UrgentIcon = ({ codes }: { codes: Code[] }) => {
-  const c = urgentCode(codes);
-  return c && <span data-cal-status={c} className="flex shrink-0"><CodeIcons codes={[c]} size={13} max={1} /></span>;
-};
-const SHARE_BG: Record<Code, string> = { D: "bg-done", L: "bg-late", M: "bg-missed", O: "bg-ghost", P: "bg-ghost" };
-/** 상태별 몫 밑줄 — 막대 자체 폭을 나눠 써서 인원이 늘어도 자리를 더 차지하지 않는다 */
-const ShareLine = ({ codes }: { codes: Code[] }) =>
-  codes.length > 0 && (
-    <span data-cal-share aria-hidden="true" className="pointer-events-none absolute inset-x-[3px] bottom-[2px] flex h-[3px] overflow-hidden rounded-full">
-      {statusShares(codes).map(([c, n]) => (
-        <span key={c} className={SHARE_BG[c]} style={{ width: `${(n / codes.length) * 100}%` }} />
-      ))}
-    </span>
-  );
-
 const Legend = ({ bg, border, children }: { bg: string; border: string; children: string }) => (
   <span className="inline-flex items-center gap-[5px]">
     <span className="h-3 w-6 rounded-[4px]" style={{ background: bg, border }} />

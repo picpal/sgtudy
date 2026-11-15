@@ -72,7 +72,7 @@ describe.each([3, 10, 20])("캘린더 막대 상태 표시 — %i명", (n) => {
         expect(b.title).toContain(label);
         expect(b.textContent).not.toMatch(/\+\d/);
 
-        const shares = b.querySelectorAll<HTMLElement>("[data-cal-share] > *");
+        const shares = b.querySelectorAll<HTMLElement>("[data-share] > *");
         expect(shares.length).toBeGreaterThan(0);
         expect([...shares].reduce((s, x) => s + parseFloat(x.style.width), 0)).toBeCloseTo(100, 6);
 
@@ -80,7 +80,7 @@ describe.each([3, 10, 20])("캘린더 막대 상태 표시 — %i명", (n) => {
         const isEnd = icons.length > 0;
         if (isEnd) {
           expect(icons.length).toBe(1);
-          expect(b.querySelector("[data-cal-status]")?.getAttribute("data-cal-status")).toBe(urgentCode(codes));
+          expect(b.querySelector("[data-status]")?.getAttribute("data-status")).toBe(urgentCode(codes));
         }
       }
       expect(bars.some((b) => b.querySelectorAll("svg").length === 1)).toBe(true);
