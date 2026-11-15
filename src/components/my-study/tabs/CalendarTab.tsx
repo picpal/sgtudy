@@ -21,6 +21,7 @@ import {
   type LeafState,
   type Tree,
   type TreeMember,
+  urgentCode,
 } from "../model";
 import { calendarSource, calendarStart } from "../sources";
 import type { ScreenState, Update } from "../state";
@@ -149,7 +150,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                         title={`${l.personal ? "[개인] " : ""}${l.crumb} · ${l.title} (${md(l.s)}–${md(l.e)})`}
                         data-cal-bar={l.id}
                         onClick={(e) => openPick(l.id, e)}
-                        className={`${HIT_Y} flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-left text-[12px] transition-shadow duration-100 hover:z-[2] hover:shadow-[0_3px_8px_rgba(27,34,48,.18)]`}
+                        className={`${HIT_Y} @container flex min-w-0 items-center gap-1 pl-2 pr-[6px] text-left text-[12px] transition-shadow duration-100 hover:z-[2] hover:shadow-[0_3px_8px_rgba(27,34,48,.18)] ${span === 1 ? NARROW_PAD : ""}`}
                         style={{
                           gridColumn: `${col + 1} / span ${span}`,
                           gridRow: lane + 1,
@@ -165,7 +166,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
                           <span className="shrink-0 rounded-[5px] bg-slate-soft px-[5px] text-[10px] font-bold leading-4 text-personal-ink max-sm:hidden">개인</span>
                         )}
                         <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{isStart || col === 0 ? l.title : `${l.title} (계속)`}</span>
-                        {isEnd && <CodeIcons codes={endCodes} size={13} max={3} />}
+                        {isEnd && <EndIcons codes={endCodes} />}
                       </button>
                     );
                   })}
@@ -322,6 +323,26 @@ export function CalPopover({ anchor, onClose, children }: { anchor: Anchor; onCl
     document.body,
   );
 }
+
+/** 아이콘 3개 + "+N" 이 들어가는 막대 안쪽 폭. 이보다 좁으면(모바일 1칸 조각) 막대 밖으로 삐져 옆 막대를 덮으므로 가장 급한 하나만 — 전원 상태는 막대를 눌러 팝오버에서 */
+/** 320 폭의 하루짜리 막대(양끝 여백 5px)는 기본 좌우 여백이면 아이콘 하나도 안 들어간다 */
+const NARROW_PAD = "max-sm:px-[3px]";
+const ALL_ICONS = "hidden @[64px]:flex";
+const ONE_ICON = "flex @[64px]:hidden";
+const EndIcons = ({ codes }: { codes: Code[] }) => {
+  const one = urgentCode(codes);
+  if (codes.length < 2 || !one) return <CodeIcons codes={codes} size={13} max={3} />;
+  return (
+    <>
+      <span data-cal-icons="all" className={ALL_ICONS}>
+        <CodeIcons codes={codes} size={13} max={3} />
+      </span>
+      <span data-cal-icons="one" className={ONE_ICON}>
+        <CodeIcons codes={[one]} size={13} max={1} />
+      </span>
+    </>
+  );
+};
 
 const Legend = ({ bg, border, children }: { bg: string; border: string; children: string }) => (
   <span className="inline-flex items-center gap-[5px]">

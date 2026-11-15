@@ -30,6 +30,9 @@ export const isDoneCode = (c: Code | null | undefined): boolean => c === "D" || 
 export const CODE_STATUS: Record<Code, TaskStatus> = { D: "done", L: "late", M: "missed", O: "open", P: "planned" };
 export const STATUS_CODE: Record<TaskStatus, Code> = { done: "D", late: "L", missed: "M", open: "O", planned: "P" };
 export const CODE_STATE: Record<Code, LeafState> = { D: "complete", L: "complete", M: "delayed", O: "progress", P: "planned" };
+const URGENCY: Code[] = ["M", "O", "P", "L", "D"];
+/** 아이콘 하나만 들어가는 자리에 보일 상태 — 손이 필요한 쪽이 먼저 */
+export const urgentCode = (codes: Code[]): Code | null => URGENCY.find((c) => codes.includes(c)) ?? null;
 
 /* ---------------- 편집 오버라이드 (낙관적 갱신용) ---------------- */
 
