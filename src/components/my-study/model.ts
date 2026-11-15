@@ -33,6 +33,12 @@ export const CODE_STATE: Record<Code, LeafState> = { D: "complete", L: "complete
 const URGENCY: Code[] = ["M", "O", "P", "L", "D"];
 /** 아이콘 하나만 들어가는 자리에 보일 상태 — 손이 필요한 쪽이 먼저 */
 export const urgentCode = (codes: Code[]): Code | null => URGENCY.find((c) => codes.includes(c)) ?? null;
+const SHARE_ORDER: Code[] = ["D", "L", "M", "O", "P"];
+/** 상태별 인원(0명 제외) — 완료부터 */
+export const statusShares = (codes: Code[]): [Code, number][] =>
+  SHARE_ORDER.map((c): [Code, number] => [c, codes.filter((x) => x === c).length]).filter(([, n]) => n > 0);
+export const statusBreakdown = (l: { personal: boolean }, codes: Code[]): string =>
+  `${codes.length}명 중 ${statusShares(codes).map(([c, n]) => `${codeLabel(l, c)} ${n}`).join(", ")}`;
 
 /* ---------------- 편집 오버라이드 (낙관적 갱신용) ---------------- */
 
