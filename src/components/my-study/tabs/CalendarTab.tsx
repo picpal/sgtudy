@@ -226,7 +226,7 @@ export function CalendarTab({ tree, S, update, goLeaf }: Props) {
         <span className="inline-flex items-center gap-[5px]">
           <span className="rounded-[5px] bg-navy px-[6px] py-px text-[10px] font-bold text-white">2주차</span>회차 시작
         </span>
-        <span className="text-muted">· 막대 끝 아이콘 = 가장 급한 제출 상태 · 밑줄 = 상태별 인원 비율(누르면 사람별)</span>
+        <span className="text-muted">· 막대 끝 아이콘 = 가장 급한 상태(제출·개인 목표) · 밑줄 = 상태별 인원 비율(누르면 사람별)</span>
       </div>
     </div>
   );

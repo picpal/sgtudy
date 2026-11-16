@@ -56,9 +56,15 @@ describe.each([3, 10, 20])("간트 행 상태 표시 — %i명", (n) => {
       const shares = bar.querySelectorAll<HTMLElement>("[data-share] > *");
       expect([...shares].reduce((s, x) => s + parseFloat(x.style.width), 0)).toBeCloseTo(100, 6);
       if (!l.personal) {
-        expect(r.querySelectorAll('svg[role="img"]').length).toBe(1);
+        expect(r.querySelectorAll("[data-status] svg").length).toBe(1);
         expect(r.querySelector("[data-status]")?.getAttribute("data-status")).toBe(urgentCode(codes));
+        // 이름 버튼 aria-label 이 상태별 인원을 이미 말한다 — 옆 아이콘이 따로 읽히면 두 번 들린다
+        expect(r.querySelector('[role="img"]')).toBeNull();
+      } else {
+        expect(r.querySelector("[data-status]")).toBeNull();
       }
+      // 주 단위(하루 = 10px)에서도 밑줄이 0 폭이 되지 않게 — 막대 폭에 비례해 줄어드는 여백
+      expect(bar.querySelector("[data-share]")!.className).not.toMatch(/inset-x-\[\d+px\]/);
     }
   });
 });

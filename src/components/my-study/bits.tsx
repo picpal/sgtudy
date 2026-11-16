@@ -136,24 +136,30 @@ export function AvatarStack({ people, size, ring, iconSize, max = 4, overflowSiz
   );
 }
 
-/** 인원이 몇이든 아이콘 하나 — 사람별 아이콘을 늘어놓으면 좁은 칸 밖으로 삐지고 "+N" 뒤에 미제출이 숨는다. 누가 어떤지는 눌러서 여는 화면(캘린더 팝오버·과제 상세)에서 */
+/**
+ * 인원이 몇이든 아이콘 하나 — 사람별 아이콘을 늘어놓으면 좁은 칸 밖으로 삐지고 "+N" 뒤에 미제출이 숨는다. 누가 어떤지는 눌러서 여는 화면(캘린더 팝오버·과제 상세)에서.
+ * 읽기 프로그램용 이름은 붙이지 않는다 — 쓰는 쪽(막대·이름 버튼) aria-label 이 statusBreakdown 으로 이미 말한다
+ */
 export function UrgentIcon({ codes, size = 13 }: { codes: Code[]; size?: number }) {
   const c = urgentCode(codes);
   return (
     c && (
       <span data-status={c} className="flex shrink-0">
-        <StatusIcon status={CODE_STATUS[c]} size={size} />
+        <StatusIcon status={CODE_STATUS[c]} size={size} label={false} />
       </span>
     )
   );
 }
 
 const SHARE_BG: Record<Code, string> = { D: "bg-done", L: "bg-late", M: "bg-missed", O: "bg-ghost", P: "bg-ghost" };
-/** 상태별 몫 밑줄 — 부모 막대(position 있는 요소) 폭을 나눠 써서 인원이 늘어도 자리를 더 차지하지 않는다 */
+/**
+ * 상태별 몫 밑줄 — 부모 막대(position 있는 요소) 폭을 나눠 써서 인원이 늘어도 자리를 더 차지하지 않는다.
+ * 양옆 여백은 막대 폭의 15% 를 넘지 않는다 — 고정 3px 이면 간트 주 단위 하루짜리 막대(안쪽 약 3px)에서 밑줄 폭이 0 이 된다
+ */
 export function ShareLine({ codes }: { codes: Code[] }) {
   return (
     codes.length > 0 && (
-      <span data-share aria-hidden="true" className="pointer-events-none absolute inset-x-[3px] bottom-[2px] flex h-[3px] overflow-hidden rounded-full">
+      <span data-share aria-hidden="true" className="pointer-events-none absolute inset-x-[min(3px,15%)] bottom-[2px] flex h-[3px] overflow-hidden rounded-full">
         {statusShares(codes).map(([c, n]) => (
           <span key={c} className={SHARE_BG[c]} style={{ width: `${(n / codes.length) * 100}%` }} />
         ))}

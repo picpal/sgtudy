@@ -77,13 +77,49 @@ describe.each([3, 10, 20])("캘린더 막대 상태 표시 — %i명", (n) => {
         expect([...shares].reduce((s, x) => s + parseFloat(x.style.width), 0)).toBeCloseTo(100, 6);
 
         const icons = b.querySelectorAll("svg");
-        const isEnd = icons.length > 0;
-        if (isEnd) {
+        if (icons.length > 0) {
           expect(icons.length).toBe(1);
           expect(b.querySelector("[data-status]")?.getAttribute("data-status")).toBe(urgentCode(codes));
+          // 막대 aria-label 이 상태별 인원을 이미 말한다 — 아이콘이 따로 읽히면 두 번 들린다
+          expect(icons[0].getAttribute("aria-hidden")).toBe("true");
+          expect(b.querySelector('[role="img"]')).toBeNull();
         }
       }
       expect(bars.some((b) => b.querySelectorAll("svg").length === 1)).toBe(true);
+      // 여러 주에 걸친 과제: 아이콘은 마지막(끝) 조각에만, 밑줄은 모든 조각에
+      const pieces = Map.groupBy(bars, (b) => b.dataset.calBar!);
+      const multi = [...pieces.values()].filter((ps) => ps.length > 1);
+      if (view === "월간") expect(multi.length).toBeGreaterThan(0);
+      for (const ps of multi) {
+        ps.slice(0, -1).forEach((b) => expect(b.querySelector("svg")).toBeNull());
+        ps.forEach((b) => expect(b.querySelector("[data-share]")).not.toBeNull());
+      }
     });
   }
+});
+
+describe("참가자 필터(calWho) — 그 사람 상태만", () => {
+  it("아이콘·밑줄·aria 가 고른 사람 하나 기준", () => {
+    const tree = treeWith(10);
+    const leaves = leavesOf(tree);
+    const who = leaves.find((l) => !l.personal && l.people.length)!.people[0].userId;
+    const byId = new Map(leaves.map((l) => [String(l.id), l]));
+    const bars = [...render(tree, { calWho: who }).querySelectorAll<HTMLElement>("[data-cal-bar]")].filter((b) => !byId.get(b.dataset.calBar!)!.personal);
+    expect(bars.length).toBeGreaterThan(0);
+    for (const b of bars) {
+      const l = byId.get(b.dataset.calBar!)!;
+      const mine = l.people.find((p) => p.userId === who)!.c;
+      expect(b.getAttribute("aria-label")).toContain(statusBreakdown(l, [mine]));
+      expect(b.querySelectorAll("[data-share] > *").length).toBe(1);
+      const st = b.querySelector("[data-status]");
+      if (st) expect(st.getAttribute("data-status")).toBe(mine);
+    }
+  });
+});
+
+describe("범례", () => {
+  it("개인 목표도 아이콘을 받으므로 「제출」 상태로만 부르지 않는다", () => {
+    const legend = [...render(treeWith(3)).querySelectorAll("span")].find((s) => s.textContent?.startsWith("· 막대 끝 아이콘"))!;
+    expect(legend.textContent).not.toMatch(/제출 상태/);
+  });
 });
