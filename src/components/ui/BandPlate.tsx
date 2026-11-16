@@ -6,5 +6,5 @@
  * 붙음 여부를 JS(scroll 리스너)로 재지 않는다: 그 방식은 iPhone Safari 크래시 의심으로 되돌린 적이 있다.
  */
 export function BandPlate() {
-  return <div aria-hidden="true" data-band-plate="" className="pointer-events-none fixed inset-x-0 top-[-64px] z-[80] h-16" />;
+  return <div aria-hidden="true" data-band-plate="" className="pointer-events-none fixed inset-x-0 top-[-64px] z-[80] h-[64px]" />;
 }

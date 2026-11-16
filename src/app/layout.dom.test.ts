@@ -25,6 +25,7 @@ describe("루트 레이아웃 — iOS 상태바 띠 덮개", () => {
     const plate = plates[0];
     expect(plate.parentElement?.tagName).toBe("BODY");
     expect(plate.getAttribute("aria-hidden")).toBe("true");
-    expect(plate.className.split(" ")).toEqual(expect.arrayContaining(["pointer-events-none", "fixed", "inset-x-0", "top-[-64px]", "h-16"]));
+    // 높이·위치를 같은 px 로 — rem 높이는 루트 글자 크기(안드로이드 글자 배율)에 따라 띠보다 커져 화면에 삐져나오거나 짧아진다
+    expect(plate.className.split(" ")).toEqual(expect.arrayContaining(["pointer-events-none", "fixed", "inset-x-0", "top-[-64px]", "h-[64px]", "z-[80]"]));
   });
 });
