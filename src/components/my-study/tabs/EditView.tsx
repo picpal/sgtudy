@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
-import { StickyTopCap } from "@/components/ui/StickyTopCap";
 import type { ToastMsg } from "@/components/ui/Toast";
 import type { TaskType } from "@/data/my-study";
 import { holdSamePage, samePage, setLeaveGuard } from "@/lib/leaveGuard";
@@ -333,7 +332,6 @@ export function EditView({ n, parent, nodes, roots, period, members, S, update, 
   return (
     <section ref={view} aria-labelledby="edit-view-title" onKeyDown={onKey} className="flex scroll-mt-0 flex-col">
       {/* 고정 막대 — 편집 화면은 문서가 스크롤된다(한 페이지 스크롤). 화면 위쪽에 붙어 저장·삭제가 잘리지 않는다 */}
-      <StickyTopCap className="-mx-1" />
       <div ref={bar} className="sticky top-0 z-[2] -mx-1 flex flex-col gap-2 border-b border-line-2 bg-surface px-1 pb-3 pt-3">
         {/* 좁은 화면(390)에서 버튼이 한 줄에 다 안 들어가면(보관 해제·올리는 중 문구) 오른쪽 버튼 묶음째 다음 줄로 — 가로 스크롤 없음 */}
         <div className="flex flex-wrap items-center gap-2">

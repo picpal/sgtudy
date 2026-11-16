@@ -126,19 +126,7 @@ describe("DetailView 경로 한 줄 · 가로 넘침 방지 (클래스 수준)",
     expect(nav.lastElementChild?.classList.contains("shrink-0")).toBe(true);
   });
   it("sticky 막대에 음수 가로 마진(-mx-1)을 두지 않는다 — 본문이 4px 넘쳤다", () => {
-    const bar = render(leaf("32"), CHULSU, false).querySelector("section > div.top-0")!;
+    const bar = render(leaf("32"), CHULSU, false).querySelector("section > div")!;
     expect(bar.className).not.toMatch(/-mx-/);
-  });
-});
-
-describe("DetailView 위 고정 막대 — iOS 상태바 띠 덮개", () => {
-  it("막대 바로 앞에 같은 바탕의 덮개가 top:-64px 로 붙고, 자리(높이)는 차지하지 않는다", () => {
-    const bar = render(leaf("311"), CHULSU, false).querySelector("section > div.top-0")!;
-    const cap = bar.previousElementSibling!;
-    expect(cap.hasAttribute("data-sticky-cap")).toBe(true);
-    expect(cap.getAttribute("aria-hidden")).toBe("true");
-    expect(cap.className.split(" ")).toEqual(expect.arrayContaining(["sticky", "top-[-64px]", "h-16", "-mb-16"]));
-    expect(cap.className).toContain("bg-surface");
-    expect(bar.className).toContain("bg-surface");
   });
 });

@@ -117,11 +117,17 @@
     scrollbar-gutter: stable;
   }
 
+  [data-band-plate] {
+    background: var(--surface);
+  }
+
   /* body 를 잠그는 전체 화면 막(fixed inset-0)은 비워 둔 자리까지 덮지 못한다 — 그 띠가 튀지 않게 막과 같은 색으로 칠한다 */
-  html:has([data-notice-popup]) {
+  html:has([data-notice-popup]),
+  html:has([data-notice-popup]) [data-band-plate] {
     background: #92979d; /* --bg-main 위 rgba(27,34,48,.45) */
   }
-  html:has([data-image-lightbox]) {
+  html:has([data-image-lightbox]),
+  html:has([data-image-lightbox]) [data-band-plate] {
     background: #0b0f17;
   }
 

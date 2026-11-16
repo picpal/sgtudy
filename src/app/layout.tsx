@@ -7,6 +7,7 @@ import { myStudyHrefOf } from "@/lib/api/my-study";
 import type { Me } from "@/lib/api/types";
 import { kstToday } from "@/lib/kst";
 import { routes } from "@/lib/routes";
+import { BandPlate } from "@/components/ui/BandPlate";
 import { MeProvider } from "@/lib/me";
 import { TodayProvider } from "@/lib/today";
 import "./globals.css";
@@ -73,6 +74,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <MeProvider me={me} myStudyHref={myStudyHref}>
           <TodayProvider today={today}>{children}</TodayProvider>
         </MeProvider>
+        <BandPlate />
       </body>
     </html>
   );
