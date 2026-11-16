@@ -49,13 +49,16 @@ describe.each([["월간", "month"], ["주간", "week"]] as const)("캘린더 막
   it("상태 아이콘·밑줄·「명 중」 인원 문구가 없다", () => {
     const bars = mount({ calMode });
     expect(bars.filter((b) => byId.get(b.dataset.calBar!)?.people.length).length).toBeGreaterThan(0);
+    expect(bars.some((b) => byId.get(b.dataset.calBar!)?.personal)).toBe(true);
     for (const b of bars) {
       expect(b.querySelector("svg")).toBeNull();
       expect(b.querySelector("[data-status]")).toBeNull();
       expect(b.querySelector("[data-share]")).toBeNull();
       expect(b.getAttribute("aria-label") ?? "").not.toContain("명 중");
       expect(b.title).not.toContain("명 중");
-      expect(b.title).toContain(byId.get(b.dataset.calBar!)!.title);
+      const l = byId.get(b.dataset.calBar!)!;
+      expect(b.title).toContain(l.title);
+      expect([l.title, `${l.title} (계속)`].map((t) => `${l.personal ? "[개인] " : ""}${t}`)).toContain(b.getAttribute("aria-label"));
     }
   });
 });
