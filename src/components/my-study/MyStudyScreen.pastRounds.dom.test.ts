@@ -107,7 +107,7 @@ describe("진행목표 — 끝난 회차 기본 접힘", () => {
     window.history.replaceState(null, "", "/my-study/aws?tab=curriculum&item=11");
     const { host } = mount({ initialItem: "11" });
     expect(detailTitle(host)).toBe(title("11"));
-    act(() => buttonByText(host.querySelector("main .sticky")!, "진행목표").click());
+    act(() => buttonByText(host.querySelector("main .sticky.top-0")!, "진행목표").click());
     expect(detailTitle(host)).toBeNull();
     expect(has(host, title("11"))).toBe(true);
     expect(toggleOf(host, title("1")).getAttribute("aria-expanded")).toBe("true");
