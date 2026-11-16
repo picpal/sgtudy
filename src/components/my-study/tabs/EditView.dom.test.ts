@@ -462,7 +462,7 @@ describe("EditView 시험 리프 — 위쪽 [저장]·[발행] (임시저장 없
     }) as unknown as ExamView;
   const pickSecond = () => act(() => host.querySelectorAll<HTMLInputElement>('input[name="exam-q-0-answer"]')[1].click());
   // 위쪽 고정 막대의 버튼 줄 · 그 아래 확인 상자 — 「문제」 섹션 머리의 [발행] 과 섞이지 않게 막대 안에서만 찾는다
-  const bar = () => host.querySelector("section > div.sticky")!;
+  const bar = () => host.querySelector("section > div.sticky.top-0")!;
   const barButton = (text: string) => Array.from(bar().querySelectorAll("button")).find((b) => b.textContent?.trim() === text);
   const confirmBox = () => bar().querySelector<HTMLElement>('[role="alertdialog"]');
   const confirmButton = (text: string) => Array.from(confirmBox()!.querySelectorAll("button")).find((b) => b.textContent?.trim() === text)!;

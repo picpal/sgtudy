@@ -7,6 +7,7 @@ import { useRefocusOnClose } from "@/lib/useRefocusOnClose";
 import { Avatar } from "@/components/ui/Avatar";
 import type { ToastMsg } from "@/components/ui/Toast";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { StickyTopCap } from "@/components/ui/StickyTopCap";
 import { md, weekdayKo } from "@/lib/date";
 import { useMe } from "@/lib/me";
 import { useToday } from "@/lib/today";
@@ -318,6 +319,7 @@ export function DetailView({ n, nodes, canEdit, onOpen, onBack, backLabel = "진
   );
   return (
     <section ref={sectionRef} aria-labelledby={pn && editing ? `pf-${pn.id}` : "detail-title"} onKeyDown={onKey} className="flex flex-col">
+      <StickyTopCap />
       <div ref={stickyBar} className="sticky top-0 z-[2] flex flex-wrap items-center gap-2 border-b border-line-2 bg-surface py-3">
         <button type="button" onClick={() => guard(onBack)} className="inline-flex h-11 shrink-0 items-center gap-[6px] rounded-[22px] border border-line-3 bg-surface pl-3 pr-4 text-[14px] font-semibold text-ink">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
